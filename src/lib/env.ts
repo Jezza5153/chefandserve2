@@ -78,47 +78,45 @@ const processClientEnv = {
 /* ----------------------------- runtime parse logic ---------------------- */
 
 const isServer = typeof window === "undefined";
-const isBuildTime = process.env.NEXT_PHASE === "phase-production-build";
 
-let parsed: z.infer<typeof clientSchema> & Partial<z.infer<typeof serverSchema>>;
+type ServerEnv = z.infer<typeof serverSchema>;
+type ClientEnv = z.infer<typeof clientSchema>;
 
-if (isServer) {
-  // Server-side: validate both halves. Fail loudly.
-  const serverResult = serverSchema.safeParse(process.env);
-  const clientResult = clientSchema.safeParse(processClientEnv);
+function parseEnv(): ServerEnv & ClientEnv {
+  if (isServer) {
+    const serverResult = serverSchema.safeParse(process.env);
+    const clientResult = clientSchema.safeParse(processClientEnv);
 
-  if (!serverResult.success || !clientResult.success) {
-    const issues: string[] = [];
-    if (!serverResult.success) {
-      issues.push(
-        "Server env errors:\n" +
-          serverResult.error.issues
-            .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
-            .join("\n"),
+    if (!serverResult.success || !clientResult.success) {
+      const issues: string[] = [];
+      if (!serverResult.success) {
+        issues.push(
+          "Server env errors:\n" +
+            serverResult.error.issues
+              .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
+              .join("\n"),
+        );
+      }
+      if (!clientResult.success) {
+        issues.push(
+          "Client env errors:\n" +
+            clientResult.error.issues
+              .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
+              .join("\n"),
+        );
+      }
+      throw new Error(
+        `\n[chef-and-serve] Invalid environment variables.\n${issues.join("\n")}\n\n` +
+          `Tip: copy .env.example to .env.local and fill in the missing values, ` +
+          `or set them in Vercel project Settings → Environment Variables.\n`,
       );
     }
-    if (!clientResult.success) {
-      issues.push(
-        "Client env errors:\n" +
-          clientResult.error.issues
-            .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
-            .join("\n"),
-      );
-    }
-
-    // At build time, throw to fail the build cleanly.
-    // At runtime, throw to crash the route so the error is visible.
-    throw new Error(
-      `\n[chef-and-serve] Invalid environment variables.\n${issues.join("\n")}\n\n` +
-        `Tip: copy .env.example to .env.local and fill in the missing values, ` +
-        `or set them in Vercel project Settings → Environment Variables.\n`,
-    );
+    return { ...serverResult.data, ...clientResult.data };
   }
 
-  parsed = { ...serverResult.data, ...clientResult.data };
-} else {
-  // Client-side: only validate NEXT_PUBLIC_* keys. Server keys are not
-  // available in process.env on the client (Next.js strips them).
+  // Client-side: server keys aren't available; return only the client slice
+  // cast to the wider type. Reading any server key on the client would be a
+  // logical bug (the value is undefined at runtime in the browser anyway).
   const clientResult = clientSchema.safeParse(processClientEnv);
   if (!clientResult.success) {
     throw new Error(
@@ -127,19 +125,16 @@ if (isServer) {
         .join(", ")}`,
     );
   }
-  parsed = clientResult.data;
-}
-
-// Build-time guard: surface what we know without throwing during static analysis
-if (isBuildTime && !isServer) {
-  // no-op — build prerender only runs server-side
+  // Cast: client code that reads a server key is broken regardless; the value
+  // would be undefined at runtime. The cast keeps server-side call sites typed.
+  return clientResult.data as ServerEnv & ClientEnv;
 }
 
 /**
  * Validated environment access. Use `env.X` everywhere instead of
  * `process.env.X` so missing keys are caught at startup, not request time.
  */
-export const env = parsed;
+export const env = parseEnv();
 
 /** Convenience flag — true when running under Vercel's production env. */
 export const isProduction = process.env.VERCEL_ENV === "production";
