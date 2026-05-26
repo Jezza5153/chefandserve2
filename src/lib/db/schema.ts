@@ -51,6 +51,15 @@ export const errorSeverityEnum = pgEnum("error_severity", [
   "critical",
 ]);
 
+/** Submission lifecycle. `new` → triaged by Maarten → converted to chef/client OR rejected. */
+export const submissionStatusEnum = pgEnum("submission_status", [
+  "new", // just arrived
+  "triaged", // Maarten has reviewed but not yet acted
+  "converted", // promoted to a chef or client record
+  "rejected", // not pursuing
+  "duplicate", // already exists as chef/client
+]);
+
 /* =============================================================================
  * Users + Auth.js adapter tables
  * =========================================================================== */
@@ -260,6 +269,117 @@ export const webhooksReceived = pgTable("webhooks_received", {
 });
 
 /* =============================================================================
+ * Submissions (Phase 1 — Jotform intake)
+ *
+ * Two tables — one per form-type for clean separation. Both share the same
+ * shape: external ID for idempotency, the raw payload (jsonb) for replay,
+ * structured fields the webhook extractor populates, status for triage flow,
+ * and FK to the chef/client row created on "convert".
+ * =========================================================================== */
+
+/** Chef intake — sourced from Jotform 252442173847359. */
+export const chefSubmissions = pgTable(
+  "chef_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    /** Jotform's submission ID. Idempotency key — same Jotform retry → 1 row. */
+    externalId: text("external_id").notNull(),
+    source: text("source").notNull().default("jotform"), // 'jotform' | 'manual' | future …
+
+    /** Full raw Jotform payload — kept for replay + audit. */
+    rawPayload: jsonb("raw_payload").notNull(),
+
+    /* ----- structured fields extracted from Jotform ----- */
+    fullName: text("full_name"),
+    email: text("email"),
+    phone: text("phone"),
+    /** Free-text or comma list of desired roles (chef/sous/bediening/…). */
+    rolesRequested: text("roles_requested"),
+    yearsExperience: integer("years_experience"),
+    /** Where the chef wants to work (Amsterdam/Randstad/etc.). */
+    locationPreference: text("location_preference"),
+    /** Free-text notes the chef wrote. */
+    notes: text("notes"),
+
+    status: submissionStatusEnum("status").notNull().default("new"),
+    triagedAt: timestamp("triaged_at", { withTimezone: true }),
+    triagedBy: text("triaged_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /** Set when status='converted'. Phase 2's chefs.id (text uuid). */
+    convertedToChefId: text("converted_to_chef_id"),
+    rejectedReason: text("rejected_reason"),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    externalIdUnique: uniqueIndex("chef_submissions_external_id_unique").on(
+      t.source,
+      t.externalId,
+    ),
+  }),
+);
+
+/** Client intake — sourced from Jotform 252448184762060. */
+export const clientSubmissions = pgTable(
+  "client_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    externalId: text("external_id").notNull(),
+    source: text("source").notNull().default("jotform"),
+
+    rawPayload: jsonb("raw_payload").notNull(),
+
+    /* ----- structured fields ----- */
+    companyName: text("company_name"),
+    contactName: text("contact_name"),
+    email: text("email"),
+    phone: text("phone"),
+    /** What role(s) are they asking for? */
+    roleRequested: text("role_requested"),
+    /** casual | fine_dining | hotel | catering | event | corporate */
+    segment: text("segment"),
+    /** Date they need staff (free-text — chef intake forms vary). */
+    dateNeeded: text("date_needed"),
+    /** Number of staff. */
+    headcount: integer("headcount"),
+    /** Their location / address. */
+    location: text("location"),
+    /** Free-text notes. */
+    notes: text("notes"),
+
+    status: submissionStatusEnum("status").notNull().default("new"),
+    triagedAt: timestamp("triaged_at", { withTimezone: true }),
+    triagedBy: text("triaged_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /** Set when status='converted'. Phase 2's clients.id (text uuid). */
+    convertedToClientId: text("converted_to_client_id"),
+    rejectedReason: text("rejected_reason"),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    externalIdUnique: uniqueIndex("client_submissions_external_id_unique").on(
+      t.source,
+      t.externalId,
+    ),
+  }),
+);
+
+/* =============================================================================
  * Type exports (for use across the app)
  * =========================================================================== */
 
@@ -269,3 +389,7 @@ export type Role = typeof roles.$inferSelect;
 export type Permission = typeof permissions.$inferSelect;
 export type AuditLogEntry = typeof auditLog.$inferSelect;
 export type ErrorLogEntry = typeof errorLog.$inferSelect;
+export type ChefSubmission = typeof chefSubmissions.$inferSelect;
+export type NewChefSubmission = typeof chefSubmissions.$inferInsert;
+export type ClientSubmission = typeof clientSubmissions.$inferSelect;
+export type NewClientSubmission = typeof clientSubmissions.$inferInsert;

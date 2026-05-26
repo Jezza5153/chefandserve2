@@ -42,7 +42,7 @@ const OPS_NAV: NavSection = {
   label: "Operations",
   items: [
     { label: "Dashboard", href: "/admin/business" },
-    { label: "Inbox", badge: "binnenkort" },
+    { label: "Inbox", href: "/admin/business/inbox" },
     { label: "Chefs", badge: "binnenkort" },
     { label: "Clients", badge: "binnenkort" },
     { label: "Shifts", badge: "binnenkort" },
