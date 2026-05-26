@@ -45,7 +45,7 @@ const OPS_NAV: NavSection = {
     { label: "Inbox", href: "/admin/business/inbox" },
     { label: "Chefs", href: "/admin/business/chefs" },
     { label: "Clients", href: "/admin/business/clients" },
-    { label: "Shifts", badge: "binnenkort" },
+    { label: "Shifts", href: "/admin/business/shifts" },
     { label: "Roster", badge: "binnenkort" },
     { label: "Hours", badge: "binnenkort" },
   ],

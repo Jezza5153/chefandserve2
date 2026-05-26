@@ -107,6 +107,26 @@ export const clientStatusEnum = pgEnum("client_status", [
   "archived",
 ]);
 
+/** Shift lifecycle. */
+export const shiftStatusEnum = pgEnum("shift_status", [
+  "request", // client request, not yet open for matching
+  "open", // open for chef matching
+  "filled", // at least one chef confirmed for full headcount
+  "completed", // shift happened
+  "cancelled", // client or us cancelled
+]);
+
+/** Placement lifecycle — the (chef, shift) record. */
+export const placementStatusEnum = pgEnum("placement_status", [
+  "proposed", // we offered to chef, awaiting response
+  "accepted", // chef said yes
+  "rejected", // chef said no
+  "confirmed", // both sides agreed, chef + client notified
+  "cancelled", // either side cancelled before shift
+  "no_show", // chef didn't turn up
+  "completed", // shift happened, hours logged
+]);
+
 /* =============================================================================
  * Users + Auth.js adapter tables
  * =========================================================================== */
@@ -578,6 +598,119 @@ export const chefAvailability = pgTable(
 );
 
 /* =============================================================================
+ * Shifts + placements (Phase 3)
+ *
+ * Shift = a client's ask ("we need a sous chef on June 15, 18:00-23:00").
+ * Placement = a (chef, shift) link — proposed/accepted/confirmed/etc.
+ *
+ * A shift can have multiple placements (e.g. headcount=3 → 3 placements).
+ * Placements drive the chef portal + payroll bridge (Phase 4/5).
+ * =========================================================================== */
+
+export const shifts = pgTable("shifts", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+
+  clientId: text("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "cascade" }),
+
+  /* ----- when ----- */
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+  /** Free-text fallback if startsAt/endsAt aren't known yet (Phase 1 intakes). */
+  whenDescription: text("when_description"),
+
+  /* ----- what ----- */
+  /** What chef-role do they need? */
+  roleNeeded: vakniveauEnum("role_needed").notNull(),
+  /** Segment context for matching. */
+  segment: segmentEnum("segment"),
+  /** How many chefs needed (1 = solo, 5 = brigade). */
+  headcount: integer("headcount").notNull().default(1),
+
+  /* ----- where ----- */
+  location: text("location"),
+  city: text("city"),
+
+  /* ----- money ----- */
+  /** Client-billed rate per chef in cents. */
+  clientRateCents: integer("client_rate_cents"),
+  /** Default chef-paid rate (placements can override). */
+  chefRateCents: integer("chef_rate_cents"),
+
+  /* ----- lifecycle ----- */
+  status: shiftStatusEnum("status").notNull().default("request"),
+  notes: text("notes"),
+
+  /* ----- audit ----- */
+  createdBy: text("created_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  cancelledReason: text("cancelled_reason"),
+});
+
+export const placements = pgTable(
+  "placements",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+
+    shiftId: text("shift_id")
+      .notNull()
+      .references(() => shifts.id, { onDelete: "cascade" }),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "restrict" }),
+
+    status: placementStatusEnum("status").notNull().default("proposed"),
+
+    /* ----- override rates (default to shift's if null) ----- */
+    chefRateCents: integer("chef_rate_cents"),
+
+    /* ----- timestamps for each transition ----- */
+    proposedAt: timestamp("proposed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    respondedAt: timestamp("responded_at", { withTimezone: true }),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+
+    /* ----- audit ----- */
+    proposedBy: text("proposed_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    notes: text("notes"),
+    /** Maarten's match-score snapshot at proposal time (0-100). */
+    matchScore: integer("match_score"),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    /** One (chef, shift) row — chef can't be double-booked on same shift. */
+    chefShiftUnique: uniqueIndex("placements_chef_shift_unique").on(
+      t.chefId,
+      t.shiftId,
+    ),
+  }),
+);
+
+/* =============================================================================
  * Type exports (for use across the app)
  * =========================================================================== */
 
@@ -596,3 +729,7 @@ export type NewChef = typeof chefs.$inferInsert;
 export type Client = typeof clients.$inferSelect;
 export type NewClient = typeof clients.$inferInsert;
 export type ChefAvailability = typeof chefAvailability.$inferSelect;
+export type Shift = typeof shifts.$inferSelect;
+export type NewShift = typeof shifts.$inferInsert;
+export type Placement = typeof placements.$inferSelect;
+export type NewPlacement = typeof placements.$inferInsert;
