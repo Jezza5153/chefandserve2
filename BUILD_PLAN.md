@@ -672,6 +672,43 @@ npm run build
 
 ---
 
-**Last updated:** PR-0A shipped. Awaiting tokens to unblock PR-0C+.
+**Last updated:** Phase 0 → 4 + 6 all shipped on `main`.
+
+### Shipped routes (live on chefandserve2.vercel.app)
+
+**Public marketing (29 pages, all static):** homepage, 17 service pages, 2 pillars, 5 company, 2 founder, 2 legal.
+
+**Auth (`(auth)` group):** `/login` magic-link form · `/verify` confirmation
+
+**Admin / IT (`(admin)` group, RBAC-gated):**
+- `/admin` → role-based redirect
+- `/admin/system` + `/system/errors` + `/system/audit` + `/system/users` + `/system/roles` (super_admin only)
+- `/admin/business` dashboard
+- `/admin/business/inbox` (+ `inbox/[kind]/[id]` triage + convert)
+- `/admin/business/chefs` (+ `chefs/[id]` edit) — list with status filter + search
+- `/admin/business/clients` (+ `clients/[id]` edit)
+- `/admin/business/shifts` (+ `shifts/new` + `shifts/[id]` with smart-match + propose flow)
+
+**Chef portal (`(chef)` group, kind=chef):**
+- `/chef` mobile dashboard (pending proposals + upcoming + recent)
+- `/chef/shifts` all placements
+- `/chef/shifts/[placementId]` accept/reject server actions
+- `/chef/availability` + `/chef/hours` (stubs)
+
+**Client portal (`(client)` group, kind=client):**
+- `/client` dashboard with upcoming bookings
+- `/client/shifts` history
+- `/client/request` stub → Jotform link
+
+**API:**
+- `POST /api/intake/chef` + `/api/intake/client` — Jotform webhook receivers (signature-verifiable, idempotent)
+- `GET /api/intake/*` — health check
+- `/api/auth/*` — Auth.js v5 handler
+
+### Phases still to ship (per ROADMAP.md)
+- **Phase 5** — Payingit bridge (CSV → SFTP/API) — needs Payingit spec call
+- **Phase 7** — Resend template polish (shift_confirmed, hours_due, etc.) + invite-chef-to-portal flow
+- **Phase 8** — IT-admin lane polish (already 80% done in PR-0F)
+- **Phase 9+** — AI matching layer (per AI_INTEGRATION.md)
 
 **Questions?** Open an issue or DM Jezza.

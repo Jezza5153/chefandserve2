@@ -396,4 +396,29 @@ Goal: when we land in Phase 9 and start wiring AI, this doc is the brief. Zero a
 
 ---
 
-**Last updated:** Phase 0 ship. PR-0A → PR-0F merged. AI layer = future Phase 9+.
+**Last updated:** Phase 0 → 4 + 6 all shipped. Phase 5 (Payingit) blocked on integration spec. Phase 7 (Resend polish) pending. AI layer = Phase 9+.
+
+### Data inventory status (vs. plan)
+
+| Table | Plan phase | Status |
+|---|---|---|
+| users · roles · permissions · role_permissions · user_roles | Phase 0 | ✓ live |
+| audit_log · error_log · webhooks_received | Phase 0 | ✓ live |
+| chef_submissions · client_submissions | Phase 1 | ✓ live (idempotent on (source, external_id)) |
+| chefs · clients · chef_availability | Phase 2 | ✓ live (soft-delete via deleted_at) |
+| shifts · placements | Phase 3 | ✓ live (with vakniveau/segment/shift_status/placement_status enums) |
+| chef_documents (R2 metadata) | Phase 2 polish | DEFERRED (needs R2 creds) |
+| chef_actions (engagement signal) | Phase 4 | DEFERRED (Phase 7 polish) |
+| hours | Phase 5 | NOT YET (Phase 5 schema lands with Payingit work) |
+| ratings | Phase 6 polish | NOT YET |
+| messages (Resend tracking) | Phase 7 | NOT YET |
+| match_scores (AI outputs) | Phase 9 | NOT YET — placements.match_score column already in place for heuristic v1 |
+
+### Tool surface status
+
+Phase 3 already exposes `findMatchesForShift()` + `proposePlacement()` as the
+matching primitives. Same function signatures will be the Phase 9 AI tool
+surface — UI/admin calls them today, future AI will call the same.
+
+Conversion primitives shipped in Phase 2: `convertChefSubmission()` +
+`convertClientSubmission()`. Already audit-logged with stable action keys.
