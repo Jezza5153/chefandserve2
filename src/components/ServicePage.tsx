@@ -1,7 +1,7 @@
-import { CTAButton } from "@/components/CTAButton";
+import { ClosingCTA } from "@/components/ClosingCTA";
 import { FAQAccordion } from "@/components/FAQAccordion";
 import { JsonLd } from "@/components/JsonLd";
-import { PillarLinkBlock, InlineLink } from "@/components/PillarLinkBlock";
+import { PageHero, SectionLabel } from "@/components/PageHero";
 import { TrustBanner } from "@/components/TrustBanner";
 import type { FAQ } from "@/lib/faqs";
 import {
@@ -20,11 +20,11 @@ export type ServiceOffer = {
 
 export type ServicePageData = {
   slug: string;
-  title: string;          // Full h1
-  description: string;    // Meta description + intro paragraph (lead)
+  title: string; // Full h1
+  description: string; // Meta description + intro paragraph (lead)
   intro: React.ReactNode; // Lead paragraph (HTML — can include <strong>)
   breadcrumbLabel: string;
-  body: React.ReactNode;  // Main page body (h2/h3/p/ul/ol/table)
+  body: React.ReactNode; // Main page body (h2/h3/p/ul/ol/table)
   faqs?: FAQ[];
   faqHeading?: string;
   offers?: ServiceOffer[];
@@ -34,10 +34,17 @@ export type ServicePageData = {
   };
   /** Optional pillar link to inject above the FAQ */
   pillarLink?: React.ReactNode;
+  /** Optional hero image override (defaults to service-werving.jpg) */
+  heroImage?: string;
+  /** Optional eyebrow (defaults to a contextual label derived from breadcrumbLabel) */
+  heroEyebrow?: string;
 };
 
 export function ServicePage({ data }: { data: ServicePageData }) {
   const url = `${site.url}/${data.slug}/`;
+  const heroImage = data.heroImage ?? "/images/service-werving.jpg";
+  const heroEyebrow = data.heroEyebrow ?? "Premium hospitality staffing";
+
   const nodes = [
     webpageNode({ url, name: data.title, description: data.description }),
     breadcrumbNode([
@@ -60,49 +67,64 @@ export function ServicePage({ data }: { data: ServicePageData }) {
     <>
       <JsonLd data={pageGraph} />
 
-      <article className="mx-auto max-w-container px-4 py-section-y-mobile md:py-section-y-tablet lg:py-section-y">
-        <TrustBanner />
+      {/* Cinematic page hero */}
+      <PageHero
+        eyebrow={heroEyebrow}
+        title={data.title}
+        intro={<p>{data.description}</p>}
+        image={heroImage}
+        imageAlt={data.breadcrumbLabel}
+        size="compact"
+      />
 
-        <header className="mb-8">
-          <h1 className="mb-6">{data.title}</h1>
-          <div className="prose-cs">{data.intro}</div>
-        </header>
+      {/* Body content */}
+      <section className="bg-white py-20 md:py-24">
+        <div className="mx-auto max-w-container px-4">
+          <TrustBanner />
 
-        <div className="prose-cs">{data.body}</div>
+          <div className="mx-auto mt-12 max-w-3xl">
+            <div className="prose-cs">{data.intro}</div>
+            <div className="prose-cs mt-8">{data.body}</div>
+          </div>
 
-        {data.pillarLink}
+          {data.pillarLink && (
+            <div className="mx-auto mt-12 max-w-3xl">{data.pillarLink}</div>
+          )}
+        </div>
+      </section>
 
-        {data.faqs && data.faqs.length > 0 && (
-          <FAQAccordion
-            faqs={data.faqs}
-            heading={data.faqHeading ?? "Veelgestelde vragen"}
-          />
-        )}
-
-        <section className="mt-12 rounded bg-bg-gray p-8 text-center md:p-12">
-          <h2 className="mb-4">{data.cta?.heading ?? "Klaar om in te huren?"}</h2>
-          <p className="mx-auto mb-6 max-w-prose text-ink-700">
-            {data.cta?.body ??
-              "Stuur een mail of bel direct. Wij nemen binnen een uur contact op voor een korte briefing."}
-          </p>
-          <div className="flex flex-wrap justify-center gap-3">
-            <CTAButton href={`mailto:${site.email}`} variant="primary">
-              Mail ons
-            </CTAButton>
-            <CTAButton href={`tel:${site.phone}`} variant="secondary">
-              Bel {site.phoneDisplay}
-            </CTAButton>
-            <CTAButton href="/contact-us/" variant="secondary">
-              Contactformulier
-            </CTAButton>
+      {/* FAQ */}
+      {data.faqs && data.faqs.length > 0 && (
+        <section className="bg-bg-gray py-20 md:py-28">
+          <div className="mx-auto max-w-container px-4">
+            <div className="mb-12 text-center">
+              <SectionLabel>Veelgestelde vragen</SectionLabel>
+              <h2 className="mx-auto mt-3 max-w-3xl font-serif text-3xl text-ink-900 md:text-5xl">
+                {data.faqHeading ?? "Veelgestelde vragen"}
+              </h2>
+            </div>
+            <div className="mx-auto max-w-3xl">
+              <FAQAccordion faqs={data.faqs} heading="" />
+            </div>
           </div>
         </section>
-      </article>
+      )}
+
+      {/* Closing CTA */}
+      <ClosingCTA
+        heading={data.cta?.heading ?? "Klaar om in te huren?"}
+        body={
+          data.cta?.body ??
+          "Stuur een mail of bel direct. Wij nemen binnen een uur contact op voor een korte briefing."
+        }
+      />
     </>
   );
 }
 
 /** Helper: standard "Lees ook" pillar link blocks for service pages */
+import { PillarLinkBlock, InlineLink } from "@/components/PillarLinkBlock";
+
 export function HotelPillarLink() {
   return (
     <PillarLinkBlock>
@@ -110,7 +132,8 @@ export function HotelPillarLink() {
       <InlineLink href="/chef-inhuren-hotel-amsterdam/">
         chef inhuren voor uw hotel in Amsterdam
       </InlineLink>{" "}
-      — met payroll-only model, Wet DBA 2026 compliant, inclusief transparante tarieven per rol.
+      — met payroll-only model, Wet DBA 2026 compliant, inclusief transparante
+      tarieven per rol.
     </PillarLinkBlock>
   );
 }
@@ -119,8 +142,9 @@ export function PayrollPillarLink() {
   return (
     <PillarLinkBlock variant="burgundy">
       Specifiek voor koks via payroll: onze{" "}
-      <InlineLink href="/payroll-chef-inhuren/">payroll chef inhuren gids</InlineLink> behandelt
-      het waarom, hoe en wat-het-kost voor compliant kok-inzet in Amsterdam.
+      <InlineLink href="/payroll-chef-inhuren/">payroll chef inhuren gids</InlineLink>{" "}
+      behandelt het waarom, hoe en wat-het-kost voor compliant kok-inzet in
+      Amsterdam.
     </PillarLinkBlock>
   );
 }

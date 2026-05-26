@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CTAButton } from "@/components/CTAButton";
+import { ClosingCTA } from "@/components/ClosingCTA";
 import { ComparisonTable, standardComparisonRows } from "@/components/ComparisonTable";
 import { FAQAccordion } from "@/components/FAQAccordion";
 import { JsonLd } from "@/components/JsonLd";
+import { PageHero } from "@/components/PageHero";
 import { TrustBanner } from "@/components/TrustBanner";
 import { payrollPillarFaqs } from "@/lib/faqs";
 import {
@@ -63,12 +64,24 @@ export default function PayrollPillarPage() {
     <>
       <JsonLd data={pageGraph} />
 
-      <article className="mx-auto max-w-container px-4 py-section-y-mobile md:py-section-y-tablet lg:py-section-y">
+      <PageHero
+        eyebrow="Pillar — Payroll"
+        title="Payroll chef inhuren — zonder ZZP-risico"
+        intro={
+          <p>
+            100% loondienst, Wet DBA 2026 compliant. 200+ chefs in netwerk,
+            binnen 24 uur inzetbaar in Amsterdam en de Randstad.
+          </p>
+        }
+        image="/images/service-werving.jpg"
+        imageAlt="Payroll chef inhuren in Amsterdam"
+      />
+
+      <article className="mx-auto max-w-3xl px-4 py-20 md:py-28">
         <TrustBanner />
 
-        <header className="mb-8">
-          <h1 className="mb-6">{TITLE}</h1>
-          <p className="prose-cs">
+        <div className="prose-cs mt-10">
+          <p className="lead">
             <strong>Payroll chef inhuren zonder ZZP-risico:</strong> Chef &amp; Serve levert
             ervaren chefs, sous chefs en keukenpersoneel volledig in loondienst via payroll —
             compliant met de Wet DBA 2026 en de Belastingdienst-handhaving die sinds 1 januari
@@ -80,7 +93,7 @@ export default function PayrollPillarPage() {
             dag één gebouwd als payroll-first staffing agency. Geen grijs gebied, geen
             constructies, geen naheffingen.
           </p>
-        </header>
+        </div>
 
         <div className="prose-cs">
           <h2>Wat is payroll chef inhuren precies?</h2>
@@ -232,27 +245,12 @@ export default function PayrollPillarPage() {
           faqs={payrollPillarFaqs}
           heading="Veelgestelde vragen over payroll chef inhuren"
         />
-
-        <section className="mt-12 rounded bg-bg-gray p-8 text-center md:p-12">
-          <h2 className="mb-4">Klaar om een payroll chef in te huren?</h2>
-          <p className="mx-auto mb-6 max-w-prose text-ink-700">
-            Stuur een e-mail, bel direct, of gebruik het contactformulier. Wij nemen binnen een
-            uur contact op voor een korte briefing. Bij spoedopdrachten 7 dagen per week
-            bereikbaar tussen 07:00 en 23:00.
-          </p>
-          <div className="flex flex-wrap justify-center gap-3">
-            <CTAButton href={`mailto:${site.email}`} variant="primary">
-              Mail ons
-            </CTAButton>
-            <CTAButton href={`tel:${site.phone}`} variant="secondary">
-              Bel {site.phoneDisplay}
-            </CTAButton>
-            <CTAButton href="/contact-us/" variant="secondary">
-              Contactformulier
-            </CTAButton>
-          </div>
-        </section>
       </article>
+
+      <ClosingCTA
+        heading="Klaar om een payroll chef in te huren?"
+        body="Stuur een e-mail, bel direct, of gebruik het contactformulier. Wij nemen binnen een uur contact op voor een korte briefing. Bij spoedopdrachten 7 dagen per week bereikbaar tussen 07:00 en 23:00."
+      />
     </>
   );
 }

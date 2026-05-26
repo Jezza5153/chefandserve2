@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JsonLd } from "@/components/JsonLd";
+import { PageHero } from "@/components/PageHero";
 import {
   breadcrumbNode,
   buildGraph,
@@ -33,14 +34,16 @@ export default function Page() {
     <>
       <JsonLd data={pageGraph} />
 
-      <article className="mx-auto max-w-container px-4 py-section-y-mobile md:py-section-y-tablet lg:py-section-y">
-        <header className="mb-12">
-          <h1 className="mb-6">Algemene Voorwaarden</h1>
-          <p className="prose-cs text-sm text-ink-700">
-            Versie 1.0 — geldig vanaf 26 mei 2026
-          </p>
-        </header>
+      <PageHero
+        eyebrow="Juridisch"
+        title="Algemene voorwaarden"
+        intro={<p className="text-sm">Versie 1.0 — geldig vanaf 26 mei 2026</p>}
+        image="/images/restaurant-interior.jpg"
+        imageAlt="Chef & Serve"
+        size="compact"
+      />
 
+      <article className="mx-auto max-w-3xl px-4 py-20 md:py-28">
         <section className="prose-cs">
           <h2>1. Definities</h2>
           <ul>

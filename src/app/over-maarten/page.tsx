@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CTAButton } from "@/components/CTAButton";
+import { ClosingCTA } from "@/components/ClosingCTA";
 import { JsonLd } from "@/components/JsonLd";
-import { TrustBanner } from "@/components/TrustBanner";
+import { PageHero, SectionLabel } from "@/components/PageHero";
+import { SplitSection } from "@/components/SplitSection";
 import {
   breadcrumbNode,
   buildGraph,
@@ -38,149 +39,177 @@ export default function Page() {
     <>
       <JsonLd data={pageGraph} />
 
-      <article className="mx-auto max-w-container px-4 py-section-y-mobile md:py-section-y-tablet lg:py-section-y">
-        <TrustBanner />
+      <PageHero
+        eyebrow="Behind Chef & Serve"
+        title="Maarten Hogeveen"
+        intro={
+          <p>
+            Patron Cuisinier, oprichter en eigenaar. 20+ jaar in de Amsterdamse
+            hospitality — van casual brasserie tot sterrenkeuken.
+          </p>
+        }
+        image="/images/maarten-portrait.jpg"
+        imageAlt="Maarten Hogeveen"
+      />
 
-        <header className="mb-12">
-          <h1 className="mb-6">Over Maarten Hogeveen</h1>
-          <p className="prose-cs text-lg">
-            Patron Cuisinier, oprichter en eigenaar van Chef &amp; Serve.
-            20+ jaar in de Amsterdamse hospitality — van casual brasserie tot
-            sterrenkeuken — en de architect van het payroll-first model
-            waarmee wij in 2026 staan.
-          </p>
-        </header>
+      {/* Carrière split */}
+      <SplitSection
+        eyebrow="Carrière"
+        title="20 jaar in de Amsterdamse top"
+        body={
+          <>
+            <p>
+              Maarten begon als jonge kok en bouwde zijn vak op in een rij
+              keukens die de stad mede hebben gevormd:
+            </p>
+            <ul>
+              <li>
+                <strong>Lute (Restaurant Lute)</strong> — fine-dining onder de
+                vlag van Peter Lute
+              </li>
+              <li>
+                <strong>d'Vijff Vlieghen</strong> — Nederlandse keuken op
+                wereldniveau aan de Spuistraat
+              </li>
+              <li>
+                <strong>d'Swarte Walvis</strong> — Zaanse hospitality-klassieker
+              </li>
+              <li>
+                <strong>Mario</strong> — Italiaanse keuken, fast-paced
+                brasserie
+              </li>
+              <li>
+                <strong>Chefstable</strong> — chef's-table-concept met
+                interactieve gastvrijheid
+              </li>
+            </ul>
+            <p>
+              Elke keuken heeft Maarten iets geleerd over discipline,
+              gastvrijheid en wat een team kan bereiken als de mise-en-place
+              klopt.
+            </p>
+          </>
+        }
+        image="/images/service-werving.jpg"
+        imageAlt="Chef plating dessert"
+      />
 
-        <section className="prose-cs mb-12">
-          <h2>Carrière in de Amsterdamse top</h2>
-          <p>
-            Maarten begon als jonge kok en bouwde zijn vak op in een rij
-            keukens die de stad mede hebben gevormd:
-          </p>
-          <ul>
-            <li>
-              <strong>Lute (Restaurant Lute)</strong> — fine-dining onder de
-              vlag van Peter Lute, één van Amsterdams toonaangevende
-              gastronomische adressen
-            </li>
-            <li>
-              <strong>d'Vijff Vlieghen</strong> — Nederlandse keuken op
-              wereldniveau in een 17e-eeuws pand aan de Spuistraat
-            </li>
-            <li>
-              <strong>d'Swarte Walvis</strong> — Zaanse hospitality-klassieker
-              met een internationale klantenkring
-            </li>
-            <li>
-              <strong>Mario</strong> — Italiaanse keuken, fast-paced
-              brasserie-stijl met focus op verse pasta en gastvrijheid
-            </li>
-            <li>
-              <strong>Chefstable</strong> — chef's-table-concept met
-              interactieve, vakgerichte gastvrijheid
-            </li>
-          </ul>
+      {/* JUSTHORECA */}
+      <SplitSection
+        reverse
+        bg="gray"
+        eyebrow="JUSTHORECA — 2017-2025"
+        title="Wat we hebben opgebouwd, en waarom we stopten"
+        body={
+          <>
+            <p>
+              In 2017 richtte Maarten <strong>JUSTHORECA</strong> op — een
+              Amsterdams uitzendbureau dat in 8 jaar uitgroeide tot één van de
+              bekendere namen in de regio. JUSTHORECA werkte voornamelijk via
+              ZZP-constructies, wat tot 2024 de standaard was in de horeca.
+            </p>
+            <p>
+              In 2025 maakte de Nederlandse overheid een einde aan die
+              werkwijze. De handhaving van de Wet DBA maakte het inzetten van
+              ZZP-koks bij langdurige inhuur juridisch onhoudbaar — en niet
+              langer eerlijk voor de chefs die het werk leveren.
+            </p>
+            <p>
+              Maarten besloot JUSTHORECA stop te zetten en opnieuw te beginnen
+              met een schoon, juridisch sluitend model.
+            </p>
+          </>
+        }
+        image="/images/restaurant-interior.jpg"
+        imageAlt="Amsterdam restaurant kitchen"
+      />
 
-          <h2>JUSTHORECA: 2017-2025</h2>
-          <p>
-            In 2017 richtte Maarten <strong>JUSTHORECA</strong> op — een
-            Amsterdams uitzendbureau voor chefs en horecapersoneel dat in 8
-            jaar uitgroeide tot één van de bekendere namen in de regio.
-            JUSTHORECA werkte voornamelijk via ZZP-constructies, wat tot 2024
-            de standaard was in de horeca.
+      {/* Quote */}
+      <section className="bg-burgundy py-20 text-center text-white md:py-28">
+        <div className="mx-auto max-w-container px-4">
+          <p className="font-ui text-[11px] uppercase tracking-[0.3em] text-cream">
+            In eigen woorden
           </p>
-          <p>
-            In 2025 maakte de Nederlandse overheid een einde aan die
-            werkwijze: de <strong>handhaving van de Wet DBA</strong>
-            (Deregulering Beoordeling Arbeidsrelaties) maakte het inzetten van
-            ZZP-koks bij langdurige inhuur juridisch onhoudbaar. Het oude
-            verdienmodel was niet langer compliant — en niet langer eerlijk
-            voor de chefs die het werk leveren.
+          <blockquote className="mx-auto mt-6 max-w-3xl font-serif text-2xl leading-snug text-white md:text-4xl">
+            &ldquo;Ik heb 20 jaar in deze keukens gestaan. Ik weet wat er van een
+            chef gevraagd wordt op zondagochtend bij 80 covers, en ik weet welke
+            man of vrouw daar het beste past.&rdquo;
+          </blockquote>
+          <p className="mt-8 font-ui text-[11px] uppercase tracking-[0.18em] text-cream">
+            — Maarten Hogeveen
           </p>
-          <p>
-            Maarten besloot JUSTHORECA stop te zetten en opnieuw te beginnen
-            met een schoon, juridisch sluitend model:{" "}
-            <strong>Chef &amp; Serve</strong>.
-          </p>
+        </div>
+      </section>
 
-          <h2>Chef &amp; Serve: 2025 — heden</h2>
-          <p>
-            Chef &amp; Serve is gebouwd op één uitgangspunt:{" "}
-            <strong>100% loondienst, geen ZZP, geen achterdeur</strong>.
-            Wij zijn de juridische werkgever van iedereen die wij plaatsen —
-            wij betalen het loon, dragen de loonheffing af, regelen vakantie­geld,
-            pensioen en doorbetaling bij ziekte.
-          </p>
-          <p>
-            Voor klanten betekent dat: geen Wet DBA-risico, geen achteraf-naheffing,
-            geen schijnzelfstandigheid. Voor chefs en bediening: zekerheid,
-            eerlijke betaling en een werkgever die naast ze staat — niet
-            tegen.
-          </p>
-
-          <h2>Wat maakt onze aanpak anders?</h2>
-          <p>
-            Veel uitzendbureaus zijn anonieme platforms. Wij zijn dat
-            bewust niet. Maarten neemt zelf nog steeds het eerste gesprek met
-            elke nieuwe klant. Hij kent het verschil tussen een casual brasserie
-            en fine dining van binnenuit, en matcht op vakniveau — niet op
-            beschikbaarheid alleen.
-          </p>
-          <p>
-            <em>"Ik heb 20 jaar in deze keukens gestaan. Ik weet wat er
-            van een chef gevraagd wordt op zondagochtend bij 80 covers, en ik
-            weet welke man of vrouw daar het beste past."</em>
-          </p>
-
-          <h2>Achtergrond &amp; bereik</h2>
-          <ul>
-            <li>20+ jaar ervaring in Amsterdamse top-hospitality</li>
-            <li>8 jaar oprichter/eigenaar JUSTHORECA (2017-2025)</li>
-            <li>Persoonlijk netwerk van {site.network.chefs}+ gescreende koks en hospitality-pros</li>
-            <li>Wekelijkse groei van ~{site.network.growthPerWeek} nieuwe vakmensen in het netwerk</li>
-            <li>Gevestigd in Amsterdam, actief in heel de Randstad</li>
-          </ul>
-        </section>
-
-        {/* Cross-links */}
-        <section className="prose-cs mb-12">
-          <h2>Meer lezen</h2>
-          <ul>
-            <li>
-              <Link href="/ik-ben-maarten-chef-and-serve/" className="text-burgundy underline-offset-4 hover:underline">
-                Maarten in eigen woorden — waarom Chef &amp; Serve
+      {/* Today */}
+      <SplitSection
+        bg="ink"
+        eyebrow="Chef & Serve — 2025 → heden"
+        title="100% loondienst, geen achterdeur"
+        body={
+          <>
+            <p>
+              Chef &amp; Serve is gebouwd op één uitgangspunt:{" "}
+              <strong>100% loondienst, geen ZZP, geen achterdeur</strong>.
+            </p>
+            <p>
+              Wij zijn de juridische werkgever van iedereen die wij plaatsen —
+              wij betalen het loon, dragen de loonheffing af, regelen
+              vakantiegeld, pensioen en doorbetaling bij ziekte.
+            </p>
+            <p>
+              Voor klanten: geen Wet DBA-risico, geen achteraf-naheffing, geen
+              schijnzelfstandigheid. Voor chefs en bediening: zekerheid,
+              eerlijke betaling en een werkgever die naast ze staat.
+            </p>
+            <p>
+              <Link
+                href="/ik-ben-maarten-chef-and-serve/"
+                className="font-ui text-[11px] uppercase tracking-[0.18em] text-cream underline-offset-4 hover:underline"
+              >
+                Maarten in eigen woorden →
               </Link>
-            </li>
-            <li>
-              <Link href="/payroll-chef-inhuren/" className="text-burgundy underline-offset-4 hover:underline">
-                Onze payroll-aanpak uitgelegd
-              </Link>
-            </li>
-            <li>
-              <Link href="/who-we-are/" className="text-burgundy underline-offset-4 hover:underline">
-                Wie wij zijn als bedrijf
-              </Link>
-            </li>
-          </ul>
-        </section>
+            </p>
+          </>
+        }
+        image="/images/chef-portrait.jpg"
+        imageAlt="Chef working"
+      />
 
-        {/* CTA */}
-        <section className="rounded bg-bg-gray p-8 text-center md:p-12">
-          <h2 className="mb-4">Direct in contact met Maarten?</h2>
-          <p className="mx-auto mb-6 max-w-prose text-ink-700">
-            Hij neemt zelf het eerste gesprek met nieuwe klanten. Bel of mail,
-            en u krijgt binnen een uur reactie.
-          </p>
-          <div className="flex flex-wrap justify-center gap-3">
-            <CTAButton href={`tel:${site.phone}`} variant="primary">
-              Bel {site.phoneDisplay}
-            </CTAButton>
-            <CTAButton href={`mailto:${site.email}`} variant="secondary">
-              Mail ons
-            </CTAButton>
+      {/* Achievements */}
+      <section className="bg-white py-20 md:py-28">
+        <div className="mx-auto max-w-container px-4">
+          <div className="mb-12 text-center">
+            <SectionLabel>Achtergrond &amp; bereik</SectionLabel>
+            <h2 className="mx-auto mt-3 max-w-3xl font-serif text-3xl text-ink-900 md:text-5xl">
+              In cijfers
+            </h2>
           </div>
-        </section>
-      </article>
+
+          <div className="grid gap-12 md:grid-cols-4 md:gap-8">
+            {[
+              { n: "20+", t: "Jaar ervaring", b: "in Amsterdamse top-hospitality" },
+              { n: "8", t: "Jaar JUSTHORECA", b: "als oprichter & eigenaar (2017-2025)" },
+              { n: `${site.network.chefs}+`, t: "Hospitality-pros", b: "in actief netwerk, wekelijks groeiend" },
+              { n: `${site.network.growthPerWeek}`, t: "Nieuwe vakmensen", b: "per week toegevoegd aan ons netwerk" },
+            ].map((s) => (
+              <div key={s.t} className="text-center">
+                <div className="font-serif text-5xl text-burgundy md:text-6xl">
+                  {s.n}
+                </div>
+                <h3 className="mt-3 font-serif text-lg text-ink-900">{s.t}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-ink-700">{s.b}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <ClosingCTA
+        eyebrow="Direct in contact met Maarten?"
+        heading="Hij neemt zelf het eerste gesprek"
+        body="Met nieuwe klanten. Bel of mail, en u krijgt binnen een uur reactie."
+      />
     </>
   );
 }

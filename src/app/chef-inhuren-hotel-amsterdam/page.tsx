@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { CTAButton } from "@/components/CTAButton";
+import { ClosingCTA } from "@/components/ClosingCTA";
 import { ComparisonTable, standardComparisonRows } from "@/components/ComparisonTable";
 import { FAQAccordion } from "@/components/FAQAccordion";
 import { JsonLd } from "@/components/JsonLd";
+import { PageHero } from "@/components/PageHero";
 import { TrustBanner } from "@/components/TrustBanner";
 import { hotelPillarFaqs } from "@/lib/faqs";
 import {
@@ -64,12 +64,24 @@ export default function HotelPillarPage() {
     <>
       <JsonLd data={pageGraph} />
 
-      <article className="mx-auto max-w-container px-4 py-section-y-mobile md:py-section-y-tablet lg:py-section-y">
+      <PageHero
+        eyebrow="Pillar — Hotels in Amsterdam"
+        title="Chef inhuren voor uw hotel in Amsterdam"
+        intro={
+          <p>
+            100% payroll, geen ZZP-risico. 200+ chefs in netwerk, binnen 24 uur
+            inzetbaar. Wet DBA 2026 compliant.
+          </p>
+        }
+        image="/images/hotel-banquet.jpg"
+        imageAlt="Hotel banqueting in Amsterdam"
+      />
+
+      <article className="mx-auto max-w-3xl px-4 py-20 md:py-28">
         <TrustBanner />
 
-        <header className="mb-8">
-          <h1 className="mb-6">{TITLE}</h1>
-          <p className="prose-cs">
+        <div className="prose-cs mt-10">
+          <p className="lead">
             <strong>Chef inhuren voor uw hotel in Amsterdam zonder ZZP-risico:</strong> Chef &amp; Serve
             levert ervaren koks, sous chefs en executive chefs volledig in loondienst via payroll —
             compliant met de Wet DBA 2026 en de handhaving die de Belastingdienst sinds 1 januari
@@ -80,7 +92,7 @@ export default function HotelPillarPage() {
             2025 gestopte JUSTHORECA — is Chef &amp; Serve vanaf dag één gebouwd als payroll-first
             staffing agency. Geen constructies, geen grijs gebied, geen naheffingen.
           </p>
-        </header>
+        </div>
 
         <div className="prose-cs">
           <h2>Waarom kiezen hotels in 2026 voor payroll in plaats van ZZP?</h2>
@@ -264,35 +276,12 @@ export default function HotelPillarPage() {
           faqs={hotelPillarFaqs}
           heading="Veelgestelde vragen over chef inhuren voor hotels in Amsterdam"
         />
-
-        <section className="mt-12 rounded bg-bg-gray p-8 text-center md:p-12">
-          <h2 className="mb-4">Klaar om een chef voor uw hotel in te huren?</h2>
-          <p className="mx-auto mb-6 max-w-prose text-ink-700">
-            Stuur een mail, bel direct, of gebruik het contactformulier. Wij nemen binnen een uur
-            contact op voor een korte briefing. Bij spoedklussen 7 dagen per week bereikbaar.
-          </p>
-          <div className="flex flex-wrap justify-center gap-3">
-            <CTAButton href={`mailto:${site.email}`} variant="primary">
-              Mail ons
-            </CTAButton>
-            <CTAButton href={`tel:${site.phone}`} variant="secondary">
-              Bel {site.phoneDisplay}
-            </CTAButton>
-            <CTAButton href="/contact-us/" variant="secondary">
-              Contactformulier
-            </CTAButton>
-          </div>
-          <p className="mt-6 text-sm text-ink-700">
-            <Link
-              href="/payroll-chef-inhuren/"
-              className="text-burgundy underline-offset-4 hover:underline"
-            >
-              Of lees onze payroll-gids
-            </Link>{" "}
-            voor de juridische compliance-route.
-          </p>
-        </section>
       </article>
+
+      <ClosingCTA
+        heading="Klaar om een chef voor uw hotel in te huren?"
+        body="Stuur een mail, bel direct, of gebruik het contactformulier. Wij nemen binnen een uur contact op voor een korte briefing. Bij spoedklussen 7 dagen per week bereikbaar."
+      />
     </>
   );
 }
