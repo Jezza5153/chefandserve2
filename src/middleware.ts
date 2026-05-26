@@ -4,32 +4,52 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 
 /**
- * Middleware — PR-0E update: auth gate.
+ * Middleware — PR-0F: auth gate + role gates.
  *
- * What it does now:
- *   - Sets x-cs-app-route + x-cs-pathname headers (used by ChromeShell)
- *   - On /admin/* paths: if unauthed, redirect to /login?next=<path>
+ * What it does:
+ *   - Auth gate: unauthed /admin/* → /login?next=<path>
+ *   - Role gate: /admin/system/* requires super_admin (else → /admin/business)
+ *   - Forwards x-cs-app-route + x-cs-pathname headers (for ChromeShell)
  *
- * What PR-0F will add:
- *   - Role gates (super_admin-only on /admin/system/*, /admin/users, /admin/roles)
- *   - IP-based audit_log enrichment
+ * Host-guard rule (chefandserve.nl → app.chefandserve.nl) remains deferred
+ * to production launch — staging is single-host.
  *
- * Host-guard (chefandserve.nl → app.chefandserve.nl) remains deferred to
- * production launch — staging is single-host.
+ * NOTE: server-side `requireRole` in each page is the source of truth for
+ * permissions. Middleware is the first-line UX defense (fast redirects),
+ * but never the only gate. Auth.js may not run database checks here on
+ * every request, so we don't trust JWT claims alone for sensitive ops.
  */
 
 const APP_PATH_PREFIXES = ["/login", "/verify", "/admin"];
+const SYSTEM_ROUTES = ["/admin/system", "/admin/users", "/admin/roles"];
 
-export default auth((request: NextRequest & { auth: import("next-auth").Session | null }) => {
+function isSystemPath(path: string): boolean {
+  return SYSTEM_ROUTES.some(
+    (r) => path === r || path.startsWith(`${r}/`),
+  );
+}
+
+export default auth((request: NextRequest & {
+  auth: import("next-auth").Session | null;
+}) => {
   const path = request.nextUrl.pathname;
-  const isAppRoute = APP_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+  const isAppRoute = APP_PATH_PREFIXES.some((p) => path.startsWith(p));
   const isAdminRoute = path.startsWith("/admin");
 
-  // Auth gate: unauthenticated users hitting /admin/* go to /login
-  if (isAdminRoute && !request.auth) {
+  // Auth gate: unauthed on /admin/* → /login?next=<path>
+  if (isAdminRoute && !request.auth?.user) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", path);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Role gate: /admin/system/* + /admin/users + /admin/roles → super_admin only
+  if (isAdminRoute && isSystemPath(path)) {
+    const roles = request.auth?.user?.roles ?? [];
+    if (!roles.includes("super_admin")) {
+      const businessUrl = new URL("/admin/business", request.url);
+      return NextResponse.redirect(businessUrl);
+    }
   }
 
   // Forward route-type header so ChromeShell can suppress marketing chrome
@@ -40,9 +60,6 @@ export default auth((request: NextRequest & { auth: import("next-auth").Session 
   return NextResponse.next({ request: { headers: requestHeaders } });
 });
 
-/**
- * Match auth-relevant routes only. Marketing pages skip middleware entirely.
- */
 export const config = {
   matcher: ["/admin/:path*", "/login", "/verify"],
 };

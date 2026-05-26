@@ -1,0 +1,109 @@
+/**
+ * Server-side permission helpers.
+ *
+ * Usage in a server component / server action:
+ *   import { requireRole, hasPermission, requireAuth } from "@/lib/permissions";
+ *   const session = await requireRole("super_admin");      // throws/redirects if not
+ *   if (await hasPermission(session, "chefs", "write")) { ... }
+ *
+ * Permissions are loaded once per request from DB. We don't put individual
+ * permissions in the JWT — only role keys. This keeps the JWT small and lets
+ * permission changes take effect immediately (paired with permissionsVersion).
+ */
+
+import { redirect } from "next/navigation";
+import { and, eq, inArray } from "drizzle-orm";
+
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db/client";
+import { permissions, rolePermissions, roles } from "@/lib/db/schema";
+
+import type { Session } from "next-auth";
+
+/* ------------------------------------------------------------------------- */
+
+export type RoleKey = "super_admin" | "owner" | (string & {}); // open for future roles
+
+/** Default landing path per role. Used after login and at /admin index. */
+export function defaultLandingFor(roleKeys: string[]): string {
+  if (roleKeys.includes("super_admin")) return "/admin/system";
+  if (roleKeys.includes("owner")) return "/admin/business";
+  return "/admin"; // fallback — shouldn't happen for seeded users
+}
+
+/** True if the session has ANY of the listed roles. */
+export function hasRole(
+  session: Session | null,
+  ...required: RoleKey[]
+): boolean {
+  if (!session?.user?.roles) return false;
+  return required.some((r) => session.user.roles.includes(r));
+}
+
+/**
+ * Server helper — get the current session or redirect to /login.
+ * Use in any server component that requires auth.
+ */
+export async function requireAuth(nextPath = "/admin"): Promise<Session> {
+  const session = await auth();
+  if (!session?.user) {
+    redirect(`/login?next=${encodeURIComponent(nextPath)}`);
+  }
+  return session;
+}
+
+/**
+ * Server helper — verify the session has the required role. super_admin
+ * bypasses all role checks (founder rule: super_admin sees everything).
+ * Otherwise redirect to the user's default landing (no blank pages).
+ *
+ * Pass `{ strict: true }` to disable the super_admin bypass — useful when
+ * a route should be visible to a SPECIFIC role only (e.g. an
+ * impersonation-warning banner shown only to owners).
+ */
+export async function requireRole(
+  required: RoleKey,
+  nextPath = "/admin",
+  options: { strict?: boolean } = {},
+): Promise<Session> {
+  const session = await requireAuth(nextPath);
+  const allowed =
+    hasRole(session, required) ||
+    (!options.strict && hasRole(session, "super_admin"));
+  if (!allowed) {
+    redirect(defaultLandingFor(session.user.roles));
+  }
+  return session;
+}
+
+/**
+ * True if the session's roles collectively grant the given permission.
+ * Looks up role_permissions live in DB (cached implicitly by Next.js fetch
+ * cache + edge — Phase 0 doesn't add an explicit cache).
+ */
+export async function hasPermission(
+  session: Session | null,
+  resource: string,
+  action: string,
+): Promise<boolean> {
+  if (!session?.user?.roles?.length) return false;
+
+  // super_admin gets everything by convention (also covered by DB grants,
+  // but checking here avoids a DB roundtrip).
+  if (session.user.roles.includes("super_admin")) return true;
+
+  const rows = await db
+    .select({ id: permissions.id })
+    .from(permissions)
+    .innerJoin(rolePermissions, eq(rolePermissions.permissionId, permissions.id))
+    .innerJoin(roles, eq(roles.id, rolePermissions.roleId))
+    .where(
+      and(
+        eq(permissions.resource, resource),
+        eq(permissions.action, action),
+        inArray(roles.key, session.user.roles),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
