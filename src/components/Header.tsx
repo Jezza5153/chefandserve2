@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { navigation, site } from "@/lib/site";
 
@@ -28,16 +27,13 @@ export function Header() {
       {/* Main nav */}
       <header className="bg-white">
         <div className="mx-auto flex max-w-container items-center justify-between gap-6 px-4 py-5 lg:py-6">
-          {/* Logo */}
-          <Link href="/" aria-label={site.name} className="flex shrink-0 items-center">
-            <Image
-              src="/images/logo.svg"
-              alt={`${site.name} logo`}
-              width={170}
-              height={48}
-              priority
-              className="h-10 w-auto md:h-12"
-            />
+          {/* Wordmark — matches live site (Prata serif "CHEF & SERVE") */}
+          <Link
+            href="/"
+            aria-label={site.name}
+            className="font-serif text-2xl tracking-[0.04em] text-ink-900 md:text-3xl"
+          >
+            Chef <span className="text-burgundy">&amp;</span> Serve
           </Link>
 
           {/* Main nav */}

@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { navigation, site } from "@/lib/site";
 
@@ -9,14 +8,12 @@ export function Footer() {
         <div className="grid gap-12 md:grid-cols-12">
           {/* Brand block */}
           <div className="md:col-span-5">
-            <Link href="/" aria-label={site.name} className="inline-block">
-              <Image
-                src="/images/logo.svg"
-                alt={`${site.name} logo`}
-                width={170}
-                height={48}
-                className="h-12 w-auto brightness-0 invert"
-              />
+            <Link
+              href="/"
+              aria-label={site.name}
+              className="inline-block font-serif text-3xl tracking-[0.04em] text-white md:text-4xl"
+            >
+              Chef <span className="text-cream">&amp;</span> Serve
             </Link>
             <p className="mt-6 max-w-sm font-serif text-lg leading-relaxed text-white/80">
               Serving the people, making the moment.

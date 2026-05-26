@@ -169,7 +169,7 @@ export default function HomePage() {
             sizes="(min-width: 768px) 50vw, 100vw"
             className="object-cover transition-transform duration-700 group-hover:scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
           <div className="relative z-10 w-full px-8 pb-12 text-center md:px-12 md:pb-16">
             <h3 className="font-serif text-4xl leading-[1.1] text-white md:text-5xl lg:text-6xl">
               <span className="block">Op zoek naar</span>
@@ -194,7 +194,7 @@ export default function HomePage() {
             sizes="(min-width: 768px) 50vw, 100vw"
             className="object-cover transition-transform duration-700 group-hover:scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
           <div className="relative z-10 w-full px-8 pb-12 text-center md:px-12 md:pb-16">
             <h3 className="font-serif text-4xl leading-[1.1] text-white md:text-5xl lg:text-6xl">
               <span className="block">Op zoek naar</span>
