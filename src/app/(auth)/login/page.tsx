@@ -1,20 +1,55 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { AuthError } from "next-auth";
+
+import { signIn } from "@/lib/auth";
 
 /**
- * Login stub — Phase 0 placeholder.
+ * Real magic-link login page.
  *
- * Real magic-link sign-in form ships in PR-0E (Auth.js v5 + Resend).
- * For now this page exists to:
- *   - Confirm the (auth) route group works
- *   - Give the middleware a redirect target for unauthed admin routes
- *   - Make it possible to share/QA the URL shape with the team
+ * - User enters email → server action calls `signIn("resend")`
+ * - Auth.js sends an email via Resend (custom React Email template)
+ * - User is redirected to /verify with status query for UX feedback
+ * - Unknown / non-active emails are rejected by the signIn callback
+ *   (no row created, no email sent — fails silently for security)
  */
 export const metadata: Metadata = {
   title: "Inloggen",
   description: "Toegang voor interne gebruikers van Chef & Serve.",
 };
 
-export default function LoginPage() {
+async function sendMagicLink(formData: FormData) {
+  "use server";
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    redirect("/login?error=invalid-email");
+  }
+  try {
+    await signIn("resend", {
+      email,
+      redirect: false, // we control the redirect below
+    });
+    redirect(`/verify?email=${encodeURIComponent(email)}`);
+  } catch (err) {
+    // Don't reveal whether the email exists. Same error UI for known/unknown.
+    if (err instanceof AuthError) {
+      redirect("/verify?email=" + encodeURIComponent(email));
+    }
+    throw err;
+  }
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; next?: string }>;
+}) {
+  const params = await searchParams;
+  const errorMsg =
+    params.error === "invalid-email"
+      ? "Vul een geldig e-mailadres in."
+      : null;
+
   return (
     <div className="mx-auto w-full max-w-md rounded-lg border border-burgundy/15 bg-white p-8 md:p-10">
       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
@@ -30,8 +65,7 @@ export default function LoginPage() {
       </p>
 
       <form
-        action="#"
-        method="post"
+        action={sendMagicLink}
         className="mt-8 space-y-4"
         aria-label="Inlogformulier"
       >
@@ -47,23 +81,30 @@ export default function LoginPage() {
             id="email"
             name="email"
             placeholder="jij@chefandserve.nl"
-            disabled
-            className="w-full rounded border border-ink-200 bg-bg-gray px-4 py-3 text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy disabled:opacity-60"
+            required
+            autoComplete="email"
+            autoFocus
+            className="w-full rounded border border-ink-200 bg-white px-4 py-3 text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
           />
         </div>
 
+        {errorMsg && (
+          <p className="rounded border border-burgundy/30 bg-burgundy/5 px-4 py-2 text-sm text-burgundy">
+            {errorMsg}
+          </p>
+        )}
+
         <button
           type="submit"
-          disabled
-          className="w-full rounded-full bg-burgundy px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900 disabled:opacity-60"
+          className="w-full rounded-full bg-burgundy px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
         >
           Stuur inloglink
         </button>
       </form>
 
-      <p className="mt-8 rounded border border-cream/40 bg-cream/10 px-4 py-3 text-xs leading-relaxed text-ink-700">
-        <strong className="text-burgundy">Phase 0 placeholder.</strong> Magic-link
-        login is in PR-0E. Tot dan kan dit formulier nog niet versturen.
+      <p className="mt-8 text-xs leading-relaxed text-ink-500">
+        Onbekende of nog niet geactiveerde adressen ontvangen geen mail —
+        neem contact op met Jezza of Maarten als je geen toegang krijgt.
       </p>
     </div>
   );

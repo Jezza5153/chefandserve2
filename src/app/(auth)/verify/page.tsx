@@ -1,22 +1,29 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+
 import { site } from "@/lib/site";
 
 /**
- * Verify-email-sent confirmation page.
+ * "Check je e-mail" — shown after a successful magic-link submission.
  *
- * Shown after a user submits the /login form. The real flow ships in PR-0E:
- * user enters email → Auth.js sends magic link via Resend → user lands here
- * → they check their email and click the link → land on /admin.
- *
- * Phase 0 stub renders the same UI without the underlying send.
+ * For security we display the same UI whether the email was real or not.
+ * If the email matches an active seeded user, Resend sends the link.
+ * If not, no email is sent — but the page looks identical so we don't
+ * leak which emails exist.
  */
 export const metadata: Metadata = {
   title: "Controleer je e-mail",
   description: "Inloglink verstuurd. Klik in je inbox om in te loggen.",
 };
 
-export default function VerifyPage() {
+export default async function VerifyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ email?: string }>;
+}) {
+  const params = await searchParams;
+  const recipient = params.email?.trim().toLowerCase();
+
   return (
     <div className="mx-auto w-full max-w-md rounded-lg border border-burgundy/15 bg-white p-8 text-center md:p-10">
       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
@@ -26,16 +33,21 @@ export default function VerifyPage() {
         Controleer je e-mail
       </h1>
       <p className="mt-4 text-sm leading-relaxed text-ink-700">
-        We hebben een inloglink gestuurd naar het adres dat je hebt opgegeven.
-        Klik in je inbox op de link om door te gaan. De link is 15 minuten
-        geldig.
+        We hebben een inloglink gestuurd
+        {recipient ? (
+          <>
+            {" "}naar <strong className="text-ink-900">{recipient}</strong>
+          </>
+        ) : null}
+        . Klik in je inbox op de link om door te gaan. De link is{" "}
+        <strong>15 minuten</strong> geldig en kan maar één keer worden gebruikt.
       </p>
 
       <div className="mt-6 rounded border border-ink-200 bg-bg-gray px-4 py-3 text-left text-xs leading-relaxed text-ink-700">
         <strong className="text-ink-900">Geen e-mail ontvangen?</strong>
         <br />
-        Check je spam- of ongewenste-mailmap. Komt het bericht niet binnen?
-        Mail dan{" "}
+        Check je spam-map. Niet-geactiveerde accounts ontvangen geen mail —
+        neem dan contact op met{" "}
         <a
           href={`mailto:${site.email}`}
           className="text-burgundy underline-offset-4 hover:underline"

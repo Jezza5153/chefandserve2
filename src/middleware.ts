@@ -1,64 +1,48 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { auth } from "@/lib/auth";
+
 /**
- * Middleware — Phase 0 (PR-0B): mostly a no-op.
+ * Middleware — PR-0E update: auth gate.
  *
- * What it does today:
- *   - Adds a header so we can confirm middleware is running on /admin/* + /login + /verify
- *   - Nothing else. Auth is added in PR-0E; role gates land in PR-0F.
+ * What it does now:
+ *   - Sets x-cs-app-route + x-cs-pathname headers (used by ChromeShell)
+ *   - On /admin/* paths: if unauthed, redirect to /login?next=<path>
  *
- * What it WILL do once Phase 0 is complete:
- *   - PR-0E: redirect unauthed /admin/* → /login?next=<path>
- *   - PR-0F: enforce role gates (super_admin only on /admin/system/*, etc.)
+ * What PR-0F will add:
+ *   - Role gates (super_admin-only on /admin/system/*, /admin/users, /admin/roles)
+ *   - IP-based audit_log enrichment
  *
- * Host-guard rule (chefandserve.nl/login → app.chefandserve.nl/login) is
- * DELIBERATELY DEFERRED until production launch. During staging everything
- * runs on chefandserve2.vercel.app — same host for marketing + app.
- *
- * On launch day we'll add:
- *   const isMarketingHost = host === "chefandserve.nl"
- *                        || host === "www.chefandserve.nl";
- *   const isAppHost      = host === "app.chefandserve.nl";
- *   if (isMarketingHost && (path matches app routes)) {
- *     return NextResponse.redirect(`https://app.chefandserve.nl${path}`, 308);
- *   }
+ * Host-guard (chefandserve.nl → app.chefandserve.nl) remains deferred to
+ * production launch — staging is single-host.
  */
 
 const APP_PATH_PREFIXES = ["/login", "/verify", "/admin"];
 
-export function middleware(request: NextRequest) {
+export default auth((request: NextRequest & { auth: import("next-auth").Session | null }) => {
   const path = request.nextUrl.pathname;
   const isAppRoute = APP_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+  const isAdminRoute = path.startsWith("/admin");
 
-  // Forward a request header so the root layout can suppress the marketing
-  // Header/Footer on app routes without moving the 29 marketing pages into
-  // a separate route group.
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-cs-pathname", path);
-  if (isAppRoute) {
-    requestHeaders.set("x-cs-app-route", "1");
+  // Auth gate: unauthenticated users hitting /admin/* go to /login
+  if (isAdminRoute && !request.auth) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("next", path);
+    return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next({
-    request: { headers: requestHeaders },
-  });
-}
+  // Forward route-type header so ChromeShell can suppress marketing chrome
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-cs-pathname", path);
+  if (isAppRoute) requestHeaders.set("x-cs-app-route", "1");
+
+  return NextResponse.next({ request: { headers: requestHeaders } });
+});
 
 /**
- * Match only app routes; skip Next internals and static assets entirely.
- * Marketing pages don't need any middleware processing.
+ * Match auth-relevant routes only. Marketing pages skip middleware entirely.
  */
 export const config = {
-  matcher: [
-    "/admin/:path*",
-    "/login",
-    "/verify",
-    /*
-     * Excludes:
-     *   - /api/auth/* (Auth.js handler, added in PR-0E)
-     *   - /_next/static, /_next/image, favicon.ico
-     *   - All marketing pages (homepage + 28 service/info pages)
-     */
-  ],
+  matcher: ["/admin/:path*", "/login", "/verify"],
 };
