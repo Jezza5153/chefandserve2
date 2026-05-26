@@ -20,6 +20,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/restaurant-interior.jpg",
+        heroEyebrow: "Horeca personeel — Rotterdam",
         title: "Horeca Personeel Rotterdam — Premium koks en bediening",
         breadcrumbLabel: "Horeca personeel Rotterdam",
         description: DESCRIPTION,

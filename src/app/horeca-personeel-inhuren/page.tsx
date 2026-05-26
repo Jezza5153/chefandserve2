@@ -22,6 +22,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/service-chefs.jpg",
+        heroEyebrow: "Horeca personeel",
         title: "Horeca Personeel Inhuren in Amsterdam — Compleet Team in Loondienst",
         breadcrumbLabel: "Horeca personeel inhuren",
         description: DESCRIPTION,

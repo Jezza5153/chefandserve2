@@ -19,6 +19,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/chef-portrait.jpg",
+        heroEyebrow: "Werken als chef-kok",
         title: "Werken als Chef-kok bij Tophotels en Restaurants in Amsterdam",
         breadcrumbLabel: "Werken als chef-kok",
         description: DESCRIPTION,

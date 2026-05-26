@@ -20,6 +20,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/catering-event.jpg",
+        heroEyebrow: "Evenement personeel",
         title: "Evenement Personeel Inhuren — Voor Festivals, Corporate en Private Events",
         breadcrumbLabel: "Evenement personeel inhuren",
         description: DESCRIPTION,

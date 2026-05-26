@@ -20,6 +20,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/team-service.jpg",
+        heroEyebrow: "Bediening inhuren",
         title: "Bediening Inhuren in Amsterdam — Gekwalificeerd, In Loondienst",
         breadcrumbLabel: "Bediening inhuren",
         description: DESCRIPTION,

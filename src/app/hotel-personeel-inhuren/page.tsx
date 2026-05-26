@@ -21,6 +21,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/hotel-banquet.jpg",
+        heroEyebrow: "Hotel personeel",
         title: "Hotel Personeel Inhuren in Amsterdam — Hospitality Staffing voor Hotels",
         breadcrumbLabel: "Hotel personeel inhuren",
         description: DESCRIPTION,

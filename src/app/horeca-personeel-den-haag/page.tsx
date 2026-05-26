@@ -20,6 +20,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/restaurant-interior.jpg",
+        heroEyebrow: "Horeca personeel — Den Haag",
         title: "Horeca Personeel Den Haag — 100% Loondienst",
         breadcrumbLabel: "Horeca personeel Den Haag",
         description: DESCRIPTION,

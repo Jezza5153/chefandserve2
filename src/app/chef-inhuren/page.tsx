@@ -21,6 +21,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/service-werving.jpg",
+        heroEyebrow: "Chef inhuren",
         title: "Chef Inhuren in Amsterdam — 100% Loondienst, Geen ZZP-risico",
         breadcrumbLabel: "Chef inhuren",
         description: DESCRIPTION,

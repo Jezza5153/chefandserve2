@@ -20,6 +20,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/catering-event.jpg",
+        heroEyebrow: "Catering personeel",
         title: "Catering Personeel Inhuren — Volledige Brigades in Loondienst",
         breadcrumbLabel: "Catering personeel inhuren",
         description: DESCRIPTION,

@@ -20,6 +20,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/chef-portrait.jpg",
+        heroEyebrow: "Horeca-pro op aanvraag",
         title: "Horeca Freelancer Alternatief — 100% Payroll Compliant",
         breadcrumbLabel: "Horeca freelancer",
         description: DESCRIPTION,

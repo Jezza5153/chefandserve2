@@ -21,6 +21,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/chef-portrait.jpg",
+        heroEyebrow: "Kok inhuren Amsterdam",
         title: "Kok Inhuren in Amsterdam — Direct Inzetbaar, In Loondienst",
         breadcrumbLabel: "Kok inhuren Amsterdam",
         description: DESCRIPTION,

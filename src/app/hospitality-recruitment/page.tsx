@@ -20,6 +20,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/maarten-portrait.jpg",
+        heroEyebrow: "Hospitality recruitment",
         title: "Hospitality Recruitment — Werving en Selectie voor Hotels en Restaurants",
         breadcrumbLabel: "Hospitality recruitment",
         description: DESCRIPTION,

@@ -2,6 +2,7 @@ import { ClosingCTA } from "@/components/ClosingCTA";
 import { FAQAccordion } from "@/components/FAQAccordion";
 import { JsonLd } from "@/components/JsonLd";
 import { PageHero, SectionLabel } from "@/components/PageHero";
+import { PricingTiles, type ServiceOffer as PricingOffer } from "@/components/PricingTiles";
 import { TrustBanner } from "@/components/TrustBanner";
 import type { FAQ } from "@/lib/faqs";
 import {
@@ -13,10 +14,7 @@ import {
 } from "@/lib/schema";
 import { site } from "@/lib/site";
 
-export type ServiceOffer = {
-  name: string;
-  pricePerHour?: number;
-};
+export type ServiceOffer = PricingOffer;
 
 export type ServicePageData = {
   slug: string;
@@ -92,6 +90,11 @@ export function ServicePage({ data }: { data: ServicePageData }) {
           )}
         </div>
       </section>
+
+      {/* Pricing tiles (when offers provided) */}
+      {data.offers && data.offers.length > 0 && (
+        <PricingTiles offers={data.offers} />
+      )}
 
       {/* FAQ */}
       {data.faqs && data.faqs.length > 0 && (

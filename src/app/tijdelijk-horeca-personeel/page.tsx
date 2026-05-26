@@ -20,6 +20,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/service-chefs.jpg",
+        heroEyebrow: "Tijdelijk horeca personeel",
         title: "Tijdelijk Horeca Personeel Inhuren — Flexibel, In Loondienst",
         breadcrumbLabel: "Tijdelijk horeca personeel",
         description: DESCRIPTION,

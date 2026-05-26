@@ -20,6 +20,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/restaurant-interior.jpg",
+        heroEyebrow: "Restaurant personeel",
         title: "Restaurant Personeel Inhuren Amsterdam — Compleet Team, In Loondienst",
         breadcrumbLabel: "Restaurant personeel inhuren",
         description: DESCRIPTION,

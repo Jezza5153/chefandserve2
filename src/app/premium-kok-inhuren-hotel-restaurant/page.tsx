@@ -20,6 +20,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/hotel-banquet.jpg",
+        heroEyebrow: "Premium kok inhuren",
         title: "Premium Kok Inhuren voor Hotel of Restaurant",
         breadcrumbLabel: "Premium kok inhuren",
         description: DESCRIPTION,

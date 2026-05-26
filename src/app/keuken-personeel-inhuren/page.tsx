@@ -21,6 +21,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/service-werving.jpg",
+        heroEyebrow: "Keuken personeel",
         title: "Keuken Personeel Inhuren Amsterdam — Volledig in Loondienst",
         breadcrumbLabel: "Keuken personeel inhuren",
         description: DESCRIPTION,

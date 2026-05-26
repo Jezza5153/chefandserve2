@@ -21,6 +21,8 @@ export default function Page() {
     <ServicePage
       data={{
         slug: SLUG,
+        heroImage: "/images/restaurant-interior.jpg",
+        heroEyebrow: "Horeca uitzendbureau",
         title: "Horeca Uitzendbureau Amsterdam — Premium, 100% Loondienst",
         breadcrumbLabel: "Horeca uitzendbureau Amsterdam",
         description: DESCRIPTION,
