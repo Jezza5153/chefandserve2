@@ -21,7 +21,7 @@ import { Header } from "@/components/Header";
  *   - During SSR/build, `usePathname` returns the route segment correctly,
  *     so the prerendered HTML is correct from the first byte.
  */
-const APP_PATH_PREFIXES = ["/admin", "/login", "/verify"];
+const APP_PATH_PREFIXES = ["/admin", "/chef", "/client", "/login", "/verify"];
 
 export function ChromeShell({
   jsonLd,

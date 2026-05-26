@@ -24,11 +24,22 @@ import type { Session } from "next-auth";
 
 export type RoleKey = "super_admin" | "owner" | (string & {}); // open for future roles
 
-/** Default landing path per role. Used after login and at /admin index. */
+/** Default landing path per role. Used after login. */
 export function defaultLandingFor(roleKeys: string[]): string {
   if (roleKeys.includes("super_admin")) return "/admin/system";
   if (roleKeys.includes("owner")) return "/admin/business";
-  return "/admin"; // fallback — shouldn't happen for seeded users
+  if (roleKeys.includes("chef")) return "/chef";
+  if (roleKeys.includes("client")) return "/client";
+  return "/admin";
+}
+
+/** Default landing path per user kind — used when a session has no roles yet. */
+export function defaultLandingForKind(
+  kind: "internal" | "chef" | "client",
+): string {
+  if (kind === "chef") return "/chef";
+  if (kind === "client") return "/client";
+  return "/admin";
 }
 
 /** True if the session has ANY of the listed roles. */

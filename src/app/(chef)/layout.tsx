@@ -1,0 +1,67 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+
+import { SignOutLink } from "@/app/(admin)/_components/SignOutLink";
+import { requireAuth } from "@/lib/permissions";
+
+export const metadata: Metadata = {
+  title: { default: "Chef portal", template: "%s · Chef & Serve" },
+  robots: { index: false, follow: false },
+};
+
+/**
+ * Chef portal layout — mobile-first. Chefs view this on their phone.
+ * Simple top nav (no sidebar). Bottom-pinned account section.
+ */
+export default async function ChefLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const session = await requireAuth();
+
+  const nav = [
+    { label: "Dashboard", href: "/chef" },
+    { label: "Mijn shifts", href: "/chef/shifts" },
+    { label: "Beschikbaarheid", href: "/chef/availability" },
+    { label: "Uren", href: "/chef/hours" },
+  ];
+
+  return (
+    <div className="flex min-h-screen flex-col bg-bg-gray">
+      <header className="border-b border-ink-200 bg-white">
+        <div className="mx-auto max-w-3xl px-4 py-4">
+          <div className="flex items-center justify-between">
+            <Link
+              href="/chef"
+              className="font-serif text-xl tracking-[0.04em] text-ink-900"
+            >
+              Chef <span className="text-burgundy">&amp;</span> Serve
+            </Link>
+            <div className="text-right">
+              <p className="font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
+                {session.user.name ?? session.user.email}
+              </p>
+              <SignOutLink />
+            </div>
+          </div>
+          <nav className="mt-4 flex flex-wrap gap-1">
+            {nav.map((n) => (
+              <Link
+                key={n.href}
+                href={n.href}
+                className="rounded-full px-3 py-1.5 font-ui text-[11px] font-medium uppercase tracking-[0.15em] text-ink-700 hover:bg-burgundy/10 hover:text-burgundy"
+              >
+                {n.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+      </header>
+
+      <main className="flex-1">
+        <div className="mx-auto max-w-3xl px-4 py-8">{children}</div>
+      </main>
+    </div>
+  );
+}
