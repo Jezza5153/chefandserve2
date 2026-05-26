@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-prata: "Prata", Georgia, serif;
+    --font-roboto: "Roboto", system-ui, -apple-system, sans-serif;
+    --font-poppins: "Poppins", system-ui, sans-serif;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-white font-sans text-ink-900 antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-serif;
+  }
+
+  h1 {
+    @apply text-hero-mobile md:text-hero-tablet lg:text-hero-desktop;
+  }
+
+  h2 {
+    @apply text-section-mobile md:text-section-tablet lg:text-section-desktop;
+  }
+
+  h3 {
+    @apply text-lg font-medium md:text-xl;
+  }
+
+  a {
+    @apply transition-colors;
+  }
+
+  /* Prose-style content (used inside service page body) */
+  .prose-cs {
+    @apply max-w-prose;
+  }
+  .prose-cs p {
+    @apply mb-4 leading-relaxed text-ink-700;
+  }
+  .prose-cs h2 {
+    @apply mb-4 mt-10 font-serif text-section-mobile md:text-section-tablet lg:text-section-desktop;
+  }
+  .prose-cs h3 {
+    @apply mb-3 mt-6 font-serif text-lg md:text-xl;
+  }
+  .prose-cs ul {
+    @apply mb-4 space-y-2 pl-5;
+  }
+  .prose-cs ul li {
+    @apply list-disc text-ink-700;
+  }
+  .prose-cs ol {
+    @apply mb-4 space-y-2 pl-5;
+  }
+  .prose-cs ol li {
+    @apply list-decimal text-ink-700;
+  }
+  .prose-cs a {
+    @apply text-burgundy underline-offset-4 hover:underline;
+  }
+  .prose-cs strong {
+    @apply font-semibold text-ink-900;
+  }
+  .prose-cs table {
+    @apply mb-6 w-full border-collapse;
+  }
+  .prose-cs table th {
+    @apply border border-burgundy bg-burgundy px-4 py-3 text-left text-white;
+  }
+  .prose-cs table td {
+    @apply border border-gray-200 px-4 py-3;
+  }
+  .prose-cs table tr:nth-child(even) td {
+    @apply bg-bg-gray;
+  }
+}
