@@ -73,6 +73,11 @@ export const site = {
     facebook: "https://www.facebook.com/chefandserve/",
     x: "https://x.com/chefandserve",
   },
+  // Public intake forms (Jotform). Phase 0: link out; Phase 1: webhook intake to own DB
+  jotform: {
+    chef: "https://form.jotform.com/252442173847359",
+    client: "https://form.jotform.com/252448184762060",
+  },
   // Founder
   founder: {
     name: "Maarten Hogeveen",

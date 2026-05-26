@@ -58,7 +58,50 @@ export default function Page() {
         }
         image="/images/contact-cover.jpg"
         imageAlt="Chef & Serve Amsterdam"
-      />
+      >
+        <a
+          href={site.jotform.client}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-full bg-white px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-900 transition-colors hover:bg-cream"
+        >
+          Vraag personeel aan
+        </a>
+        <a
+          href={`tel:${site.phone}`}
+          className="rounded-full border border-white px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-white hover:text-ink-900"
+        >
+          Bel {site.phoneDisplay}
+        </a>
+      </PageHero>
+
+      {/* Primary intake CTA — Jotform pill */}
+      <section className="bg-bg-gray py-12 md:py-16">
+        <div className="mx-auto max-w-container px-4">
+          <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 rounded-lg border border-burgundy/20 bg-white p-8 text-center md:flex-row md:items-center md:justify-between md:gap-8 md:p-10 md:text-left">
+            <div className="flex-1">
+              <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+                Aanmeldformulier
+              </p>
+              <h2 className="mt-2 font-serif text-2xl text-ink-900 md:text-3xl">
+                Vraag personeel aan in 5 minuten
+              </h2>
+              <p className="mt-3 text-sm leading-relaxed text-ink-700 md:text-base">
+                Vertel ons rol, periode, segment en bijzonderheden via ons
+                online formulier. Wij matchen handmatig binnen 4-24 uur.
+              </p>
+            </div>
+            <a
+              href={site.jotform.client}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 rounded-full bg-burgundy px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
+            >
+              Open aanmeldformulier →
+            </a>
+          </div>
+        </div>
+      </section>
 
       {/* Contact methods */}
       <section className="bg-white py-16 md:py-24">
