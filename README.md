@@ -1,6 +1,13 @@
 # Chef & Serve — v2.0
 
-Premium horeca uitzendbureau Amsterdam. Production rebuild of [chefandserve.nl](https://chefandserve.nl) on a modern static stack — Next.js 15 App Router, TypeScript, Tailwind.
+Premium horeca uitzendbureau Amsterdam. Marketing site + operations platform on Next.js 15, TypeScript, Tailwind, Neon Postgres, Auth.js.
+
+> **For contributors / devs:** start with [`BUILD_PLAN.md`](./BUILD_PLAN.md) — environments, URLs, tokens, the 6 Phase 0 PRs in detail.
+>
+> **Strategic 12-week roadmap:** [`ROADMAP.md`](./ROADMAP.md)
+
+**Staging:** https://chefandserve2.vercel.app
+**Production (post-launch):** https://chefandserve.nl (marketing) + https://app.chefandserve.nl (admin/portal)
 
 ## Stack
 
