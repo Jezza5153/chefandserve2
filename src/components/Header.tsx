@@ -1,50 +1,90 @@
+import Image from "next/image";
 import Link from "next/link";
 import { navigation, site } from "@/lib/site";
 
+/**
+ * Header — matches live site:
+ *   1. Thin burgundy top strip (small caps tagline + phone)
+ *   2. White nav row with real logo image (no text fallback), main nav, SHIFT MANAGER outline CTA
+ */
 export function Header() {
   return (
     <>
-      {/* Top contact strip */}
-      <div className="bg-burgundy text-xs text-white">
-        <div className="mx-auto flex max-w-container items-center justify-between px-4 py-2">
-          <span className="hidden sm:inline">
-            SERVING THE PEOPLE, MAKING THE MOMENT.
+      {/* Top burgundy strip */}
+      <div className="bg-burgundy text-[11px] tracking-[0.18em] text-cream">
+        <div className="mx-auto flex max-w-container items-center justify-between px-4 py-1.5">
+          <span className="hidden font-ui uppercase sm:inline">
+            Serving the people, making the moment.
           </span>
           <a
             href={`tel:${site.phone}`}
-            className="ml-auto inline-flex items-center gap-2 hover:underline"
+            className="ml-auto font-ui uppercase transition-opacity hover:opacity-80"
           >
-            <span aria-hidden>📞</span>
             {site.phoneDisplay}
           </a>
         </div>
       </div>
 
-      {/* Main header */}
-      <header className="border-b border-gray-100 bg-white">
-        <div className="mx-auto flex max-w-container items-center justify-between px-4 py-4">
-          <Link href="/" className="font-serif text-xl text-ink-900 md:text-2xl">
-            <span className="tracking-wide">Chef &amp; Serve</span>
+      {/* Main nav */}
+      <header className="bg-white">
+        <div className="mx-auto flex max-w-container items-center justify-between gap-6 px-4 py-5 lg:py-6">
+          {/* Logo */}
+          <Link href="/" aria-label={site.name} className="flex shrink-0 items-center">
+            <Image
+              src="/images/logo.svg"
+              alt={`${site.name} logo`}
+              width={170}
+              height={48}
+              priority
+              className="h-10 w-auto md:h-12"
+            />
           </Link>
 
-          <nav className="hidden items-center gap-6 text-sm md:flex" aria-label="Hoofdmenu">
+          {/* Main nav */}
+          <nav
+            className="hidden flex-1 items-center justify-center gap-8 lg:flex"
+            aria-label="Hoofdmenu"
+          >
             {navigation.main.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className="font-medium uppercase tracking-wide text-ink-700 hover:text-burgundy"
+                className="font-ui text-[11px] uppercase tracking-[0.18em] text-ink-900 transition-colors hover:text-burgundy"
               >
                 {item.label}
               </Link>
             ))}
           </nav>
 
-          <Link
-            href="/contact-us/"
-            className="rounded border border-ink-900 px-4 py-2 text-sm font-medium uppercase tracking-wide text-ink-900 transition-colors hover:bg-burgundy hover:border-burgundy hover:text-white"
-          >
-            Shift manager
-          </Link>
+          {/* CTA + utility */}
+          <div className="flex shrink-0 items-center gap-3">
+            <a
+              href={`tel:${site.phone}`}
+              aria-label="Bel ons"
+              className="hidden h-9 w-9 items-center justify-center rounded-full border border-ink-900 text-ink-900 transition-colors hover:bg-burgundy hover:border-burgundy hover:text-white md:inline-flex"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+              </svg>
+            </a>
+
+            <Link
+              href="/work-with-us/"
+              className="hidden rounded-full border border-ink-900 px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-900 transition-colors hover:border-burgundy hover:bg-burgundy hover:text-white md:inline-block"
+            >
+              Shift manager
+            </Link>
+          </div>
         </div>
       </header>
     </>

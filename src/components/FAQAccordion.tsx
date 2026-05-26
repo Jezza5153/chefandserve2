@@ -19,12 +19,14 @@ export function FAQAccordion({
 
   return (
     <section className="my-12" aria-labelledby="faq-heading">
-      <h2
-        id="faq-heading"
-        className="mb-6 font-serif text-section-mobile md:text-section-tablet lg:text-section-desktop"
-      >
-        {heading}
-      </h2>
+      {heading && (
+        <h2
+          id="faq-heading"
+          className="mb-6 font-serif text-section-mobile md:text-section-tablet lg:text-section-desktop"
+        >
+          {heading}
+        </h2>
+      )}
       <div className="space-y-3">
         {faqs.map((faq, i) => {
           const isOpen = openIndex === i;

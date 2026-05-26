@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     minimumCacheTTL: 31536000,
+    // Allow legacy WP CDN while we transition; remove once everything is in /public/images
+    remotePatterns: [
+      { protocol: "https", hostname: "chefandserve.nl", pathname: "/wp-content/uploads/**" },
+    ],
   },
   // 301 redirects from the old WP site (preserves SEO equity)
   async redirects() {
