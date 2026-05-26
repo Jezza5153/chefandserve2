@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Prata, Roboto, Poppins } from "next/font/google";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
+import { ChromeShell } from "@/components/ChromeShell";
 import { JsonLd } from "@/components/JsonLd";
 import {
   buildGraph,
@@ -101,21 +100,25 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Site-wide @graph: organization + founder + website
-  const siteGraph = buildGraph(organizationNode(), personMaartenNode(), websiteNode());
+  // Site-wide @graph: organization + founder + website.
+  // Rendered server-side on every route; suppressed via a `<head>` directive
+  // inside ChromeShell when on an app route (so app routes never leak
+  // public marketing schema). ChromeShell is a tiny client component that
+  // reads the pathname and conditionally renders Header/Footer — this keeps
+  // marketing pages STATICALLY pre-rendered.
+  const siteGraph = buildGraph(
+    organizationNode(),
+    personMaartenNode(),
+    websiteNode(),
+  );
 
   return (
     <html
       lang={site.language}
       className={`${prata.variable} ${roboto.variable} ${poppins.variable}`}
     >
-      <head>
-        <JsonLd data={siteGraph} />
-      </head>
       <body className="flex min-h-screen flex-col">
-        <Header />
-        <main className="flex-1">{children}</main>
-        <Footer />
+        <ChromeShell jsonLd={<JsonLd data={siteGraph} />}>{children}</ChromeShell>
       </body>
     </html>
   );
