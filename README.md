@@ -5,6 +5,8 @@ Premium horeca uitzendbureau Amsterdam. Marketing site + operations platform on 
 > **For contributors / devs:** start with [`BUILD_PLAN.md`](./BUILD_PLAN.md) — environments, URLs, tokens, the 6 Phase 0 PRs in detail.
 >
 > **Strategic 12-week roadmap:** [`ROADMAP.md`](./ROADMAP.md)
+>
+> **AI integration prep (living doc):** [`AI_INTEGRATION.md`](./AI_INTEGRATION.md) — data inventory, RAG corpus, tool surface, decision-points where AI adds value. Update every phase so AI is plug-in ready.
 
 **Staging:** https://chefandserve2.vercel.app
 **Production (post-launch):** https://chefandserve.nl (marketing) + https://app.chefandserve.nl (admin/portal)
