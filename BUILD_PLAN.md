@@ -157,37 +157,28 @@ What I need from you to proceed. Per PR:
 
 Pure code change. No accounts. Builds the auth/admin route groups with stub content.
 
-### PR-0C — Env validation + Sentry
+### PR-0C — Env validation (Sentry deferred)
 
-| What | Where | Notes |
-|---|---|---|
-| `SENTRY_DSN` | Sentry → project settings → Client Keys | Format: `https://xxx@oXXX.ingest.sentry.io/XXX` |
-| `SENTRY_AUTH_TOKEN` | Sentry → settings → auth tokens (create new) | Needs `project:write`, `release:admin` scopes |
-| `SENTRY_ORG` | URL slug | e.g. `chef-and-serve` |
-| `SENTRY_PROJECT` | URL slug | e.g. `chefandserve` |
-| `NEXT_PUBLIC_SENTRY_DSN` | Same as `SENTRY_DSN` | Exposed to client for browser-side errors |
-
-Set all in Vercel project → Settings → Environment Variables → both Production AND Preview environments.
+No external accounts needed. The `error_log` table (PR-0D) + `/admin/system/errors` viewer (PR-0F) provide enough observability for Phase 0. If/when traffic justifies it, Sentry can be added as a single-env-var swap-in upgrade.
 
 ### PR-0D — Database
 
 | What | Where | Notes |
 |---|---|---|
-| `DATABASE_URL` | Neon → project → connection string | **Pooled** connection (default) for app reads/writes |
-| `DATABASE_URL_UNPOOLED` | Neon → unpooled connection | Used for `drizzle-kit migrate` (long-lived connections) |
-| Neon project name | (decision needed) | Suggest: `chefandserve-ops` |
-| Dev/staging branch | Create explicitly in Neon | Suggest branch name: `dev` (preview deploys use this) |
-| Email — Jezza | (your email) | Lowercase. Used as `super_admin` login. |
-| Email — Maarten | (his email) | Lowercase. `owner` role. |
-| Email — Gina | (her email) | Lowercase. `owner` role. |
+| `DATABASE_URL` | Neon → project → connection string | **Pooled** connection (default) for app reads/writes. **Provided ✅** |
+| `DATABASE_URL_UNPOOLED` | Same string, host without `-pooler` segment | Used for `drizzle-kit migrate`. Derived from `DATABASE_URL` ✅ |
+| Neon project | Connected | Database `chef and serve` (spaces in name — handled), branch `main`, region `eu-west-2` |
+| Email — Jezza | `info@jezzacooks.com` ✅ | super_admin, status=`active` |
+| Email — Maarten | `maarten@jezzacooks.com` (placeholder) | owner, status=`invited` — cannot log in until real email set |
+| Email — Gina | `gina@jezzacooks.com` (placeholder) | owner, status=`invited` — cannot log in until real email set |
 
 ### PR-0E — Auth.js magic-link
 
 | What | Where | Notes |
 |---|---|---|
-| `RESEND_API_KEY` | resend.com → API keys → create | Starts with `re_` |
-| Resend sending domain | Verify `chefandserve.nl` (production) OR `chefandserve2.vercel.app` (staging) | Domain verification adds DKIM/SPF records to DNS |
-| `RESEND_FROM_EMAIL` | e.g. `noreply@chefandserve.nl` | Must match verified domain |
+| `RESEND_API_KEY` | resend.com → API keys → create | **Provided ✅** (starts with `re_`) |
+| Resend sending domain | `jezzacooks.com` (Jezza's personal domain — staging only) | **Provided ✅** — DKIM/SPF on jezzacooks.com to be added when domain verification runs. At launch, swap to `noreply@chefandserve.nl`. |
+| `RESEND_FROM_EMAIL` | `info@jezzacooks.com` ✅ | All magic-link emails come from this address during staging |
 | `AUTH_SECRET` | Generated: `openssl rand -base64 32` | I can generate and add to `.env.local`. **Never commit.** |
 | `AUTH_URL` | `https://chefandserve2.vercel.app` (staging) | Becomes `https://app.chefandserve.nl` at launch |
 
@@ -216,7 +207,7 @@ Builds on PR-0D + PR-0E. Pure code.
 | **Neon** | Postgres for ops data | Serverless, branching (free dev/staging DBs), Vercel-native, scale-to-zero on idle |
 | **Auth.js v5** | Magic-link auth + session management | Open-source, owned by Vercel team, Drizzle adapter, Resend provider built-in |
 | **Resend** | Transactional email | Modern API, React Email templates, excellent deliverability, free tier 3k/mo |
-| **Sentry** | Error monitoring | Free tier 5k events/mo, Next.js auto-instrumented, source maps |
+| ~~**Sentry**~~ | ~~Error monitoring~~ — **deferred** | Replaced by built-in `error_log` table + `/admin/system/errors` viewer. Sentry can be swapped in later if/when needed (single env var + a few config files). Keeps the stack one tool smaller for now. |
 | **Cloudflare** | DNS (DNS already managed there) + R2 (Phase 2) | R2 has zero egress fees — way cheaper than S3 for chef-document downloads |
 | **Railway** | Background workers (Phase 5+) | Long-running tasks don't fit Vercel function timeouts |
 | **Drizzle ORM** | Type-safe SQL + migrations | Better DX than Prisma for this stack; pairs naturally with Neon |
@@ -284,7 +275,7 @@ webhooks_received
 
 ### What's NOT in Phase 0
 
-- No `errors` table. Sentry owns this. Adding our own table would either duplicate Sentry or be sanitized to uselessness.
+- ~~No `errors` table.~~ **Updated 2026-05-27:** since Sentry is deferred, we DO have a minimal `error_log` table for application-level errors. Stack traces and message text are logged in full (single-tenant + closed-system — no other tenants' data to leak). PII in error payloads is the responsibility of error-throwers (don't include emails/BSN in error messages).
 - No `chef_submissions` / `client_submissions` yet — Phase 1
 - No `chefs`, `clients`, `shifts`, `placements`, `hours` — Phase 2 / Phase 3
 - No `messages` (email tracking) — Phase 7
@@ -379,33 +370,27 @@ src/app/(admin)/admin/page.tsx          -- placeholder ("Phase 0 — auth coming
 
 **Risk:** low — additive only.
 
-### PR-0C — Env validation + Sentry
+### PR-0C — Env validation (no Sentry)
 
-**Goal:** error visibility before adding auth/DB. Build crashes loudly on missing env.
+**Goal:** zod-validated env split. Build fails loudly on missing config. Sentry deferred — see PR-0D for the `error_log` table that replaces it.
 
 **Files created:**
 ```
 src/lib/env.ts                          -- zod-validated server/client env schemas
-instrumentation.ts                       -- Sentry init
-sentry.client.config.ts
-sentry.server.config.ts
-sentry.edge.config.ts
 ```
 
 **Dependencies added (pinned):**
 ```json
-{ "@sentry/nextjs": "^8.40.0", "zod": "^3.23.0" }
+{ "zod": "^3.23.0" }
 ```
 
 **Acceptance:**
-- Missing `SENTRY_DSN` → build fails with readable zod error message
-- Server error → visible in Sentry within 30s
-- Client error → visible in Sentry
-- `grep -r AUTH_SECRET .next/static` → 0 matches
+- Missing `DATABASE_URL` or `RESEND_API_KEY` → `npm run build` fails with readable zod error message naming the missing key
+- `grep -r AUTH_SECRET .next/static` → 0 matches (no server secret leaked to client bundle)
 
-**Tokens needed:** `SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, org + project slugs.
+**Tokens needed:** none yet — PR-0D and PR-0E supply the values that PR-0C validates.
 
-**Risk:** low. Isolated PR.
+**Risk:** very low. Isolated PR.
 
 ### PR-0D — Database schema + idempotent seed
 
