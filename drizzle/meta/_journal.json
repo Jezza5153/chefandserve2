@@ -15,6 +15,13 @@
       "when": 1779837523938,
       "tag": "0001_hesitant_firebird",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779837953601,
+      "tag": "0002_remarkable_machine_man",
+      "breakpoints": true
     }
   ]
 }

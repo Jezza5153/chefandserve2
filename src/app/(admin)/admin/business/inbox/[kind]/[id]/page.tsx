@@ -8,6 +8,10 @@ import {
   chefSubmissions,
   clientSubmissions,
 } from "@/lib/db/schema";
+import {
+  convertChefSubmission,
+  convertClientSubmission,
+} from "@/lib/domain/conversions";
 import { requireRole } from "@/lib/permissions";
 
 export const metadata = { title: "Aanmelding" };
@@ -147,26 +151,13 @@ export default async function InboxDetailPage({
   async function markConverted() {
     "use server";
     const session = await requireRole("owner");
-    // Phase 2 will create the actual chefs/clients row here. For now just
-    // flip status so Maarten can clear his inbox. The "convert" promotion
-    // becomes a real flow once Phase 2 (chefs + clients masters) lands.
-    const table = kind === "chef" ? chefSubmissions : clientSubmissions;
-    await db
-      .update(table)
-      .set({
-        status: "converted",
-        triagedAt: new Date(),
-        triagedBy: session.user.id,
-        updatedAt: new Date(),
-      })
-      .where(eq(table.id, id));
-    await db.insert(auditLog).values({
-      userId: session.user.id,
-      action: "intake.converted",
-      resource: `${kind}_submission`,
-      resourceId: id,
-    });
-    redirect(`/admin/business/inbox/${kind}/${id}`);
+    if (kind === "chef") {
+      const { chefId } = await convertChefSubmission(id, session.user.id);
+      redirect(`/admin/business/chefs/${chefId}`);
+    } else {
+      const { clientId } = await convertClientSubmission(id, session.user.id);
+      redirect(`/admin/business/clients/${clientId}`);
+    }
   }
 
   /* ----- view -------------------------------------------------------- */
