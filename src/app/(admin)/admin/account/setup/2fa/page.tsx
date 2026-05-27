@@ -35,6 +35,23 @@ const CODES_COOKIE = "cs_2fa_codes";
 const SETUP_TTL = 10 * 60;
 const CODES_TTL = 5 * 60;
 
+async function startTotpSetup() {
+  "use server";
+  await requireAuth("/admin/account/setup");
+  // Generate fresh secret, write the cookie inside this action (legal —
+  // server actions can mutate cookies), then bounce back to the same page
+  // which will now see the cookie and render the QR.
+  const secret = generateSecret();
+  (await cookies()).set(SETUP_COOKIE, secret, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: SETUP_TTL,
+    path: "/admin/account/setup",
+  });
+  redirect("/admin/account/setup/2fa");
+}
+
 async function confirm2FA(formData: FormData) {
   "use server";
   const session = await requireAuth("/admin/account/setup");
@@ -112,22 +129,55 @@ export default async function Setup2FAPage({
   if (!u.passwordHash) redirect("/admin/account/setup/password");
   if (u.totpEnabled) redirect("/admin/account/setup");
 
-  // Generate fresh secret per render; store in a short-lived cookie so the
-  // confirm action can read it back without trusting form-data.
-  const secret = generateSecret();
+  // PR-Z fix: cookies().set() during server-component render throws in
+  // Next.js 15 ("Cookies can only be modified in a Server Action or Route
+  // Handler"). The original crash digests 2914207426 + 473219613 both
+  // pointed here. Two-phase render:
+  //   1. No setup cookie present → render "Begin setup" button. Click fires
+  //      a server action that generates the secret + writes the cookie +
+  //      redirects back here.
+  //   2. Cookie present → decode the secret, render QR + verify form.
+  //
+  // TODO (Fence 3): replace raw-secret-in-cookie with an opaque token
+  // pointing at a server-side setup_sessions row. For now: HttpOnly + 10min
+  // TTL + dedicated path scope is acceptable risk.
+  const cookieStore = await cookies();
+  const existingSecret = cookieStore.get(SETUP_COOKIE)?.value;
+
+  if (!existingSecret) {
+    return (
+      <WizardShell current={2}>
+        <h1 className="font-serif text-4xl text-ink-900 md:text-5xl">
+          Activeer twee-factor authenticatie
+        </h1>
+        <p className="mt-4 max-w-prose text-sm leading-relaxed text-ink-700 md:text-base">
+          Je gaat zo een eenmalige QR-code zien. Zorg dat je authenticator-app
+          klaar staat (1Password, Authy, Google Authenticator of Bitwarden).
+        </p>
+        <form action={startTotpSetup} className="mt-10">
+          <button
+            type="submit"
+            className="rounded-full bg-burgundy px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
+          >
+            QR-code tonen
+          </button>
+        </form>
+        <p className="mt-6 text-xs leading-relaxed text-ink-500">
+          De QR-code is 10 minuten geldig. Lukt het scannen niet? Dan kun je
+          ook handmatig een sleutel invoeren in je app.
+        </p>
+      </WizardShell>
+    );
+  }
+
+  // Cookie present — render the QR + verify form. Email may be missing on
+  // very fresh sessions; fall back to a placeholder rather than throwing.
+  const secret = existingSecret;
   const uri = buildProvisioningUri({
     secretBase32: secret,
-    accountEmail: session.user.email,
+    accountEmail: session.user.email || "medewerker@chefandserve.nl",
   });
   const qr = await buildQrDataUrl(uri);
-
-  (await cookies()).set(SETUP_COOKIE, secret, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: SETUP_TTL,
-    path: "/admin/account/setup",
-  });
 
   const errorMsg =
     params.error === "session-expired"

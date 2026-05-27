@@ -41,6 +41,20 @@ const CODES_TTL = 5 * 60;
 
 /* -------- server action --------------------------------------------- */
 
+async function startTotpSetup() {
+  "use server";
+  await requireRole("owner");
+  const secret = generateSecret();
+  (await cookies()).set(SETUP_COOKIE, secret, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: SETUP_TTL,
+    path: "/admin/account/2fa",
+  });
+  redirect("/admin/account/2fa");
+}
+
 async function confirmEnrollment(formData: FormData) {
   "use server";
   const session = await requireRole("owner");
@@ -97,14 +111,8 @@ async function confirmEnrollment(formData: FormData) {
   redirect("/admin/account/2fa/codes");
 }
 
-async function currentPermissionsVersion(userId: string): Promise<number> {
-  const [u] = await db
-    .select({ v: users.permissionsVersion })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-  return u?.v ?? 1;
-}
+// (currentPermissionsVersion helper removed — we no longer bump
+//  permissionsVersion on self-enroll; that was the wizard-kickout bug fix.)
 
 /* -------- page ------------------------------------------------------ */
 
@@ -180,21 +188,44 @@ export default async function TwoFAPage({
 
   /* ----- not yet enrolled — render setup UI ----- */
 
-  const secret = generateSecret();
+  // PR-Z: cookies().set() during server-component render is illegal in
+  // Next.js 15. Use a two-phase flow: button → server action sets cookie
+  // → re-render reads cookie + shows QR.
+  const cookieStore = await cookies();
+  const existingSecret = cookieStore.get(SETUP_COOKIE)?.value;
+
+  if (!existingSecret) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          Account · 2FA setup
+        </p>
+        <h1 className="mt-3 font-serif text-4xl text-ink-900 md:text-5xl">
+          Zet twee-factor authenticatie aan
+        </h1>
+        <p className="mt-4 text-sm leading-relaxed text-ink-700 md:text-base">
+          Zorg dat je authenticator-app klaar staat (1Password, Authy of
+          Google Authenticator) en klik hieronder om een eenmalige QR-code
+          te tonen.
+        </p>
+        <form action={startTotpSetup} className="mt-8">
+          <button
+            type="submit"
+            className="rounded-full bg-burgundy px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
+          >
+            QR-code tonen
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  const secret = existingSecret;
   const uri = buildProvisioningUri({
     secretBase32: secret,
-    accountEmail: session.user.email!,
+    accountEmail: session.user.email || "medewerker@chefandserve.nl",
   });
   const qr = await buildQrDataUrl(uri);
-
-  // Set the cookie so the verify form server-action can read it back.
-  (await cookies()).set(SETUP_COOKIE, secret, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: SETUP_TTL,
-    path: "/admin/account/2fa",
-  });
 
   const errorMsg =
     params.error === "session-expired"
