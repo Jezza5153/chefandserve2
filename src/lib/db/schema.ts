@@ -961,3 +961,290 @@ export const recoveryIntents = pgTable(
 
 export type RecoveryIntent = typeof recoveryIntents.$inferSelect;
 export type NewRecoveryIntent = typeof recoveryIntents.$inferInsert;
+
+/* =============================================================================
+ * Integration spine (PR-CHEF-0) — the operating-system layer underneath the
+ * trust chain. Every external delivery (payroll, accounting, calendar, email)
+ * goes through this set of tables so we have:
+ *   - one place to see what's connected and healthy
+ *   - one place to retry failed exports
+ *   - idempotency on every outbound side-effect
+ *   - delivery tracking for emails (via Resend webhooks)
+ *   - in-app notifications as a separate channel (and future push source)
+ *
+ * Rules (see plan: "Integration principles"):
+ *  - No external API call inside a business transaction.
+ *  - Approve hours → write state + enqueue outbox row (atomic).
+ *  - Workers consume outbox by `provider` field with retries.
+ *  - External system IDs live in external_refs, never on entity tables.
+ * =========================================================================== */
+
+export const integrationStatusEnum = pgEnum("integration_status", [
+  "disabled",
+  "test",
+  "active",
+  "error",
+]);
+
+export const integrationOutboxStatusEnum = pgEnum("integration_outbox_status", [
+  "pending",
+  "processing",
+  "sent",
+  "failed",
+  "skipped",
+  "superseded",
+]);
+
+export const emailStatusEnum = pgEnum("email_status", [
+  "queued",
+  "sent",
+  "delivered",
+  "bounced",
+  "failed",
+  "complained",
+  "suppressed",
+]);
+
+/**
+ * One row per external system we talk to. Status + last-checked surfaced on
+ * /admin/business/integrations.
+ */
+export const integrationConnections = pgTable("integration_connections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider").notNull(),
+  displayName: text("display_name").notNull(),
+  status: integrationStatusEnum("status").notNull().default("disabled"),
+  /** AES-256-GCM ciphertext (reuses TOTP_ENCRYPTION_KEY pattern). */
+  configEncrypted: text("config_encrypted"),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Outbox: every cross-system side-effect lands here first. Workers pick rows
+ * by (provider, status='pending', nextAttemptAt < now()) and execute.
+ *
+ * Idempotency: `idempotencyKey` is UNIQUE. Same key = same logical event.
+ * Re-enqueuing with the same key is a no-op (ON CONFLICT DO NOTHING).
+ */
+export const integrationOutbox = pgTable(
+  "integration_outbox",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    eventType: text("event_type").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    payloadJson: jsonb("payload_json").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    status: integrationOutboxStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastError: text("last_error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    runId: uuid("run_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    idempotencyKeyUnique: uniqueIndex("integration_outbox_idempotency_unique").on(
+      t.idempotencyKey,
+    ),
+    pendingIdx: index("integration_outbox_pending_idx").on(
+      t.provider,
+      t.status,
+      t.nextAttemptAt,
+    ),
+  }),
+);
+
+/**
+ * Manual or cron-driven export runs. Groups outbox rows for forensics and
+ * surfaces success/fail counts on /admin/business/integrations.
+ */
+export const integrationRuns = pgTable("integration_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider").notNull(),
+  /** 'manual_export' | 'cron' | 'retry' | 'dry_run' */
+  runType: text("run_type").notNull(),
+  /** 'pending' | 'running' | 'success' | 'partial' | 'failed' */
+  status: text("status").notNull().default("pending"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  totalItems: integer("total_items"),
+  successCount: integer("success_count"),
+  failedCount: integer("failed_count"),
+  createdBy: text("created_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Maps Chef & Serve entities to external system IDs.
+ *   - chef → payingit employee id
+ *   - client → accounting customer id
+ *   - shift_hours → payroll batch line id
+ *   - payroll_batch → external batch ref
+ */
+export const externalRefs = pgTable(
+  "external_refs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    externalId: text("external_id").notNull(),
+    externalUrl: text("external_url"),
+    metaJson: jsonb("meta_json"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    providerEntityUnique: uniqueIndex("external_refs_provider_entity_unique").on(
+      t.provider,
+      t.entityType,
+      t.entityId,
+    ),
+  }),
+);
+
+/**
+ * One row per email sent. Resend's providerMessageId is the bridge to the
+ * webhook events table — webhook lookups join on this id.
+ */
+export const emailMessages = pgTable(
+  "email_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    providerMessageId: text("provider_message_id"),
+    toEmail: text("to_email").notNull(),
+    template: text("template").notNull(),
+    eventKey: text("event_key"),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    status: emailStatusEnum("status").notNull().default("queued"),
+    lastEventAt: timestamp("last_event_at", { withTimezone: true }),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    providerMessageIdUnique: uniqueIndex(
+      "email_messages_provider_message_id_unique",
+    ).on(t.providerMessageId),
+    statusIdx: index("email_messages_status_idx").on(t.status, t.createdAt),
+  }),
+);
+
+/**
+ * Raw Resend webhook events. Lets us replay/audit + debug bounce reasons.
+ */
+export const emailEvents = pgTable("email_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  messageId: uuid("message_id")
+    .notNull()
+    .references(() => emailMessages.id, { onDelete: "cascade" }),
+  providerEventType: text("provider_event_type").notNull(),
+  payloadJson: jsonb("payload_json").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * In-app notifications — the bell-and-list inbox. Future Web Push source.
+ *
+ * Read marker via `readAt`. We index on (userId, readAt) for the unread
+ * count query that runs on every page render of any layout with the bell.
+ */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    actionUrl: text("action_url"),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    unreadIdx: index("notifications_unread_idx").on(
+      t.userId,
+      t.readAt,
+      t.createdAt,
+    ),
+  }),
+);
+
+/**
+ * Lightweight contact log — when Maarten clicks "Bel chef" / "WhatsApp",
+ * a small modal captures the outcome. Builds operational memory.
+ */
+export const contactLogs = pgTable("contact_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  actorUserId: text("actor_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  /** 'chef' | 'client' */
+  targetType: text("target_type").notNull(),
+  targetId: text("target_id").notNull(),
+  /** 'phone' | 'whatsapp' | 'email' | 'in_person' */
+  channel: text("channel").notNull(),
+  entityType: text("entity_type"),
+  entityId: text("entity_id"),
+  /** 'no_answer' | 'spoken' | 'callback_requested' | 'note_only' */
+  outcome: text("outcome"),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/* ----- Type exports ------------------------------------------------------ */
+export type IntegrationConnection =
+  typeof integrationConnections.$inferSelect;
+export type NewIntegrationConnection =
+  typeof integrationConnections.$inferInsert;
+export type IntegrationOutboxRow = typeof integrationOutbox.$inferSelect;
+export type NewIntegrationOutboxRow = typeof integrationOutbox.$inferInsert;
+export type IntegrationRun = typeof integrationRuns.$inferSelect;
+export type NewIntegrationRun = typeof integrationRuns.$inferInsert;
+export type ExternalRef = typeof externalRefs.$inferSelect;
+export type NewExternalRef = typeof externalRefs.$inferInsert;
+export type EmailMessage = typeof emailMessages.$inferSelect;
+export type NewEmailMessage = typeof emailMessages.$inferInsert;
+export type EmailEvent = typeof emailEvents.$inferSelect;
+export type NewEmailEvent = typeof emailEvents.$inferInsert;
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;
+export type ContactLog = typeof contactLogs.$inferSelect;
+export type NewContactLog = typeof contactLogs.$inferInsert;

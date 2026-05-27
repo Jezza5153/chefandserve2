@@ -102,8 +102,8 @@
 
 | PR | Description | Status |
 |---|---|---|
-| PR-CHEF-0 | Integration spine (outbox/runs/external_refs/email tracking/notifications/contact_logs) | 🟡 starting |
-| PR-AI-0 | AI/RAG docs spine (docs/ai/) | 🟡 parallel |
+| PR-CHEF-0 | Integration spine (outbox/runs/external_refs/email tracking/notifications/contact_logs) | ✅ live (migration 0011 applied · 18/18 smoke pass · /admin/business/integrations live) |
+| PR-AI-0 | AI/RAG docs spine (docs/ai/) | 🟡 in progress (background agent) |
 | PR-CHEF-1 | Hours chain (chef → klant → admin → exported) + trust timeline | ⏳ |
 | PR-CHEF-2 | Three role dashboards ("wat moet ik nu doen?") | ⏳ |
 | PR-CHEF-3 | Admin bulk approval + dispute UX + manual-add hours | ⏳ |
@@ -173,7 +173,8 @@
 | 0001..0008 | Submissions, chefs, clients, shifts, etc. | applied |
 | 0009_noisy_sprite.sql | notification_routes (PR-F1) | applied |
 | 0010_recovery_intents.sql | recovery_intents (PR-C) | applied (May 27) |
-| 0011..pending | integration spine + hours + payroll + AVG + … | not yet generated |
+| 0011_integration_spine.sql | integration_connections + integration_outbox + integration_runs + external_refs + email_messages + email_events + notifications + contact_logs (PR-CHEF-0) | applied (May 27) |
+| 0012..pending | shift_hours + payroll + AVG + … | not yet generated |
 
 ---
 

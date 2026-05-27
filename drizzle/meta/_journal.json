@@ -78,6 +78,13 @@
       "when": 1779905088161,
       "tag": "0010_recovery_intents",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779909311389,
+      "tag": "0011_integration_spine",
+      "breakpoints": true
     }
   ]
 }
