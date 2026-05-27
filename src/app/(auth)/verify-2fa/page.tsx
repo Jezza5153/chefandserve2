@@ -105,8 +105,17 @@ async function submit(formData: FormData) {
     redirect(`/verify-2fa?error=wrong-code&next=${encodeURIComponent(next)}`);
   }
 
-  // Success — mint the 2FA cookie.
-  const cookie = await buildCookieValue(u.id);
+  // Success — mint the 2FA cookie with the user's current enrolledAt
+  // timestamp embedded so admin reset can invalidate it.
+  const [fresh] = await db
+    .select({ totpEnrolledAt: users.totpEnrolledAt })
+    .from(users)
+    .where(eq(users.id, u.id))
+    .limit(1);
+  const enrolledAtMs = fresh?.totpEnrolledAt
+    ? new Date(fresh.totpEnrolledAt).getTime()
+    : Date.now();
+  const cookie = await buildCookieValue({ userId: u.id, enrolledAtMs });
   (await cookies()).set(TWOFA_COOKIE_NAME, cookie.value, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

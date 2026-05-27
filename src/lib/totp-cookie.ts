@@ -1,25 +1,36 @@
 /**
- * 2FA verification cookie — PR-S2B.
+ * 2FA verification cookie — PR-S2B + PR-C0.
  *
- * Auth.js issues the JWT session normally on magic-link callback. To gate
- * /admin/* on a second factor for internal users we use a separate signed
- * HttpOnly cookie, decoupled from the session.
+ * Auth.js issues the JWT session normally on magic-link/credentials
+ * callback. To gate /admin/* on a second factor for internal users we
+ * use a separate signed HttpOnly cookie, decoupled from the session.
  *
  * Cookie name:  cs_2fa_verified
- * Cookie value: `${userId}.${expiresAtEpochMs}.${hmac}`
- *   where hmac = hmac_sha256(TOTP_ENCRYPTION_KEY, `${userId}.${expiresAtEpochMs}`)
+ *
+ * Format (v2 — PR-C0 versioned):
+ *   v2.userId.enrolledAtMs.expiresAtMs.hmac
+ *
+ *   hmac = hmac_sha256(SECRET, "v2." + userId + "." + enrolledAtMs + "." + expiresAtMs)
+ *
+ * Why include enrolledAtMs:
+ *   When an admin resets a user's 2FA, we wipe users.totp_enrolled_at and
+ *   bump permissions_version. The bumped permissions_version invalidates
+ *   the user's JWT entirely on next request (jwt callback returns null).
+ *   But on a DIFFERENT browser where the user may have a stale cs_2fa_verified
+ *   cookie, the JWT may still be valid for a few seconds until the next
+ *   permissionsVersion check fires. By embedding enrolledAtMs in the cookie
+ *   and comparing it to the live DB value, we reject the cookie as soon as
+ *   the database state changes — regardless of JWT freshness.
+ *
+ * v1 cookies (without "v2." prefix) are rejected on sight — the user
+ * re-prompts and gets a v2 cookie on next mint.
  *
  * Web Crypto API (SubtleCrypto) used throughout so this module is safe in
  * both Node runtime (server actions) and Edge runtime (middleware).
- *
- * Properties:
- *   - HttpOnly, Secure (prod), SameSite=Lax, Path=/
- *   - TTL = TOTP_REVERIFY_HOURS (default 12)
- *   - Tied to userId — the verify path always compares against the current
- *     session.user.id, so a swiped cookie cannot be moved between users.
  */
 
 const COOKIE_NAME = "cs_2fa_verified";
+const VERSION = "v2";
 
 function getRawKey(): string {
   const key = process.env.TOTP_ENCRYPTION_KEY;
@@ -67,18 +78,18 @@ function fromHex(hex: string): Uint8Array | null {
 
 async function sign(payload: string): Promise<string> {
   const key = await getKey();
-  const dataBuf = new TextEncoder().encode(payload).slice().buffer;
-  const sig = await crypto.subtle.sign("HMAC", key, dataBuf);
+  const sig = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(payload),
+  );
   return toHex(sig);
 }
 
-async function verify(payload: string, expectedHex: string): Promise<boolean> {
+async function verifySig(payload: string, expectedHex: string): Promise<boolean> {
   const expected = fromHex(expectedHex);
   if (!expected) return false;
   const key = await getKey();
-  // Copy to a fresh ArrayBuffer so TS doesn't flag ArrayBufferLike (possibly
-  // SharedArrayBuffer) — crypto.subtle.verify wants BufferSource over plain
-  // ArrayBuffer in strict mode.
   const sigBuf = expected.slice().buffer;
   const dataBuf = new TextEncoder().encode(payload).slice().buffer;
   return crypto.subtle.verify("HMAC", key, sigBuf, dataBuf);
@@ -86,38 +97,55 @@ async function verify(payload: string, expectedHex: string): Promise<boolean> {
 
 /* ---------- public API ----------------------------------------------- */
 
-export async function buildCookieValue(userId: string): Promise<{
-  value: string;
-  maxAge: number;
-}> {
+export async function buildCookieValue(args: {
+  userId: string;
+  enrolledAtMs: number;
+}): Promise<{ value: string; maxAge: number }> {
   const hours = Number(process.env.TOTP_REVERIFY_HOURS ?? 12);
   const expiresAt = Date.now() + hours * 60 * 60 * 1000;
-  const hmac = await sign(`${userId}.${expiresAt}`);
+  const payload = `${VERSION}.${args.userId}.${args.enrolledAtMs}.${expiresAt}`;
+  const hmac = await sign(payload);
   return {
-    value: `${userId}.${expiresAt}.${hmac}`,
+    value: `${payload}.${hmac}`,
     maxAge: hours * 60 * 60,
   };
 }
 
 /**
- * Validate a cookie value against an expected userId. Returns true only when
- * the HMAC is valid, the cookie userId matches, and the cookie hasn't
- * expired.
+ * Validate the cookie. Returns true ONLY when:
+ *   - format is v2
+ *   - userId matches expected
+ *   - enrolledAtMs matches expected (i.e. user hasn't re-enrolled or
+ *     been reset by an admin)
+ *   - expiry is in the future
+ *   - HMAC verifies
+ *
+ * Never throws. Malformed → false.
  */
 export async function validateCookieValue(args: {
   cookieValue: string | undefined;
   expectedUserId: string;
+  expectedEnrolledAtMs: number | null;
 }): Promise<boolean> {
-  if (!args.cookieValue) return false;
-  const parts = args.cookieValue.split(".");
-  if (parts.length !== 3) return false;
-  const [userId, expiresAtStr, hmac] = parts;
-  if (userId !== args.expectedUserId) return false;
+  try {
+    if (!args.cookieValue) return false;
+    const parts = args.cookieValue.split(".");
+    // v2 format = 5 parts (v2, userId, enrolledAtMs, expiresAtMs, hmac)
+    if (parts.length !== 5) return false;
+    const [version, userId, enrolledAtStr, expiresAtStr, hmac] = parts;
+    if (version !== VERSION) return false;
+    if (userId !== args.expectedUserId) return false;
+    if (args.expectedEnrolledAtMs === null) return false; // user is no longer enrolled
+    if (Number(enrolledAtStr) !== args.expectedEnrolledAtMs) return false;
 
-  const expiresAt = Number(expiresAtStr);
-  if (!Number.isFinite(expiresAt) || expiresAt < Date.now()) return false;
+    const expiresAt = Number(expiresAtStr);
+    if (!Number.isFinite(expiresAt) || expiresAt < Date.now()) return false;
 
-  return verify(`${userId}.${expiresAt}`, hmac);
+    const payload = `${version}.${userId}.${enrolledAtStr}.${expiresAtStr}`;
+    return await verifySig(payload, hmac);
+  } catch {
+    return false;
+  }
 }
 
 export const TWOFA_COOKIE_NAME = COOKIE_NAME;

@@ -218,6 +218,9 @@ export const authConfig: NextAuthConfig = {
         token.permissionsVersion = dbUser.permissionsVersion;
         token.totpEnabled = Boolean(dbUser.totpEnabled);
         token.hasPassword = Boolean(dbUser.passwordHash);
+        token.totpEnrolledAtMs = dbUser.totpEnrolledAt
+          ? new Date(dbUser.totpEnrolledAt).getTime()
+          : null;
         return token;
       }
 
@@ -229,6 +232,7 @@ export const authConfig: NextAuthConfig = {
             status: users.status,
             totpEnabled: users.totpEnabled,
             passwordHash: users.passwordHash,
+            totpEnrolledAt: users.totpEnrolledAt,
           })
           .from(users)
           .where(eq(users.id, token.userId))
@@ -246,6 +250,9 @@ export const authConfig: NextAuthConfig = {
         // and 2FA toggles reflect without waiting for a permissionsVersion bump.
         token.totpEnabled = Boolean(current.totpEnabled);
         token.hasPassword = Boolean(current.passwordHash);
+        token.totpEnrolledAtMs = current.totpEnrolledAt
+          ? new Date(current.totpEnrolledAt).getTime()
+          : null;
       }
 
       // refresh user data periodically
@@ -284,6 +291,10 @@ export const authConfig: NextAuthConfig = {
           (token.permissionsVersion as number) ?? 1;
         session.user.totpEnabled = Boolean(token.totpEnabled);
         session.user.hasPassword = Boolean(token.hasPassword);
+        session.user.totpEnrolledAtMs =
+          typeof token.totpEnrolledAtMs === "number"
+            ? token.totpEnrolledAtMs
+            : null;
       }
       return session;
     },

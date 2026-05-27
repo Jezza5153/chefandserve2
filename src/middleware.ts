@@ -79,6 +79,7 @@ export default auth(async (request: NextRequest & {
     const ok = await validateCookieValue({
       cookieValue: cookie,
       expectedUserId: request.auth.user.id,
+      expectedEnrolledAtMs: request.auth.user.totpEnrolledAtMs,
     });
     if (!ok) {
       const verifyUrl = new URL("/verify-2fa", request.url);

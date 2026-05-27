@@ -1,4 +1,5 @@
 import { asc, eq } from "drizzle-orm";
+import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { roles, userRoles, users } from "@/lib/db/schema";
@@ -52,12 +53,12 @@ export default async function UsersPage() {
             Users
           </h1>
         </div>
-        <a
+        <Link
           href="/admin/system/users/new"
           className="shrink-0 rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
         >
           + Nieuwe medewerker
-        </a>
+        </Link>
       </div>
       <p className="mt-4 text-sm text-ink-700 md:text-base">
         Alle accounts in het systeem. Klik op &ldquo;Nieuwe medewerker&rdquo; om
@@ -97,7 +98,14 @@ export default async function UsersPage() {
                   i < userRows.length - 1 ? "border-b border-ink-200" : ""
                 }
               >
-                <td className="px-4 py-3 text-sm text-ink-900">{u.email}</td>
+                <td className="px-4 py-3 text-sm">
+                  <Link
+                    href={`/admin/system/users/${u.id}`}
+                    className="text-ink-900 hover:text-burgundy hover:underline"
+                  >
+                    {u.email}
+                  </Link>
+                </td>
                 <td className="px-4 py-3 text-sm text-ink-700">
                   {u.name ?? "—"}
                 </td>
