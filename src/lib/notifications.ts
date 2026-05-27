@@ -23,7 +23,11 @@ export type NotificationEvent =
   | "weekly_digest"
   | "error_critical"
   | "totp_lockout"
-  | "erasure_r2_failure";
+  | "erasure_r2_failure"
+  // PR-CHEF-1 — hours chain
+  | "hours_signed"
+  | "hours_klant_timeout"
+  | "hours_admin_force_approve_needed";
 
 type Route = {
   recipients: string[];
@@ -43,6 +47,9 @@ function envFallback(event: NotificationEvent): string[] {
     case "client_submission_received":
     case "client_portal_request":
     case "weekly_digest":
+    case "hours_signed":
+    case "hours_klant_timeout":
+    case "hours_admin_force_approve_needed":
       return maarten ? [maarten] : [];
     case "error_critical":
     case "totp_lockout":
@@ -105,6 +112,9 @@ export const ALL_EVENTS: NotificationEvent[] = [
   "error_critical",
   "totp_lockout",
   "erasure_r2_failure",
+  "hours_signed",
+  "hours_klant_timeout",
+  "hours_admin_force_approve_needed",
 ];
 
 export const EVENT_LABELS: Record<NotificationEvent, string> = {
@@ -115,4 +125,7 @@ export const EVENT_LABELS: Record<NotificationEvent, string> = {
   error_critical: "Kritieke fout in systeem",
   totp_lockout: "Te veel mislukte 2FA pogingen",
   erasure_r2_failure: "Right-to-erasure R2 cleanup faalde",
+  hours_signed: "Klant heeft uren ondertekend — keuren?",
+  hours_klant_timeout: "Klant heeft 5 dagen niet getekend",
+  hours_admin_force_approve_needed: "Klant 10 dagen overtijd — admin actie nodig",
 };

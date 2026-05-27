@@ -1248,3 +1248,113 @@ export type Notification = typeof notifications.$inferSelect;
 export type NewNotification = typeof notifications.$inferInsert;
 export type ContactLog = typeof contactLogs.$inferSelect;
 export type NewContactLog = typeof contactLogs.$inferInsert;
+
+/* =============================================================================
+ * Shift hours (PR-CHEF-1) — the trust chain backbone.
+ *
+ * One row per placement. The placement is the "work assignment"; the hours
+ * row is the "payroll-evidence" lifecycle that flows: chef logs → klant
+ * signs → admin approves → exported to payroll. Statuses NEVER show in UI
+ * directly — pipe through humanStatus() from src/lib/hours-labels.ts.
+ *
+ * Rules:
+ *   - row created by workers/complete-placements.ts (NOT inline at submit)
+ *   - chef can edit while status='draft' or 'client_rejected'
+ *   - klant can sign/reject only while status='submitted' (no time editing)
+ *   - admin can approve only while status='client_signed'
+ *   - after 'admin_approved' or 'exported' the row is READ-ONLY — corrections
+ *     create a new shift_hour_corrections row (PR-CHEF-7), never mutate
+ * =========================================================================== */
+
+export const shiftHoursStatusEnum = pgEnum("shift_hours_status", [
+  "draft",
+  "submitted",
+  "client_signed",
+  "client_rejected",
+  "admin_approved",
+  "admin_rejected",
+  "exported",
+  "void",
+]);
+
+export const shiftHours = pgTable(
+  "shift_hours",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** One row per placement — UNIQUE means double-submit is impossible. */
+    placementId: text("placement_id")
+      .notNull()
+      .unique()
+      .references(() => placements.id, { onDelete: "restrict" }),
+    /** Denormalized for query speed — joins on chef/client/shift become 1-hop. */
+    shiftId: text("shift_id")
+      .notNull()
+      .references(() => shifts.id, { onDelete: "restrict" }),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "restrict" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "restrict" }),
+
+    /* ----- the actual numbers ----- */
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }).notNull(),
+    breakMinutes: integer("break_minutes").notNull().default(0),
+    /** Computed at submit, stored — endedAt - startedAt - breakMinutes. */
+    workedMinutes: integer("worked_minutes").notNull(),
+    /** Snapshot — chef rate at submit time (may differ from current chef.hourlyRate*). */
+    chefRateCents: integer("chef_rate_cents").notNull(),
+    clientRateCents: integer("client_rate_cents").notNull(),
+
+    /* ----- notes ----- */
+    chefNotes: text("chef_notes"),
+    clientNotes: text("client_notes"),
+    adminNotes: text("admin_notes"),
+
+    /* ----- state machine ----- */
+    status: shiftHoursStatusEnum("status").notNull().default("draft"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    clientSignedAt: timestamp("client_signed_at", { withTimezone: true }),
+    clientSignedBy: text("client_signed_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    clientRejectedAt: timestamp("client_rejected_at", { withTimezone: true }),
+    adminApprovedAt: timestamp("admin_approved_at", { withTimezone: true }),
+    adminApprovedBy: text("admin_approved_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    adminRejectedAt: timestamp("admin_rejected_at", { withTimezone: true }),
+
+    /* ----- payroll handoff (Phase 5+) ----- */
+    payingitExportedAt: timestamp("payingit_exported_at", { withTimezone: true }),
+    payingitExportRef: text("payingit_export_ref"),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    /** Admin queue ordered by signed-at. */
+    statusIdx: index("shift_hours_status_idx").on(t.status, t.clientSignedAt),
+    /** Chef dashboard query. */
+    chefIdx: index("shift_hours_chef_idx").on(t.chefId, t.status),
+    /** Klant queue query. */
+    clientIdx: index("shift_hours_client_idx").on(t.clientId, t.status),
+    /** Sanity: end > start, no negative break. */
+    endAfterStart: check(
+      "shift_hours_end_after_start",
+      sql`${t.endedAt} > ${t.startedAt}`,
+    ),
+    breakNonNegative: check(
+      "shift_hours_break_non_negative",
+      sql`${t.breakMinutes} >= 0`,
+    ),
+  }),
+);
+
+export type ShiftHours = typeof shiftHours.$inferSelect;
+export type NewShiftHours = typeof shiftHours.$inferInsert;
