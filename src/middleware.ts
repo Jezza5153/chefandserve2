@@ -2,26 +2,27 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { TWOFA_COOKIE_NAME, validateCookieValue } from "@/lib/totp-cookie";
 
 /**
- * Middleware — PR-0F: auth gate + role gates.
+ * Middleware — auth + role + 2FA gates.
  *
  * What it does:
- *   - Auth gate: unauthed /admin/* → /login?next=<path>
+ *   - Auth gate: unauthed /admin|/chef|/client/* → /login?next=<path>
+ *   - 2FA gate (PR-S2B, only when TOTP_ENFORCE=true): internal users with
+ *     totp_enabled and no valid cs_2fa_verified cookie → /verify-2fa?next=<path>
  *   - Role gate: /admin/system/* requires super_admin (else → /admin/business)
  *   - Forwards x-cs-app-route + x-cs-pathname headers (for ChromeShell)
  *
- * Host-guard rule (chefandserve.nl → app.chefandserve.nl) remains deferred
- * to production launch — staging is single-host.
- *
  * NOTE: server-side `requireRole` in each page is the source of truth for
  * permissions. Middleware is the first-line UX defense (fast redirects),
- * but never the only gate. Auth.js may not run database checks here on
- * every request, so we don't trust JWT claims alone for sensitive ops.
+ * but never the only gate.
  */
 
 const APP_PATH_PREFIXES = ["/login", "/verify", "/admin", "/chef", "/client"];
 const SYSTEM_ROUTES = ["/admin/system", "/admin/users", "/admin/roles"];
+
+const TOTP_ENFORCE = process.env.TOTP_ENFORCE === "true";
 
 function isSystemPath(path: string): boolean {
   return SYSTEM_ROUTES.some(
@@ -29,7 +30,7 @@ function isSystemPath(path: string): boolean {
   );
 }
 
-export default auth((request: NextRequest & {
+export default auth(async (request: NextRequest & {
   auth: import("next-auth").Session | null;
 }) => {
   const path = request.nextUrl.pathname;
@@ -44,6 +45,31 @@ export default auth((request: NextRequest & {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", path);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // 2FA gate (PR-S2B) — dark-launched via TOTP_ENFORCE. Only active when:
+  //   1. TOTP_ENFORCE=true in env
+  //   2. User is internal (kind=internal)
+  //   3. User has totp_enabled=true
+  //   4. No valid cs_2fa_verified cookie for THIS user
+  //   5. The current path needs auth (not /verify-2fa itself, not /login)
+  if (
+    TOTP_ENFORCE &&
+    needsAuth &&
+    path !== "/verify-2fa" &&
+    request.auth?.user?.kind === "internal" &&
+    request.auth.user.totpEnabled === true
+  ) {
+    const cookie = request.cookies.get(TWOFA_COOKIE_NAME)?.value;
+    const ok = await validateCookieValue({
+      cookieValue: cookie,
+      expectedUserId: request.auth.user.id,
+    });
+    if (!ok) {
+      const verifyUrl = new URL("/verify-2fa", request.url);
+      verifyUrl.searchParams.set("next", path);
+      return NextResponse.redirect(verifyUrl);
+    }
   }
 
   // Kind/role gates
@@ -84,5 +110,12 @@ export default auth((request: NextRequest & {
 });
 
 export const config = {
-  matcher: ["/admin/:path*", "/chef/:path*", "/client/:path*", "/login", "/verify"],
+  matcher: [
+    "/admin/:path*",
+    "/chef/:path*",
+    "/client/:path*",
+    "/login",
+    "/verify",
+    "/verify-2fa",
+  ],
 };

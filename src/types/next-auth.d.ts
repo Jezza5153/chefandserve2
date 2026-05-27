@@ -17,6 +17,8 @@ declare module "next-auth" {
       kind: "internal" | "chef" | "client";
       roles: string[];
       permissionsVersion: number;
+      /** PR-S2A/B — middleware reads this to decide whether to gate on /verify-2fa. */
+      totpEnabled: boolean;
     };
   }
 }
@@ -29,5 +31,6 @@ declare module "next-auth/jwt" {
     kind?: "internal" | "chef" | "client";
     roles?: string[];
     permissionsVersion?: number;
+    totpEnabled?: boolean;
   }
 }

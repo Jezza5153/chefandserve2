@@ -90,6 +90,16 @@ const serverSchema = z.object({
     .min(32, "TOTP_ENCRYPTION_KEY must be ≥32 chars (openssl rand -base64 32)")
     .optional(),
 
+  // Phase 1 PR-S2B — challenge gate switch.
+  //   false (default) → challenge code ships but is INACTIVE.
+  //   true            → internal users with totp_enabled=true MUST clear
+  //                     /verify-2fa before reaching /admin/*.
+  // Documented runbook: SQL escape hatch via Neon dashboard if a super_admin
+  // locks themselves out. See plan PR-S2C.
+  TOTP_ENFORCE: z.enum(["true", "false"]).default("false"),
+  /** Hours before a 2FA verification expires and the user must re-verify. */
+  TOTP_REVERIFY_HOURS: z.coerce.number().int().positive().default(12),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
