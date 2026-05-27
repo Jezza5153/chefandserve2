@@ -1630,3 +1630,93 @@ export type DPA = typeof dataProcessingAgreements.$inferSelect;
 export type NewDPA = typeof dataProcessingAgreements.$inferInsert;
 export type RetentionPolicy = typeof retentionPolicies.$inferSelect;
 export type NewRetentionPolicy = typeof retentionPolicies.$inferInsert;
+
+/* =============================================================================
+ * Payroll batches + corrections (PR-CHEF-7) — admin-approved hours become
+ * payroll-exportable batches. Once 'exported' the underlying shift_hours
+ * row is READ-ONLY — corrections create a shift_hour_corrections row.
+ *
+ * Rule: approved hours are not the same as exported payroll. A batch is
+ * a deliberate admin action ("klaarzetten voor uitbetaling") that groups
+ * approved rows for a period.
+ * =========================================================================== */
+
+export const payrollBatchStatusEnum = pgEnum("payroll_batch_status", [
+  "draft",
+  "exported",
+  "partially_failed",
+  "corrected",
+  "void",
+]);
+
+export const payrollBatches = pgTable("payroll_batches", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  periodStart: timestamp("period_start", { withTimezone: false, mode: "date" }).notNull(),
+  periodEnd: timestamp("period_end", { withTimezone: false, mode: "date" }).notNull(),
+  provider: text("provider").notNull().default("csv"),
+  status: payrollBatchStatusEnum("status").notNull().default("draft"),
+  fileUrl: text("file_url"),
+  fileChecksum: text("file_checksum"),
+  rowCount: integer("row_count"),
+  totalChefCostCents: integer("total_chef_cost_cents"),
+  totalClientRevenueCents: integer("total_client_revenue_cents"),
+  totalMarginCents: integer("total_margin_cents"),
+  exportedAt: timestamp("exported_at", { withTimezone: true }),
+  exportedBy: text("exported_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  externalRef: text("external_ref"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const payrollBatchLines = pgTable("payroll_batch_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  batchId: uuid("batch_id")
+    .notNull()
+    .references(() => payrollBatches.id, { onDelete: "cascade" }),
+  shiftHoursId: uuid("shift_hours_id")
+    .notNull()
+    .references(() => shiftHours.id, { onDelete: "restrict" }),
+  amountCents: integer("amount_cents").notNull(),
+  clientAmountCents: integer("client_amount_cents").notNull(),
+  /** 'pending' | 'exported' | 'rejected' */
+  status: text("status").notNull().default("pending"),
+  externalRef: text("external_ref"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const shiftHourCorrections = pgTable("shift_hour_corrections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  originalShiftHoursId: uuid("original_shift_hours_id")
+    .notNull()
+    .references(() => shiftHours.id, { onDelete: "restrict" }),
+  /** 'time_change' | 'break_change' | 'rate_change' | 'void' | 'manual_adjustment' */
+  correctionType: text("correction_type").notNull(),
+  reason: text("reason").notNull(),
+  deltaWorkedMinutes: integer("delta_worked_minutes"),
+  deltaChefAmountCents: integer("delta_chef_amount_cents"),
+  deltaClientAmountCents: integer("delta_client_amount_cents"),
+  /** 'pending' | 'approved' | 'exported' | 'rejected' */
+  status: text("status").notNull().default("pending"),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "set null" }),
+  approvedBy: text("approved_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type PayrollBatch = typeof payrollBatches.$inferSelect;
+export type NewPayrollBatch = typeof payrollBatches.$inferInsert;
+export type PayrollBatchLine = typeof payrollBatchLines.$inferSelect;
+export type NewPayrollBatchLine = typeof payrollBatchLines.$inferInsert;
+export type ShiftHourCorrection = typeof shiftHourCorrections.$inferSelect;
+export type NewShiftHourCorrection = typeof shiftHourCorrections.$inferInsert;
