@@ -68,7 +68,7 @@ async function confirmEnrollment(formData: FormData) {
       totpEnabled: true,
       totpEnrolledAt: new Date(),
       // bump permissionsVersion so other devices/tabs re-validate the session
-      permissionsVersion: (await currentPermissionsVersion(session.user.id)) + 1,
+      // No permissionsVersion bump — self-action, would log the user out.
       updatedAt: new Date(),
     })
     .where(eq(users.id, session.user.id));

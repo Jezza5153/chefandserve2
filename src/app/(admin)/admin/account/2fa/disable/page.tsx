@@ -87,7 +87,9 @@ async function disable2FA(formData: FormData) {
       totpSecretEncrypted: null,
       totpEnabled: false,
       totpEnrolledAt: null,
-      permissionsVersion: u.permissionsVersion + 1,
+      // No permissionsVersion bump — self-action. Other-device 2FA cookies
+      // expire on their own TTL; if you need to nuke them after a disable,
+      // it's a separate admin tool.
       updatedAt: new Date(),
     })
     .where(eq(users.id, u.id));

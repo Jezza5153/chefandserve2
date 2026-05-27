@@ -48,19 +48,16 @@ async function setPassword(formData: FormData) {
 
   const hash = await hashPassword(password);
 
-  // Bump permissionsVersion so other sessions/devices re-validate.
-  const [current] = await db
-    .select({ permissionsVersion: users.permissionsVersion })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-
+  // NOTE: do NOT bump permissionsVersion here. The user is changing their
+  // own password mid-wizard — bumping would invalidate their current JWT
+  // and kick them back to /login (the JWT callback returns null on
+  // version mismatch). The password isn't checked per-request anyway, so
+  // there's nothing to invalidate.
   await db
     .update(users)
     .set({
       passwordHash: hash,
       passwordSetAt: new Date(),
-      permissionsVersion: (current?.permissionsVersion ?? 1) + 1,
       updatedAt: new Date(),
     })
     .where(eq(users.id, session.user.id));

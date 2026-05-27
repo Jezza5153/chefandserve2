@@ -54,19 +54,16 @@ async function confirm2FA(formData: FormData) {
 
   const encrypted = await encryptSecret(setupSecret);
 
-  const [current] = await db
-    .select({ permissionsVersion: users.permissionsVersion })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-
+  // Don't bump permissionsVersion — same reason as the password step: this
+  // is a self-action mid-wizard. The user's own JWT must survive the call.
+  // Other devices' 2FA gate is enforced via the cs_2fa_verified cookie
+  // which is per-device anyway.
   await db
     .update(users)
     .set({
       totpSecretEncrypted: encrypted,
       totpEnabled: true,
       totpEnrolledAt: new Date(),
-      permissionsVersion: (current?.permissionsVersion ?? 1) + 1,
       updatedAt: new Date(),
     })
     .where(eq(users.id, session.user.id));
