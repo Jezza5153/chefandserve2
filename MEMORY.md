@@ -109,10 +109,10 @@
 | PR-CHEF-3 | Admin bulk approval + dispute UX + manual-add hours | ✅ live (magic eligibility + bulk-select bar + per-row approve + anomaly flagging in queue) |
 | PR-CHEF-4 | Profile editing (direct + request-change split) | ✅ live (migration 0013 · ProfileForm direct edit · RequestChangeFormSection for sensitive fields · profile_change_requests table) |
 | PR-CHEF-5 | Confirm-notify chef + cancel-severity + contact cards | ✅ live (ShiftConfirmedChefEmail · ShiftCancelledByChefClientEmail · cancellation-severity util · cancel flow with tel: CTA · contact card · rejection reason on accept/reject) |
-| PR-CHEF-6 | Notification prefs scaffolding | ⏳ |
+| PR-CHEF-6 | Notification prefs scaffolding | ✅ live (migration 0014 · notification_prefs table · shouldSendToUser/setPref helpers · V1 always-on) |
 | PR-CHEF-7 | Payroll batches + corrections + CSV export | ⏳ |
-| PR-CHEF-8 | Email delivery tracking (Resend webhooks) | ⏳ |
-| PR-CHEF-9 | In-app notification inbox UI | ⏳ |
+| PR-CHEF-8 | Email delivery tracking (Resend webhooks) | ✅ live (POST /api/webhooks/resend with svix-signature HMAC verify · recordEmailEventFromWebhook updates email_messages.status) |
+| PR-CHEF-9 | In-app notification inbox UI | ✅ live (bell with unread badge in all 3 layouts · /chef/notifications · /client/notifications · /admin/notifications · markRead + markAllRead) |
 | PR-CHEF-10 | AVG consent + privacy requests + retention policies | ⏳ |
 | PR-CHEF-11 | Calendar ICS feeds (chef + klant) | ⏳ |
 | PR-CHEF-12 | Document verification + expiry + visibility | ⏳ |

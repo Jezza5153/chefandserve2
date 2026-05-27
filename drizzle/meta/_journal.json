@@ -99,6 +99,13 @@
       "when": 1779911038532,
       "tag": "0013_profile_change_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1779911493450,
+      "tag": "0014_notification_prefs",
+      "breakpoints": true
     }
   ]
 }

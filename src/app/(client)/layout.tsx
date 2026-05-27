@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { SignOutLink } from "@/app/(admin)/_components/SignOutLink";
+import { NotificationBell } from "@/components/NotificationBell";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata: Metadata = {
@@ -39,11 +40,17 @@ export default async function ClientLayout({
             >
               Chef <span className="text-burgundy">&amp;</span> Serve
             </Link>
-            <div className="text-right">
-              <p className="font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
-                {session.user.name ?? session.user.email}
-              </p>
-              <SignOutLink />
+            <div className="flex items-center gap-4">
+              <NotificationBell
+                userId={session.user.id}
+                notificationsHref="/client/notifications"
+              />
+              <div className="text-right">
+                <p className="font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
+                  {session.user.name ?? session.user.email}
+                </p>
+                <SignOutLink />
+              </div>
             </div>
           </div>
           <nav className="mt-4 flex flex-wrap gap-1">

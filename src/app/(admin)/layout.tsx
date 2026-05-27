@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { NotificationBell } from "@/components/NotificationBell";
 import { SidebarNav } from "@/components/admin/SidebarNav";
 import { requireAuth } from "@/lib/permissions";
 import { site } from "@/lib/site";
@@ -46,14 +47,20 @@ export default async function AdminLayout({
         <SidebarNav session={session} />
 
         <div className="border-t border-ink-200 px-6 py-4">
-          <p className="mb-2 text-xs leading-relaxed text-ink-700">
-            <strong className="text-ink-900 block">
-              {session.user.name ?? session.user.email}
-            </strong>
-            <span className="text-ink-500">
-              {session.user.roles.join(", ")}
-            </span>
-          </p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs leading-relaxed text-ink-700">
+              <strong className="text-ink-900 block">
+                {session.user.name ?? session.user.email}
+              </strong>
+              <span className="text-ink-500">
+                {session.user.roles.join(", ")}
+              </span>
+            </p>
+            <NotificationBell
+              userId={session.user.id}
+              notificationsHref="/admin/notifications"
+            />
+          </div>
           <SignOutLink />
         </div>
       </aside>
@@ -66,7 +73,13 @@ export default async function AdminLayout({
           >
             Chef <span className="text-burgundy">&amp;</span> Serve
           </Link>
-          <SignOutLink />
+          <div className="flex items-center gap-4">
+            <NotificationBell
+              userId={session.user.id}
+              notificationsHref="/admin/notifications"
+            />
+            <SignOutLink />
+          </div>
         </header>
 
         <div className="px-6 py-10 md:px-10 md:py-12">{children}</div>

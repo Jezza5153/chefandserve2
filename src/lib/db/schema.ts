@@ -1411,3 +1411,25 @@ export const profileChangeRequests = pgTable(
 
 export type ProfileChangeRequest = typeof profileChangeRequests.$inferSelect;
 export type NewProfileChangeRequest = typeof profileChangeRequests.$inferInsert;
+
+/* =============================================================================
+ * Notification preferences (PR-CHEF-6) — per-user opt-out scaffolding.
+ *
+ * V1: empty table = all events enabled. shouldSendToUser() defaults true.
+ * V2: future /chef/settings + /client/settings will mutate this row.
+ *
+ * jsonb shape: { [eventKey: string]: boolean } where false = suppress.
+ * =========================================================================== */
+
+export const notificationPrefs = pgTable("notification_prefs", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  prefs: jsonb("prefs").notNull().default({} as Record<string, boolean>),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type NotificationPrefs = typeof notificationPrefs.$inferSelect;
+export type NewNotificationPrefs = typeof notificationPrefs.$inferInsert;
