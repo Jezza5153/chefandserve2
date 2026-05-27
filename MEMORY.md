@@ -66,13 +66,17 @@
 │  • Reset another internal's 2FA (PR-C0)                           │
 ├──────────────────────────────────────────────────────────────────┤
 │ Chef portal (mobile-first)                                        │
-│  • /chef dashboard · /chef/profile · /chef/availability           │
-│  • /chef/shifts · /chef/shifts/[id] — accept/reject               │
-│  • /chef/hours — STUB (PR-CHEF-1 will replace)                    │
+│  • /chef — "wat moet ik nu doen?" dashboard (Today/Action/Money)  │
+│  • /chef/hours — list + /chef/hours/[id] simple-form              │
+│  • /chef/shifts/[id] — accept/reject + cancel (severity-aware)    │
+│    with contact card (tel:/WhatsApp/Maps)                          │
+│  • /chef/availability calendar · /chef/profile editable           │
+│  • /chef/notifications · /chef/calendar (ICS subscribe)           │
 ├──────────────────────────────────────────────────────────────────┤
 │ Klant portal                                                      │
-│  • /client dashboard · /client/profile · /client/shifts           │
-│  • /client/request — submit shift request in-portal               │
+│  • /client — "actie nodig" dashboard                              │
+│  • /client/shifts/[id]/hours — receipt-style sign/reject          │
+│  • /client/request · /client/notifications · /client/calendar     │
 ├──────────────────────────────────────────────────────────────────┤
 │ Auth                                                              │
 │  • /login (magic-link primary, password+TOTP behind toggle)       │
