@@ -117,6 +117,50 @@ export default async function ShiftDetailPage({
       resourceId: placementId,
     });
 
+    // Send client-confirmation email when a placement reaches "confirmed"
+    if (newStatus === "confirmed") {
+      try {
+        const placement = await db.query.placements.findFirst({
+          where: eq(placements.id, placementId),
+        });
+        if (placement) {
+          const chef = await db.query.chefs.findFirst({
+            where: eq(chefs.id, placement.chefId),
+          });
+          const shift = await db.query.shifts.findFirst({
+            where: eq(shifts.id, placement.shiftId),
+          });
+          const clientRow = shift
+            ? await db.query.clients.findFirst({
+                where: eq(clients.id, shift.clientId),
+              })
+            : null;
+          if (chef && shift && clientRow?.email) {
+            const { sendEmail, formatShiftWhen } = await import("@/lib/email");
+            const { ShiftConfirmedClientEmail } = await import(
+              "@/emails/ShiftConfirmedClientEmail"
+            );
+            await sendEmail({
+              to: clientRow.email,
+              subject: `Chef bevestigd voor ${clientRow.companyName} — ${shift.roleNeeded}`,
+              react: ShiftConfirmedClientEmail({
+                clientContactName: clientRow.contactName,
+                companyName: clientRow.companyName,
+                chefName: chef.fullName,
+                chefVakniveau: chef.vakniveau,
+                chefYears: chef.yearsExperience,
+                shiftWhen: formatShiftWhen(shift.startsAt, shift.endsAt),
+                shiftLocation: shift.location ?? shift.city,
+                shiftRole: shift.roleNeeded,
+              }),
+            });
+          }
+        }
+      } catch (e) {
+        console.error("[confirmed] notification failed:", e);
+      }
+    }
+
     redirect(`/admin/business/shifts/${id}`);
   }
 

@@ -16,10 +16,14 @@ import { db } from "@/lib/db/client";
 import {
   chefAvailability,
   chefs,
+  clients,
   placements,
   shifts,
   type Chef,
 } from "@/lib/db/schema";
+import { sendEmail, formatShiftWhen } from "@/lib/email";
+import { env } from "@/lib/env";
+import { ShiftProposedEmail } from "@/emails/ShiftProposedEmail";
 
 /* ----- ladder (used for vakniveau scoring) -------------------------- */
 /** Higher index = more senior. Same level = perfect match. */
@@ -271,6 +275,35 @@ export async function proposePlacement(
     .update(shifts)
     .set({ status: "open", updatedAt: new Date() })
     .where(and(eq(shifts.id, shiftId), eq(shifts.status, "request")));
+
+  // Best-effort: send shift-proposed email to chef (if they have an email)
+  // Failure here doesn't abort the placement — admin sees the row regardless.
+  try {
+    const chef = await db.query.chefs.findFirst({ where: eq(chefs.id, chefId) });
+    const shift = await db.query.shifts.findFirst({ where: eq(shifts.id, shiftId) });
+    if (chef?.email && shift) {
+      const client = await db.query.clients.findFirst({
+        where: eq(clients.id, shift.clientId),
+      });
+      const placementUrl = `${env.NEXT_PUBLIC_APP_URL}/chef/shifts/${placement.id}`;
+      await sendEmail({
+        to: chef.email,
+        subject: `Nieuwe shift bij ${client?.companyName ?? "een klant"} — ${shift.roleNeeded}`,
+        react: ShiftProposedEmail({
+          chefName: chef.fullName,
+          clientName: client?.companyName ?? "Onze klant",
+          shiftWhen: formatShiftWhen(shift.startsAt, shift.endsAt),
+          shiftRole: shift.roleNeeded,
+          shiftCity: shift.city,
+          shiftRateEur: shift.chefRateCents ? shift.chefRateCents / 100 : null,
+          shiftNotes: shift.notes,
+          placementUrl,
+        }),
+      });
+    }
+  } catch (e) {
+    console.error("[propose] notification email failed:", e);
+  }
 
   return { placementId: placement.id };
 }
