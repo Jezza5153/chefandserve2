@@ -1,0 +1,13 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "_comment": "This repo also hosts a Next.js app on Vercel. The Railway service in 'outstanding-charisma' should ONLY run the workers/ supervisor — never the Next app. This file overrides Railway's framework auto-detection so the GitHub auto-deploy doesn't try to build Next.",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "cd workers && npm ci"
+  },
+  "deploy": {
+    "startCommand": "cd workers && npx tsx supervisor.ts",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
