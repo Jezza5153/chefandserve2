@@ -200,6 +200,15 @@ export const authConfig: NextAuthConfig = {
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = (token.userId as string) ?? "";
+        // Explicitly forward email/name from the JWT — Auth.js v5 doesn't
+        // auto-merge them when the session callback returns a custom shape.
+        // Without this, pages that read session.user.email (e.g. the 2FA
+        // setup page's QR provisioning URI) crash on first render after
+        // sign-in because the non-null assertion hits undefined.
+        if (typeof token.email === "string") session.user.email = token.email;
+        if (typeof token.name === "string" || token.name === null) {
+          session.user.name = token.name;
+        }
         session.user.kind = (token.kind as "internal" | "chef" | "client") ?? "internal";
         session.user.roles = (token.roles as string[]) ?? [];
         session.user.permissionsVersion =
