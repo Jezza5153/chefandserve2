@@ -29,6 +29,8 @@ import {
   auditLog,
   chefs,
   clients,
+  roles,
+  userRoles,
   users,
 } from "@/lib/db/schema";
 import { sendEmail } from "@/lib/email";
@@ -213,6 +215,101 @@ export async function activatePortalUser(
   }
 
   return { ok: true };
+}
+
+/**
+ * PR-A: invite a new internal staff member.
+ *
+ * Creates a user row with kind=internal, status=active (skips the
+ * "invited" pause used for chef/client), links the user_role row for
+ * the requested role, and sends a PortalInviteEmail with internal copy.
+ *
+ * The forced setup wizard in middleware takes care of the actual
+ * security: invited user can ONLY reach /admin/account/setup/* until
+ * they've set password + 2FA + saved recovery codes.
+ *
+ * Authority check is the caller's responsibility — invoking server
+ * action must verify `requireRole("super_admin")` first.
+ */
+export async function inviteInternalStaff(args: {
+  email: string;
+  name: string;
+  role: "owner" | "super_admin";
+  actingUserId: string;
+}): Promise<InviteResult> {
+  const email = args.email.trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, error: "Ongeldig e-mailadres" };
+  }
+  if (!args.name.trim()) {
+    return { ok: false, error: "Naam is verplicht" };
+  }
+
+  // Check for an existing user
+  const existing = await db.query.users.findFirst({
+    where: eq(users.email, email),
+  });
+  if (existing) {
+    if (existing.kind !== "internal") {
+      return {
+        ok: false,
+        error: `E-mail ${email} bestaat al als ${existing.kind}-account.`,
+      };
+    }
+    // Already an internal user — short-circuit
+    return { ok: true, userId: existing.id, alreadyExisted: true };
+  }
+
+  // Lookup the role row
+  const roleRow = await db.query.roles.findFirst({
+    where: eq(roles.key, args.role),
+  });
+  if (!roleRow) {
+    return { ok: false, error: `Rol '${args.role}' bestaat niet` };
+  }
+
+  // Create the user (active immediately — wizard middleware gates access)
+  const [newUser] = await db
+    .insert(users)
+    .values({
+      email,
+      name: args.name.trim(),
+      kind: "internal",
+      status: "active",
+    })
+    .returning({ id: users.id });
+
+  // Link role
+  await db.insert(userRoles).values({
+    userId: newUser.id,
+    roleId: roleRow.id,
+    grantedBy: args.actingUserId,
+  });
+
+  await db.insert(auditLog).values({
+    userId: args.actingUserId,
+    action: "users.invite_internal",
+    resource: "users",
+    resourceId: newUser.id,
+    after: { email, name: args.name.trim(), role: args.role },
+  });
+
+  // Best-effort invite email
+  try {
+    await sendEmail({
+      to: email,
+      subject: "Welkom bij Chef & Serve — toegang tot het medewerker-portaal",
+      react: PortalInviteEmail({
+        recipientName: args.name.trim(),
+        recipientKind: "internal",
+        loginUrl: `${env.NEXT_PUBLIC_APP_URL}/login`,
+      }),
+    });
+  } catch (e) {
+    console.error("[invite-internal] email failed:", e);
+  }
+
+  return { ok: true, userId: newUser.id, alreadyExisted: false };
 }
 
 /** Disable a portal user (keeps the row, blocks login). */

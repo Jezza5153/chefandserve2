@@ -88,6 +88,47 @@ export async function requireRole(
 }
 
 /**
+ * Fence 4 — assert that an internal user has completed the setup wizard
+ * before allowing a server action / API route to proceed.
+ *
+ * Middleware already redirects pages, but server actions and API routes
+ * bypass page render entirely. Call this at the top of any admin-only
+ * server action that mutates state.
+ *
+ * Behavior:
+ *   - Non-internal users → pass-through (chefs/clients have no wizard).
+ *   - Internal user with hasPassword + totpEnabled → pass-through.
+ *   - Internal user missing either → throws an Error that the caller
+ *     should redirect on, AND writes auth.setup_incomplete_blocked audit.
+ *
+ * Throws so callers can use it as a guard at the top of an action.
+ */
+export async function assertSetupComplete(session: Session): Promise<void> {
+  if (session.user.kind !== "internal") return;
+  if (session.user.hasPassword && session.user.totpEnabled) return;
+
+  // Block + audit. Importing db here would create a circular dep, so we
+  // use a lazy import.
+  const { db } = await import("@/lib/db/client");
+  const { auditLog } = await import("@/lib/db/schema");
+  await db
+    .insert(auditLog)
+    .values({
+      userId: session.user.id,
+      action: "auth.setup_incomplete_blocked",
+      resource: "users",
+      resourceId: session.user.id,
+      after: {
+        hasPassword: session.user.hasPassword,
+        totpEnabled: session.user.totpEnabled,
+      },
+    })
+    .catch(() => {});
+
+  throw new Error("SETUP_INCOMPLETE");
+}
+
+/**
  * True if the session's roles collectively grant the given permission.
  * Looks up role_permissions live in DB (cached implicitly by Next.js fetch
  * cache + edge — Phase 0 doesn't add an explicit cache).

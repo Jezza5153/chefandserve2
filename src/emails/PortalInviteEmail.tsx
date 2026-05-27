@@ -11,56 +11,67 @@ import { EmailLayout, styles } from "./_layout";
  */
 export function PortalInviteEmail({
   recipientName,
-  recipientKind, // 'chef' | 'client'
+  recipientKind, // 'chef' | 'client' | 'internal'
   loginUrl,
 }: {
   recipientName: string;
-  recipientKind: "chef" | "client";
+  recipientKind: "chef" | "client" | "internal";
   loginUrl: string;
 }) {
-  const isChef = recipientKind === "chef";
+  const firstName = recipientName.split(" ")[0];
+  const portalLabel =
+    recipientKind === "chef"
+      ? "chef-portaal"
+      : recipientKind === "client"
+        ? "klant-portaal"
+        : "medewerker-portaal van Chef & Serve";
+
+  const bullets: string[] =
+    recipientKind === "chef"
+      ? [
+          "Shift-voorstellen van Maarten zien en accepteren of afwijzen",
+          "Je komende shifts bekijken",
+          "Je beschikbaarheid beheren",
+          "Je profiel bekijken",
+        ]
+      : recipientKind === "client"
+        ? [
+            "Je geplande shifts en bevestigde chefs zien",
+            "Nieuwe aanvragen indienen vanuit het portaal",
+            "Je bedrijfsprofiel bekijken",
+            "Facturen + betalingsstatus bekijken (binnenkort)",
+          ]
+        : [
+            "Aanmeldingen converteren naar chefs en klanten",
+            "Roosters samenstellen en chef-voorstellen versturen",
+            "Volledige toegang tot alle inkomende aanvragen",
+            "Eerste login: wachtwoord + 2FA setup verplicht (~90 sec)",
+          ];
 
   return (
     <EmailLayout
-      preview={`Je bent uitgenodigd voor het Chef & Serve portaal`}
+      preview={`Je bent uitgenodigd voor het Chef & Serve ${portalLabel}`}
     >
       <Heading as="h1" style={styles.h1}>
         Welkom bij Chef &amp; Serve
       </Heading>
       <Text style={styles.lead}>
-        Hoi {recipientName.split(" ")[0]}, je hebt nu toegang tot het{" "}
-        {isChef ? "chef-portaal" : "klant-portaal"}.
+        Hoi {firstName}, je hebt nu toegang tot het {portalLabel}.
       </Text>
 
-      {isChef ? (
-        <>
-          <Text style={styles.para}>
-            In het portaal kun je:
-          </Text>
-          <ul style={{ fontSize: "14px", lineHeight: "1.8", color: styles.ink, paddingLeft: "20px" }}>
-            <li>Shift-voorstellen van Maarten zien en accepteren of afwijzen</li>
-            <li>Je komende shifts bekijken</li>
-            <li>Je beschikbaarheid beheren (binnenkort)</li>
-            <li>Je uren indienen na elke shift (binnenkort)</li>
-          </ul>
-        </>
-      ) : (
-        <>
-          <Text style={styles.para}>
-            In het portaal kun je:
-          </Text>
-          <ul style={{ fontSize: "14px", lineHeight: "1.8", color: styles.ink, paddingLeft: "20px" }}>
-            <li>Je geplande shifts en bevestigde chefs zien</li>
-            <li>Nieuwe aanvragen indienen (binnenkort in portaal)</li>
-            <li>Facturen + betalingsstatus bekijken (binnenkort)</li>
-            <li>Chefs beoordelen na elke shift (binnenkort)</li>
-          </ul>
-        </>
-      )}
+      <Text style={styles.para}>
+        In het portaal kun je:
+      </Text>
+      <ul style={{ fontSize: "14px", lineHeight: "1.8", color: styles.ink, paddingLeft: "20px" }}>
+        {bullets.map((b) => (
+          <li key={b}>{b}</li>
+        ))}
+      </ul>
 
       <Text style={styles.para}>
-        Klik op de knop hieronder om in te loggen. Wij sturen je een
-        eenmalige link per e-mail — geen wachtwoord nodig.
+        {recipientKind === "internal"
+          ? "Klik op de knop hieronder om in te loggen. Bij je eerste login richt je je wachtwoord en 2FA in — dit duurt ~90 seconden."
+          : "Klik op de knop hieronder om in te loggen. Wij sturen je een eenmalige link per e-mail — geen wachtwoord nodig."}
       </Text>
 
       <Section style={{ textAlign: "center", margin: "32px 0" }}>

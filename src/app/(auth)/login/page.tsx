@@ -197,8 +197,8 @@ export default async function LoginPage({
         Welkom terug
       </h1>
       <p className="mt-4 text-sm leading-relaxed text-ink-700">
-        Vul je e-mailadres, wachtwoord en 2FA-code in. Geen wachtwoord (nog)?
-        Vraag een eenmalige inloglink aan onderaan.
+        Vul je e-mailadres in en we sturen je een eenmalige inloglink.
+        Geen wachtwoord nodig.
       </p>
 
       <form
@@ -224,41 +224,58 @@ export default async function LoginPage({
           />
         </div>
 
-        <div>
-          <label
-            htmlFor="password"
-            className="mb-2 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy"
-          >
-            Wachtwoord
-          </label>
-          <input
-            type="password"
-            id="password"
-            name="password"
-            autoComplete="current-password"
-            placeholder="Alleen voor admin-accounts"
-            className="w-full rounded border border-ink-200 bg-white px-4 py-3 font-mono text-base text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
-          />
-        </div>
-
-        <div>
-          <label
-            htmlFor="totp"
-            className="mb-2 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy"
-          >
-            2FA-code
-          </label>
-          <input
-            type="text"
-            id="totp"
-            name="totp"
-            inputMode="text"
-            maxLength={16}
-            autoComplete="one-time-code"
-            placeholder="123 456 of recovery code"
-            className="w-full rounded border border-ink-200 bg-white px-4 py-3 font-mono text-base tracking-wider text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
-          />
-        </div>
+        {/* Password + TOTP fields — hidden behind toggle so first-time
+            visitors aren't intimidated by them. Internal staff who have
+            completed the wizard click "Heb je al een wachtwoord?" to open. */}
+        <details
+          className="rounded border border-ink-200 bg-bg-gray px-4 py-3 text-sm"
+          // The browser remembers the open state per-page-load. For "remembered
+          // across visits" we'd need a tiny client component reading
+          // sessionStorage; not worth the round-trip in V1.
+        >
+          <summary className="cursor-pointer font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy hover:underline">
+            Heb je al een wachtwoord ingesteld?
+          </summary>
+          <div className="mt-4 space-y-3">
+            <p className="text-xs leading-relaxed text-ink-700">
+              Voor interne medewerkers met wachtwoord + 2FA. Chefs en klanten
+              gebruiken altijd de eenmalige inloglink hierboven.
+            </p>
+            <div>
+              <label
+                htmlFor="password"
+                className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy"
+              >
+                Wachtwoord
+              </label>
+              <input
+                type="password"
+                id="password"
+                name="password"
+                autoComplete="current-password"
+                className="w-full rounded border border-ink-200 bg-white px-3 py-2 font-mono text-base text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="totp"
+                className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy"
+              >
+                2FA-code (of recovery code)
+              </label>
+              <input
+                type="text"
+                id="totp"
+                name="totp"
+                inputMode="text"
+                maxLength={16}
+                autoComplete="one-time-code"
+                placeholder="123 456 of ABCD-EFGH-IJKL"
+                className="w-full rounded border border-ink-200 bg-white px-3 py-2 font-mono text-base tracking-wider text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              />
+            </div>
+          </div>
+        </details>
 
         {errorMsg && (
           <p className="rounded border border-burgundy/30 bg-burgundy/5 px-4 py-2 text-sm text-burgundy">
@@ -268,35 +285,33 @@ export default async function LoginPage({
 
         <TurnstileWidget siteKey={env.NEXT_PUBLIC_TURNSTILE_SITE_KEY} />
 
-        <button
-          type="submit"
-          formAction={passwordLogin}
-          className="w-full rounded-full bg-burgundy px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
-        >
-          Inloggen
-        </button>
-
-        <div className="relative my-4">
-          <hr className="border-ink-200" />
-          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-3 font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
-            of
-          </span>
-        </div>
-
+        {/* Primary action: magic-link. Most logins use this (chef + klant
+            always; internal staff before wizard; internal staff who don't
+            want to type the password). */}
         <button
           type="submit"
           formAction={sendMagicLink}
-          className="w-full rounded-full border border-burgundy/40 bg-white px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy transition-colors hover:bg-burgundy/5"
+          className="w-full rounded-full bg-burgundy px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
         >
           Stuur eenmalige inloglink
+        </button>
+
+        {/* Secondary action: password+TOTP. Only useful after wizard is
+            complete AND the user toggled open the password fields above. */}
+        <button
+          type="submit"
+          formAction={passwordLogin}
+          className="w-full rounded-full border border-burgundy/40 bg-white px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy transition-colors hover:bg-burgundy/5"
+        >
+          Inloggen met wachtwoord + 2FA
         </button>
       </form>
 
       <p className="mt-8 text-xs leading-relaxed text-ink-500">
-        Chefs en klanten gebruiken altijd de eenmalige inloglink. Admin-accounts
-        kunnen inloggen met wachtwoord + 2FA na de eerste setup. Onbekende of
-        nog niet geactiveerde adressen ontvangen geen mail — neem contact op
-        met Jezza of Maarten als je geen toegang krijgt.
+        Chefs en klanten gebruiken altijd de eenmalige inloglink. Interne
+        medewerkers kunnen na hun eerste setup ook met wachtwoord + 2FA
+        inloggen. Onbekende of nog niet geactiveerde adressen ontvangen
+        geen mail.
       </p>
     </div>
   );

@@ -43,15 +43,26 @@ export default async function UsersPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-        System
-      </p>
-      <h1 className="mt-3 font-serif text-4xl text-ink-900 md:text-5xl">
-        Users
-      </h1>
+      <div className="flex items-baseline justify-between gap-4">
+        <div>
+          <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+            System
+          </p>
+          <h1 className="mt-3 font-serif text-4xl text-ink-900 md:text-5xl">
+            Users
+          </h1>
+        </div>
+        <a
+          href="/admin/system/users/new"
+          className="shrink-0 rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
+        >
+          + Nieuwe medewerker
+        </a>
+      </div>
       <p className="mt-4 text-sm text-ink-700 md:text-base">
-        Alle accounts in het systeem. Phase 0 = read-only — edits via SQL of
-        admin scripts.
+        Alle accounts in het systeem. Klik op &ldquo;Nieuwe medewerker&rdquo; om
+        een interne collega uit te nodigen — ze krijgen een mail en lopen bij
+        hun eerste login door de setup-wizard.
       </p>
 
       <div className="mt-8 overflow-hidden rounded-lg border border-ink-200 bg-white">
