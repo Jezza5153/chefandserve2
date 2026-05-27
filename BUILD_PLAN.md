@@ -706,9 +706,25 @@ npm run build
 - `/api/auth/*` — Auth.js v5 handler
 
 ### Phases still to ship (per ROADMAP.md)
-- **Phase 5** — Payingit bridge (CSV → SFTP/API) — needs Payingit spec call
-- **Phase 7** — Resend template polish (shift_confirmed, hours_due, etc.) + invite-chef-to-portal flow
-- **Phase 8** — IT-admin lane polish (already 80% done in PR-0F)
-- **Phase 9+** — AI matching layer (per AI_INTEGRATION.md)
+- **Phase 5** — Payingit bridge (CSV → SFTP/API) — needs Payingit spec call.
+  `workers/payingit-sync.ts` runs in DRY-RUN mode today (emails Maarten a
+  preview of what would be pushed).
+- **Phase 2 polish** — Cloudflare R2 file uploads (CV, photos, certs).
+  Env vars stubbed in `.env.example`; needs R2 bucket + token.
+- **Phase 9 live** — LLM matching. pgvector + columns + HNSW indexes are
+  already live on Neon. `workers/embedding-refresh.ts` is stubbed —
+  one env var + uncommenting the fetch() turns it on.
+
+### Shipped since last update
+- **Phase 7A/B**: Resend templates (ShiftProposedEmail, ShiftConfirmedClientEmail,
+  PortalInviteEmail) wired into propose/confirm flows; portal invite flow
+  with Activate/Disable buttons on chef + client detail pages.
+- **Phase 2 polish**: Vakniveau dropdown, segments multi-select pills,
+  specialties text, languages list, rate-band (€/uur) on chef profile.
+- **Phase 8 polish**: Webhooks list + detail viewer + replay button.
+- **Phase 9 prep**: pgvector extension live, embedding columns +
+  HNSW indexes on chefs/clients/shifts.
+- **Railway workers**: 4 stand-alone scripts ready to deploy — weekly
+  digest, Payingit sync (stub), embedding refresh (stub), error digest.
 
 **Questions?** Open an issue or DM Jezza.
