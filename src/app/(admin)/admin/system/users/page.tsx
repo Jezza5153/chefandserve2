@@ -1,8 +1,8 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import Link from "next/link";
 
 import { db } from "@/lib/db/client";
-import { roles, userRoles, users } from "@/lib/db/schema";
+import { auditLog, roles, userRoles, users } from "@/lib/db/schema";
 import { requireRole } from "@/lib/permissions";
 
 export const metadata = { title: "Users" };
@@ -23,6 +23,9 @@ export default async function UsersPage() {
       status: users.status,
       seedKey: users.seedKey,
       createdAt: users.createdAt,
+      passwordHash: users.passwordHash,
+      totpEnabled: users.totpEnabled,
+      totpEnrolledAt: users.totpEnrolledAt,
     })
     .from(users)
     .orderBy(asc(users.createdAt));
@@ -40,6 +43,42 @@ export default async function UsersPage() {
   for (const r of allUserRoles) {
     const existing = rolesByUser.get(r.userId) ?? [];
     rolesByUser.set(r.userId, [...existing, r.roleKey]);
+  }
+
+  // Last successful sign-in per user — single query, GROUP BY user_id over
+  // auth.signin rows. Cheap on small audit_log tables; if this gets slow
+  // we'll add a denormalized lastSignInAt column on users.
+  const lastSignins = await db
+    .select({
+      userId: auditLog.userId,
+      lastAt: sql<string>`max(${auditLog.createdAt})`.as("last_at"),
+    })
+    .from(auditLog)
+    .where(eq(auditLog.action, "auth.signin"))
+    .groupBy(auditLog.userId);
+
+  const lastSigninByUser = new Map<string, Date>();
+  for (const row of lastSignins) {
+    if (row.userId && row.lastAt) {
+      lastSigninByUser.set(row.userId, new Date(row.lastAt));
+    }
+  }
+
+  function relativeTime(d: Date | undefined | null): string {
+    if (!d) return "—";
+    const diffMs = Date.now() - d.getTime();
+    const minutes = Math.floor(diffMs / 60_000);
+    if (minutes < 1) return "zojuist";
+    if (minutes < 60) return `${minutes} min geleden`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} u geleden`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} d geleden`;
+    return d.toLocaleDateString("nl-NL", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
   }
 
   return (
@@ -66,61 +105,99 @@ export default async function UsersPage() {
         hun eerste login door de setup-wizard.
       </p>
 
-      <div className="mt-8 overflow-hidden rounded-lg border border-ink-200 bg-white">
-        <table className="w-full">
+      <div className="mt-8 overflow-x-auto rounded-lg border border-ink-200 bg-white">
+        <table className="w-full min-w-[860px]">
           <thead className="bg-bg-gray text-left">
             <tr>
               <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                Email
+                E-mail
               </th>
               <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                Name
+                Naam
               </th>
               <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                Kind
+                Type
               </th>
               <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
                 Status
               </th>
               <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                Roles
+                Setup
               </th>
               <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                Seed key
+                2FA
+              </th>
+              <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
+                Rollen
+              </th>
+              <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
+                Laatste login
               </th>
             </tr>
           </thead>
           <tbody>
-            {userRows.map((u, i) => (
-              <tr
-                key={u.id}
-                className={
-                  i < userRows.length - 1 ? "border-b border-ink-200" : ""
-                }
-              >
-                <td className="px-4 py-3 text-sm">
-                  <Link
-                    href={`/admin/system/users/${u.id}`}
-                    className="text-ink-900 hover:text-burgundy hover:underline"
-                  >
-                    {u.email}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-sm text-ink-700">
-                  {u.name ?? "—"}
-                </td>
-                <td className="px-4 py-3 text-xs text-ink-500">{u.kind}</td>
-                <td className="px-4 py-3">
-                  <StatusBadge status={u.status} />
-                </td>
-                <td className="px-4 py-3 text-xs text-ink-700">
-                  {(rolesByUser.get(u.id) ?? []).join(", ") || "—"}
-                </td>
-                <td className="px-4 py-3 font-mono text-xs text-ink-500">
-                  {u.seedKey ?? "—"}
-                </td>
-              </tr>
-            ))}
+            {userRows.map((u, i) => {
+              const setupDone = u.kind !== "internal"
+                ? null
+                : Boolean(u.passwordHash) && Boolean(u.totpEnabled);
+              return (
+                <tr
+                  key={u.id}
+                  className={
+                    i < userRows.length - 1 ? "border-b border-ink-200" : ""
+                  }
+                >
+                  <td className="px-4 py-3 text-sm">
+                    <Link
+                      href={`/admin/system/users/${u.id}`}
+                      className="text-ink-900 hover:text-burgundy hover:underline"
+                    >
+                      {u.email}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-ink-700">
+                    {u.name ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-ink-500">{u.kind}</td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={u.status} />
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {u.kind !== "internal" ? (
+                      <span className="text-ink-500">n.v.t.</span>
+                    ) : setupDone ? (
+                      <span className="text-emerald-700">✓ klaar</span>
+                    ) : (
+                      <span className="text-amber-700">⚠ wacht</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {u.kind !== "internal" ? (
+                      <span className="text-ink-500">n.v.t.</span>
+                    ) : u.totpEnabled ? (
+                      <span
+                        className="text-emerald-700"
+                        title={
+                          u.totpEnrolledAt
+                            ? `sinds ${new Date(u.totpEnrolledAt).toLocaleDateString("nl-NL")}`
+                            : undefined
+                        }
+                      >
+                        ✓ aan
+                      </span>
+                    ) : (
+                      <span className="text-ink-500">uit</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-ink-700">
+                    {(rolesByUser.get(u.id) ?? []).join(", ") || "—"}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-ink-500">
+                    {relativeTime(lastSigninByUser.get(u.id))}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

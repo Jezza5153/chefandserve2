@@ -187,22 +187,38 @@ export function AvailabilityCalendar({
               {m.days.map((d) => {
                 const iso = isoDate(d);
                 const isPast = d < today;
+                const isToday = d.getTime() === today.getTime();
                 const isBlocked = blocked.has(iso);
                 const isRangeStart = rangeStart === iso;
+                // Today ring beats the range ring (range ring still wins
+                // if the user explicitly shift-clicked today as the anchor).
+                const ring = isRangeStart
+                  ? "ring-2 ring-burgundy ring-offset-1"
+                  : isToday
+                    ? "ring-2 ring-ink-900 ring-offset-1"
+                    : "";
                 return (
                   <button
                     key={iso}
                     type="button"
                     disabled={isPast || pending}
                     onClick={(e) => handleClick(d, e.shiftKey)}
-                    className={`aspect-square rounded text-xs transition-all ${
+                    className={`aspect-square rounded text-xs font-medium transition-all ${
                       isPast
                         ? "cursor-not-allowed bg-bg-gray text-ink-200"
                         : isBlocked
                           ? "bg-burgundy text-white hover:bg-burgundy-900"
                           : "bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
-                    } ${isRangeStart ? "ring-2 ring-burgundy ring-offset-1" : ""}`}
-                    title={isPast ? "Verleden" : isBlocked ? "Geblokkeerd" : "Beschikbaar"}
+                    } ${ring}`}
+                    title={
+                      isPast
+                        ? "Verleden"
+                        : isToday
+                          ? "Vandaag"
+                          : isBlocked
+                            ? "Geblokkeerd"
+                            : "Beschikbaar"
+                    }
                   >
                     {d.getDate()}
                   </button>
@@ -225,6 +241,10 @@ export function AvailabilityCalendar({
         <span className="flex items-center gap-2">
           <span className="inline-block size-3 rounded bg-bg-gray" />
           Verleden
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="inline-block size-3 rounded bg-emerald-50 ring-2 ring-ink-900" />
+          Vandaag
         </span>
         {pending && <span className="text-burgundy">Opslaan…</span>}
       </div>

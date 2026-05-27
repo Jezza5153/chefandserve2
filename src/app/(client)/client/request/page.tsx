@@ -222,24 +222,50 @@ export default async function ClientRequestPage({
 
   if (params.ok === "1") {
     return (
-      <div>
-        <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-          Aanvraag verzonden
-        </p>
-        <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
-          Bedankt — we hebben je aanvraag binnen
-        </h1>
-        <p className="mt-4 max-w-prose text-sm leading-relaxed text-ink-700">
-          Maarten of Gina kijkt er meestal binnen <strong>4 uur</strong> naar
-          (binnen kantooruren) en stuurt je voorstellen via e-mail. Voor
-          spoed-aanvragen — bel het kantoor.
-        </p>
-        <a
-          href="/client/request"
-          className="mt-6 inline-block rounded-full border border-burgundy/30 px-5 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy hover:bg-burgundy/5"
-        >
-          Nog een aanvraag indienen
-        </a>
+      <div className="max-w-2xl">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-8 md:p-10">
+          <div className="flex items-start gap-4">
+            <span
+              aria-hidden
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-2xl font-bold leading-none text-white"
+            >
+              ✓
+            </span>
+            <div>
+              <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-emerald-800">
+                Aanvraag ontvangen
+              </p>
+              <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
+                Bedankt — we hebben je aanvraag binnen
+              </h1>
+              <p className="mt-4 max-w-prose text-sm leading-relaxed text-ink-700">
+                Maarten of Gina kijkt er binnen <strong>4 werkuren</strong>
+                {" "}naar en stuurt je voorstellen via e-mail naar{" "}
+                <strong>{me.email ?? "je opgegeven e-mailadres"}</strong>.
+                Spoed? Bel het kantoor.
+              </p>
+              <p className="mt-3 text-xs text-ink-500">
+                Je vindt deze aanvraag terug onder &ldquo;Mijn shifts&rdquo;
+                zodra er een voorstel is.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          <a
+            href="/client/request"
+            className="inline-block rounded-full bg-burgundy px-5 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900"
+          >
+            Nog een aanvraag indienen
+          </a>
+          <a
+            href="/client/shifts"
+            className="inline-block rounded-full border border-burgundy/30 px-5 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy hover:bg-burgundy/5"
+          >
+            Mijn shifts bekijken
+          </a>
+        </div>
       </div>
     );
   }
