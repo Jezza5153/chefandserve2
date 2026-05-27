@@ -135,25 +135,88 @@ export default async function ShiftDetailPage({
                 where: eq(clients.id, shift.clientId),
               })
             : null;
-          if (chef && shift && clientRow?.email) {
+          if (chef && shift) {
             const { sendEmail, formatShiftWhen } = await import("@/lib/email");
+            const { recordEmailMessage, createNotification } = await import(
+              "@/lib/integrations"
+            );
             const { ShiftConfirmedClientEmail } = await import(
               "@/emails/ShiftConfirmedClientEmail"
             );
-            await sendEmail({
-              to: clientRow.email,
-              subject: `Chef bevestigd voor ${clientRow.companyName} — ${shift.roleNeeded}`,
-              react: ShiftConfirmedClientEmail({
-                clientContactName: clientRow.contactName,
-                companyName: clientRow.companyName,
-                chefName: chef.fullName,
-                chefVakniveau: chef.vakniveau,
-                chefYears: chef.yearsExperience,
-                shiftWhen: formatShiftWhen(shift.startsAt, shift.endsAt),
-                shiftLocation: shift.location ?? shift.city,
-                shiftRole: shift.roleNeeded,
-              }),
-            });
+            const { ShiftConfirmedChefEmail } = await import(
+              "@/emails/ShiftConfirmedChefEmail"
+            );
+            const shiftWhen = formatShiftWhen(shift.startsAt, shift.endsAt);
+
+            // KLANT email (existing behavior)
+            if (clientRow?.email) {
+              const send = await sendEmail({
+                to: clientRow.email,
+                subject: `Chef bevestigd voor ${clientRow.companyName} — ${shift.roleNeeded}`,
+                react: ShiftConfirmedClientEmail({
+                  clientContactName: clientRow.contactName,
+                  companyName: clientRow.companyName,
+                  chefName: chef.fullName,
+                  chefVakniveau: chef.vakniveau,
+                  chefYears: chef.yearsExperience,
+                  shiftWhen,
+                  shiftLocation: shift.location ?? shift.city,
+                  shiftRole: shift.roleNeeded,
+                }),
+              });
+              if (send.ok) {
+                await recordEmailMessage({
+                  providerMessageId: send.id,
+                  toEmail: clientRow.email,
+                  template: "ShiftConfirmedClientEmail",
+                  eventKey: "shift_confirmed",
+                  entityType: "placement",
+                  entityId: placementId,
+                  userId: clientRow.userId ?? undefined,
+                });
+              }
+            }
+
+            // CHEF email (PR-CHEF-5 new — chef closes the loop too)
+            if (chef.email) {
+              const send = await sendEmail({
+                to: chef.email,
+                subject: `Shift bevestigd: ${shift.roleNeeded} bij ${clientRow?.companyName ?? "klant"}`,
+                react: ShiftConfirmedChefEmail({
+                  chefName: chef.fullName,
+                  clientName: clientRow?.companyName ?? "—",
+                  shiftWhen,
+                  shiftLocation: shift.location ?? shift.city,
+                  shiftRole: shift.roleNeeded,
+                  clientContactName: clientRow?.contactName,
+                  clientContactPhone: clientRow?.phone,
+                }),
+              });
+              if (send.ok) {
+                await recordEmailMessage({
+                  providerMessageId: send.id,
+                  toEmail: chef.email,
+                  template: "ShiftConfirmedChefEmail",
+                  eventKey: "shift_confirmed",
+                  entityType: "placement",
+                  entityId: placementId,
+                  userId: chef.userId ?? undefined,
+                });
+              }
+            }
+
+            // In-app notification for the chef
+            if (chef.userId) {
+              await createNotification({
+                userId: chef.userId,
+                type: "shift_confirmed",
+                title: `Shift bevestigd bij ${clientRow?.companyName ?? "klant"}`,
+                body: shiftWhen,
+                actionUrl: `/chef/shifts/${placementId}`,
+                entityType: "placement",
+                entityId: placementId,
+              });
+            }
           }
         }
       } catch (e) {

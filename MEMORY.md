@@ -108,7 +108,7 @@
 | PR-CHEF-2 | Three role dashboards ("wat moet ik nu doen?") | ✅ live (chef + klant + admin all "actie nodig" first + integration health card + ActionCard shared) |
 | PR-CHEF-3 | Admin bulk approval + dispute UX + manual-add hours | ✅ live (magic eligibility + bulk-select bar + per-row approve + anomaly flagging in queue) |
 | PR-CHEF-4 | Profile editing (direct + request-change split) | ✅ live (migration 0013 · ProfileForm direct edit · RequestChangeFormSection for sensitive fields · profile_change_requests table) |
-| PR-CHEF-5 | Confirm-notify chef + cancel-severity + contact cards + contact_logs | ⏳ |
+| PR-CHEF-5 | Confirm-notify chef + cancel-severity + contact cards | ✅ live (ShiftConfirmedChefEmail · ShiftCancelledByChefClientEmail · cancellation-severity util · cancel flow with tel: CTA · contact card · rejection reason on accept/reject) |
 | PR-CHEF-6 | Notification prefs scaffolding | ⏳ |
 | PR-CHEF-7 | Payroll batches + corrections + CSV export | ⏳ |
 | PR-CHEF-8 | Email delivery tracking (Resend webhooks) | ⏳ |

@@ -38,7 +38,15 @@ import { redirect } from "next/navigation";
 export const metadata = { title: "Mijn profiel" };
 export const dynamic = "force-dynamic";
 
-const SEGMENT_OPTIONS = ["casual", "fine_dining", "hotel", "banqueting", "catering", "event", "corporate", "michelin"] as const;
+type Segment =
+  | "casual"
+  | "fine_dining"
+  | "hotel"
+  | "banqueting"
+  | "catering"
+  | "event"
+  | "corporate"
+  | "michelin";
 
 async function saveProfile(formData: FormData) {
   "use server";
@@ -55,9 +63,7 @@ async function saveProfile(formData: FormData) {
     .map((l) => l.trim().toLowerCase())
     .filter(Boolean);
   const specialties = String(formData.get("specialties") ?? "").trim() || null;
-  const segments = formData.getAll("segments").map((s) => String(s)) as Array<
-    typeof SEGMENT_OPTIONS[number]
-  >;
+  const segments = formData.getAll("segments").map((s) => String(s)) as Segment[];
 
   const before = {
     phone: chef.phone,
