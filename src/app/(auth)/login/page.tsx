@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 
@@ -161,7 +162,7 @@ async function sendMagicLink(formData: FormData) {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; next?: string }>;
+  searchParams: Promise<{ error?: string; next?: string; reset?: string }>;
 }) {
   const params = await searchParams;
 
@@ -186,7 +187,18 @@ export default async function LoginPage({
             ? "Inloggen mislukt. Controleer je e-mail, wachtwoord en 2FA-code."
             : params.error === "password-missing-fields"
               ? "Vul alle drie de velden in om met wachtwoord in te loggen. Geen wachtwoord? Gebruik de eenmalige inloglink."
-              : null;
+              : params.error === "recovery-invalid"
+                ? "Herstellink ongeldig of al gebruikt. Vraag een nieuwe aan."
+                : params.error === "recovery-totp-missing"
+                  ? "2FA is in de tussentijd al gereset. Log in via een eenmalige inloglink."
+                  : null;
+
+  const resetBanner =
+    params.reset === "password"
+      ? "Wachtwoord opgeslagen. Log nu in met je nieuwe wachtwoord en je huidige 2FA-code."
+      : params.reset === "2fa"
+        ? "2FA is gereset. Log in via een eenmalige inloglink — daarna stel je opnieuw een authenticator in via de setup-wizard."
+        : null;
 
   return (
     <div className="mx-auto w-full max-w-md rounded-lg border border-burgundy/15 bg-white p-8 md:p-10">
@@ -200,6 +212,12 @@ export default async function LoginPage({
         Vul je e-mailadres in en we sturen je een eenmalige inloglink.
         Geen wachtwoord nodig.
       </p>
+
+      {resetBanner ? (
+        <p className="mt-6 rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+          ✓ {resetBanner}
+        </p>
+      ) : null}
 
       <form
         className="mt-8 space-y-4"
@@ -306,6 +324,21 @@ export default async function LoginPage({
           Inloggen met wachtwoord + 2FA
         </button>
       </form>
+
+      <div className="mt-6 flex flex-col gap-1 text-xs">
+        <Link
+          href="/login/forgot-password"
+          className="text-burgundy underline-offset-4 hover:underline"
+        >
+          Wachtwoord vergeten?
+        </Link>
+        <Link
+          href="/login/lost-2fa"
+          className="text-burgundy underline-offset-4 hover:underline"
+        >
+          Geen toegang tot je authenticator?
+        </Link>
+      </div>
 
       <p className="mt-8 text-xs leading-relaxed text-ink-500">
         Chefs en klanten gebruiken altijd de eenmalige inloglink. Interne

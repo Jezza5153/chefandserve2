@@ -916,3 +916,48 @@ export type UserRecoveryCode = typeof userRecoveryCodes.$inferSelect;
 export type NewUserRecoveryCode = typeof userRecoveryCodes.$inferInsert;
 export type NotificationRoute = typeof notificationRoutes.$inferSelect;
 export type NewNotificationRoute = typeof notificationRoutes.$inferInsert;
+
+/* =============================================================================
+ * Recovery intents (PR-C) — purpose-bound, single-use account recovery tokens.
+ *
+ * Fence 5: forgot-password and lost-2fa flows MUST NOT reuse generic login
+ * magic-links. Each recovery email contains a token bound to a specific
+ * intent. The recovery page validates intent matches before accepting the
+ * 2nd factor.
+ *
+ *   intent = 'password' → /recover/password?token=<token>
+ *     Requires current TOTP code + new password (twice).
+ *   intent = 'totp'     → /recover/2fa?token=<token>
+ *     Requires a recovery code; consumes it and wipes the user's TOTP
+ *     so they re-enroll via the wizard.
+ *
+ * Token = 32 random bytes hex (64 chars). Expires 15 min after creation.
+ * Single-use via atomic UPDATE … SET consumed_at = now() WHERE
+ * consumed_at IS NULL. All attempts audited.
+ * =========================================================================== */
+export const recoveryIntentEnum = pgEnum("recovery_intent", ["password", "totp"]);
+
+export const recoveryIntents = pgTable(
+  "recovery_intents",
+  {
+    token: text("token").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    intent: recoveryIntentEnum("intent").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    recoveryIntentsUserIdx: index("recovery_intents_user_idx").on(
+      t.userId,
+      t.intent,
+    ),
+  }),
+);
+
+export type RecoveryIntent = typeof recoveryIntents.$inferSelect;
+export type NewRecoveryIntent = typeof recoveryIntents.$inferInsert;
