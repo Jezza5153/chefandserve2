@@ -75,10 +75,17 @@ export function Header() {
             </a>
 
             <Link
-              href="/work-with-us/"
+              href="/login"
+              className="hidden font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-900 transition-colors hover:text-burgundy md:inline-block"
+            >
+              Inloggen
+            </Link>
+
+            <Link
+              href="/aanmelden"
               className="hidden rounded-full border border-ink-900 px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-900 transition-colors hover:border-burgundy hover:bg-burgundy hover:text-white md:inline-block"
             >
-              Shift manager
+              Aanmelden
             </Link>
           </div>
         </div>
