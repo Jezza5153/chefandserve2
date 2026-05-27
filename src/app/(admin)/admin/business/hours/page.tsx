@@ -7,7 +7,7 @@
  * Owner or super_admin only.
  */
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 
 import { HumanStatusBadge } from "@/components/hours/HumanStatusBadge";

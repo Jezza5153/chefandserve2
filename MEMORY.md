@@ -105,7 +105,7 @@
 | PR-CHEF-0 | Integration spine (outbox/runs/external_refs/email tracking/notifications/contact_logs) | ✅ live (migration 0011 applied · 18/18 smoke pass · /admin/business/integrations live) |
 | PR-AI-0 | AI/RAG docs spine (docs/ai/) | 🟡 in progress (background agent) |
 | PR-CHEF-1 | Hours chain (chef → klant → admin → exported) + trust timeline | ✅ live (migration 0012 applied · 9 emails · trust timeline · chef form · klant receipt · admin queue+detail) |
-| PR-CHEF-2 | Three role dashboards ("wat moet ik nu doen?") | ⏳ |
+| PR-CHEF-2 | Three role dashboards ("wat moet ik nu doen?") | ✅ live (chef + klant + admin all "actie nodig" first + integration health card + ActionCard shared) |
 | PR-CHEF-3 | Admin bulk approval + dispute UX + manual-add hours | ⏳ |
 | PR-CHEF-4 | Profile editing (direct + request-change split) | ⏳ |
 | PR-CHEF-5 | Confirm-notify chef + cancel-severity + contact cards + contact_logs | ⏳ |

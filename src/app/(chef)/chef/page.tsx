@@ -1,36 +1,46 @@
-import { and, desc, eq, gte, inArray } from "drizzle-orm";
+/**
+ * /chef — daily home for chefs.
+ *
+ * PR-CHEF-2. Rebuilt around "wat moet ik nu doen?" instead of menu-of-features.
+ *
+ * Sections (in priority order):
+ *   1. VANDAAG       — today's confirmed shift(s) with contact + maps + tel:
+ *   2. ACTIE NODIG   — pending proposals + hours to log + rejected hours
+ *   3. GELD          — approved this month / pending klant / pending admin
+ *   4. KOMENDE       — next 4 confirmed shifts
+ *
+ * Empty states designed (no gray voids).
+ */
+
+import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import Link from "next/link";
 
+import { ActionCard, ActionRow } from "@/components/dashboard/ActionCard";
 import { db } from "@/lib/db/client";
 import {
   chefs,
   clients,
   placements,
+  shiftHours,
   shifts,
 } from "@/lib/db/schema";
+import {
+  computeChefAmountCents,
+  formatEuro,
+} from "@/lib/hours-labels";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata = { title: "Dashboard" };
 
-/**
- * Chef dashboard — first thing a chef sees after login.
- *
- * Sections:
- *   1. Pending proposals (shifts waiting for accept/reject)
- *   2. Upcoming confirmed shifts (next 14 days)
- *   3. Quick links
- */
-export default async function ChefDashboardPage() {
+export default async function ChefHomePage() {
   const session = await requireAuth();
   if (session.user.kind !== "chef" && !session.user.roles.includes("super_admin")) {
     return <p>Geen toegang.</p>;
   }
 
-  // Find the chef row linked to this user
   const chef = await db.query.chefs.findFirst({
     where: eq(chefs.userId, session.user.id),
   });
-
   if (!chef) {
     return (
       <div className="rounded-lg border border-amber-300 bg-amber-50 p-6">
@@ -43,30 +53,107 @@ export default async function ChefDashboardPage() {
     );
   }
 
-  /* ----- queries ----- */
-  const pending = await db
-    .select({
-      placement: placements,
-      shift: shifts,
-      clientName: clients.companyName,
-    })
+  /* ---------------- queries ---------------- */
+  const now = new Date();
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfTomorrow = new Date(startOfToday);
+  startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const horizon = new Date(now);
+  horizon.setDate(horizon.getDate() + 14);
+
+  // Today's confirmed shifts
+  const todayShifts = await db
+    .select({ p: placements, s: shifts, clientName: clients.companyName, clientPhone: clients.phone })
     .from(placements)
     .innerJoin(shifts, eq(shifts.id, placements.shiftId))
     .innerJoin(clients, eq(clients.id, shifts.clientId))
     .where(
       and(
         eq(placements.chefId, chef.id),
-        eq(placements.status, "proposed"),
+        inArray(placements.status, ["confirmed", "accepted"]),
+        gte(shifts.startsAt, startOfToday),
+        lte(shifts.startsAt, startOfTomorrow),
       ),
     )
     .orderBy(shifts.startsAt);
 
+  // Pending proposals
+  const pendingProposals = await db
+    .select({ p: placements, s: shifts, clientName: clients.companyName })
+    .from(placements)
+    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .innerJoin(clients, eq(clients.id, shifts.clientId))
+    .where(and(eq(placements.chefId, chef.id), eq(placements.status, "proposed")))
+    .orderBy(shifts.startsAt);
+
+  // Hours to log
+  const hoursToLog = await db
+    .select({ h: shiftHours, s: shifts, clientName: clients.companyName })
+    .from(shiftHours)
+    .innerJoin(shifts, eq(shifts.id, shiftHours.shiftId))
+    .innerJoin(clients, eq(clients.id, shiftHours.clientId))
+    .where(and(eq(shiftHours.chefId, chef.id), eq(shiftHours.status, "draft")))
+    .orderBy(shifts.startsAt);
+
+  // Hours rejected (need attention)
+  const hoursRejected = await db
+    .select({ h: shiftHours, s: shifts, clientName: clients.companyName })
+    .from(shiftHours)
+    .innerJoin(shifts, eq(shifts.id, shiftHours.shiftId))
+    .innerJoin(clients, eq(clients.id, shiftHours.clientId))
+    .where(
+      and(
+        eq(shiftHours.chefId, chef.id),
+        inArray(shiftHours.status, ["client_rejected", "admin_rejected"]),
+      ),
+    )
+    .orderBy(shifts.startsAt);
+
+  // Money this month
+  const moneyThisMonth = await db
+    .select()
+    .from(shiftHours)
+    .innerJoin(shifts, eq(shifts.id, shiftHours.shiftId))
+    .where(
+      and(
+        eq(shiftHours.chefId, chef.id),
+        inArray(shiftHours.status, ["admin_approved", "exported"]),
+        gte(shifts.startsAt, startOfMonth),
+      ),
+    );
+
+  const approvedCents = moneyThisMonth.reduce(
+    (sum, r) =>
+      sum +
+      computeChefAmountCents(r.shift_hours.workedMinutes, r.shift_hours.chefRateCents),
+    0,
+  );
+
+  // Waiting on klant
+  const pendingKlant = await db
+    .select()
+    .from(shiftHours)
+    .where(and(eq(shiftHours.chefId, chef.id), eq(shiftHours.status, "submitted")));
+  const pendingKlantCents = pendingKlant.reduce(
+    (sum, r) => sum + computeChefAmountCents(r.workedMinutes, r.chefRateCents),
+    0,
+  );
+
+  // Waiting on admin
+  const pendingAdmin = await db
+    .select()
+    .from(shiftHours)
+    .where(and(eq(shiftHours.chefId, chef.id), eq(shiftHours.status, "client_signed")));
+  const pendingAdminCents = pendingAdmin.reduce(
+    (sum, r) => sum + computeChefAmountCents(r.workedMinutes, r.chefRateCents),
+    0,
+  );
+
+  // Next 4 confirmed shifts (incl. today)
   const upcoming = await db
-    .select({
-      placement: placements,
-      shift: shifts,
-      clientName: clients.companyName,
-    })
+    .select({ p: placements, s: shifts, clientName: clients.companyName })
     .from(placements)
     .innerJoin(shifts, eq(shifts.id, placements.shiftId))
     .innerJoin(clients, eq(clients.id, shifts.clientId))
@@ -74,78 +161,68 @@ export default async function ChefDashboardPage() {
       and(
         eq(placements.chefId, chef.id),
         inArray(placements.status, ["accepted", "confirmed"]),
-        gte(shifts.startsAt, new Date()),
+        gte(shifts.startsAt, startOfToday),
       ),
     )
     .orderBy(shifts.startsAt)
     .limit(5);
 
-  const recent = await db
-    .select({
-      placement: placements,
-      shift: shifts,
-      clientName: clients.companyName,
-    })
-    .from(placements)
-    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
-    .innerJoin(clients, eq(clients.id, shifts.clientId))
-    .where(eq(placements.chefId, chef.id))
-    .orderBy(desc(shifts.startsAt))
-    .limit(3);
+  // Next shift countdown (anything within 14 days)
+  const nextShift = upcoming.find(
+    (u) => new Date(u.s.startsAt).getTime() > now.getTime() && new Date(u.s.startsAt) <= horizon,
+  );
 
+  /* ---------------- render ---------------- */
   return (
     <div>
       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-        Welkom terug
+        {greeting()}
       </p>
       <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
-        {greeting()},{" "}
-        {chef.fullName.split(" ")[0]}
+        Hallo {chef.fullName.split(" ")[0]}
       </h1>
 
-      {/* Pending proposals */}
-      {pending.length > 0 && (
+      {/* VANDAAG */}
+      {todayShifts.length > 0 && (
         <section className="mt-8">
-          <h2 className="font-serif text-xl text-ink-900">
-            ⏰ Nieuwe voorstellen ({pending.length})
+          <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+            Vandaag
           </h2>
-          <p className="mt-1 text-sm text-ink-700">
-            Maarten heeft je voorgesteld voor deze shifts. Reageer zo snel
-            mogelijk.
-          </p>
-          <ul className="mt-4 space-y-3">
-            {pending.map(({ placement, shift, clientName }) => (
+          <ul className="mt-3 space-y-3">
+            {todayShifts.map(({ p, s, clientName, clientPhone }) => (
               <li
-                key={placement.id}
+                key={p.id}
                 className="rounded-lg border-2 border-burgundy/40 bg-burgundy/5 p-5"
               >
-                <h3 className="font-serif text-lg text-ink-900">
-                  {shift.roleNeeded} bij {clientName}
+                <h3 className="font-serif text-xl text-ink-900">
+                  {clientName}
                 </h3>
                 <p className="mt-1 text-sm text-ink-700">
-                  {formatRange(shift.startsAt, shift.endsAt)}
-                  {shift.city && ` · ${shift.city}`}
+                  {formatTime(s.startsAt)} – {formatTime(s.endsAt)} ·{" "}
+                  {s.roleNeeded}
                 </p>
-                {shift.chefRateCents && (
-                  <p className="mt-1 text-sm text-ink-700">
-                    Tarief:{" "}
-                    <strong>
-                      €{(shift.chefRateCents / 100).toFixed(2)}/uur
-                    </strong>
-                  </p>
-                )}
-                {shift.notes && (
-                  <p className="mt-2 rounded bg-white px-3 py-2 text-xs italic text-ink-700">
-                    Notitie van Maarten: {shift.notes}
-                  </p>
-                )}
-                <div className="mt-4">
-                  <Link
-                    href={`/chef/shifts/${placement.id}`}
-                    className="inline-block rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
-                  >
-                    Bekijk & reageer →
-                  </Link>
+                {s.location ? (
+                  <p className="mt-1 text-xs text-ink-500">{s.location}</p>
+                ) : null}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {clientPhone ? (
+                    <a
+                      href={`tel:${clientPhone.replace(/[^+\d]/g, "")}`}
+                      className="rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900"
+                    >
+                      Bel klant
+                    </a>
+                  ) : null}
+                  {s.location ? (
+                    <a
+                      href={`https://maps.google.com/?q=${encodeURIComponent(s.location)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-full border border-burgundy/40 bg-white px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy hover:bg-burgundy/5"
+                    >
+                      Route openen
+                    </a>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -153,10 +230,131 @@ export default async function ChefDashboardPage() {
         </section>
       )}
 
-      {/* Upcoming */}
+      {/* ACTIE NODIG */}
+      <section className="mt-10">
+        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          Actie nodig
+        </h2>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          {pendingProposals.length > 0 ? (
+            <ActionCard
+              icon="⏰"
+              title={`${pendingProposals.length} shift ${pendingProposals.length === 1 ? "voorstel" : "voorstellen"}`}
+              tone="urgent"
+            >
+              {pendingProposals.slice(0, 3).map(({ p, s, clientName }) => (
+                <ActionRow
+                  key={p.id}
+                  label={`${clientName} · ${s.roleNeeded}`}
+                  meta={formatShiftDateShort(s.startsAt)}
+                  href={`/chef/shifts/${p.id}`}
+                  cta="Bekijk →"
+                />
+              ))}
+            </ActionCard>
+          ) : null}
+
+          {hoursToLog.length > 0 ? (
+            <ActionCard
+              icon="📝"
+              title={`${hoursToLog.length} ${hoursToLog.length === 1 ? "uurbriefje" : "uurbriefjes"} invullen`}
+              tone="urgent"
+            >
+              {hoursToLog.slice(0, 3).map(({ h, s, clientName }) => (
+                <ActionRow
+                  key={h.id}
+                  label={`${clientName} · ${s.roleNeeded}`}
+                  meta={formatShiftDateShort(s.startsAt)}
+                  href={`/chef/hours/${h.placementId}`}
+                  cta="Vul in →"
+                />
+              ))}
+              {hoursToLog.length > 3 ? (
+                <p className="px-2 pt-2 text-xs text-ink-500">
+                  + {hoursToLog.length - 3} meer
+                </p>
+              ) : null}
+            </ActionCard>
+          ) : null}
+
+          {hoursRejected.length > 0 ? (
+            <ActionCard
+              icon="⚠️"
+              title={`${hoursRejected.length} ${hoursRejected.length === 1 ? "uurbriefje afgekeurd" : "uurbriefjes afgekeurd"}`}
+              tone="critical"
+            >
+              {hoursRejected.slice(0, 3).map(({ h, s, clientName }) => (
+                <ActionRow
+                  key={h.id}
+                  label={`${clientName} · ${s.roleNeeded}`}
+                  meta={formatShiftDateShort(s.startsAt)}
+                  href={`/chef/hours/${h.placementId}`}
+                  cta="Pas aan →"
+                />
+              ))}
+            </ActionCard>
+          ) : null}
+
+          {pendingProposals.length === 0 && hoursToLog.length === 0 && hoursRejected.length === 0 ? (
+            <ActionCard icon="✓" title="Geen actie nodig" tone="success">
+              <p className="px-2 text-sm text-ink-700">
+                Alles is afgehandeld. Veel plezier op je shift.
+              </p>
+            </ActionCard>
+          ) : null}
+        </div>
+      </section>
+
+      {/* GELD */}
+      <section className="mt-10">
+        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          Geld
+        </h2>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <MoneyStat
+            label="Deze maand goedgekeurd"
+            value={formatEuro(approvedCents)}
+            note={`${moneyThisMonth.length} ${moneyThisMonth.length === 1 ? "shift" : "shifts"} afgerond`}
+          />
+          <MoneyStat
+            label="Wacht op klant-akkoord"
+            value={formatEuro(pendingKlantCents)}
+            note={`${pendingKlant.length} ${pendingKlant.length === 1 ? "uurbriefje" : "uurbriefjes"}`}
+          />
+          <MoneyStat
+            label="Wacht op Chef & Serve"
+            value={formatEuro(pendingAdminCents)}
+            note={`${pendingAdmin.length} ${pendingAdmin.length === 1 ? "uurbriefje" : "uurbriefjes"}`}
+          />
+        </div>
+      </section>
+
+      {/* Next shift countdown (if applicable) */}
+      {nextShift && todayShifts.length === 0 ? (
+        <section className="mt-10">
+          <div className="rounded-lg border border-burgundy/30 bg-burgundy/5 p-5">
+            <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+              Volgende shift
+            </p>
+            <p className="mt-2 font-serif text-xl text-ink-900">
+              {nextShift.clientName} · {nextShift.s.roleNeeded}
+            </p>
+            <p className="mt-1 text-sm text-ink-700">
+              {countdownLabel(nextShift.s.startsAt)} ·{" "}
+              {new Date(nextShift.s.startsAt).toLocaleDateString("nl-NL", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {/* KOMENDE */}
       <section className="mt-10">
         <div className="flex items-baseline justify-between">
-          <h2 className="font-serif text-xl text-ink-900">
+          <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
             Komende shifts ({upcoming.length})
           </h2>
           <Link
@@ -168,24 +366,21 @@ export default async function ChefDashboardPage() {
         </div>
         {upcoming.length === 0 ? (
           <p className="mt-3 rounded-lg border border-ink-200 bg-white p-6 text-center text-sm text-ink-500">
-            Geen bevestigde komende shifts.
+            Geen bevestigde shifts. Maarten matcht je aan komende aanvragen.
           </p>
         ) : (
-          <ul className="mt-4 space-y-2">
-            {upcoming.map(({ placement, shift, clientName }) => (
+          <ul className="mt-3 space-y-2">
+            {upcoming.map(({ p, s, clientName }) => (
               <li
-                key={placement.id}
-                className="rounded-lg border border-ink-200 bg-white p-4"
+                key={p.id}
+                className="rounded border border-ink-200 bg-white p-4"
               >
-                <Link
-                  href={`/chef/shifts/${placement.id}`}
-                  className="block"
-                >
-                  <h3 className="font-serif text-base text-ink-900 hover:text-burgundy">
-                    {shift.roleNeeded} · {clientName}
-                  </h3>
-                  <p className="mt-1 text-xs text-ink-500">
-                    {formatRange(shift.startsAt, shift.endsAt)}
+                <Link href={`/chef/shifts/${p.id}`} className="block">
+                  <p className="font-serif text-base text-ink-900 hover:text-burgundy">
+                    {clientName} · {s.roleNeeded}
+                  </p>
+                  <p className="mt-0.5 text-xs text-ink-500">
+                    {formatShiftDateShort(s.startsAt)} · {formatTime(s.startsAt)} – {formatTime(s.endsAt)}
                   </p>
                 </Link>
               </li>
@@ -193,35 +388,11 @@ export default async function ChefDashboardPage() {
           </ul>
         )}
       </section>
-
-      {/* Recent history */}
-      {recent.length > 0 && (
-        <section className="mt-10">
-          <h2 className="font-serif text-xl text-ink-900">
-            Recente shifts
-          </h2>
-          <ul className="mt-4 space-y-2">
-            {recent.map(({ placement, shift, clientName }) => (
-              <li
-                key={placement.id}
-                className="flex items-center justify-between rounded border border-ink-200 bg-white px-4 py-3"
-              >
-                <div>
-                  <p className="font-serif text-sm text-ink-900">
-                    {shift.roleNeeded} · {clientName}
-                  </p>
-                  <p className="text-xs text-ink-500">
-                    {formatDate(shift.startsAt)} · {placement.status}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
     </div>
   );
 }
+
+/* ------------------- helpers ------------------- */
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -230,16 +401,47 @@ function greeting(): string {
   return "Goedenavond";
 }
 
-function formatRange(start: Date, end: Date): string {
-  const s = new Date(start);
-  const e = new Date(end);
-  return `${s.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" })}, ${s.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}–${e.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}`;
+function formatTime(d: Date | string): string {
+  return new Date(d).toLocaleTimeString("nl-NL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function formatDate(d: Date): string {
+function formatShiftDateShort(d: Date | string): string {
   return new Date(d).toLocaleDateString("nl-NL", {
+    weekday: "short",
     day: "numeric",
     month: "short",
-    year: "numeric",
   });
+}
+
+function countdownLabel(d: Date | string): string {
+  const ms = new Date(d).getTime() - Date.now();
+  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((ms / (1000 * 60 * 60)) % 24);
+  if (days <= 0) return `over ${hours} uur`;
+  if (days === 1) return "morgen";
+  if (days < 7) return `over ${days} dagen`;
+  return `over ${days} dagen`;
+}
+
+function MoneyStat({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: string;
+  note: string;
+}) {
+  return (
+    <div className="rounded-lg border border-ink-200 bg-white p-4">
+      <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
+        {label}
+      </p>
+      <p className="mt-1 font-serif text-2xl text-ink-900">{value}</p>
+      <p className="mt-1 text-xs text-ink-500">{note}</p>
+    </div>
+  );
 }

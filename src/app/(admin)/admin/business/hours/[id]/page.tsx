@@ -26,7 +26,6 @@ import {
   clients,
   shiftHours,
   shifts,
-  users,
 } from "@/lib/db/schema";
 import { sendEmail } from "@/lib/email";
 import {

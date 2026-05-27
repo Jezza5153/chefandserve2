@@ -1,8 +1,28 @@
-import { and, eq, gte, inArray } from "drizzle-orm";
+/**
+ * /client — klant daily home.
+ *
+ * PR-CHEF-2. Rebuilt as "wat moet ik nu doen?" + this-week schedule.
+ *
+ * Sections:
+ *   - ACTIE NODIG: hours to sign, newly-confirmed chefs (last 7d),
+ *     pending portal-submitted requests waiting on Maarten
+ *   - DEZE WEEK: chronological list of accepted/confirmed shifts (next 7 days)
+ *   - CTA: nieuwe aanvraag + agenda link (PR-CHEF-11 ICS-feed)
+ */
+
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import Link from "next/link";
 
+import { ActionCard, ActionRow } from "@/components/dashboard/ActionCard";
 import { db } from "@/lib/db/client";
-import { chefs, clients, placements, shifts } from "@/lib/db/schema";
+import {
+  chefs,
+  clients,
+  clientSubmissions,
+  placements,
+  shiftHours,
+  shifts,
+} from "@/lib/db/schema";
 import { requireAuth } from "@/lib/permissions";
 import { site } from "@/lib/site";
 
@@ -17,7 +37,6 @@ export default async function ClientDashboardPage() {
   const client = await db.query.clients.findFirst({
     where: eq(clients.userId, session.user.id),
   });
-
   if (!client) {
     return (
       <div className="rounded-lg border border-amber-300 bg-amber-50 p-6">
@@ -37,10 +56,72 @@ export default async function ClientDashboardPage() {
     );
   }
 
-  const upcoming = await db
+  const now = new Date();
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfWeek = new Date(startOfToday);
+  endOfWeek.setDate(endOfWeek.getDate() + 7);
+  const sevenDaysAgo = new Date(now);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  // Hours to sign (submitted)
+  const hoursToSign = await db
     .select({
-      placement: placements,
-      shift: shifts,
+      h: shiftHours,
+      chefName: chefs.fullName,
+      shiftStart: shifts.startsAt,
+      shiftId: shifts.id,
+    })
+    .from(shiftHours)
+    .innerJoin(chefs, eq(chefs.id, shiftHours.chefId))
+    .innerJoin(shifts, eq(shifts.id, shiftHours.shiftId))
+    .where(
+      and(eq(shiftHours.clientId, client.id), eq(shiftHours.status, "submitted")),
+    )
+    .orderBy(shifts.startsAt);
+
+  // Recently confirmed chefs (last 7d)
+  const recentConfirms = await db
+    .select({
+      p: placements,
+      s: shifts,
+      chef: chefs,
+    })
+    .from(placements)
+    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .innerJoin(chefs, eq(chefs.id, placements.chefId))
+    .where(
+      and(
+        eq(shifts.clientId, client.id),
+        eq(placements.status, "confirmed"),
+        gte(placements.confirmedAt, sevenDaysAgo),
+      ),
+    )
+    .orderBy(desc(placements.confirmedAt))
+    .limit(5);
+
+  // Pending portal submissions (klant submitted via portal, not yet acted on)
+  const pendingRequests = await db
+    .select()
+    .from(clientSubmissions)
+    .where(
+      and(
+        eq(clientSubmissions.source, "client_portal"),
+        eq(clientSubmissions.status, "triaged"),
+      ),
+    )
+    .orderBy(desc(clientSubmissions.createdAt))
+    .limit(10);
+  // Filter to "ours" by company name match (no clientId FK in submissions yet)
+  const myPending = pendingRequests.filter(
+    (r) => r.companyName === client.companyName,
+  );
+
+  // This week's shifts (accepted/confirmed, next 7d)
+  const thisWeek = await db
+    .select({
+      p: placements,
+      s: shifts,
       chef: chefs,
     })
     .from(placements)
@@ -50,94 +131,196 @@ export default async function ClientDashboardPage() {
       and(
         eq(shifts.clientId, client.id),
         inArray(placements.status, ["accepted", "confirmed"]),
-        gte(shifts.startsAt, new Date()),
+        gte(shifts.startsAt, startOfToday),
+        lte(shifts.startsAt, endOfWeek),
       ),
     )
     .orderBy(shifts.startsAt)
     .limit(20);
 
+  const hasActions = hoursToSign.length + recentConfirms.length + myPending.length > 0;
+
   return (
     <div>
       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-        Welkom bij Chef &amp; Serve
+        Welkom terug
       </p>
       <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
         {client.companyName}
       </h1>
 
+      {/* ACTIE NODIG */}
       <section className="mt-8">
+        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          Actie nodig
+        </h2>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          {hoursToSign.length > 0 && (
+            <ActionCard
+              icon="✅"
+              title={`${hoursToSign.length} ${hoursToSign.length === 1 ? "uurbriefje wacht" : "uurbriefjes wachten"} op akkoord`}
+              tone="urgent"
+            >
+              {hoursToSign.slice(0, 4).map(({ h, chefName, shiftId, shiftStart }) => (
+                <ActionRow
+                  key={h.id}
+                  label={chefName}
+                  meta={formatShiftDateShort(shiftStart)}
+                  href={`/client/shifts/${shiftId}/hours`}
+                  cta="Controleer →"
+                />
+              ))}
+              {hoursToSign.length > 4 && (
+                <p className="px-2 pt-2 text-xs text-ink-500">
+                  + {hoursToSign.length - 4} meer
+                </p>
+              )}
+            </ActionCard>
+          )}
+
+          {recentConfirms.length > 0 && (
+            <ActionCard
+              icon="🆕"
+              title={`${recentConfirms.length} ${recentConfirms.length === 1 ? "nieuwe chef bevestigd" : "nieuwe chefs bevestigd"}`}
+            >
+              {recentConfirms.slice(0, 4).map(({ p, s, chef }) => (
+                <ActionRow
+                  key={p.id}
+                  label={`${chef.fullName} · ${s.roleNeeded}`}
+                  meta={formatShiftDateShort(s.startsAt)}
+                />
+              ))}
+            </ActionCard>
+          )}
+
+          {myPending.length > 0 && (
+            <ActionCard
+              icon="📝"
+              title={`${myPending.length} ${myPending.length === 1 ? "aanvraag wacht" : "aanvragen wachten"} op planning`}
+            >
+              {myPending.slice(0, 4).map((s) => (
+                <ActionRow
+                  key={s.id}
+                  label={s.roleRequested ?? "Personeel aanvraag"}
+                  meta={s.dateNeeded ?? ""}
+                />
+              ))}
+            </ActionCard>
+          )}
+
+          {!hasActions && (
+            <ActionCard icon="✓" title="Geen actie nodig" tone="success">
+              <p className="px-2 text-sm text-ink-700">
+                Alles is afgehandeld. Vraag nieuwe shifts aan wanneer je ze
+                nodig hebt.
+              </p>
+            </ActionCard>
+          )}
+        </div>
+      </section>
+
+      {/* DEZE WEEK */}
+      <section className="mt-10">
         <div className="flex items-baseline justify-between">
-          <h2 className="font-serif text-xl text-ink-900">
-            Komende shifts ({upcoming.length})
+          <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+            Deze week ({thisWeek.length})
           </h2>
           <Link
-            href="/client/request"
+            href="/client/shifts"
             className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy hover:underline"
           >
-            + Nieuwe aanvraag
+            Alle shifts →
           </Link>
         </div>
 
-        {upcoming.length === 0 ? (
-          <div className="mt-4 rounded-lg border border-ink-200 bg-white p-8 text-center">
-            <p className="font-serif text-lg text-ink-900">
-              Geen geplande shifts
-            </p>
-            <p className="mt-2 text-sm text-ink-500">
-              Vraag personeel aan via de knop hierboven, of mail{" "}
-              <a
-                href={`mailto:${site.email}`}
-                className="text-burgundy underline-offset-4 hover:underline"
-              >
-                {site.email}
-              </a>
-              .
-            </p>
+        {thisWeek.length === 0 ? (
+          <div className="mt-3 rounded-lg border border-ink-200 bg-white p-6 text-center text-sm text-ink-500">
+            Geen shifts deze week.
           </div>
         ) : (
-          <ul className="mt-4 space-y-3">
-            {upcoming.map(({ placement, shift, chef }) => (
+          <ul className="mt-3 space-y-2">
+            {thisWeek.map(({ p, s, chef }) => (
               <li
-                key={placement.id}
-                className="rounded-lg border border-ink-200 bg-white p-5"
+                key={p.id}
+                className="rounded border border-ink-200 bg-white p-4"
               >
-                <h3 className="font-serif text-lg text-ink-900">
-                  {shift.roleNeeded}: {chef.fullName}
-                </h3>
-                <p className="mt-1 text-sm text-ink-700">
-                  {formatRange(shift.startsAt, shift.endsAt)}
-                  {shift.location && ` · ${shift.location}`}
-                </p>
-                <p className="mt-2 text-xs text-ink-500">
-                  Status: {placement.status}
-                  {chef.yearsExperience &&
-                    ` · ${chef.yearsExperience}j ervaring`}
-                </p>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-serif text-base text-ink-900">
+                      {chef.fullName} · {s.roleNeeded}
+                    </p>
+                    <p className="mt-0.5 text-xs text-ink-500">
+                      {formatShiftDateShort(s.startsAt)} ·{" "}
+                      {formatTime(s.startsAt)} – {formatTime(s.endsAt)}
+                    </p>
+                  </div>
+                  <StatusPill status={p.status} />
+                </div>
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      <section className="mt-12">
-        <h2 className="font-serif text-xl text-ink-900">Binnenkort</h2>
-        <ul className="mt-3 space-y-2 text-sm text-ink-700">
-          <li>· Direct personeel aanvragen via dit portaal (Phase 6)</li>
-          <li>· Chef-profielen bekijken vóór bevestiging</li>
-          <li>· Facturen + betalingsstatus (Phase 5)</li>
-          <li>· Chefs beoordelen na shifts</li>
-        </ul>
+      {/* CTAs */}
+      <section className="mt-10 flex flex-wrap gap-3">
+        <Link
+          href="/client/request"
+          className="rounded-full bg-burgundy px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
+        >
+          + Nieuwe aanvraag indienen
+        </Link>
+        {/* PR-CHEF-11 will fill /client/calendar — for now disabled */}
+        <span className="rounded-full border border-ink-200 bg-white px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-400">
+          Agenda · binnenkort
+        </span>
       </section>
     </div>
   );
 }
 
-function formatRange(start: Date, end: Date): string {
-  const s = new Date(start);
-  const e = new Date(end);
-  return `${s.toLocaleDateString("nl-NL", {
-    weekday: "long",
+/* --------------- helpers --------------- */
+
+function formatShiftDateShort(d: Date | string): string {
+  return new Date(d).toLocaleDateString("nl-NL", {
+    weekday: "short",
     day: "numeric",
-    month: "long",
-  })}, ${s.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}–${e.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}`;
+    month: "short",
+  });
+}
+
+function formatTime(d: Date | string): string {
+  return new Date(d).toLocaleTimeString("nl-NL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function StatusPill({ status }: { status: string }) {
+  const labels: Record<string, string> = {
+    proposed: "Wacht op chef",
+    accepted: "Chef komt",
+    confirmed: "Bevestigd",
+    cancelled: "Geannuleerd",
+    completed: "Afgerond",
+    rejected: "Afgewezen",
+    no_show: "No-show",
+  };
+  const tone =
+    status === "confirmed"
+      ? "bg-emerald-100 text-emerald-700"
+      : status === "accepted"
+        ? "bg-blue-100 text-blue-700"
+        : status === "proposed"
+          ? "bg-amber-100 text-amber-800"
+          : status === "completed"
+            ? "bg-bg-gray text-ink-700"
+            : "bg-bg-gray text-ink-500";
+  return (
+    <span
+      className={`shrink-0 rounded-full px-2.5 py-1 font-ui text-[9px] font-medium uppercase tracking-wider ${tone}`}
+    >
+      {labels[status] ?? status}
+    </span>
+  );
 }

@@ -1,6 +1,16 @@
+/**
+ * /admin/business — Maarten/Gina cockpit.
+ *
+ * PR-CHEF-2 rebuild: "Actie nodig" comes FIRST, integrations health
+ * second, KPIs + upcoming roster preserved below.
+ *
+ * Access: owner OR super_admin.
+ */
+
 import Link from "next/link";
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 
+import { ActionCard } from "@/components/dashboard/ActionCard";
 import { db } from "@/lib/db/client";
 import {
   chefSubmissions,
@@ -8,20 +18,12 @@ import {
   clientSubmissions,
   clients,
   placements,
+  shiftHours,
   shifts,
 } from "@/lib/db/schema";
+import { getIntegrationHealth } from "@/lib/integrations";
 import { requireRole } from "@/lib/permissions";
 
-/**
- * Owner / Maarten cockpit.
- *
- * Real-time pulse of the business — what's new in the inbox, how many
- * chefs/clients are active, this week's roster, and what needs Maarten's
- * attention right now (proposed placements awaiting chef response,
- * shifts still open).
- *
- * Access: owner OR super_admin.
- */
 export const metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
 
@@ -31,8 +33,9 @@ export default async function BusinessDashboardPage() {
   const now = new Date();
   const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
 
-  // Parallel queries — small + fast on Neon
+  // Parallel queries
   const [
     [{ newChefSubs }],
     [{ newClientSubs }],
@@ -42,18 +45,19 @@ export default async function BusinessDashboardPage() {
     [{ openShifts }],
     [{ proposedAwaiting }],
     [{ confirmedThisWeek }],
+    [{ hoursToApprove }],
+    [{ hoursMissingFromChef }],
+    [{ hoursKlantTimeout }],
+    [{ acceptedNotConfirmed }],
     upcomingShifts,
+    integrationsHealth,
   ] = await Promise.all([
     db
-      .select({
-        newChefSubs: sql<number>`count(*)::int`,
-      })
+      .select({ newChefSubs: sql<number>`count(*)::int` })
       .from(chefSubmissions)
       .where(and(eq(chefSubmissions.status, "new"), gte(chefSubmissions.createdAt, weekAgo))),
     db
-      .select({
-        newClientSubs: sql<number>`count(*)::int`,
-      })
+      .select({ newClientSubs: sql<number>`count(*)::int` })
       .from(clientSubmissions)
       .where(and(eq(clientSubmissions.status, "new"), gte(clientSubmissions.createdAt, weekAgo))),
     db
@@ -80,6 +84,31 @@ export default async function BusinessDashboardPage() {
       .select({ confirmedThisWeek: sql<number>`count(*)::int` })
       .from(placements)
       .where(and(eq(placements.status, "confirmed"), gte(placements.createdAt, weekAgo))),
+    // HOURS — to approve (client_signed)
+    db
+      .select({ hoursToApprove: sql<number>`count(*)::int` })
+      .from(shiftHours)
+      .where(eq(shiftHours.status, "client_signed")),
+    // HOURS — completed placements without a submitted shift_hours row (chef forgot)
+    db
+      .select({ hoursMissingFromChef: sql<number>`count(*)::int` })
+      .from(shiftHours)
+      .where(eq(shiftHours.status, "draft")),
+    // HOURS — klant timeout (submitted > 5d ago)
+    db
+      .select({ hoursKlantTimeout: sql<number>`count(*)::int` })
+      .from(shiftHours)
+      .where(
+        and(
+          eq(shiftHours.status, "submitted"),
+          lt(shiftHours.submittedAt, fiveDaysAgo),
+        ),
+      ),
+    // Accepted placements still awaiting admin confirmation
+    db
+      .select({ acceptedNotConfirmed: sql<number>`count(*)::int` })
+      .from(placements)
+      .where(eq(placements.status, "accepted")),
     db
       .select({
         id: shifts.id,
@@ -92,15 +121,19 @@ export default async function BusinessDashboardPage() {
       })
       .from(shifts)
       .leftJoin(clients, eq(clients.id, shifts.clientId))
-      .where(
-        and(gte(shifts.startsAt, now), lt(shifts.startsAt, weekFromNow)),
-      )
+      .where(and(gte(shifts.startsAt, now), lt(shifts.startsAt, weekFromNow)))
       .orderBy(shifts.startsAt)
       .limit(8),
+    getIntegrationHealth(),
   ]);
 
   const inboxCount = newChefSubs + newClientSubs;
-  const needsAttention = inboxCount + openShifts + proposedAwaiting;
+  const needsAttention =
+    hoursToApprove +
+    hoursMissingFromChef +
+    hoursKlantTimeout +
+    acceptedNotConfirmed +
+    inboxCount;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -112,35 +145,144 @@ export default async function BusinessDashboardPage() {
         {session.user.name ? `, ${session.user.name.split(" ")[0]}` : ""}
       </h1>
 
-      {needsAttention === 0 ? (
-        <p className="mt-4 text-base text-ink-700">
-          Niks wat direct aandacht vraagt. Alles loopt.
-        </p>
-      ) : (
-        <p className="mt-4 text-base text-ink-700">
-          <strong className="text-burgundy">{needsAttention}</strong> ding
-          {needsAttention === 1 ? "" : "en"} die je aandacht vragen — zie
-          hieronder.
-        </p>
-      )}
+      <p className="mt-4 text-base text-ink-700">
+        {needsAttention === 0
+          ? "Niks wat direct aandacht vraagt. Alles loopt."
+          : `${needsAttention} ${needsAttention === 1 ? "ding" : "dingen"} die je aandacht vragen — zie hieronder.`}
+      </p>
+
+      {/* ACTIE NODIG */}
+      <section className="mt-8">
+        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          Actie nodig
+        </h2>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          {hoursToApprove > 0 && (
+            <ActionCard
+              icon="✅"
+              title={`${hoursToApprove} ${hoursToApprove === 1 ? "uurbriefje wacht" : "uurbriefjes wachten"} op goedkeuring`}
+              tone="urgent"
+              ctaLabel="Uren keuren"
+              ctaHref="/admin/business/hours?filter=wacht_op_mij"
+            />
+          )}
+          {inboxCount > 0 && (
+            <ActionCard
+              icon="📨"
+              title={`${inboxCount} nieuwe aanmelding${inboxCount === 1 ? "" : "en"}`}
+              tone="urgent"
+              ctaLabel="Open inbox"
+              ctaHref="/admin/business/inbox"
+            >
+              <p className="px-2 text-xs text-ink-500">
+                {newChefSubs} chef{newChefSubs === 1 ? "" : "s"} ·{" "}
+                {newClientSubs} klant{newClientSubs === 1 ? "" : "en"}
+              </p>
+            </ActionCard>
+          )}
+          {acceptedNotConfirmed > 0 && (
+            <ActionCard
+              icon="📋"
+              title={`${acceptedNotConfirmed} ${acceptedNotConfirmed === 1 ? "shift mist" : "shifts missen"} bevestiging`}
+              ctaLabel="Bekijken"
+              ctaHref="/admin/business/shifts"
+            />
+          )}
+          {hoursKlantTimeout > 0 && (
+            <ActionCard
+              icon="⚠️"
+              title={`${hoursKlantTimeout} klant${hoursKlantTimeout === 1 ? "" : "en"} heeft 5+ dagen niet getekend`}
+              tone="critical"
+              ctaLabel="Bekijken"
+              ctaHref="/admin/business/hours?filter=wacht_op_klant"
+            />
+          )}
+          {hoursMissingFromChef > 0 && (
+            <ActionCard
+              icon="⏰"
+              title={`${hoursMissingFromChef} chef${hoursMissingFromChef === 1 ? "" : "s"} ${hoursMissingFromChef === 1 ? "heeft" : "hebben"} geen uren ingevuld`}
+              ctaLabel="Bekijken"
+              ctaHref="/admin/business/hours?filter=wacht_op_chef"
+            />
+          )}
+          {needsAttention === 0 && (
+            <ActionCard icon="✓" title="Alles bijgewerkt" tone="success">
+              <p className="px-2 text-sm text-ink-700">
+                Geen openstaande uren, geen lege inbox, geen vergeten
+                bevestigingen.
+              </p>
+            </ActionCard>
+          )}
+        </div>
+      </section>
+
+      {/* SYSTEEM / INTEGRATIES */}
+      <section className="mt-10">
+        <div className="flex items-baseline justify-between">
+          <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+            Systeem / integraties
+          </h2>
+          <Link
+            href="/admin/business/integrations"
+            className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy hover:underline"
+          >
+            Alle integraties →
+          </Link>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <HealthChip
+            label="E-mail bezorging"
+            value={
+              integrationsHealth.emailBouncesLast7d > 0
+                ? `${integrationsHealth.emailBouncesLast7d} bounces (7d)`
+                : "Geen bounces (7d)"
+            }
+            tone={integrationsHealth.emailBouncesLast7d > 0 ? "amber" : "green"}
+          />
+          <HealthChip
+            label="Outbox"
+            value={
+              integrationsHealth.outboxFailed > 0
+                ? `${integrationsHealth.outboxFailed} mislukt`
+                : `${integrationsHealth.outboxPending} wachtend`
+            }
+            tone={
+              integrationsHealth.outboxFailed > 0
+                ? "burgundy"
+                : integrationsHealth.outboxPending > 0
+                  ? "amber"
+                  : "green"
+            }
+          />
+          <HealthChip
+            label="Payroll export"
+            value="CSV klaar · live API later"
+            tone="gray"
+          />
+        </div>
+      </section>
 
       {/* Quick actions */}
-      <div className="mt-8 flex flex-wrap gap-3">
+      <div className="mt-10 flex flex-wrap gap-3">
         <ActionLink href="/admin/business/inbox" label="Open inbox" />
         <ActionLink href="/admin/business/shifts/new" label="Nieuwe shift" />
         <ActionLink href="/admin/business/chefs" label="Chefs" muted />
         <ActionLink href="/admin/business/clients" label="Klanten" muted />
+        <ActionLink href="/admin/business/hours" label="Uren keuren" muted />
       </div>
 
       {/* KPI grid */}
       <div className="mt-10 grid gap-4 md:grid-cols-4">
+        <Stat label="Actieve chefs" value={activeChefs} href="/admin/business/chefs" />
+        <Stat label="Actieve klanten" value={activeClients} href="/admin/business/clients" />
+        <Stat label="Shifts deze week" value={shiftsThisWeek} href="/admin/business/shifts" />
         <Stat
-          label="Nieuwe inbox-items"
-          value={inboxCount}
-          sub={`${newChefSubs} chefs · ${newClientSubs} klanten`}
-          href="/admin/business/inbox"
-          highlight={inboxCount > 0}
+          label="Bevestigd (7d)"
+          value={confirmedThisWeek}
+          sub="afgelopen week"
         />
+      </div>
+      <div className="mt-4 grid gap-4 md:grid-cols-4">
         <Stat
           label="Open shifts"
           value={openShifts}
@@ -156,17 +298,19 @@ export default async function BusinessDashboardPage() {
           highlight={proposedAwaiting > 0}
         />
         <Stat
-          label="Bevestigd (7d)"
-          value={confirmedThisWeek}
-          sub="afgelopen week"
+          label="Uren te keuren"
+          value={hoursToApprove}
+          sub="wachten op mij"
+          href="/admin/business/hours?filter=wacht_op_mij"
+          highlight={hoursToApprove > 0}
         />
-      </div>
-
-      <div className="mt-4 grid gap-4 md:grid-cols-4">
-        <Stat label="Actieve chefs" value={activeChefs} href="/admin/business/chefs" />
-        <Stat label="Actieve klanten" value={activeClients} href="/admin/business/clients" />
-        <Stat label="Shifts deze week" value={shiftsThisWeek} href="/admin/business/shifts" />
-        <Stat label="Totaal placements" value={confirmedThisWeek + proposedAwaiting} />
+        <Stat
+          label="Uren wachten op klant"
+          value={hoursKlantTimeout}
+          sub="5+ dagen overtijd"
+          href="/admin/business/hours?filter=wacht_op_klant"
+          highlight={hoursKlantTimeout > 0}
+        />
       </div>
 
       {/* Upcoming roster preview */}
@@ -185,9 +329,7 @@ export default async function BusinessDashboardPage() {
 
         {upcomingShifts.length === 0 ? (
           <div className="rounded-lg border border-ink-200 bg-white p-10 text-center">
-            <p className="font-serif text-lg text-ink-900">
-              Geen shifts ingepland
-            </p>
+            <p className="font-serif text-lg text-ink-900">Geen shifts ingepland</p>
             <p className="mt-2 text-sm text-ink-500">
               Maak een nieuwe shift aan via{" "}
               <Link
@@ -229,6 +371,8 @@ export default async function BusinessDashboardPage() {
   );
 }
 
+/* --------------- helpers --------------- */
+
 function greeting(): string {
   const h = new Date().getHours();
   if (h < 12) return "Goedemorgen";
@@ -239,14 +383,34 @@ function greeting(): string {
 function formatWhen(start: Date, end: Date): string {
   const s = new Date(start);
   const e = new Date(end);
-  return `${s.toLocaleDateString("nl-NL", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  })}, ${s.toLocaleTimeString("nl-NL", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })}–${e.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}`;
+  return `${s.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" })}, ${s.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}–${e.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function HealthChip({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "green" | "amber" | "burgundy" | "gray";
+}) {
+  const cls =
+    tone === "green"
+      ? "border-emerald-200 bg-emerald-50"
+      : tone === "amber"
+        ? "border-amber-300 bg-amber-50"
+        : tone === "burgundy"
+          ? "border-burgundy/40 bg-burgundy/5"
+          : "border-ink-200 bg-white";
+  return (
+    <div className={`rounded-lg border p-4 ${cls}`}>
+      <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
+        {label}
+      </p>
+      <p className="mt-1 font-mono text-sm text-ink-900">{value}</p>
+    </div>
+  );
 }
 
 function Stat({
@@ -273,13 +437,7 @@ function Stat({
       </p>
       <p className="mt-2 font-serif text-3xl text-ink-900">{value}</p>
       {sub && (
-        <p
-          className={`mt-1 text-xs ${
-            highlight ? "text-burgundy" : "text-ink-500"
-          }`}
-        >
-          {sub}
-        </p>
+        <p className={`mt-1 text-xs ${highlight ? "text-burgundy" : "text-ink-500"}`}>{sub}</p>
       )}
     </div>
   );
