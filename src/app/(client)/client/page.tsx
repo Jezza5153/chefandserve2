@@ -270,10 +270,12 @@ export default async function ClientDashboardPage() {
         >
           + Nieuwe aanvraag indienen
         </Link>
-        {/* PR-CHEF-11 will fill /client/calendar — for now disabled */}
-        <span className="rounded-full border border-ink-200 bg-white px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-400">
-          Agenda · binnenkort
-        </span>
+        <Link
+          href="/client/calendar"
+          className="rounded-full border border-burgundy/40 bg-white px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy hover:bg-burgundy/5"
+        >
+          Abonneer op agenda
+        </Link>
       </section>
     </div>
   );

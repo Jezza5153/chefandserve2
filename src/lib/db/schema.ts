@@ -193,6 +193,13 @@ export const users = pgTable(
     totpEnabled: boolean("totp_enabled").notNull().default(false),
     totpEnrolledAt: timestamp("totp_enrolled_at", { withTimezone: true }),
 
+    /* ----- PR-CHEF-11: ICS calendar feed token -------------------------
+     * Per-user random secret used to derive the public ICS URL token.
+     * Rotating this string invalidates any subscribed calendar app on
+     * any device — the user's "logout of my calendar" button.
+     */
+    calendarTokenSecret: text("calendar_token_secret"),
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

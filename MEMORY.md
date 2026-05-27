@@ -114,7 +114,7 @@
 | PR-CHEF-8 | Email delivery tracking (Resend webhooks) | ✅ live (POST /api/webhooks/resend with svix-signature HMAC verify · recordEmailEventFromWebhook updates email_messages.status) |
 | PR-CHEF-9 | In-app notification inbox UI | ✅ live (bell with unread badge in all 3 layouts · /chef/notifications · /client/notifications · /admin/notifications · markRead + markAllRead) |
 | PR-CHEF-10 | AVG consent + privacy requests + retention policies | ⏳ |
-| PR-CHEF-11 | Calendar ICS feeds (chef + klant) | ⏳ |
+| PR-CHEF-11 | Calendar ICS feeds (chef + klant) | ✅ live (migration 0015 calendar_token · src/lib/calendar/ics.ts · /chef/calendar.ics + /client/calendar.ics public-by-token · /chef/calendar + /client/calendar UI with copy URL + rotate secret) |
 | PR-CHEF-12 | Document verification + expiry + visibility | ⏳ |
 | PR-CHEF-13 | Backup + restore drill + encryption | ⏳ |
 | PR-CHEF-14 | Polish: countdown, empty/late states, doc visibility labels | ⏳ |
