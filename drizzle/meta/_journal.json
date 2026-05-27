@@ -50,6 +50,13 @@
       "when": 1779878990737,
       "tag": "0006_mature_cargill",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779879577885,
+      "tag": "0007_steady_midnight",
+      "breakpoints": true
     }
   ]
 }

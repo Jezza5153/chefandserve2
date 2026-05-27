@@ -170,6 +170,20 @@ export const users = pgTable(
      */
     seedKey: text("seed_key").unique(),
 
+    /* ----- PR-S2A: TOTP 2FA (internal users only) -------------------- */
+    /**
+     * AES-256-GCM ciphertext of the TOTP shared secret. Format:
+     * base64(iv || ciphertext || authTag). Encryption key from
+     * env.TOTP_ENCRYPTION_KEY. Null = not enrolled.
+     */
+    totpSecretEncrypted: text("totp_secret_encrypted"),
+    /**
+     * Flipped to true on successful enrollment, false on disable. The
+     * S2B/S2C challenge gate reads this — currently no challenge yet.
+     */
+    totpEnabled: boolean("totp_enabled").notNull().default(false),
+    totpEnrolledAt: timestamp("totp_enrolled_at", { withTimezone: true }),
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -351,6 +365,41 @@ export const webhooksReceived = pgTable("webhooks_received", {
     .notNull()
     .defaultNow(),
 });
+
+/* =============================================================================
+ * Recovery codes (PR-S2A) — one row per code, lifecycle tracked.
+ *
+ * 8 codes generated at TOTP enrollment, bcrypt-hashed (no plaintext stored).
+ * `used_at` is set atomically on first use — never replayable. Disabling 2FA
+ * deletes all rows for the user.
+ *
+ * NOTE: declared here (above users? no, schema relies on circular avoidance
+ * via the foreign key). We place it at the bottom of the auth section but
+ * BEFORE users? Drizzle handles forward refs via lazy refs (() => users.id).
+ * Order in this file is for human readability only.
+ * =========================================================================== */
+export const userRecoveryCodes = pgTable(
+  "user_recovery_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** bcrypt hash of the recovery code — never plaintext */
+    codeHash: text("code_hash").notNull(),
+    /** Atomic single-use: SET used_at = now() WHERE used_at IS NULL */
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    userRecoveryCodesUserIdx: index("user_recovery_codes_user_idx").on(
+      t.userId,
+      t.usedAt,
+    ),
+  }),
+);
 
 /* =============================================================================
  * Rate limits (PR-S1A) — per-scope sliding-window counter.
@@ -823,3 +872,5 @@ export type ChefDocument = typeof chefDocuments.$inferSelect;
 export type NewChefDocument = typeof chefDocuments.$inferInsert;
 export type RateLimit = typeof rateLimits.$inferSelect;
 export type NewRateLimit = typeof rateLimits.$inferInsert;
+export type UserRecoveryCode = typeof userRecoveryCodes.$inferSelect;
+export type NewUserRecoveryCode = typeof userRecoveryCodes.$inferInsert;

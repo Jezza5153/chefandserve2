@@ -53,6 +53,11 @@ const OPS_NAV: NavSection = {
   ],
 };
 
+const ACCOUNT_NAV: NavSection = {
+  label: "Mijn account",
+  items: [{ label: "2FA", href: "/admin/account/2fa" }],
+};
+
 export function SidebarNav({ session }: { session: Session }) {
   const isSuperAdmin = hasRole(session, "super_admin");
 
@@ -63,6 +68,7 @@ export function SidebarNav({ session }: { session: Session }) {
         section={OPS_NAV}
         className={isSuperAdmin ? "mt-8" : ""}
       />
+      <NavGroup section={ACCOUNT_NAV} className="mt-8" />
     </nav>
   );
 }

@@ -81,6 +81,15 @@ const serverSchema = z.object({
   TURNSTILE_SECRET: z.string().optional(),
   TURNSTILE_BYPASS: z.string().optional(),
 
+  // Phase 1 PR-S2A — TOTP secret-encryption key.
+  // 32-byte base64. Decrypts users.totp_secret_encrypted via AES-256-GCM.
+  // Optional during the deploy window; src/lib/totp.ts throws at call time
+  // if 2FA features are used without it being set.
+  TOTP_ENCRYPTION_KEY: z
+    .string()
+    .min(32, "TOTP_ENCRYPTION_KEY must be ≥32 chars (openssl rand -base64 32)")
+    .optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
