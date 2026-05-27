@@ -116,6 +116,15 @@ export const shiftStatusEnum = pgEnum("shift_status", [
   "cancelled", // client or us cancelled
 ]);
 
+/** Chef document type — PDF/JPG metadata only; bytes live in R2. */
+export const chefDocumentTypeEnum = pgEnum("chef_document_type", [
+  "cv",
+  "photo",
+  "certificate",
+  "id_document",
+  "other",
+]);
+
 /** Placement lifecycle — the (chef, shift) record. */
 export const placementStatusEnum = pgEnum("placement_status", [
   "proposed", // we offered to chef, awaiting response
@@ -658,6 +667,38 @@ export const shifts = pgTable("shifts", {
   cancelledReason: text("cancelled_reason"),
 });
 
+/**
+ * Chef documents — metadata only. Bytes live in Cloudflare R2.
+ *
+ * Bytes path in R2: `chefs/<chefId>/<docId>/<filename>`
+ * Public access: NONE. Files retrieved via short-lived presigned URLs
+ * generated server-side by getDownloadUrl(documentId).
+ */
+export const chefDocuments = pgTable("chef_documents", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  chefId: text("chef_id")
+    .notNull()
+    .references(() => chefs.id, { onDelete: "cascade" }),
+  type: chefDocumentTypeEnum("type").notNull().default("other"),
+  /** Original filename as uploaded. */
+  filename: text("filename").notNull(),
+  /** Key in R2 bucket — `chefs/<chefId>/<docId>/<filename>`. */
+  r2Key: text("r2_key").notNull().unique(),
+  /** Reported by browser at upload time. Trust-but-verify. */
+  mimeType: text("mime_type"),
+  sizeBytes: integer("size_bytes"),
+  uploadedBy: text("uploaded_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  /** Soft-delete — preserve audit trail. R2 object purge happens via cleanup worker. */
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
 export const placements = pgTable(
   "placements",
   {
@@ -733,3 +774,5 @@ export type Shift = typeof shifts.$inferSelect;
 export type NewShift = typeof shifts.$inferInsert;
 export type Placement = typeof placements.$inferSelect;
 export type NewPlacement = typeof placements.$inferInsert;
+export type ChefDocument = typeof chefDocuments.$inferSelect;
+export type NewChefDocument = typeof chefDocuments.$inferInsert;

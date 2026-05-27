@@ -5,13 +5,30 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db/client";
 import { auditLog, chefSubmissions, chefs, users } from "@/lib/db/schema";
 import {
+  listChefDocuments,
+  requestChefDocumentUpload,
+  softDeleteChefDocument,
+  type DocumentType,
+} from "@/lib/domain/chef-documents";
+import {
   activatePortalUser,
   disablePortalUser,
   inviteChefToPortal,
 } from "@/lib/domain/portal-invites";
 import { requireRole } from "@/lib/permissions";
+import { r2IsConfigured } from "@/lib/r2";
+
+import { DocumentUploader } from "./_components/DocumentUploader";
 
 export const metadata = { title: "Chef" };
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  cv: "CV",
+  photo: "Foto",
+  certificate: "Certificaat",
+  id_document: "ID-bewijs",
+  other: "Overig",
+};
 
 const VAKNIVEAU_OPTIONS = [
   "keukenhulp",
@@ -63,6 +80,35 @@ export default async function ChefDetailPage({
   const portalUser = chef.userId
     ? await db.query.users.findFirst({ where: eq(users.id, chef.userId) })
     : null;
+
+  // Documents (with fresh presigned download URLs)
+  const documents = await listChefDocuments(chef.id);
+  const r2Ready = r2IsConfigured();
+
+  /* ---------- document server actions ----------------------- */
+  async function uploadRequest(args: {
+    chefId: string;
+    type: DocumentType;
+    filename: string;
+    mimeType: string;
+    sizeBytes: number;
+  }) {
+    "use server";
+    const session = await requireRole("owner");
+    return requestChefDocumentUpload({
+      ...args,
+      uploadedBy: session.user.id,
+    });
+  }
+
+  async function deleteDocument(formData: FormData) {
+    "use server";
+    const session = await requireRole("owner");
+    const documentId = String(formData.get("documentId") ?? "");
+    if (!documentId) return;
+    await softDeleteChefDocument(documentId, session.user.id);
+    redirect(`/admin/business/chefs/${id}`);
+  }
 
   /* ---------- server actions ----------------------------------- */
   async function doInviteToPortal() {
@@ -391,13 +437,74 @@ export default async function ChefDetailPage({
         )}
       </section>
 
+      {/* Documents */}
+      <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
+        <div className="mb-4">
+          <h2 className="font-serif text-lg text-ink-900">Documenten</h2>
+          <p className="mt-1 text-sm text-ink-700">
+            CV, foto, certificaten, ID-bewijs. Bestanden worden veilig opgeslagen
+            in Cloudflare R2 — alleen toegankelijk via tijdelijk-getekende links.
+          </p>
+        </div>
+
+        {documents.length > 0 ? (
+          <ul className="mb-4 space-y-2">
+            {documents.map((doc) => (
+              <li
+                key={doc.id}
+                className="flex items-center justify-between gap-3 rounded border border-ink-200 bg-bg-gray px-3 py-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-ink-900">
+                    {doc.filename}
+                  </p>
+                  <p className="text-xs text-ink-500">
+                    {DOC_TYPE_LABELS[doc.type] ?? doc.type}
+                    {doc.sizeBytes &&
+                      ` · ${(doc.sizeBytes / 1024 / 1024).toFixed(1)} MB`}
+                    {" · "}
+                    {new Date(doc.createdAt).toLocaleDateString("nl-NL")}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {doc.downloadUrl && (
+                    <a
+                      href={doc.downloadUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-full border border-ink-200 bg-white px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-ink-900 hover:border-burgundy hover:text-burgundy"
+                    >
+                      Bekijk
+                    </a>
+                  )}
+                  <form action={deleteDocument}>
+                    <input type="hidden" name="documentId" value={doc.id} />
+                    <button
+                      type="submit"
+                      className="rounded-full border border-red-200 bg-white px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-red-700 hover:bg-red-50"
+                    >
+                      Verwijder
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mb-4 text-sm text-ink-500">Nog geen documenten geupload.</p>
+        )}
+
+        <DocumentUploader
+          chefId={chef.id}
+          requestUpload={uploadRequest}
+          disabled={!r2Ready}
+        />
+      </section>
+
       <div className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
         <h2 className="font-serif text-lg text-ink-900">Binnenkort op deze pagina</h2>
         <ul className="mt-3 space-y-2 text-sm text-ink-700">
           <li>· Beschikbaarheidskalender (Phase 4)</li>
-          <li>· Vakniveau + segmenten + specialties tags</li>
-          <li>· Tarief-band (€/uur min/max)</li>
-          <li>· Documenten (CV, foto, certificaten — Phase 2 polish met R2)</li>
           <li>· Plaatsings-geschiedenis (Phase 3)</li>
           <li>· Ratings van klanten (Phase 6)</li>
         </ul>
