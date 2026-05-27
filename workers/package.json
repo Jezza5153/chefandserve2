@@ -5,6 +5,7 @@
   "description": "Background workers for Chef & Serve (Railway deploys).",
   "type": "module",
   "scripts": {
+    "supervisor": "tsx supervisor.ts",
     "weekly-digest": "tsx weekly-digest.ts",
     "payingit-sync": "tsx payingit-sync.ts",
     "embedding-refresh": "tsx embedding-refresh.ts",
@@ -13,8 +14,12 @@
   "dependencies": {
     "@neondatabase/serverless": "0.10.4",
     "dotenv": "^17.4.2",
+    "node-cron": "^3.0.3",
     "resend": "4.0.1",
     "tsx": "4.19.2"
+  },
+  "devDependencies": {
+    "@types/node-cron": "^3.0.11"
   },
   "engines": {
     "node": ">=20"
