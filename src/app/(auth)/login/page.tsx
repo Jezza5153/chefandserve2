@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 
-import { signIn } from "@/lib/auth";
+import { auth, signIn } from "@/lib/auth";
+import { defaultLandingFor } from "@/lib/permissions";
 
 /**
  * Real magic-link login page.
@@ -45,6 +46,20 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string; next?: string }>;
 }) {
   const params = await searchParams;
+
+  // Already signed in? Skip the form entirely and send them to their landing
+  // page. This is what unblocks the "magic link → bounced back to /login"
+  // loop — Auth.js v5's default post-callback redirect target is the page
+  // that initiated the sign-in, which is usually /login itself.
+  const session = await auth();
+  if (session?.user) {
+    const dest =
+      params.next && params.next.startsWith("/")
+        ? params.next
+        : defaultLandingFor(session.user.roles ?? []);
+    redirect(dest);
+  }
+
   const errorMsg =
     params.error === "invalid-email"
       ? "Vul een geldig e-mailadres in."
