@@ -55,6 +55,16 @@ const serverSchema = z.object({
   MAARTEN_EMAIL: z.string().email(),
   GINA_EMAIL: z.string().email(),
 
+  // Cloudflare R2 — file uploads. Optional until R2 is wired up.
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET: z.string().optional(),
+  R2_ENDPOINT: z.string().url().optional(),
+  R2_PUBLIC_URL: z.string().url().optional(),
+
+  // Phase 9 — embedding API. Optional until Phase 9 ships.
+  OPENAI_API_KEY: z.string().startsWith("sk-").optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });

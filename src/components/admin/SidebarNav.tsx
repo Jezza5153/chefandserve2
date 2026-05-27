@@ -32,6 +32,7 @@ const SYSTEM_NAV: NavSection = {
     { label: "Dashboard", href: "/admin/system" },
     { label: "Errors", href: "/admin/system/errors" },
     { label: "Audit", href: "/admin/system/audit" },
+    { label: "Webhooks", href: "/admin/system/webhooks" },
     { label: "Health", badge: "binnenkort" },
     { label: "Users", href: "/admin/system/users" },
     { label: "Roles", href: "/admin/system/roles" },

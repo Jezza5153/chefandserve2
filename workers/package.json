@@ -1,0 +1,22 @@
+{
+  "name": "chefandserve-workers",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Background workers for Chef & Serve (Railway deploys).",
+  "type": "module",
+  "scripts": {
+    "weekly-digest": "tsx weekly-digest.ts",
+    "payingit-sync": "tsx payingit-sync.ts",
+    "embedding-refresh": "tsx embedding-refresh.ts",
+    "error-digest": "tsx error-digest.ts"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "0.10.4",
+    "dotenv": "^17.4.2",
+    "resend": "4.0.1",
+    "tsx": "4.19.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
