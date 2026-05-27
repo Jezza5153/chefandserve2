@@ -815,6 +815,14 @@ export const shifts = pgTable("shifts", {
  * Public access: NONE. Files retrieved via short-lived presigned URLs
  * generated server-side by getDownloadUrl(documentId).
  */
+export const chefDocumentStatusEnum = pgEnum("chef_document_status", [
+  "uploaded",
+  "needs_review",
+  "verified",
+  "expired",
+  "rejected",
+]);
+
 export const chefDocuments = pgTable("chef_documents", {
   id: text("id")
     .primaryKey()
@@ -833,6 +841,26 @@ export const chefDocuments = pgTable("chef_documents", {
   uploadedBy: text("uploaded_by").references(() => users.id, {
     onDelete: "set null",
   }),
+
+  /* ----- PR-CHEF-12: trust signals -----------------------------------
+   * Klant-visibility, verification, expiry. Used by:
+   *   - /chef/profile shows labels "Klant mag zien" / "Alleen intern"
+   *   - /admin/business/chefs/[id] has verify/reject/toggle/setExpiry
+   *   - workers/document-expiry.ts sends 30d-out warnings
+   */
+  /** When true, klant portal pages may render this doc. Default false (intern). */
+  clientVisible: boolean("client_visible").notNull().default(false),
+  /** Admin marked the doc as legitimate. */
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  verifiedBy: text("verified_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  /** Hard expiry — HACCP / SVH certs expire. Cron warns 30d out. */
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  /** Workflow status — separate from soft-delete. */
+  status: chefDocumentStatusEnum("status").notNull().default("uploaded"),
+  rejectionReason: text("rejection_reason"),
+
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

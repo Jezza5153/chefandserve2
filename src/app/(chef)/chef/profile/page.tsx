@@ -404,6 +404,9 @@ export default async function ChefProfilePage({
         requestAction={requestChange}
       />
 
+      {/* Documents — PR-CHEF-12 */}
+      <DocumentsSection chefId={chef.id} />
+
       {chef.notes ? (
         <div className="mt-10">
           <h2 className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
@@ -418,6 +421,121 @@ export default async function ChefProfilePage({
         </div>
       ) : null}
     </div>
+  );
+}
+
+async function DocumentsSection({ chefId }: { chefId: string }) {
+  const docs = await db
+    .select()
+    .from(chefDocuments)
+    .where(
+      and(
+        eq(chefDocuments.chefId, chefId),
+        isNull(chefDocuments.deletedAt),
+      ),
+    )
+    .orderBy(desc(chefDocuments.createdAt));
+
+  return (
+    <section className="mt-10">
+      <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+        Documenten
+      </h2>
+      {docs.length === 0 ? (
+        <p className="mt-3 rounded-lg border border-ink-200 bg-white p-4 text-sm text-ink-500">
+          Nog geen documenten geüpload. Vraag het kantoor om je documenten
+          toe te voegen.
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {docs.map((d) => (
+            <li
+              key={d.id}
+              className="flex items-center justify-between gap-3 rounded border border-ink-200 bg-white px-4 py-3 text-sm"
+            >
+              <div className="min-w-0">
+                <a
+                  href={`/api/chef-document/${d.id}`}
+                  className="text-ink-900 hover:text-burgundy hover:underline"
+                >
+                  {d.filename}
+                </a>
+                <p className="mt-0.5 text-xs text-ink-500">
+                  {labelForDocType(d.type)} ·{" "}
+                  {new Date(d.createdAt).toLocaleDateString("nl-NL", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                  {d.expiresAt
+                    ? ` · verloopt ${new Date(d.expiresAt).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" })}`
+                    : ""}
+                </p>
+              </div>
+              <div className="shrink-0 space-x-2">
+                <DocVisibilityChip clientVisible={d.clientVisible} />
+                <DocStatusChip status={d.status} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function labelForDocType(t: string): string {
+  return (
+    {
+      cv: "CV",
+      photo: "Foto",
+      certificate: "Certificaat",
+      id_document: "ID-bewijs",
+      other: "Document",
+    } as Record<string, string>
+  )[t] ?? t;
+}
+
+function DocVisibilityChip({ clientVisible }: { clientVisible: boolean }) {
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider ${
+        clientVisible
+          ? "bg-blue-100 text-blue-700"
+          : "bg-bg-gray text-ink-700"
+      }`}
+      title={
+        clientVisible
+          ? "Klanten met een bevestigde shift mogen dit document zien"
+          : "Alleen Chef & Serve ziet dit document"
+      }
+    >
+      {clientVisible ? "Klant mag zien" : "Alleen intern"}
+    </span>
+  );
+}
+
+function DocStatusChip({ status }: { status: string }) {
+  const labels: Record<string, string> = {
+    uploaded: "Geüpload",
+    needs_review: "Wacht op controle",
+    verified: "✓ Geverifieerd",
+    expired: "⚠ Verlopen",
+    rejected: "✗ Afgewezen",
+  };
+  const tone: Record<string, string> = {
+    uploaded: "bg-bg-gray text-ink-700",
+    needs_review: "bg-amber-100 text-amber-800",
+    verified: "bg-emerald-100 text-emerald-700",
+    expired: "bg-burgundy/10 text-burgundy",
+    rejected: "bg-red-100 text-red-700",
+  };
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider ${tone[status] ?? "bg-bg-gray text-ink-700"}`}
+    >
+      {labels[status] ?? status}
+    </span>
   );
 }
 
