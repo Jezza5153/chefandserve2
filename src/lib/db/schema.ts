@@ -337,6 +337,13 @@ export const webhooksReceived = pgTable("webhooks_received", {
   id: uuid("id").primaryKey().defaultRandom(),
   source: text("source").notNull(), // 'jotform' | 'payingit' | etc.
   payload: jsonb("payload").notNull(),
+  /**
+   * PR-S1C step 1 — raw request headers captured for forensics + to identify
+   * any signature header Jotform might send. Secrets (Authorization, Cookie)
+   * are stripped before storage. Read this column to design the HMAC fallback
+   * decision in S1C step 2.
+   */
+  headers: jsonb("headers"),
   signatureValid: boolean("signature_valid"),
   processedAt: timestamp("processed_at", { withTimezone: true }),
   processingError: text("processing_error"),

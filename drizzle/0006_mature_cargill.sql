@@ -1,0 +1,1 @@
+ALTER TABLE "webhooks_received" ADD COLUMN "headers" jsonb;

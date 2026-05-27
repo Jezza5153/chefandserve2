@@ -127,6 +127,22 @@ export default async function WebhookDetailPage({
           {JSON.stringify(row.payload, null, 2)}
         </pre>
       </details>
+
+      {row.headers ? (
+        <details className="mt-4 rounded-lg border border-ink-200 bg-white p-6">
+          <summary className="cursor-pointer font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy hover:underline">
+            Request headers (PR-S1C — used to decide HMAC vs URL-secret)
+          </summary>
+          <pre className="mt-4 max-h-[40vh] overflow-auto rounded bg-bg-gray p-4 text-[11px] leading-relaxed text-ink-700">
+            {JSON.stringify(row.headers, null, 2)}
+          </pre>
+          <p className="mt-3 text-xs text-ink-500">
+            Look for any <code>x-jotform-*</code>, <code>x-signature</code>, or
+            <code>x-hub-signature</code> header. If none is present on real
+            submissions, fall back to URL-secret path or IP-allowlist.
+          </p>
+        </details>
+      ) : null}
     </div>
   );
 }

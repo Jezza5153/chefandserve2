@@ -117,23 +117,36 @@ export async function handleJotformWebhook(
 ): Promise<Response> {
   const body = await parseBody(request);
 
-  // Step 1: ALWAYS log the raw payload to webhooks_received. Even if we later
-  // fail to parse, this row is the recovery point.
+  // PR-S1C step 1: capture all incoming request headers (minus secrets).
+  // Goal: identify the actual header name(s) Jotform sends so we can decide
+  // HMAC vs URL-secret vs IP-allowlist in step 2 — no fantasy header names.
+  const safeHeaders: Record<string, string> = {};
+  const REDACT_KEYS = new Set(["authorization", "cookie", "proxy-authorization"]);
+  request.headers.forEach((value, key) => {
+    if (REDACT_KEYS.has(key.toLowerCase())) {
+      safeHeaders[key] = "<redacted>";
+    } else {
+      safeHeaders[key] = value;
+    }
+  });
+
+  // Step 1: ALWAYS log the raw payload + headers to webhooks_received.
+  // Even if we later fail to parse, this row is the recovery point AND the
+  // source of truth for "what does Jotform actually send".
   let signatureValid: boolean | null = null;
-  // Jotform supports HMAC via x-jotform-signature header (optional)
+  // S1C step 2/3 hooks: HMAC verification gated behind two env vars.
+  // Step 1 leaves both unset so we only INSTRUMENT — no enforcement yet.
   const jotformSecret = process.env.JOTFORM_WEBHOOK_SECRET;
   if (jotformSecret) {
     const sig = request.headers.get("x-jotform-signature");
-    // Simple presence check — full HMAC verification needs the raw body bytes
-    // which Next.js doesn't easily expose after formData parsing. Phase 1 ships
-    // the audit path; full crypto verify can land in Phase 1 polish if Jotform
-    // turns out to sign requests in our setup.
+    // Presence-only audit until step 2 lands real HMAC compute over raw bytes.
     signatureValid = Boolean(sig);
   }
 
   await db.insert(webhooksReceived).values({
     source: "jotform",
     payload: { kind, body },
+    headers: safeHeaders,
     signatureValid,
     processedAt: null,
   });
