@@ -74,6 +74,13 @@ const serverSchema = z.object({
     .min(32, "RATE_LIMIT_HASH_SECRET must be ≥32 chars (openssl rand -base64 32)")
     .optional(),
 
+  // Phase 1 PR-S1B — Cloudflare Turnstile (anti-bot challenge on /login).
+  // BOTH must be set together for Turnstile verification to activate.
+  // Missing → graceful degradation: login still works, rate-limit only.
+  // TURNSTILE_BYPASS=1 is preview-only escape hatch — rejected in production.
+  TURNSTILE_SECRET: z.string().optional(),
+  TURNSTILE_BYPASS: z.string().optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
@@ -81,6 +88,8 @@ const serverSchema = z.object({
 const clientSchema = z.object({
   NEXT_PUBLIC_SITE_URL: z.string().url(),
   NEXT_PUBLIC_APP_URL: z.string().url(),
+  /** Optional — when present, the login page renders the Turnstile widget. */
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().optional(),
 });
 
 /* ----------------------------- parse ------------------------------------ */
@@ -92,6 +101,7 @@ const clientSchema = z.object({
 const processClientEnv = {
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
 };
 
 /* ----------------------------- runtime parse logic ---------------------- */

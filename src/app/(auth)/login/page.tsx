@@ -3,14 +3,17 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 
+import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 import { auth, signIn } from "@/lib/auth";
 import { db } from "@/lib/db/client";
-import { auditLog } from "@/lib/db/schema";
+import { auditLog, errorLog } from "@/lib/db/schema";
+import { env } from "@/lib/env";
 import { defaultLandingFor } from "@/lib/permissions";
 import {
   checkRateLimit,
   extractClientIp,
 } from "@/lib/rate-limit";
+import { verifyTurnstileToken } from "@/lib/turnstile";
 
 /**
  * Real magic-link login page.
@@ -37,8 +40,26 @@ async function sendMagicLink(formData: FormData) {
     redirect("/login?error=invalid-email");
   }
 
+  const reqHeaders = await headers();
+  const ip = extractClientIp(reqHeaders);
+
+  // PR-S1B: Turnstile gate (graceful no-op if env vars missing).
+  const tsToken = String(formData.get("cf-turnstile-response") ?? "");
+  const tsResult = await verifyTurnstileToken({ token: tsToken, remoteIp: ip });
+  if (!tsResult.ok) {
+    await db
+      .insert(errorLog)
+      .values({
+        message: `Turnstile rejected: ${tsResult.codes.join(",")}`,
+        severity: "warning",
+        url: "/login",
+        context: { codes: tsResult.codes, reason: tsResult.reason },
+      })
+      .catch(() => {});
+    redirect("/login?error=turnstile");
+  }
+
   // PR-S1A: two-gate rate limit. Scopes never mix identifiers — see plan.
-  const ip = extractClientIp(await headers());
 
   const emailGate = await checkRateLimit("magic_link_email", email);
   if (!emailGate.ok) {
@@ -109,7 +130,9 @@ export default async function LoginPage({
       ? "Vul een geldig e-mailadres in."
       : params.error === "too-many"
         ? "Te veel inlogpogingen — probeer het over enkele minuten opnieuw."
-        : null;
+        : params.error === "turnstile"
+          ? "Beveiligingscontrole mislukt. Probeer het opnieuw."
+          : null;
 
   return (
     <div className="mx-auto w-full max-w-md rounded-lg border border-burgundy/15 bg-white p-8 md:p-10">
@@ -154,6 +177,8 @@ export default async function LoginPage({
             {errorMsg}
           </p>
         )}
+
+        <TurnstileWidget siteKey={env.NEXT_PUBLIC_TURNSTILE_SITE_KEY} />
 
         <button
           type="submit"
