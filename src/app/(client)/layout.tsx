@@ -25,6 +25,7 @@ export default async function ClientLayout({
     { label: "Dashboard", href: "/client" },
     { label: "Komende shifts", href: "/client/shifts" },
     { label: "Nieuwe aanvraag", href: "/client/request" },
+    { label: "Mijn profiel", href: "/client/profile" },
   ];
 
   return (

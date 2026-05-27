@@ -24,6 +24,7 @@ export default async function ChefLayout({
     { label: "Dashboard", href: "/chef" },
     { label: "Mijn shifts", href: "/chef/shifts" },
     { label: "Beschikbaarheid", href: "/chef/availability" },
+    { label: "Mijn profiel", href: "/chef/profile" },
     { label: "Uren", href: "/chef/hours" },
   ];
 
