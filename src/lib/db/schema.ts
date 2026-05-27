@@ -28,6 +28,7 @@ import {
   jsonb,
   primaryKey,
   uniqueIndex,
+  index,
   check,
   pgEnum,
 } from "drizzle-orm/pg-core";
@@ -343,6 +344,43 @@ export const webhooksReceived = pgTable("webhooks_received", {
     .notNull()
     .defaultNow(),
 });
+
+/* =============================================================================
+ * Rate limits (PR-S1A) — per-scope sliding-window counter.
+ *
+ * Key derivation MUST keep scopes isolated. If a single key mixed email+ip,
+ * an attacker could rotate emails to bypass the IP-only threshold. See
+ * src/lib/rate-limit.ts for the hmac derivation.
+ *
+ * Scopes:
+ *   magic_link_email  → hmac(SECRET, "magic_link_email:" + lower(email))  · 3 / 10 min
+ *   magic_link_ip     → hmac(SECRET, "magic_link_ip:" + ip)               · 10 / hour
+ *   totp_verify       → hmac(SECRET, "totp_verify:" + userId)             · 5 / 5 min  (S2B/S2C)
+ *
+ * Retention: rows older than 7 days pruned by workers/retention.ts (PR-AVG1).
+ * Until that ships, the table grows but stays tiny (each row ~64 bytes).
+ * =========================================================================== */
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    /** hmac_sha256(RATE_LIMIT_HASH_SECRET, scope+":"+identifier) — never raw PII */
+    keyHash: text("key_hash").primaryKey(),
+    /** which threshold this row is counting against */
+    scope: text("scope").notNull(),
+    /** hits in the current window */
+    count: integer("count").notNull().default(0),
+    /** start of the current window — when it expires, count resets */
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    /** last hit, used by retention worker to prune cold rows */
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    /** Cold-row pruning by retention worker (PR-AVG1). NOT unique. */
+    rateLimitsUpdatedAtIdx: index("rate_limits_updated_at_idx").on(t.updatedAt),
+  }),
+);
 
 /* =============================================================================
  * Submissions (Phase 1 — Jotform intake)
@@ -776,3 +814,5 @@ export type Placement = typeof placements.$inferSelect;
 export type NewPlacement = typeof placements.$inferInsert;
 export type ChefDocument = typeof chefDocuments.$inferSelect;
 export type NewChefDocument = typeof chefDocuments.$inferInsert;
+export type RateLimit = typeof rateLimits.$inferSelect;
+export type NewRateLimit = typeof rateLimits.$inferInsert;

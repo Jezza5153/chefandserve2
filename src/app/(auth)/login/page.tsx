@@ -1,18 +1,29 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 
 import { auth, signIn } from "@/lib/auth";
+import { db } from "@/lib/db/client";
+import { auditLog } from "@/lib/db/schema";
 import { defaultLandingFor } from "@/lib/permissions";
+import {
+  checkRateLimit,
+  extractClientIp,
+} from "@/lib/rate-limit";
 
 /**
  * Real magic-link login page.
  *
- * - User enters email → server action calls `signIn("resend")`
- * - Auth.js sends an email via Resend (custom React Email template)
- * - User is redirected to /verify with status query for UX feedback
- * - Unknown / non-active emails are rejected by the signIn callback
- *   (no row created, no email sent — fails silently for security)
+ * Pipeline:
+ *   1. validate email shape                     → error=invalid-email
+ *   2. (PR-S1B) Turnstile token verification    → error=turnstile (deferred to PR-S1B)
+ *   3. PR-S1A rate-limit per-email scope        → error=too-many
+ *   4. PR-S1A rate-limit per-ip scope           → error=too-many
+ *   5. signIn("resend") — Auth.js sends magic link via Resend
+ *   6. redirect to /verify (same UI for known/unknown to avoid enumeration)
+ *
+ * Unknown / non-active emails are rejected silently by the signIn callback.
  */
 export const metadata: Metadata = {
   title: "Inloggen",
@@ -25,6 +36,39 @@ async function sendMagicLink(formData: FormData) {
   if (!email || !email.includes("@")) {
     redirect("/login?error=invalid-email");
   }
+
+  // PR-S1A: two-gate rate limit. Scopes never mix identifiers — see plan.
+  const ip = extractClientIp(await headers());
+
+  const emailGate = await checkRateLimit("magic_link_email", email);
+  if (!emailGate.ok) {
+    await db
+      .insert(auditLog)
+      .values({
+        action: "auth.rate_limited",
+        resource: "auth",
+        // No raw email/IP — the audit row is itself non-PII
+        after: { scope: "magic_link_email", retryAfterSec: emailGate.retryAfterSec },
+      })
+      .catch(() => {
+        /* audit best-effort; never block on its failure */
+      });
+    redirect(`/login?error=too-many&retry=${emailGate.retryAfterSec}`);
+  }
+
+  const ipGate = await checkRateLimit("magic_link_ip", ip);
+  if (!ipGate.ok) {
+    await db
+      .insert(auditLog)
+      .values({
+        action: "auth.rate_limited",
+        resource: "auth",
+        after: { scope: "magic_link_ip", retryAfterSec: ipGate.retryAfterSec },
+      })
+      .catch(() => {});
+    redirect(`/login?error=too-many&retry=${ipGate.retryAfterSec}`);
+  }
+
   try {
     await signIn("resend", {
       email,
@@ -63,7 +107,9 @@ export default async function LoginPage({
   const errorMsg =
     params.error === "invalid-email"
       ? "Vul een geldig e-mailadres in."
-      : null;
+      : params.error === "too-many"
+        ? "Te veel inlogpogingen — probeer het over enkele minuten opnieuw."
+        : null;
 
   return (
     <div className="mx-auto w-full max-w-md rounded-lg border border-burgundy/15 bg-white p-8 md:p-10">

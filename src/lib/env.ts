@@ -65,6 +65,15 @@ const serverSchema = z.object({
   // Phase 9 — embedding API. Optional until Phase 9 ships.
   OPENAI_API_KEY: z.string().startsWith("sk-").optional(),
 
+  // Phase 1 PR-S1A — rate-limit key derivation secret.
+  // hmac_sha256(SECRET, scope+":"+identifier) becomes the row primary key.
+  // Optional during the deploy window where the env var hasn't been set yet;
+  // src/lib/rate-limit.ts throws clearly if it's missing AT CALL TIME.
+  RATE_LIMIT_HASH_SECRET: z
+    .string()
+    .min(32, "RATE_LIMIT_HASH_SECRET must be ≥32 chars (openssl rand -base64 32)")
+    .optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
