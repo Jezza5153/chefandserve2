@@ -27,14 +27,55 @@ const nextConfig: NextConfig = {
     ];
   },
   async headers() {
+    // PR-S1D — security headers, AVG/AP-aligned.
+    //
+    // HSTS: 1-year max-age, includeSubDomains. NO preload yet — preload is
+    // painful to reverse and requires every current+future subdomain to be
+    // HTTPS-safe. Audit subdomains before adding preload (deferred PR).
+    //
+    // CSP: ships as REPORT-ONLY first. Violations land on /api/csp-report
+    // → error_log. After 48h of clean reports across /login, /, /our-offer,
+    // /work-with-us, /admin/system, /chef, /client we flip the header name
+    // to "Content-Security-Policy" (enforce mode — separate PR).
+    //
+    // unsafe-inline scripts are required by current Next.js inline runtime.
+    // TODO: migrate to nonce-based CSP after Next.js 16 nonce support.
+    const csp = [
+      "default-src 'self'",
+      // Cloudflare Turnstile widget loads from challenges.cloudflare.com
+      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+      "connect-src 'self' https://challenges.cloudflare.com",
+      "frame-src https://challenges.cloudflare.com",
+      // Legacy WP CDN for image transition + data URLs for inline icons
+      "img-src 'self' data: https://chefandserve.nl",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self' data:",
+      "media-src 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+      "report-uri /api/csp-report",
+    ].join("; ");
+
     return [
       {
         source: "/(.*)",
         headers: [
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains",
+          },
+          { key: "Content-Security-Policy-Report-Only", value: csp },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          // Tightened to DENY — was SAMEORIGIN. We never frame our own admin.
+          { key: "X-Frame-Options", value: "DENY" },
+          {
+            key: "Permissions-Policy",
+            value:
+              "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+          },
         ],
       },
     ];
