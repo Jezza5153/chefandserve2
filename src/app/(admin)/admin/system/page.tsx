@@ -67,7 +67,7 @@ export default async function SystemDashboardPage() {
           highlight={unresolvedErrors > 0}
         />
         <StatCard label="Audit events" value={auditCount} href="/admin/system/audit" />
-        <StatCard label="Health" value="—" sub="Binnenkort" />
+        <StatCard label="Health" value="Status" sub="Klik voor checks" href="/admin/system/health" />
       </div>
 
       <section className="mt-12">

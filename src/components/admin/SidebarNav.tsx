@@ -33,7 +33,7 @@ const SYSTEM_NAV: NavSection = {
     { label: "Errors", href: "/admin/system/errors" },
     { label: "Audit", href: "/admin/system/audit" },
     { label: "Webhooks", href: "/admin/system/webhooks" },
-    { label: "Health", badge: "binnenkort" },
+    { label: "Health", href: "/admin/system/health" },
     { label: "Users", href: "/admin/system/users" },
     { label: "Roles", href: "/admin/system/roles" },
   ],

@@ -1,30 +1,42 @@
 /**
- * Embedding refresh — 3am daily.
+ * Embedding refresh — runs daily on Railway.
  *
- * STATUS: STUB. The vector columns exist (Phase 9 prep migration applied)
- * but no LLM is wired yet. When ready:
- *   1. Add OPENAI_API_KEY (or ANTHROPIC_API_KEY) to Railway env
- *   2. Uncomment the actual embedding call below
- *   3. Schedule this cron on Railway
- *
- * What it does (when live):
+ * What it does:
  *   - Computes a content hash for each chef / client / shift
- *   - For rows where embedded_text_hash != current hash → re-embed
+ *   - For rows where `embedded_text_hash != current hash` → re-embed
  *   - Stores vector(1536) in the `embedding` column
+ *   - Updates `embedded_text_hash` + `embedded_at`
  *
- * Cost projection: OpenAI text-embedding-3-small at $0.02 per 1M tokens.
- * Each chef profile ~200 tokens → ~$4 for 1M chef embeddings. Negligible.
+ * Activation:
+ *   - Set `OPENAI_API_KEY` on the Railway service.
+ *   - Without the key, this worker runs in OBSERVE mode: it counts stale
+ *     rows and writes an audit entry, but makes no API calls and no writes.
+ *
+ * Cost guidance:
+ *   - Model: text-embedding-3-small, dim 1536, $0.02 per 1M input tokens.
+ *   - A chef profile ~200 tokens → ~$4 for 1M embeddings. Negligible.
+ *
+ * Safety:
+ *   - Soft-deleted rows skipped (deleted_at IS NULL filter).
+ *   - Past shifts skipped (matching is forward-looking only).
+ *   - Rate-limited via REQUEST_DELAY_MS so we don't hammer OpenAI.
+ *   - Idempotent: only embeds rows whose content actually changed.
  */
 import { createHash } from "node:crypto";
 
 import { sql, audit, log } from "./_lib";
 
-function contentHash(text: string): string {
-  return createHash("sha256").update(text).digest("hex");
-}
+/* ----- config ------------------------------------------------------------ */
 
-/** Build the text we'll embed for a chef. */
-function chefText(c: {
+const EMBEDDING_MODEL = "text-embedding-3-small";
+const EMBEDDING_DIM = 1536;
+const REQUEST_DELAY_MS = 50; // ~20 req/s — well below OpenAI's tier-1 limit
+const BATCH_LOG_EVERY = 25;
+
+/* ----- text builders ----------------------------------------------------- */
+
+type ChefRow = {
+  id: string;
   full_name: string;
   vakniveau: string | null;
   segments: string[] | null;
@@ -33,7 +45,32 @@ function chefText(c: {
   years_experience: number | null;
   languages: string[] | null;
   notes: string | null;
-}): string {
+  embedded_text_hash: string | null;
+};
+
+type ClientRow = {
+  id: string;
+  company_name: string;
+  segment: string | null;
+  city: string | null;
+  notes: string | null;
+  embedded_text_hash: string | null;
+};
+
+type ShiftRow = {
+  id: string;
+  when_description: string | null;
+  role_needed: string;
+  segment: string | null;
+  starts_at: Date;
+  location: string | null;
+  city: string | null;
+  notes: string | null;
+  embedded_text_hash: string | null;
+  client_name: string | null;
+};
+
+function chefText(c: ChefRow): string {
   return [
     `Naam: ${c.full_name}`,
     c.vakniveau ? `Vakniveau: ${c.vakniveau}` : null,
@@ -48,85 +85,214 @@ function chefText(c: {
     .join(". ");
 }
 
-async function getEmbedding(_text: string): Promise<number[] | null> {
-  // PHASE 9 ACTUAL CALL — gated behind OPENAI_API_KEY presence
-  // const apiKey = process.env.OPENAI_API_KEY;
-  // if (!apiKey) return null;
-  // const r = await fetch("https://api.openai.com/v1/embeddings", {
-  //   method: "POST",
-  //   headers: {
-  //     "Content-Type": "application/json",
-  //     Authorization: `Bearer ${apiKey}`,
-  //   },
-  //   body: JSON.stringify({
-  //     model: "text-embedding-3-small",
-  //     input: text,
-  //   }),
-  // });
-  // const data = await r.json();
-  // return data.data?.[0]?.embedding ?? null;
-  return null; // stub
+function clientText(c: ClientRow): string {
+  return [
+    `Bedrijf: ${c.company_name}`,
+    c.segment ? `Segment: ${c.segment}` : null,
+    c.city ? `Stad: ${c.city}` : null,
+    c.notes ? `Notes: ${c.notes}` : null,
+  ]
+    .filter(Boolean)
+    .join(". ");
 }
 
-async function main() {
-  log("embedding-refresh start (STUB MODE)");
+function shiftText(s: ShiftRow): string {
+  return [
+    s.client_name ? `Klant: ${s.client_name}` : null,
+    `Rol: ${s.role_needed}`,
+    s.segment ? `Segment: ${s.segment}` : null,
+    `Wanneer: ${new Date(s.starts_at).toLocaleDateString("nl-NL")}`,
+    s.when_description ? `Periode: ${s.when_description}` : null,
+    s.location || s.city ? `Locatie: ${[s.location, s.city].filter(Boolean).join(", ")}` : null,
+    s.notes ? `Notes: ${s.notes}` : null,
+  ]
+    .filter(Boolean)
+    .join(". ");
+}
 
-  if (!process.env.OPENAI_API_KEY) {
-    log("OPENAI_API_KEY not set — stub mode, no embeddings computed");
-    log(
-      "When ready: set the env var + uncomment the actual call in getEmbedding()",
-    );
+function contentHash(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+/* ----- OpenAI call ------------------------------------------------------- */
+
+async function getEmbedding(text: string): Promise<number[] | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const r = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: EMBEDDING_MODEL,
+      input: text,
+    }),
+  });
+
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    log(`OpenAI ${r.status}: ${body.slice(0, 200)}`);
+    return null;
   }
 
-  // Find chefs that need re-embedding
-  const chefs = await sql`
+  const data = (await r.json()) as {
+    data?: Array<{ embedding?: number[] }>;
+  };
+  const vec = data.data?.[0]?.embedding;
+  if (!vec || vec.length !== EMBEDDING_DIM) return null;
+  return vec;
+}
+
+/** pgvector accepts a string like `[0.1,0.2,...]` for vector input. */
+function vectorLiteral(vec: number[]): string {
+  return `[${vec.join(",")}]`;
+}
+
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/* ----- processors -------------------------------------------------------- */
+
+async function processChefs(observeOnly: boolean) {
+  const rows = (await sql`
     SELECT id, full_name, vakniveau, segments, specialties, city,
            years_experience, languages, notes, embedded_text_hash
     FROM chefs
     WHERE deleted_at IS NULL
-  ` as Array<{
-    id: string;
-    full_name: string;
-    vakniveau: string | null;
-    segments: string[] | null;
-    specialties: string | null;
-    city: string | null;
-    years_experience: number | null;
-    languages: string[] | null;
-    notes: string | null;
-    embedded_text_hash: string | null;
-  }>;
+  `) as ChefRow[];
 
   let stale = 0;
   let updated = 0;
-  for (const chef of chefs) {
-    const text = chefText(chef);
+  for (const row of rows) {
+    const text = chefText(row);
     const hash = contentHash(text);
-    if (chef.embedded_text_hash === hash) continue;
+    if (row.embedded_text_hash === hash) continue;
     stale++;
 
+    if (observeOnly) continue;
+
     const vec = await getEmbedding(text);
-    if (!vec) continue; // stub — no embedding service wired
+    if (!vec) continue;
 
-    // Phase 9 actual write:
-    // await sql`
-    //   UPDATE chefs
-    //   SET embedding = ${vec}::vector, embedded_text_hash = ${hash}, embedded_at = now()
-    //   WHERE id = ${chef.id}
-    // `;
+    await sql`
+      UPDATE chefs
+      SET embedding = ${vectorLiteral(vec)}::vector,
+          embedded_text_hash = ${hash},
+          embedded_at = now()
+      WHERE id = ${row.id}
+    `;
     updated++;
+    if (updated % BATCH_LOG_EVERY === 0) log(`  chefs: ${updated} embedded`);
+    await sleep(REQUEST_DELAY_MS);
   }
+  return { scanned: rows.length, stale, updated };
+}
 
-  log(`Chefs scanned: ${chefs.length}, stale: ${stale}, updated: ${updated}`);
+async function processClients(observeOnly: boolean) {
+  const rows = (await sql`
+    SELECT id, company_name, segment, city, notes, embedded_text_hash
+    FROM clients
+    WHERE deleted_at IS NULL
+  `) as ClientRow[];
 
-  // (Same logic for clients + shifts would go here)
+  let stale = 0;
+  let updated = 0;
+  for (const row of rows) {
+    const text = clientText(row);
+    const hash = contentHash(text);
+    if (row.embedded_text_hash === hash) continue;
+    stale++;
+
+    if (observeOnly) continue;
+
+    const vec = await getEmbedding(text);
+    if (!vec) continue;
+
+    await sql`
+      UPDATE clients
+      SET embedding = ${vectorLiteral(vec)}::vector,
+          embedded_text_hash = ${hash},
+          embedded_at = now()
+      WHERE id = ${row.id}
+    `;
+    updated++;
+    if (updated % BATCH_LOG_EVERY === 0) log(`  clients: ${updated} embedded`);
+    await sleep(REQUEST_DELAY_MS);
+  }
+  return { scanned: rows.length, stale, updated };
+}
+
+async function processShifts(observeOnly: boolean) {
+  // Forward-looking only — past shifts don't need embeddings for matching.
+  // Shifts don't have soft-delete; cancelled shifts are excluded via status.
+  const rows = (await sql`
+    SELECT s.id, s.when_description, s.role_needed, s.segment, s.starts_at,
+           s.location, s.city, s.notes, s.embedded_text_hash,
+           c.company_name AS client_name
+    FROM shifts s
+    LEFT JOIN clients c ON c.id = s.client_id
+    WHERE s.starts_at >= now()
+      AND s.status != 'cancelled'
+  `) as ShiftRow[];
+
+  let stale = 0;
+  let updated = 0;
+  for (const row of rows) {
+    const text = shiftText(row);
+    const hash = contentHash(text);
+    if (row.embedded_text_hash === hash) continue;
+    stale++;
+
+    if (observeOnly) continue;
+
+    const vec = await getEmbedding(text);
+    if (!vec) continue;
+
+    await sql`
+      UPDATE shifts
+      SET embedding = ${vectorLiteral(vec)}::vector,
+          embedded_text_hash = ${hash},
+          embedded_at = now()
+      WHERE id = ${row.id}
+    `;
+    updated++;
+    if (updated % BATCH_LOG_EVERY === 0) log(`  shifts: ${updated} embedded`);
+    await sleep(REQUEST_DELAY_MS);
+  }
+  return { scanned: rows.length, stale, updated };
+}
+
+/* ----- main -------------------------------------------------------------- */
+
+async function main() {
+  const observeOnly = !process.env.OPENAI_API_KEY;
+  log(`embedding-refresh start (${observeOnly ? "OBSERVE — no key" : "LIVE"})`);
+
+  const chefStats = await processChefs(observeOnly);
+  log(`chefs: scanned=${chefStats.scanned} stale=${chefStats.stale} updated=${chefStats.updated}`);
+
+  const clientStats = await processClients(observeOnly);
+  log(`clients: scanned=${clientStats.scanned} stale=${clientStats.stale} updated=${clientStats.updated}`);
+
+  const shiftStats = await processShifts(observeOnly);
+  log(`shifts: scanned=${shiftStats.scanned} stale=${shiftStats.stale} updated=${shiftStats.updated}`);
 
   await audit("worker.embedding_refresh", "system", null, {
-    chefs_scanned: chefs.length,
-    chefs_stale: stale,
-    chefs_updated: updated,
-    mode: process.env.OPENAI_API_KEY ? "live" : "STUB",
+    mode: observeOnly ? "observe" : "live",
+    chefs: chefStats,
+    clients: clientStats,
+    shifts: shiftStats,
   });
+
+  if (observeOnly && (chefStats.stale + clientStats.stale + shiftStats.stale) > 0) {
+    log(
+      `↳ ${chefStats.stale + clientStats.stale + shiftStats.stale} rows are stale; ` +
+      `set OPENAI_API_KEY on Railway to start embedding them.`,
+    );
+  }
 
   process.exit(0);
 }
