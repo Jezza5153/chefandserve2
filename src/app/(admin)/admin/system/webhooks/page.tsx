@@ -1,14 +1,24 @@
 import { desc } from "drizzle-orm";
+import { headers } from "next/headers";
 import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { webhooksReceived } from "@/lib/db/schema";
 import { requireRole } from "@/lib/permissions";
 
+import { TestWebhookButton } from "./_components/TestWebhookButton";
+
 export const metadata = { title: "Webhooks" };
 
 export default async function WebhooksListPage() {
   await requireRole("super_admin");
+
+  // Build the absolute base URL once so the client buttons can POST cross-origin
+  // if needed (works whether we're on Vercel, preview, or localhost).
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const baseUrl = `${proto}://${host}`;
 
   const rows = await db
     .select()
@@ -28,6 +38,22 @@ export default async function WebhooksListPage() {
         Alle binnenkomende webhooks (Jotform, Payingit straks). Klik door
         om de raw payload te zien of opnieuw te verwerken.
       </p>
+
+      <div className="mt-6 flex flex-wrap items-start gap-4 rounded-lg border border-ink-200 bg-bg-gray p-4">
+        <div className="flex-1 min-w-[200px]">
+          <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
+            Test pipeline
+          </p>
+          <p className="mt-1 text-xs text-ink-700">
+            POST een sample payload — verschijnt direct in de inbox + lijst hieronder.
+          </p>
+        </div>
+        <TestWebhookButton kind="chef" endpoint={`${baseUrl}/api/intake/chef`} />
+        <TestWebhookButton
+          kind="client"
+          endpoint={`${baseUrl}/api/intake/client`}
+        />
+      </div>
 
       {rows.length === 0 ? (
         <div className="mt-10 rounded-lg border border-ink-200 bg-white p-10 text-center">
