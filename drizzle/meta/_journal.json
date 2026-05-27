@@ -64,6 +64,13 @@
       "when": 1779883387698,
       "tag": "0008_tough_piledriver",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779884013450,
+      "tag": "0009_noisy_sprite",
+      "breakpoints": true
     }
   ]
 }

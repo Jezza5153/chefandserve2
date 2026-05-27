@@ -34,6 +34,7 @@ const SYSTEM_NAV: NavSection = {
     { label: "Audit", href: "/admin/system/audit" },
     { label: "Webhooks", href: "/admin/system/webhooks" },
     { label: "Emails", href: "/admin/system/emails" },
+    { label: "Notificaties", href: "/admin/system/notifications" },
     { label: "Health", href: "/admin/system/health" },
     { label: "Users", href: "/admin/system/users" },
     { label: "Roles", href: "/admin/system/roles" },

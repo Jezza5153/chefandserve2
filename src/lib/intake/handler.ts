@@ -74,7 +74,7 @@ async function parseBody(request: Request): Promise<JotformBody> {
 
 /* -------- notification ------------------------------------------------- */
 
-async function notifyMaarten(
+async function notifySubmissionReceived(
   kind: IntakeKind,
   summary: {
     name?: string | null;
@@ -82,6 +82,14 @@ async function notifyMaarten(
     notes?: string | null;
   },
 ) {
+  // PR-F1: per-event routing. Admin can change recipients in
+  // /admin/system/notifications without a redeploy. Empty = no send.
+  const { recipientsFor } = await import("@/lib/notifications");
+  const event =
+    kind === "chef" ? "chef_submission_received" : "client_submission_received";
+  const to = await recipientsFor(event);
+  if (to.length === 0) return; // route disabled or empty
+
   const subject =
     kind === "chef"
       ? `🍳 Nieuwe chef-aanmelding: ${summary.name ?? "onbekend"}`
@@ -99,13 +107,13 @@ async function notifyMaarten(
   try {
     await resend.emails.send({
       from: env.RESEND_FROM_EMAIL,
-      to: env.MAARTEN_EMAIL,
+      to,
       subject,
       text,
     });
   } catch (e) {
     // Best-effort. Failure is logged separately via error_log (PR-1B).
-    console.error("[intake] Maarten notification failed:", e);
+    console.error("[intake] notifySubmissionReceived failed:", e);
   }
 }
 
@@ -226,7 +234,7 @@ export async function handleJotformWebhook(
   }
 
   // Step 4: best-effort Resend notification to Maarten
-  await notifyMaarten(kind, {
+  await notifySubmissionReceived(kind, {
     name,
     email: row.email ?? null,
     notes: row.notes ?? null,

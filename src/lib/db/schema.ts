@@ -425,6 +425,37 @@ export const userRecoveryCodes = pgTable(
  * Retention: rows older than 7 days pruned by workers/retention.ts (PR-AVG1).
  * Until that ships, the table grows but stays tiny (each row ~64 bytes).
  * =========================================================================== */
+/* =============================================================================
+ * Notification routes (PR-F1) — per-event configurable recipient list.
+ *
+ * Today every transactional/admin email is hardcoded to MAARTEN_EMAIL or
+ * JEZZA_EMAIL via env var. This table lets the admin reroute per event from
+ * the UI without a redeploy.
+ *
+ * Falls back to env vars when no row exists for the event (so behavior is
+ * unchanged on first deploy). See src/lib/notifications.ts → routeFor().
+ *
+ * Events:
+ *   chef_submission_received   client_submission_received
+ *   client_portal_request      weekly_digest
+ *   error_critical             totp_lockout
+ *   erasure_r2_failure
+ * =========================================================================== */
+export const notificationRoutes = pgTable("notification_routes", {
+  /** stable event key — primary key */
+  event: text("event").primaryKey(),
+  /** array of email addresses (normalized lowercase) */
+  recipients: text("recipients").array().notNull().default(sql`'{}'::text[]`),
+  /** when false, sends are skipped (and logged to messages_sent as suppressed in PR-AVG1) */
+  enabled: boolean("enabled").notNull().default(true),
+  updatedBy: text("updated_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const rateLimits = pgTable(
   "rate_limits",
   {
@@ -883,3 +914,5 @@ export type RateLimit = typeof rateLimits.$inferSelect;
 export type NewRateLimit = typeof rateLimits.$inferInsert;
 export type UserRecoveryCode = typeof userRecoveryCodes.$inferSelect;
 export type NewUserRecoveryCode = typeof userRecoveryCodes.$inferInsert;
+export type NotificationRoute = typeof notificationRoutes.$inferSelect;
+export type NewNotificationRoute = typeof notificationRoutes.$inferInsert;
