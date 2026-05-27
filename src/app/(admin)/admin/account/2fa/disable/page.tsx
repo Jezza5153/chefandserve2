@@ -53,7 +53,7 @@ async function disable2FA(formData: FormData) {
 
   if (looksLikeTotp) {
     try {
-      const secret = decryptSecret(u.totpSecretEncrypted);
+      const secret = await decryptSecret(u.totpSecretEncrypted);
       factorOk = verifyCode(secret, raw);
     } catch {
       factorOk = false;

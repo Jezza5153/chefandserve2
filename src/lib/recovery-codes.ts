@@ -10,12 +10,22 @@
  * even under concurrent requests.
  */
 
-import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { userRecoveryCodes } from "@/lib/db/schema";
+
+/** Edge-safe random bytes — Web Crypto API. */
+function randomHex(bytes: number): string {
+  const buf = new Uint8Array(bytes);
+  crypto.getRandomValues(buf);
+  let out = "";
+  for (let i = 0; i < buf.length; i++) {
+    out += buf[i].toString(16).padStart(2, "0");
+  }
+  return out;
+}
 
 const CODE_BYTES = 6;        // → 12 hex chars
 const TOTAL_CODES = 8;
@@ -48,7 +58,7 @@ export async function generateAndPersist(userId: string): Promise<string[]> {
   const rows: { userId: string; codeHash: string }[] = [];
 
   for (let i = 0; i < TOTAL_CODES; i++) {
-    const code = formatCode(randomBytes(CODE_BYTES).toString("hex"));
+    const code = formatCode(randomHex(CODE_BYTES));
     plaintexts.push(code);
     rows.push({
       userId,

@@ -60,7 +60,7 @@ async function confirmEnrollment(formData: FormData) {
   }
 
   // Verified. Encrypt + persist + generate recovery codes.
-  const encrypted = encryptSecret(setupSecret);
+  const encrypted = await encryptSecret(setupSecret);
   await db
     .update(users)
     .set({

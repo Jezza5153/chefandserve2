@@ -16,36 +16,41 @@ import {
 import { verifyTurnstileToken } from "@/lib/turnstile";
 
 /**
- * Real magic-link login page.
+ * Login page — dual flow.
  *
- * Pipeline:
- *   1. validate email shape                     → error=invalid-email
- *   2. (PR-S1B) Turnstile token verification    → error=turnstile (deferred to PR-S1B)
- *   3. PR-S1A rate-limit per-email scope        → error=too-many
- *   4. PR-S1A rate-limit per-ip scope           → error=too-many
- *   5. signIn("resend") — Auth.js sends magic link via Resend
- *   6. redirect to /verify (same UI for known/unknown to avoid enumeration)
+ * PR-S2E: a single form with three fields (email, password, 2FA code) +
+ * two submit buttons:
  *
- * Unknown / non-active emails are rejected silently by the signIn callback.
+ *  - Primary "Inloggen" → password+TOTP path (Credentials provider).
+ *    Internal staff after the wizard use this.
+ *
+ *  - Secondary "Stuur eenmalige inloglink" → magic-link path (Resend).
+ *    Chefs/klanten use this. Internal users who haven't enrolled yet
+ *    also use this — first login bounces to /admin/account/setup.
+ *
+ * Both gates run rate-limit (PR-S1A) + Turnstile (PR-S1B). Both honor
+ * the seed-only rule via the signIn callback in auth.ts.
  */
 export const metadata: Metadata = {
   title: "Inloggen",
   description: "Toegang voor interne gebruikers van Chef & Serve.",
 };
 
-async function sendMagicLink(formData: FormData) {
-  "use server";
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  if (!email || !email.includes("@")) {
-    redirect("/login?error=invalid-email");
-  }
+/* -------- shared gates ---------------------------------------------- */
 
+async function runGates(
+  email: string,
+  formData: FormData,
+): Promise<void> {
   const reqHeaders = await headers();
   const ip = extractClientIp(reqHeaders);
 
-  // PR-S1B: Turnstile gate (graceful no-op if env vars missing).
+  // Turnstile (graceful no-op if env vars missing).
   const tsToken = String(formData.get("cf-turnstile-response") ?? "");
-  const tsResult = await verifyTurnstileToken({ token: tsToken, remoteIp: ip });
+  const tsResult = await verifyTurnstileToken({
+    token: tsToken,
+    remoteIp: ip,
+  });
   if (!tsResult.ok) {
     await db
       .insert(errorLog)
@@ -59,8 +64,7 @@ async function sendMagicLink(formData: FormData) {
     redirect("/login?error=turnstile");
   }
 
-  // PR-S1A: two-gate rate limit. Scopes never mix identifiers — see plan.
-
+  // Two-gate rate limit. Scopes never mix identifiers.
   const emailGate = await checkRateLimit("magic_link_email", email);
   if (!emailGate.ok) {
     await db
@@ -68,15 +72,14 @@ async function sendMagicLink(formData: FormData) {
       .values({
         action: "auth.rate_limited",
         resource: "auth",
-        // No raw email/IP — the audit row is itself non-PII
-        after: { scope: "magic_link_email", retryAfterSec: emailGate.retryAfterSec },
+        after: {
+          scope: "magic_link_email",
+          retryAfterSec: emailGate.retryAfterSec,
+        },
       })
-      .catch(() => {
-        /* audit best-effort; never block on its failure */
-      });
+      .catch(() => {});
     redirect(`/login?error=too-many&retry=${emailGate.retryAfterSec}`);
   }
-
   const ipGate = await checkRateLimit("magic_link_ip", ip);
   if (!ipGate.ok) {
     await db
@@ -84,26 +87,76 @@ async function sendMagicLink(formData: FormData) {
       .values({
         action: "auth.rate_limited",
         resource: "auth",
-        after: { scope: "magic_link_ip", retryAfterSec: ipGate.retryAfterSec },
+        after: {
+          scope: "magic_link_ip",
+          retryAfterSec: ipGate.retryAfterSec,
+        },
       })
       .catch(() => {});
     redirect(`/login?error=too-many&retry=${ipGate.retryAfterSec}`);
   }
+}
+
+/* -------- server actions -------------------------------------------- */
+
+async function passwordLogin(formData: FormData) {
+  "use server";
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const password = String(formData.get("password") ?? "");
+  const totp = String(formData.get("totp") ?? "").trim();
+
+  if (!email || !email.includes("@")) {
+    redirect("/login?error=invalid-email");
+  }
+  if (!password || !totp) {
+    redirect("/login?error=password-missing-fields");
+  }
+
+  await runGates(email, formData);
+
+  try {
+    await signIn("password-totp", {
+      email,
+      password,
+      totp,
+      redirect: false,
+    });
+    redirect("/admin");
+  } catch (err) {
+    // CredentialsSignin or other AuthError → generic error. Don't reveal
+    // whether the password or the TOTP code was the failing factor.
+    if (err instanceof AuthError) {
+      redirect("/login?error=bad-credentials");
+    }
+    throw err;
+  }
+}
+
+async function sendMagicLink(formData: FormData) {
+  "use server";
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    redirect("/login?error=invalid-email");
+  }
+
+  await runGates(email, formData);
 
   try {
     await signIn("resend", {
       email,
-      redirect: false, // we control the redirect below
+      redirect: false,
     });
     redirect(`/verify?email=${encodeURIComponent(email)}`);
   } catch (err) {
-    // Don't reveal whether the email exists. Same error UI for known/unknown.
     if (err instanceof AuthError) {
+      // Same UI for known/unknown — no enumeration.
       redirect("/verify?email=" + encodeURIComponent(email));
     }
     throw err;
   }
 }
+
+/* -------- page -------------------------------------------------------- */
 
 export default async function LoginPage({
   searchParams,
@@ -112,10 +165,7 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
 
-  // Already signed in? Skip the form entirely and send them to their landing
-  // page. This is what unblocks the "magic link → bounced back to /login"
-  // loop — Auth.js v5's default post-callback redirect target is the page
-  // that initiated the sign-in, which is usually /login itself.
+  // Already signed in? Bypass.
   const session = await auth();
   if (session?.user) {
     const dest =
@@ -132,7 +182,11 @@ export default async function LoginPage({
         ? "Te veel inlogpogingen — probeer het over enkele minuten opnieuw."
         : params.error === "turnstile"
           ? "Beveiligingscontrole mislukt. Probeer het opnieuw."
-          : null;
+          : params.error === "bad-credentials"
+            ? "Inloggen mislukt. Controleer je e-mail, wachtwoord en 2FA-code."
+            : params.error === "password-missing-fields"
+              ? "Vul alle drie de velden in om met wachtwoord in te loggen. Geen wachtwoord? Gebruik de eenmalige inloglink."
+              : null;
 
   return (
     <div className="mx-auto w-full max-w-md rounded-lg border border-burgundy/15 bg-white p-8 md:p-10">
@@ -143,13 +197,11 @@ export default async function LoginPage({
         Welkom terug
       </h1>
       <p className="mt-4 text-sm leading-relaxed text-ink-700">
-        Toegang is voorbehouden aan interne gebruikers van Chef &amp; Serve.
-        Vul je e-mailadres in en we sturen een eenmalige inloglink — geen
-        wachtwoord nodig.
+        Vul je e-mailadres, wachtwoord en 2FA-code in. Geen wachtwoord (nog)?
+        Vraag een eenmalige inloglink aan onderaan.
       </p>
 
       <form
-        action={sendMagicLink}
         className="mt-8 space-y-4"
         aria-label="Inlogformulier"
       >
@@ -172,6 +224,42 @@ export default async function LoginPage({
           />
         </div>
 
+        <div>
+          <label
+            htmlFor="password"
+            className="mb-2 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy"
+          >
+            Wachtwoord
+          </label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            autoComplete="current-password"
+            placeholder="Alleen voor admin-accounts"
+            className="w-full rounded border border-ink-200 bg-white px-4 py-3 font-mono text-base text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="totp"
+            className="mb-2 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy"
+          >
+            2FA-code
+          </label>
+          <input
+            type="text"
+            id="totp"
+            name="totp"
+            inputMode="text"
+            maxLength={16}
+            autoComplete="one-time-code"
+            placeholder="123 456 of recovery code"
+            className="w-full rounded border border-ink-200 bg-white px-4 py-3 font-mono text-base tracking-wider text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+          />
+        </div>
+
         {errorMsg && (
           <p className="rounded border border-burgundy/30 bg-burgundy/5 px-4 py-2 text-sm text-burgundy">
             {errorMsg}
@@ -182,15 +270,33 @@ export default async function LoginPage({
 
         <button
           type="submit"
+          formAction={passwordLogin}
           className="w-full rounded-full bg-burgundy px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
         >
-          Stuur inloglink
+          Inloggen
+        </button>
+
+        <div className="relative my-4">
+          <hr className="border-ink-200" />
+          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-3 font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
+            of
+          </span>
+        </div>
+
+        <button
+          type="submit"
+          formAction={sendMagicLink}
+          className="w-full rounded-full border border-burgundy/40 bg-white px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy transition-colors hover:bg-burgundy/5"
+        >
+          Stuur eenmalige inloglink
         </button>
       </form>
 
       <p className="mt-8 text-xs leading-relaxed text-ink-500">
-        Onbekende of nog niet geactiveerde adressen ontvangen geen mail —
-        neem contact op met Jezza of Maarten als je geen toegang krijgt.
+        Chefs en klanten gebruiken altijd de eenmalige inloglink. Admin-accounts
+        kunnen inloggen met wachtwoord + 2FA na de eerste setup. Onbekende of
+        nog niet geactiveerde adressen ontvangen geen mail — neem contact op
+        met Jezza of Maarten als je geen toegang krijgt.
       </p>
     </div>
   );

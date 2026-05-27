@@ -80,7 +80,7 @@ async function submit(formData: FormData) {
   const cleaned = raw.replace(/\s+/g, "");
   if (/^\d{6}$/.test(cleaned)) {
     try {
-      const secret = decryptSecret(u.totpSecretEncrypted);
+      const secret = await decryptSecret(u.totpSecretEncrypted);
       ok = verifyCode(secret, cleaned);
     } catch {
       ok = false;

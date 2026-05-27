@@ -20,7 +20,6 @@
  * of a third-party outage.
  */
 
-import { createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
 
 const BCRYPT_ROUNDS = 12;
@@ -48,12 +47,21 @@ export function checkPolicy(password: string): PasswordCheckResult {
  * Check the password against HIBP's k-anonymity API. Returns the breach
  * count (0 = not breached). Fail-open on network errors — log + return 0.
  */
+// Web Crypto API SHA1 — works in both Node and Edge runtimes.
+async function sha1Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const buf = await crypto.subtle.digest("SHA-1", data);
+  const view = new Uint8Array(buf);
+  let out = "";
+  for (let i = 0; i < view.length; i++) {
+    out += view[i].toString(16).padStart(2, "0");
+  }
+  return out.toUpperCase();
+}
+
 export async function checkBreached(password: string): Promise<number> {
   if (!password) return 0;
-  const sha1 = createHash("sha1")
-    .update(password, "utf8")
-    .digest("hex")
-    .toUpperCase();
+  const sha1 = await sha1Hex(password);
   const prefix = sha1.slice(0, 5);
   const suffix = sha1.slice(5);
 

@@ -13,6 +13,7 @@ import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { eq } from "drizzle-orm";
 import NextAuth from "next-auth";
 import type { NextAuthConfig } from "next-auth";
+import Credentials from "next-auth/providers/credentials";
 import { Resend } from "resend";
 
 import { db } from "@/lib/db/client";
@@ -26,6 +27,9 @@ import {
   users,
 } from "@/lib/db/schema";
 import { env } from "@/lib/env";
+import { verifyPassword } from "@/lib/passwords";
+import { verifyAndConsume } from "@/lib/recovery-codes";
+import { decryptSecret, verifyCode } from "@/lib/totp";
 
 import { MagicLinkEmail } from "@/emails/MagicLinkEmail";
 
@@ -61,6 +65,67 @@ export const authConfig: NextAuthConfig = {
   // We re-implement the Resend provider inline so we can use our own
   // React Email template instead of Auth.js's default plain HTML.
   providers: [
+    // PR-S2E — primary login flow for internal staff after wizard:
+    // email + password + TOTP code (or single-use recovery code).
+    Credentials({
+      id: "password-totp",
+      name: "Password + 2FA",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+        totp: { label: "2FA code", type: "text" },
+      },
+      authorize: async (credentials) => {
+        const email = String(credentials?.email ?? "").trim().toLowerCase();
+        const password = String(credentials?.password ?? "");
+        const totpRaw = String(credentials?.totp ?? "").trim();
+
+        if (!email || !password || !totpRaw) return null;
+
+        const dbUser = await loadUserWithRoles(email);
+        if (!dbUser) return null;
+        if (dbUser.status !== "active") return null;
+        if (!dbUser.passwordHash || !dbUser.totpSecretEncrypted) return null;
+
+        // 1. Verify password (bcrypt, constant-time-ish)
+        const pwOk = await verifyPassword(password, dbUser.passwordHash);
+        if (!pwOk) return null;
+
+        // 2. Verify TOTP. Try numeric code first, fall back to recovery code.
+        let totpOk = false;
+        const cleaned = totpRaw.replace(/\s+/g, "");
+        if (/^\d{6}$/.test(cleaned)) {
+          try {
+            const secret = await decryptSecret(dbUser.totpSecretEncrypted);
+            totpOk = verifyCode(secret, cleaned);
+          } catch {
+            totpOk = false;
+          }
+        }
+        if (!totpOk) {
+          // Recovery code path — atomic single-use consume
+          totpOk = await verifyAndConsume(dbUser.id, totpRaw);
+        }
+        if (!totpOk) return null;
+
+        // Audit (best-effort)
+        await db
+          .insert(auditLog)
+          .values({
+            userId: dbUser.id,
+            action: "auth.password_signin",
+            resource: "users",
+            resourceId: dbUser.id,
+          })
+          .catch(() => {});
+
+        return {
+          id: dbUser.id,
+          email: dbUser.email,
+          name: dbUser.name ?? null,
+        };
+      },
+    }),
     {
       id: "resend",
       name: "Resend",

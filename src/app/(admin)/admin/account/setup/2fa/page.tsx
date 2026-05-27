@@ -52,7 +52,7 @@ async function confirm2FA(formData: FormData) {
     redirect("/admin/account/setup/2fa?error=wrong-code");
   }
 
-  const encrypted = encryptSecret(setupSecret);
+  const encrypted = await encryptSecret(setupSecret);
 
   const [current] = await db
     .select({ permissionsVersion: users.permissionsVersion })
