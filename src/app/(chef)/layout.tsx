@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
+
 import { SignOutLink } from "@/app/(admin)/_components/SignOutLink";
+import { ConsentGate } from "@/components/ConsentGate";
 import { NotificationBell } from "@/components/NotificationBell";
+import { hasCurrentConsent, isConsentEnforced, recordConsent } from "@/lib/consent";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata: Metadata = {
@@ -14,12 +19,29 @@ export const metadata: Metadata = {
  * Chef portal layout — mobile-first. Chefs view this on their phone.
  * Simple top nav (no sidebar). Bottom-pinned account section.
  */
+async function acceptChefConsent() {
+  "use server";
+  const session = await requireAuth();
+  const h = await headers();
+  await recordConsent({
+    userId: session.user.id,
+    kind: "chef",
+    ip: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
+    userAgent: h.get("user-agent") ?? undefined,
+  });
+  revalidatePath("/chef");
+}
+
 export default async function ChefLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const session = await requireAuth();
+  const consented = await hasCurrentConsent({
+    userId: session.user.id,
+    kind: "chef",
+  });
 
   const nav = [
     { label: "Dashboard", href: "/chef" },
@@ -70,6 +92,14 @@ export default async function ChefLayout({
       <main className="flex-1">
         <div className="mx-auto max-w-3xl px-4 py-8">{children}</div>
       </main>
+
+      {!consented ? (
+        <ConsentGate
+          enforce={isConsentEnforced()}
+          privacyHref="/privacy-chef"
+          acceptAction={acceptChefConsent}
+        />
+      ) : null}
     </div>
   );
 }

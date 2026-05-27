@@ -1522,3 +1522,111 @@ export const notificationPrefs = pgTable("notification_prefs", {
 
 export type NotificationPrefs = typeof notificationPrefs.$inferSelect;
 export type NewNotificationPrefs = typeof notificationPrefs.$inferInsert;
+
+/* =============================================================================
+ * AVG / GDPR (PR-CHEF-10) — consent_log + privacy_requests + DPA + retention.
+ *
+ * Plain-Dutch UX in front, full audit trail in back. Consent is append-only.
+ * Privacy requests have a 30d AVG max response time auto-set. DPA files
+ * live in R2. retention_policies map entity types to bewaartermijn intervals.
+ * =========================================================================== */
+
+export const privacyRequestTypeEnum = pgEnum("privacy_request_type", [
+  "access",
+  "correction",
+  "deletion",
+  "export",
+]);
+
+export const privacyRequestStatusEnum = pgEnum("privacy_request_status", [
+  "pending",
+  "in_progress",
+  "fulfilled",
+  "rejected",
+  "partially_fulfilled",
+]);
+
+export const consentLog = pgTable(
+  "consent_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Stable key, e.g. 'gegevensgebruik_chef_v1'. */
+    documentKey: text("document_key").notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    ip: text("ip"),
+    userAgent: text("user_agent"),
+  },
+  (t) => ({
+    userIdx: index("consent_log_user_idx").on(t.userId, t.documentKey),
+  }),
+);
+
+export const privacyRequests = pgTable("privacy_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  type: privacyRequestTypeEnum("type").notNull(),
+  status: privacyRequestStatusEnum("status").notNull().default("pending"),
+  reason: text("reason"),
+  /** 30 days from creation (AVG art. 12(3) max). */
+  dueDate: timestamp("due_date", { withTimezone: true }).notNull(),
+  handledBy: text("handled_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  responseFileUrl: text("response_file_url"),
+  decisionNotes: text("decision_notes"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const dataProcessingAgreements = pgTable("data_processing_agreements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "cascade" }),
+  version: text("version").notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  acceptedBy: text("accepted_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  fileUrl: text("file_url"),
+  fileChecksum: text("file_checksum"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const retentionPolicies = pgTable("retention_policies", {
+  entityType: text("entity_type").primaryKey(),
+  /** Postgres interval string, e.g. '7 years'. */
+  retentionPeriod: text("retention_period").notNull(),
+  legalBasis: text("legal_basis").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type ConsentLog = typeof consentLog.$inferSelect;
+export type NewConsentLog = typeof consentLog.$inferInsert;
+export type PrivacyRequest = typeof privacyRequests.$inferSelect;
+export type NewPrivacyRequest = typeof privacyRequests.$inferInsert;
+export type DPA = typeof dataProcessingAgreements.$inferSelect;
+export type NewDPA = typeof dataProcessingAgreements.$inferInsert;
+export type RetentionPolicy = typeof retentionPolicies.$inferSelect;
+export type NewRetentionPolicy = typeof retentionPolicies.$inferInsert;

@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
+
 import { SignOutLink } from "@/app/(admin)/_components/SignOutLink";
+import { ConsentGate } from "@/components/ConsentGate";
 import { NotificationBell } from "@/components/NotificationBell";
+import { hasCurrentConsent, isConsentEnforced, recordConsent } from "@/lib/consent";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata: Metadata = {
@@ -15,12 +20,29 @@ export const metadata: Metadata = {
  * Phase 6 shell: dashboard + upcoming bookings. Phase 6 polish adds
  * request flow + invoices + chef ratings.
  */
+async function acceptClientConsent() {
+  "use server";
+  const session = await requireAuth();
+  const h = await headers();
+  await recordConsent({
+    userId: session.user.id,
+    kind: "client",
+    ip: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
+    userAgent: h.get("user-agent") ?? undefined,
+  });
+  revalidatePath("/client");
+}
+
 export default async function ClientLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const session = await requireAuth();
+  const consented = await hasCurrentConsent({
+    userId: session.user.id,
+    kind: "client",
+  });
 
   const nav = [
     { label: "Dashboard", href: "/client" },
@@ -69,6 +91,14 @@ export default async function ClientLayout({
       <main className="flex-1">
         <div className="mx-auto max-w-4xl px-4 py-8">{children}</div>
       </main>
+
+      {!consented ? (
+        <ConsentGate
+          enforce={isConsentEnforced()}
+          privacyHref="/privacy-klant"
+          acceptAction={acceptClientConsent}
+        />
+      ) : null}
     </div>
   );
 }
