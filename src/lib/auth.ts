@@ -152,6 +152,7 @@ export const authConfig: NextAuthConfig = {
         token.roles = dbUser.roles;
         token.permissionsVersion = dbUser.permissionsVersion;
         token.totpEnabled = Boolean(dbUser.totpEnabled);
+        token.hasPassword = Boolean(dbUser.passwordHash);
         return token;
       }
 
@@ -162,6 +163,7 @@ export const authConfig: NextAuthConfig = {
             permissionsVersion: users.permissionsVersion,
             status: users.status,
             totpEnabled: users.totpEnabled,
+            passwordHash: users.passwordHash,
           })
           .from(users)
           .where(eq(users.id, token.userId))
@@ -175,9 +177,10 @@ export const authConfig: NextAuthConfig = {
         ) {
           return null; // forces re-login
         }
-        // Keep the totp flag fresh on every JWT read so toggling 2FA reflects
-        // without waiting for the next permissions-version bump.
+        // Keep the gate flags fresh on every JWT read so setup-completion
+        // and 2FA toggles reflect without waiting for a permissionsVersion bump.
         token.totpEnabled = Boolean(current.totpEnabled);
+        token.hasPassword = Boolean(current.passwordHash);
       }
 
       // refresh user data periodically
@@ -187,6 +190,7 @@ export const authConfig: NextAuthConfig = {
           token.roles = refreshed.roles;
           token.permissionsVersion = refreshed.permissionsVersion;
           token.totpEnabled = Boolean(refreshed.totpEnabled);
+          token.hasPassword = Boolean(refreshed.passwordHash);
         }
       }
 
@@ -214,6 +218,7 @@ export const authConfig: NextAuthConfig = {
         session.user.permissionsVersion =
           (token.permissionsVersion as number) ?? 1;
         session.user.totpEnabled = Boolean(token.totpEnabled);
+        session.user.hasPassword = Boolean(token.hasPassword);
       }
       return session;
     },

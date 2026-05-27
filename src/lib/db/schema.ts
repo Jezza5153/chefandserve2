@@ -170,6 +170,15 @@ export const users = pgTable(
      */
     seedKey: text("seed_key").unique(),
 
+    /* ----- PR-S2D: password (bcrypt) for steady-state login ---------- */
+    /**
+     * bcrypt hash of the user's password. Null = user hasn't completed
+     * the forced enrollment wizard yet. Internal users without a password
+     * are bounced to /admin/account/setup on every request.
+     */
+    passwordHash: text("password_hash"),
+    passwordSetAt: timestamp("password_set_at", { withTimezone: true }),
+
     /* ----- PR-S2A: TOTP 2FA (internal users only) -------------------- */
     /**
      * AES-256-GCM ciphertext of the TOTP shared secret. Format:

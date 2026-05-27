@@ -47,16 +47,31 @@ export default auth(async (request: NextRequest & {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 2FA gate (PR-S2B) — dark-launched via TOTP_ENFORCE. Only active when:
+  // Setup-wizard gate (PR-S2D) — internal users must complete password +
+  // TOTP before reaching any other admin page. Forced regardless of
+  // TOTP_ENFORCE. /admin/account/setup/* is the wizard itself.
+  if (
+    needsAuth &&
+    request.auth?.user?.kind === "internal" &&
+    !path.startsWith("/admin/account/setup") &&
+    (!request.auth.user.hasPassword || !request.auth.user.totpEnabled)
+  ) {
+    const url = new URL("/admin/account/setup", request.url);
+    return NextResponse.redirect(url);
+  }
+
+  // 2FA verification gate (PR-S2B) — dark-launched via TOTP_ENFORCE. Only
+  // active when:
   //   1. TOTP_ENFORCE=true in env
   //   2. User is internal (kind=internal)
-  //   3. User has totp_enabled=true
+  //   3. User has totp_enabled=true (already enrolled via wizard)
   //   4. No valid cs_2fa_verified cookie for THIS user
   //   5. The current path needs auth (not /verify-2fa itself, not /login)
   if (
     TOTP_ENFORCE &&
     needsAuth &&
     path !== "/verify-2fa" &&
+    !path.startsWith("/admin/account/setup") &&
     request.auth?.user?.kind === "internal" &&
     request.auth.user.totpEnabled === true
   ) {

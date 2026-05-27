@@ -19,6 +19,8 @@ declare module "next-auth" {
       permissionsVersion: number;
       /** PR-S2A/B — middleware reads this to decide whether to gate on /verify-2fa. */
       totpEnabled: boolean;
+      /** PR-S2D — middleware reads this to force the setup wizard until password is set. */
+      hasPassword: boolean;
     };
   }
 }
@@ -32,5 +34,6 @@ declare module "next-auth/jwt" {
     roles?: string[];
     permissionsVersion?: number;
     totpEnabled?: boolean;
+    hasPassword?: boolean;
   }
 }
