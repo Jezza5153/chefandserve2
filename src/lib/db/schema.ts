@@ -1448,6 +1448,60 @@ export type ProfileChangeRequest = typeof profileChangeRequests.$inferSelect;
 export type NewProfileChangeRequest = typeof profileChangeRequests.$inferInsert;
 
 /* =============================================================================
+ * Backup runs + restore drills (PR-CHEF-13) — backup ops record-keeping.
+ *
+ * scripts/backup-neon.sh writes one backup_runs row per backup. Same
+ * for scripts/restore-drill.sh and restore_drills.
+ *
+ * These are intentionally simple tables — no FKs, no enums, just operator
+ * truth. Admin /admin/business/integrations reads them for the "last
+ * backup" widget.
+ * =========================================================================== */
+
+export const backupRuns = pgTable("backup_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  /** 'ok' | 'failed' */
+  status: text("status").notNull(),
+  fileSize: integer("file_size"),
+  /** sha256 of pre-encryption gzip — for integrity verification */
+  checksum: text("checksum"),
+  /** sha256 of the encrypted .age file */
+  encryptedChecksum: text("encrypted_checksum"),
+  /** Absolute path on the Mac Mini, e.g. /Users/jezza/Backups/... */
+  location: text("location"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const restoreDrills = pgTable("restore_drills", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  backupRunId: uuid("backup_run_id").references(() => backupRuns.id, {
+    onDelete: "set null",
+  }),
+  restoredAt: timestamp("restored_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  /** 'local_dev' | 'neon_dev_branch' */
+  target: text("target").notNull(),
+  rowCountSpotCheck: integer("row_count_spot_check"),
+  /** 'ok' | 'failed' | 'data_mismatch' */
+  result: text("result").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type BackupRun = typeof backupRuns.$inferSelect;
+export type NewBackupRun = typeof backupRuns.$inferInsert;
+export type RestoreDrill = typeof restoreDrills.$inferSelect;
+export type NewRestoreDrill = typeof restoreDrills.$inferInsert;
+
+/* =============================================================================
  * Notification preferences (PR-CHEF-6) — per-user opt-out scaffolding.
  *
  * V1: empty table = all events enabled. shouldSendToUser() defaults true.

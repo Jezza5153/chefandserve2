@@ -116,7 +116,7 @@
 | PR-CHEF-10 | AVG consent + privacy requests + retention policies | ⏳ |
 | PR-CHEF-11 | Calendar ICS feeds (chef + klant) | ✅ live (migration 0015 calendar_token · src/lib/calendar/ics.ts · /chef/calendar.ics + /client/calendar.ics public-by-token · /chef/calendar + /client/calendar UI with copy URL + rotate secret) |
 | PR-CHEF-12 | Document verification + expiry + visibility | ✅ live (migration 0016 · clientVisible+verifiedAt/By+expiresAt+status on chef_documents · /api/chef-document/[id] 3-way access · workers/document-expiry.ts · profile doc list with visibility chips) |
-| PR-CHEF-13 | Backup + restore drill + encryption | ⏳ |
+| PR-CHEF-13 | Backup + restore drill + encryption | ✅ live (migration 0017 · backup-neon.sh + restore-drill.sh + backup-install.sh + launchd plist + age-encryption support + 12-week retention · backup_runs + restore_drills tables) |
 | PR-CHEF-14 | Polish: countdown, empty/late states, doc visibility labels | ⏳ |
 | PR-CHEF-15 | Web Push (DEFERRED) | 💤 deferred |
 | PR-CHEF-FUT | Reserved API/webhook schemas (no UI) | 💤 reserved |
