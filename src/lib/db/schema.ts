@@ -1358,3 +1358,56 @@ export const shiftHours = pgTable(
 
 export type ShiftHours = typeof shiftHours.$inferSelect;
 export type NewShiftHours = typeof shiftHours.$inferInsert;
+
+/* =============================================================================
+ * Profile change requests (PR-CHEF-4) — chef requests edits to sensitive fields.
+ *
+ * Chef can edit phone/city/languages/specialties/segments/photo directly.
+ * For rate, vakniveau, name, email — they file a request here and Maarten
+ * approves. Prevents surprise payroll/margin bugs from chef-edited rates.
+ *
+ * Status flow: pending → approved | rejected.
+ * Approval writes the new value to the chefs table + audit + email + outbox.
+ * =========================================================================== */
+
+export const profileChangeStatusEnum = pgEnum("profile_change_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+
+export const profileChangeRequests = pgTable(
+  "profile_change_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    /** Field name on the chefs table, e.g. 'hourlyRateMinCents' */
+    field: text("field").notNull(),
+    /** Snapshot of current value at request time (jsonb so works for any type). */
+    currentValue: jsonb("current_value"),
+    /** What the chef proposes. */
+    proposedValue: jsonb("proposed_value"),
+    /** Free-text justification. */
+    reason: text("reason"),
+    status: profileChangeStatusEnum("status").notNull().default("pending"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decidedBy: text("decided_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    decisionNotes: text("decision_notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    chefIdx: index("profile_change_requests_chef_idx").on(t.chefId, t.status),
+  }),
+);
+
+export type ProfileChangeRequest = typeof profileChangeRequests.$inferSelect;
+export type NewProfileChangeRequest = typeof profileChangeRequests.$inferInsert;
