@@ -725,6 +725,31 @@ npm run build
 - **Phase 9 prep**: pgvector extension live, embedding columns +
   HNSW indexes on chefs/clients/shifts.
 - **Railway workers**: 4 stand-alone scripts ready to deploy — weekly
-  digest, Payingit sync (stub), embedding refresh (stub), error digest.
+  digest, Payingit sync (stub), embedding refresh (now LIVE — drop
+  `OPENAI_API_KEY` on Railway and it backfills), error digest.
+- **R2 file uploads**: chef document table + presigned-PUT flow + admin
+  uploader UI. Graceful no-op when env vars missing. Helper script
+  `scripts/setup-r2.sh` wires the whole thing in 30 seconds once the
+  user creates a bucket-scoped Cloudflare token.
+- **Operational pages**: `/admin/system/health` (component status + fix
+  hints) · `/admin/system/emails` (gallery of every transactional
+  template with sample data) · public `GET /api/health` for monitoring.
+
+### What's left for you (Jezza/Maarten) to wire externally
+
+These are the final external dependencies — the code is ready, the
+infrastructure isn't.
+
+| What | Where | Why blocked | Unblocks |
+|---|---|---|---|
+| **R2 token** | Cloudflare dash → `r2/api-tokens` → "Create API token" scoped to ONLY `chefandserve` bucket. Then `R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... bash scripts/setup-r2.sh` | User action only | Chef document uploads (CVs, photos, certificates) |
+| **Jotform webhook URL** | In each Jotform form → Settings → Integrations → Webhooks → `https://app.chefandserve.nl/api/intake/{chef,client}` | User action only | Real submissions flow into `/admin/business/inbox` |
+| **Railway project** | Railway dash → New project from GitHub → root `workers/` → set env vars (`DATABASE_URL_UNPOOLED`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, recipient emails) → schedule each worker per `workers/README.md` | User action only | Weekly digest, error digest, embedding refresh, Payingit dry-run all run automatically |
+| **OpenAI key** | OpenAI dash → create API key with read access to embeddings only → drop on Railway as `OPENAI_API_KEY` | User action only | `embedding-refresh.ts` switches from OBSERVE to LIVE, backfills all vectors automatically over the next 24h |
+| **Payingit spec** | 30-min call with Payingit support — get their CSV format or SFTP path | User action only | `payingit-sync.ts` switches from dry-run to live push |
+
+After the first two, the entire intake → roster → portal → email loop is
+production-ready. The other three are nice-to-haves that unlock
+automation but aren't blockers for daily operations.
 
 **Questions?** Open an issue or DM Jezza.
