@@ -37,6 +37,7 @@ export type WorkSummary = {
   lastWorkedAt: Date | null;
   topClients: { name: string; count: number }[];
   topSegments: { segment: string; count: number }[];
+  topClientTypes: { clientType: string; count: number }[]; // PR-2B "wat voor klant"
 };
 
 export async function getChefWorkSummary(chefId: string): Promise<WorkSummary> {
@@ -47,6 +48,7 @@ export async function getChefWorkSummary(chefId: string): Promise<WorkSummary> {
     [last],
     topClients,
     topSegments,
+    topClientTypes,
     [rating],
   ] = await Promise.all([
     db
@@ -86,6 +88,15 @@ export async function getChefWorkSummary(chefId: string): Promise<WorkSummary> {
       .orderBy(sql`count(*) desc`)
       .limit(5),
     db
+      .select({ clientType: clients.clientType, count: sql<number>`count(*)::int` })
+      .from(placements)
+      .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+      .innerJoin(clients, eq(clients.id, shifts.clientId))
+      .where(and(eq(placements.chefId, chefId), inArray(placements.status, ["completed", "confirmed"])))
+      .groupBy(clients.clientType)
+      .orderBy(sql`count(*) desc`)
+      .limit(5),
+    db
       .select({
         avg: sql<number | null>`round(avg(${ratings.stars})::numeric, 1)`,
         n: sql<number>`count(*)::int`,
@@ -111,6 +122,9 @@ export async function getChefWorkSummary(chefId: string): Promise<WorkSummary> {
     topSegments: topSegments
       .filter((s) => s.segment != null)
       .map((s) => ({ segment: String(s.segment), count: s.count })),
+    topClientTypes: topClientTypes
+      .filter((t) => t.clientType != null)
+      .map((t) => ({ clientType: String(t.clientType), count: t.count })),
   };
 }
 

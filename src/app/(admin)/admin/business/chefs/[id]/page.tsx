@@ -26,6 +26,7 @@ import {
   getChefRecentShifts,
   getChefWorkSummary,
 } from "@/lib/domain/chef-history";
+import { clientTypeLabel } from "@/lib/domain/client-taxonomy";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import {
   createProfileDataRequest,
@@ -998,7 +999,9 @@ export default async function ChefDetailPage({
           Uren uit goedgekeurde urenstaten · betrouwbaarheid uit plaatsingen · beoordelingen uit klantfeedback.
         </p>
 
-        {(workSummary.topClients.length > 0 || workSummary.topSegments.length > 0) && (
+        {(workSummary.topClients.length > 0 ||
+          workSummary.topSegments.length > 0 ||
+          workSummary.topClientTypes.length > 0) && (
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             {workSummary.topClients.length > 0 && (
               <div className="rounded-lg border border-ink-200 bg-white p-4">
@@ -1020,6 +1023,18 @@ export default async function ChefDetailPage({
                   {workSummary.topSegments.map((s) => (
                     <span key={s.segment} className="rounded-full bg-burgundy/5 px-2 py-0.5 text-xs text-burgundy">
                       {s.segment} · {s.count}×
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {workSummary.topClientTypes.length > 0 && (
+              <div className="rounded-lg border border-ink-200 bg-white p-4">
+                <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Werkt vooral voor</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {workSummary.topClientTypes.map((t) => (
+                    <span key={t.clientType} className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
+                      {clientTypeLabel(t.clientType)} · {t.count}×
                     </span>
                   ))}
                 </div>

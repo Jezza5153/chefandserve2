@@ -1,15 +1,20 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
 import {
   auditLog,
+  chefs,
   clientChangeRequests,
   clientSubmissions,
   clients,
   users,
 } from "@/lib/db/schema";
+import {
+  CLIENT_TAG_OPTIONS,
+  CLIENT_TYPE_OPTIONS,
+} from "@/lib/domain/client-taxonomy";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import {
   activatePortalUser,
@@ -52,6 +57,67 @@ export default async function ClientDetailPage({
     .limit(25);
   const pendingChanges = changeRequests.filter((r) => r.status === "pending");
   const decidedChanges = changeRequests.filter((r) => r.status !== "pending");
+
+  // PR-2B: resolve favorite/blocked chef names for display.
+  const relatedChefIds = [
+    ...(client.favoriteChefIds ?? []),
+    ...(client.blockedChefIds ?? []),
+  ];
+  const relatedChefs = relatedChefIds.length
+    ? await db
+        .select({ id: chefs.id, fullName: chefs.fullName })
+        .from(chefs)
+        .where(inArray(chefs.id, relatedChefIds))
+    : [];
+  const chefNameById = new Map(relatedChefs.map((c) => [c.id, c.fullName]));
+
+  // PR-2B: set client_type + client_tags (the "wat voor klant" signal).
+  async function updateClientType(formData: FormData) {
+    "use server";
+    const session = await requireRole("owner");
+    const clientType = String(formData.get("clientType") ?? "").trim() || null;
+    const clientTags = formData.getAll("clientTags").map(String).filter(Boolean);
+    await db
+      .update(clients)
+      .set({
+        clientType,
+        clientTags: clientTags.length ? clientTags : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(clients.id, id));
+    await db.insert(auditLog).values({
+      userId: session.user.id,
+      action: "clients.update_type",
+      resource: "clients",
+      resourceId: id,
+      after: { clientType, clientTags },
+    });
+    redirect(`/admin/business/clients/${id}`);
+  }
+
+  // PR-2B: remove a chef from the favorite/blocked list (set it on a shift).
+  async function removeClientChef(formData: FormData) {
+    "use server";
+    const session = await requireRole("owner");
+    const chefId = String(formData.get("chefId") ?? "");
+    const kind = String(formData.get("kind") ?? "");
+    if (!chefId) return;
+    const current =
+      (kind === "blocked" ? client!.blockedChefIds : client!.favoriteChefIds) ?? [];
+    const next = current.filter((x) => x !== chefId);
+    await db
+      .update(clients)
+      .set(kind === "blocked" ? { blockedChefIds: next } : { favoriteChefIds: next })
+      .where(eq(clients.id, id));
+    await db.insert(auditLog).values({
+      userId: session.user.id,
+      action: kind === "blocked" ? "clients.unblock_chef" : "clients.unfavorite_chef",
+      resource: "clients",
+      resourceId: id,
+      after: { chefId },
+    });
+    redirect(`/admin/business/clients/${id}`);
+  }
 
   async function doInviteToPortal() {
     "use server";
@@ -376,6 +442,80 @@ export default async function ClientDetailPage({
         </div>
       </form>
 
+      {/* PR-2B: Klanttype + tags + favoriete / geblokkeerde chefs */}
+      <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
+        <h2 className="font-serif text-lg text-ink-900">Klanttype &amp; voorkeuren</h2>
+        <p className="mt-1 text-sm text-ink-700">
+          Bepaalt &quot;wat voor klant&quot; — voedt Chef 360 (&quot;welk klanttype
+          doet deze chef&quot;), de filters en de matching-redenen.
+        </p>
+        <form action={updateClientType} className="mt-4 grid gap-4 md:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
+              Klanttype
+            </span>
+            <select
+              name="clientType"
+              defaultValue={client.clientType ?? ""}
+              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            >
+              <option value="">— kies —</option>
+              {CLIENT_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <fieldset className="md:col-span-2">
+            <legend className="mb-1.5 font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
+              Tags
+            </legend>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              {CLIENT_TAG_OPTIONS.map((t) => (
+                <label key={t.value} className="flex items-center gap-1.5 text-sm text-ink-700">
+                  <input
+                    type="checkbox"
+                    name="clientTags"
+                    value={t.value}
+                    defaultChecked={(client.clientTags ?? []).includes(t.value)}
+                    className="accent-burgundy"
+                  />
+                  {t.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <div className="md:col-span-2 flex justify-end">
+            <button
+              type="submit"
+              className="rounded-full bg-burgundy px-6 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
+            >
+              Opslaan
+            </button>
+          </div>
+        </form>
+
+        <div className="mt-6 grid gap-6 border-t border-ink-100 pt-6 md:grid-cols-2">
+          <ClientChefList
+            tone="favorite"
+            heading="★ Favoriete chefs"
+            chefIds={client.favoriteChefIds ?? []}
+            chefNameById={chefNameById}
+            action={removeClientChef}
+            emptyHint="Nog geen favorieten. Markeer een chef vanaf een shift."
+          />
+          <ClientChefList
+            tone="blocked"
+            heading="⊘ Geblokkeerde chefs"
+            chefIds={client.blockedChefIds ?? []}
+            chefNameById={chefNameById}
+            action={removeClientChef}
+            emptyHint="Geen geblokkeerde chefs. Blokkeer een chef vanaf een shift."
+          />
+        </div>
+      </section>
+
       {/* Portal access */}
       <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
         <div className="flex items-start justify-between gap-4">
@@ -546,7 +686,7 @@ export default async function ClientDetailPage({
           <li>· Plaatsings-geschiedenis (Phase 3)</li>
           <li>· Aankomende shifts (Phase 3)</li>
           <li>· Facturen + betalingsstatus (Phase 5)</li>
-          <li>· Gegeven ratings + chef-voorkeuren</li>
+          <li>· Gegeven ratings</li>
         </ul>
       </div>
     </div>
@@ -554,6 +694,57 @@ export default async function ClientDetailPage({
 }
 
 /* ----- helpers ----- */
+function ClientChefList({
+  tone,
+  heading,
+  chefIds,
+  chefNameById,
+  action,
+  emptyHint,
+}: {
+  tone: "favorite" | "blocked";
+  heading: string;
+  chefIds: string[];
+  chefNameById: Map<string, string>;
+  action: (formData: FormData) => Promise<void>;
+  emptyHint: string;
+}) {
+  const headTone = tone === "favorite" ? "text-emerald-700" : "text-red-700";
+  return (
+    <div>
+      <p className={`font-ui text-[10px] uppercase tracking-[0.2em] ${headTone}`}>
+        {heading}
+      </p>
+      {chefIds.length === 0 ? (
+        <p className="mt-2 text-xs text-ink-500">{emptyHint}</p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {chefIds.map((cid) => (
+            <li key={cid} className="flex items-center justify-between gap-2 text-sm">
+              <Link
+                href={`/admin/business/chefs/${cid}`}
+                className="text-ink-900 hover:text-burgundy hover:underline"
+              >
+                {chefNameById.get(cid) ?? cid}
+              </Link>
+              <form action={action}>
+                <input type="hidden" name="chefId" value={cid} />
+                <input type="hidden" name="kind" value={tone} />
+                <button
+                  type="submit"
+                  className="font-ui text-[10px] uppercase tracking-[0.15em] text-ink-500 hover:text-red-600"
+                >
+                  verwijderen
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 type FieldProps = {
   label: string;
   name: string;

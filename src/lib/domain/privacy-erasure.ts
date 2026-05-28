@@ -91,6 +91,16 @@ export async function previewUserErasure(
       .where(eq(ratings.chefId, subject.chefId));
     if (rts.length > 0)
       willErase.push({ table: "ratings (vrije tekst)", count: rts.length, action: "anonymiseren" });
+
+    // PR-2B: klant favorite/blocked lists that reference this chef.
+    const favBlk = await db
+      .select({ id: clients.id })
+      .from(clients)
+      .where(
+        sql`${subject.chefId} = ANY(${clients.favoriteChefIds}) OR ${subject.chefId} = ANY(${clients.blockedChefIds})`,
+      );
+    if (favBlk.length > 0)
+      willErase.push({ table: "klant favoriet/blokkeer", count: favBlk.length, action: "verwijderen" });
   }
 
   if (subject.clientId) {
@@ -237,6 +247,20 @@ export async function eraseUserData(args: {
 
     // PR-2.1: missing-data requests hold the chef's contact (sent_to) — delete them.
     await db.delete(profileDataRequests).where(eq(profileDataRequests.chefId, subject.chefId));
+
+    // PR-2B: drop this chef from every klant's favorite/blocked list so the id
+    // doesn't linger. Single idempotent statement (neon-http, no tx) — only
+    // touches rows that actually contain the id.
+    await db
+      .update(clients)
+      .set({
+        favoriteChefIds: sql`array_remove(${clients.favoriteChefIds}, ${subject.chefId})`,
+        blockedChefIds: sql`array_remove(${clients.blockedChefIds}, ${subject.chefId})`,
+        updatedAt: new Date(),
+      })
+      .where(
+        sql`${subject.chefId} = ANY(${clients.favoriteChefIds}) OR ${subject.chefId} = ANY(${clients.blockedChefIds})`,
+      );
   }
 
   // ----- klant path -----

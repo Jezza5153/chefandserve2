@@ -145,3 +145,45 @@ export function getChefMatchExplanation(s: CandidateSignals): MatchExplanation {
 
   return { confidence: getMatchConfidenceLabel(s), reasons, warnings, nextCheck };
 }
+
+/**
+ * PR-5 "Waarom niet nr 1?" — deterministic, relative explanation. Given the
+ * top-ranked candidate and another candidate, returns the 1–2 signals that make
+ * the other rank lower. Honest comparison, no AI. Empty when there's no clear
+ * gap (i.e. they're effectively tied on the operator-relevant signals).
+ */
+export function getRankGapReasons(top: CandidateSignals, other: CandidateSignals): string[] {
+  const gap: string[] = [];
+
+  if (top.availability === "available" && other.availability !== "available") {
+    gap.push("nr 1 is beschikbaar");
+  }
+  if (top.isFavorite && !other.isFavorite) gap.push("nr 1 is klant-favoriet");
+
+  const tw = top.workedHereCount ?? 0;
+  const ow = other.workedHereCount ?? 0;
+  if (tw > ow) gap.push(`nr 1 werkte hier vaker (${tw}× vs ${ow}×)`);
+
+  if (
+    typeof top.distanceKm === "number" &&
+    typeof other.distanceKm === "number" &&
+    other.distanceKm > top.distanceKm + 5
+  ) {
+    gap.push(`verder weg dan nr 1 (${other.distanceKm} vs ${top.distanceKm} km)`);
+  }
+
+  const marginRank = { ok: 2, low: 1, negative: 0 } as const;
+  if (
+    top.marginTone &&
+    other.marginTone &&
+    marginRank[other.marginTone] < marginRank[top.marginTone]
+  ) {
+    gap.push("lagere marge dan nr 1");
+  }
+
+  const tm = top.matchScore ?? 0;
+  const om = other.matchScore ?? 0;
+  if (tm > om + 5) gap.push(`lagere match-score (${om} vs ${tm})`);
+
+  return gap.slice(0, 2);
+}

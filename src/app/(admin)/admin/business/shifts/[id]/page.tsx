@@ -28,6 +28,7 @@ import {
   getChefCandidateBadges,
   getChefMatchExplanation,
   getMatchConfidenceLabel,
+  getRankGapReasons,
   getRankScore,
   type CandidateSignals,
 } from "@/lib/domain/staffing-intelligence";
@@ -179,6 +180,10 @@ export default async function ShiftDetailPage({
   const rankedMatches = [...matches].sort(
     (a, b) => getRankScore(signalsFor(b.chef.id, b.score)) - getRankScore(signalsFor(a.chef.id, a.score)),
   );
+  // PR-5: top candidate's signals — drives the "waarom niet nr 1?" comparison.
+  const topSignals = rankedMatches.length
+    ? signalsFor(rankedMatches[0].chef.id, rankedMatches[0].score)
+    : null;
 
   async function toggleClientChef(formData: FormData) {
     "use server";
@@ -636,13 +641,17 @@ export default async function ShiftDetailPage({
             voorstellen zijn uitgesloten.
           </p>
           <ul className="mt-4 space-y-2">
-            {rankedMatches.map((m) => {
+            {rankedMatches.map((m, idx) => {
               const c = chefById.get(m.chef.id);
               const sig = signalsFor(m.chef.id, m.score);
               const conf = getMatchConfidenceLabel(sig);
               const expl = getChefMatchExplanation(sig);
               const badges = getChefCandidateBadges(sig);
               const allWarnings = [...new Set([...m.warnings, ...expl.warnings])];
+              const gapReasons =
+                idx > 0 && topSignals && !sig.isBlocked
+                  ? getRankGapReasons(topSignals, sig)
+                  : [];
               const phoneDigits = c?.phone?.replace(/\D/g, "") ?? "";
               const tm = travelFor(m.chef.id);
               return (
@@ -729,6 +738,12 @@ export default async function ShiftDetailPage({
                         <p className="mt-1.5 text-[11px] text-ink-500">
                           <span className="font-medium text-ink-700">Checken:</span>{" "}
                           {expl.nextCheck.join(" · ")}
+                        </p>
+                      )}
+                      {gapReasons.length > 0 && (
+                        <p className="mt-1 text-[11px] text-ink-500">
+                          <span className="font-medium text-ink-700">Waarom niet nr 1:</span>{" "}
+                          {gapReasons.join(" · ")}
                         </p>
                       )}
                     </div>

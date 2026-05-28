@@ -118,6 +118,32 @@ console.log("\n── PR-3.1 match explanation ──");
   assert("low margin (rate+avail known) → no nextCheck", low.nextCheck.length === 0, low.nextCheck.join(","));
 }
 
+console.log("\n── PR-5 waarom-niet-nr-1 gap ──");
+{
+  const top = {
+    matchScore: 90, availability: "available" as const, isFavorite: true,
+    workedHereCount: 3, distanceKm: 5, marginTone: "ok" as const,
+  };
+  const weak = {
+    matchScore: 70, availability: "unknown" as const, isFavorite: false,
+    workedHereCount: 0, distanceKm: 30, marginTone: "low" as const,
+  };
+  const gap = si.getRankGapReasons(top, weak);
+  assert("gap capped at 2", gap.length <= 2, gap.join(","));
+  assert("gap leads with availability", gap[0] === "nr 1 is beschikbaar", gap.join(","));
+
+  assert("tied candidates → no gap", si.getRankGapReasons(
+    { matchScore: 80, availability: "available" },
+    { matchScore: 80, availability: "available" },
+  ).length === 0);
+
+  const distGap = si.getRankGapReasons({ matchScore: 80, distanceKm: 5 }, { matchScore: 80, distanceKm: 30 });
+  assert("distance gap surfaced", distGap.some((g) => g.startsWith("verder weg dan nr 1")), distGap.join(","));
+
+  const scoreGap = si.getRankGapReasons({ matchScore: 90 }, { matchScore: 70 });
+  assert("match-score gap surfaced", scoreGap.includes("lagere match-score (70 vs 90)"), scoreGap.join(","));
+}
+
 console.log(`\n─────────────────────────────\n  ✓ pass: ${pass}\n  ✗ fail: ${fail}`);
 if (fail > 0) process.exit(1);
 console.log("\nSmoke OK ✓");

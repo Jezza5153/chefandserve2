@@ -104,6 +104,46 @@ function experienceBonus(years: number | null, shiftSegment: string | null): num
   return 0.6;
 }
 
+/* ----- PR-2B: chef preference ↔ shift signal (deterministic) -------- */
+/**
+ * Maps a chef's normalized Jotform preference (PREF_MAP in intake/jotform.ts)
+ * to the structured shift signals it satisfies. Preferences with no structured
+ * counterpart yet (bbq, flexible) are intentionally absent — we never invent a
+ * reason we can't prove from real data.
+ */
+const PREFERENCE_SIGNALS: Record<
+  string,
+  { segments?: string[]; clientTypes?: string[]; clientTags?: string[]; label: string }
+> = {
+  breakfast: { clientTags: ["ontbijt"], label: "ontbijt" },
+  banqueting: { segments: ["banqueting"], clientTags: ["banqueting"], label: "banqueting" },
+  beachclub: { clientTypes: ["beachclub"], label: "beachclub" },
+  early_shifts: { clientTags: ["early_start"], label: "vroege shifts" },
+  hotels: { segments: ["hotel"], clientTypes: ["hotel"], label: "hotels" },
+  restaurants: { clientTypes: ["restaurant"], label: "restaurants" },
+  michelin: { segments: ["michelin"], label: "Michelin" },
+};
+
+function matchedPreferenceLabels(
+  preferences: string[],
+  shift: { segment: string | null; clientType: string | null; clientTags: string[] | null },
+): string[] {
+  const out: string[] = [];
+  for (const pref of preferences) {
+    const sig = PREFERENCE_SIGNALS[pref];
+    if (!sig) continue;
+    const segHit = !!(sig.segments && shift.segment && sig.segments.includes(shift.segment));
+    const typeHit = !!(sig.clientTypes && shift.clientType && sig.clientTypes.includes(shift.clientType));
+    const tagHit = !!(
+      sig.clientTags &&
+      shift.clientTags &&
+      sig.clientTags.some((t) => shift.clientTags!.includes(t))
+    );
+    if (segHit || typeHit || tagHit) out.push(sig.label);
+  }
+  return out;
+}
+
 /**
  * Build the human-readable reasons + warnings for a match. Extracted so both
  * findMatchesForShift (admin scoring) and getMatchReasonsForPlacement (klant
@@ -113,8 +153,19 @@ function experienceBonus(years: number | null, shiftSegment: string | null): num
  * are INTERNAL only — never render them to a klant.
  */
 function buildReasonsAndWarnings(
-  chef: Pick<Chef, "vakniveau" | "yearsExperience" | "city" | "status" | "segments">,
-  shift: { roleNeeded: string; segment: string | null; city: string | null },
+  chef: Pick<
+    Chef,
+    "vakniveau" | "yearsExperience" | "city" | "status" | "segments" | "languages" | "preferences"
+  >,
+  shift: {
+    roleNeeded: string;
+    segment: string | null;
+    city: string | null;
+    minExperience?: number | null;
+    languageRequired?: string | null;
+    clientType?: string | null;
+    clientTags?: string[] | null;
+  },
   v: number,
   s: number,
 ): { reasons: string[]; warnings: string[] } {
@@ -147,6 +198,33 @@ function buildReasonsAndWarnings(
     warnings.push("Nog in onboarding");
   }
 
+  // PR-2B: shift requirements (the other half of the matching brain).
+  if (
+    shift.minExperience != null &&
+    chef.yearsExperience != null &&
+    chef.yearsExperience < shift.minExperience
+  ) {
+    warnings.push(`Onder gevraagde ervaring (${chef.yearsExperience}j < ${shift.minExperience}j)`);
+  }
+  if (shift.languageRequired) {
+    const langs = (chef.languages ?? []).map((l) => l.toLowerCase());
+    const req = shift.languageRequired.toLowerCase();
+    if (langs.some((l) => l.includes(req) || req.includes(l))) {
+      reasons.push(`Spreekt ${shift.languageRequired}`);
+    } else if (langs.length > 0) {
+      warnings.push(`Mist gevraagde taal: ${shift.languageRequired}`);
+    }
+  }
+
+  // PR-2B: chef preference ↔ this shift's segment / klanttype / tags.
+  for (const label of matchedPreferenceLabels(chef.preferences ?? [], {
+    segment: shift.segment,
+    clientType: shift.clientType ?? null,
+    clientTags: shift.clientTags ?? null,
+  })) {
+    reasons.push(`Voorkeur sluit aan: ${label}`);
+  }
+
   return { reasons, warnings };
 }
 
@@ -165,13 +243,20 @@ export async function getMatchReasonsForPlacement(
       chefCity: chefs.city,
       chefStatus: chefs.status,
       chefSegments: chefs.segments,
+      chefLanguages: chefs.languages,
+      chefPreferences: chefs.preferences,
       shiftRole: shifts.roleNeeded,
       shiftSegment: shifts.segment,
       shiftCity: shifts.city,
+      shiftMinExperience: shifts.minExperience,
+      shiftLanguageRequired: shifts.languageRequired,
+      clientType: clients.clientType,
+      clientTags: clients.clientTags,
     })
     .from(placements)
     .innerJoin(chefs, eq(chefs.id, placements.chefId))
     .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .leftJoin(clients, eq(clients.id, shifts.clientId))
     .where(eq(placements.id, placementId))
     .limit(1);
   if (!row) return [];
@@ -185,8 +270,18 @@ export async function getMatchReasonsForPlacement(
       city: row.chefCity,
       status: row.chefStatus,
       segments: row.chefSegments,
+      languages: row.chefLanguages,
+      preferences: row.chefPreferences,
     },
-    { roleNeeded: row.shiftRole, segment: row.shiftSegment, city: row.shiftCity },
+    {
+      roleNeeded: row.shiftRole,
+      segment: row.shiftSegment,
+      city: row.shiftCity,
+      minExperience: row.shiftMinExperience,
+      languageRequired: row.shiftLanguageRequired,
+      clientType: row.clientType,
+      clientTags: row.clientTags,
+    },
     v,
     s,
   );
@@ -226,6 +321,11 @@ export async function findMatchesForShift(
     where: eq(shifts.id, shiftId),
   });
   if (!shift) throw new Error(`Shift ${shiftId} not found`);
+
+  // PR-2B: klanttype + tags feed the preference-match reasons.
+  const matchClient = await db.query.clients.findFirst({
+    where: eq(clients.id, shift.clientId),
+  });
 
   // 1. Active chefs only (not soft-deleted)
   const candidateChefs = await db
@@ -296,7 +396,20 @@ export async function findMatchesForShift(
     const composite = v * 0.5 + s * 0.3 + e * 0.2;
     const score = Math.round(composite * 100);
 
-    const { reasons, warnings } = buildReasonsAndWarnings(chef, shift, v, s);
+    const { reasons, warnings } = buildReasonsAndWarnings(
+      chef,
+      {
+        roleNeeded: shift.roleNeeded,
+        segment: shift.segment,
+        city: shift.city,
+        minExperience: shift.minExperience,
+        languageRequired: shift.languageRequired,
+        clientType: matchClient?.clientType ?? null,
+        clientTags: matchClient?.clientTags ?? null,
+      },
+      v,
+      s,
+    );
 
     results.push({
       chef,
