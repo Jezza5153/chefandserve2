@@ -38,7 +38,14 @@ export type IconName =
   | "clock"
   | "check-circle"
   | "user-round"
-  | "shield-check";
+  | "shield-check"
+  | "mail"
+  | "refresh-cw"
+  | "activity"
+  | "eye"
+  | "sparkles"
+  | "message-circle"
+  | "banknote";
 
 const PATHS: Record<IconName, ReactNode> = {
   dashboard: (
@@ -232,6 +239,39 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       <path d="m9 12 2 2 4-4" />
+    </>
+  ),
+  mail: (
+    <>
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m22 7-10 5L2 7" />
+    </>
+  ),
+  "refresh-cw": (
+    <>
+      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+      <path d="M8 16H3v5" />
+    </>
+  ),
+  activity: <path d="M22 12h-4l-3 9L9 3l-3 9H2" />,
+  eye: (
+    <>
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  sparkles: (
+    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+  ),
+  "message-circle": <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z" />,
+  banknote: (
+    <>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2" />
+      <path d="M6 12h.01" />
+      <path d="M18 12h.01" />
     </>
   ),
 };
