@@ -772,6 +772,16 @@ export const clients = pgTable("clients", {
   /* ----- external IDs ----- */
   payingitClientId: text("payingit_client_id"),
 
+  /* ----- PR-2B: venue type + requirements + chef relationships ----- */
+  /** hotel/restaurant/beachclub/event_venue/caterer/private/corporate/other */
+  clientType: text("client_type"),
+  /** ontbijt/banqueting/fine_dining/large_volume/early_start/solo_shift… */
+  clientTags: text("client_tags").array(),
+  /** chefs this klant prefers (soft boost in ranking). */
+  favoriteChefIds: text("favorite_chef_ids").array(),
+  /** chefs to never send here (HARD exclude in ranking). */
+  blockedChefIds: text("blocked_chef_ids").array(),
+
   /* ----- lifecycle ----- */
   status: clientStatusEnum("status").notNull().default("prospect"),
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
@@ -865,6 +875,19 @@ export const shifts = pgTable("shifts", {
   clientRateCents: integer("client_rate_cents"),
   /** Default chef-paid rate (placements can override). */
   chefRateCents: integer("chef_rate_cents"),
+
+  /* ----- PR-2B: shift requirements (the other half of the matching brain) ----- */
+  dressCode: text("dress_code"),
+  languageRequired: text("language_required"),
+  minExperience: integer("min_experience"),
+  kitchenType: text("kitchen_type"),
+  /** 'solo' | 'team' */
+  soloOrTeam: text("solo_or_team"),
+  /** 'prep' | 'live' | 'buffet' | 'fine_dining' */
+  serviceStyle: text("service_style"),
+  parkingAvailable: boolean("parking_available"),
+  mealIncluded: boolean("meal_included"),
+  startFlexible: boolean("start_flexible"),
 
   /* ----- lifecycle ----- */
   status: shiftStatusEnum("status").notNull().default("request"),

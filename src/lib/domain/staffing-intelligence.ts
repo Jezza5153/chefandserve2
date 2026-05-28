@@ -14,11 +14,15 @@ export type Availability = "available" | "unavailable" | "maybe" | "unknown";
 export type CandidateSignals = {
   matchScore?: number | null; // 0–100 from smart-match
   rateCents?: number | null; // chef hourly rate
-  availability?: Availability; // for the shift date
+  availability?: Availability; // for the shift date (PR-4)
   workedHereCount?: number; // prior placements for this client
   lastContactDays?: number | null; // days since last contact_log
   completeness?: Completeness | null;
-  // PR-3.1: distanceKm, marginCents, isFavorite, isBlocked
+  // PR-3.1 ranking inputs:
+  distanceKm?: number | null;
+  marginTone?: "ok" | "low" | "negative" | null;
+  isFavorite?: boolean;
+  isBlocked?: boolean;
 };
 
 export type BadgeTone = "green" | "amber" | "blue" | "grey" | "red";
@@ -85,4 +89,59 @@ export function getMatchConfidenceLabel(s: CandidateSignals): Confidence {
         ? "profiel onvolledig"
         : null;
   return { label: "midden", reason };
+}
+
+/* ----- PR-3.1: ranking + explanation ------------------------------------- */
+
+/**
+ * Composite rank score (deterministic). Blocked = -1 (excluded). Otherwise the
+ * match score adjusted by the operator-relevant signals: nearby + available +
+ * worked-here + favorite boost; far / unavailable / thin-margin penalty.
+ */
+export function getRankScore(s: CandidateSignals): number {
+  if (s.isBlocked) return -1; // hard exclude
+  let score = s.matchScore ?? 50;
+  if (s.isFavorite) score += 12;
+  if (s.availability === "available") score += 8;
+  else if (s.availability === "unavailable") score -= 25;
+  score += Math.min(s.workedHereCount ?? 0, 3) * 4; // up to +12
+  if (s.marginTone === "low") score -= 8;
+  else if (s.marginTone === "negative") score -= 25;
+  if (typeof s.distanceKm === "number") {
+    if (s.distanceKm > 40) score -= 10;
+    else if (s.distanceKm > 25) score -= 5;
+  }
+  if (s.completeness && !s.completeness.canMatch) score -= 15;
+  return score;
+}
+
+export type MatchExplanation = {
+  confidence: Confidence;
+  reasons: string[]; // why this chef
+  warnings: string[]; // what's risky
+  nextCheck: string[]; // what to verify before sending
+};
+
+/** Decision support — waarom deze chef · wat is onzeker · wat checken. */
+export function getChefMatchExplanation(s: CandidateSignals): MatchExplanation {
+  const reasons: string[] = [];
+  if ((s.matchScore ?? 0) >= 80) reasons.push("sterke match");
+  if (s.isFavorite) reasons.push("klant-favoriet");
+  if ((s.workedHereCount ?? 0) > 0) reasons.push(`eerder hier (${s.workedHereCount}×)`);
+  if (s.availability === "available") reasons.push("beschikbaar");
+  if (typeof s.distanceKm === "number" && s.distanceKm <= 15) reasons.push(`dichtbij (${s.distanceKm} km)`);
+  if (s.marginTone === "ok") reasons.push("gezonde marge");
+
+  const warnings = getChefCandidateWarnings(s);
+  if (s.marginTone === "negative") warnings.push("negatieve marge");
+  else if (s.marginTone === "low") warnings.push("lage marge");
+  if (typeof s.distanceKm === "number" && s.distanceKm > 40) warnings.push(`ver weg (${s.distanceKm} km)`);
+  if (s.isBlocked) warnings.push("door klant geblokkeerd");
+
+  const nextCheck: string[] = [];
+  if (!s.availability || s.availability === "unknown") nextCheck.push("beschikbaarheid bevestigen");
+  if (!(typeof s.rateCents === "number" && s.rateCents > 0)) nextCheck.push("tarief opvragen");
+  if (s.completeness && s.completeness.missingCritical.length > 0) nextCheck.push("profiel aanvullen");
+
+  return { confidence: getMatchConfidenceLabel(s), reasons, warnings, nextCheck };
 }

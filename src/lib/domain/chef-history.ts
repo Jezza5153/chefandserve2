@@ -212,7 +212,7 @@ export async function getChefClientHistory(
   chefId: string,
   clientId: string,
 ): Promise<ChefClientHistory> {
-  const [[hist], [rating]] = await Promise.all([
+  const [[hist], [rating], [client]] = await Promise.all([
     db
       .select({
         completed: sql<number>`count(*) filter (where ${placements.status} = 'completed')::int`,
@@ -225,13 +225,18 @@ export async function getChefClientHistory(
       .select({ avg: sql<number | null>`round(avg(${ratings.stars})::numeric, 1)` })
       .from(ratings)
       .where(and(eq(ratings.chefId, chefId), eq(ratings.clientId, clientId))),
+    db
+      .select({ fav: clients.favoriteChefIds, blk: clients.blockedChefIds })
+      .from(clients)
+      .where(eq(clients.id, clientId))
+      .limit(1),
   ]);
 
   return {
     completedShifts: hist?.completed ?? 0,
     lastWorkedAt: hist?.lastWorkedAt ?? null,
     averageRatingForClient: rating?.avg != null ? Number(rating.avg) : null,
-    isFavorite: false, // PR-2B
-    isBlocked: false, // PR-2B
+    isFavorite: (client?.fav ?? []).includes(chefId), // PR-2B
+    isBlocked: (client?.blk ?? []).includes(chefId), // PR-2B
   };
 }

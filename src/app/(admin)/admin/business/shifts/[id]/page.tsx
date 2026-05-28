@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db/client";
 import {
   auditLog,
+  chefAvailability,
   chefs,
   clients,
   contactLogs,
@@ -25,10 +26,12 @@ import {
 } from "@/lib/domain/travel";
 import {
   getChefCandidateBadges,
-  getChefCandidateWarnings,
+  getChefMatchExplanation,
   getMatchConfidenceLabel,
+  getRankScore,
   type CandidateSignals,
 } from "@/lib/domain/staffing-intelligence";
+import { amsterdamDayKey } from "@/lib/roster-format";
 import { requireRole } from "@/lib/permissions";
 
 export const metadata = { title: "Shift" };
@@ -94,12 +97,38 @@ export default async function ShiftDetailPage({
     : [];
   const workedHereById = new Map(workedHereRows.map((r) => [r.chefId, r.n]));
 
+  // PR-4: availability for THIS shift's Amsterdam day (no row = unknown).
+  const shiftDayKey = amsterdamDayKey(shift.startsAt);
+  const availRows = candidateChefIds.length
+    ? await db
+        .select({ chefId: chefAvailability.chefId, available: chefAvailability.available })
+        .from(chefAvailability)
+        .where(
+          and(
+            inArray(chefAvailability.chefId, candidateChefIds),
+            sql`${chefAvailability.date}::date = ${shiftDayKey}::date`,
+          ),
+        )
+    : [];
+  const availabilityById = new Map(availRows.map((r) => [r.chefId, r.available]));
+  // PR-2B: klant favorite/blocked sets.
+  const favoriteSet = new Set(client?.favoriteChefIds ?? []);
+  const blockedSet = new Set(client?.blockedChefIds ?? []);
+
   function candidateSignals(chefId: string, score: number): CandidateSignals {
     const c = chefById.get(chefId);
+    const availability = availabilityById.has(chefId)
+      ? availabilityById.get(chefId)
+        ? "available"
+        : "unavailable"
+      : "unknown";
     return {
       matchScore: score,
       rateCents: c?.hourlyRateMinCents ?? null,
       workedHereCount: workedHereById.get(chefId) ?? 0,
+      availability,
+      isFavorite: favoriteSet.has(chefId),
+      isBlocked: blockedSet.has(chefId),
       completeness: c
         ? getProfileCompleteness({
             vakniveau: c.vakniveau,
@@ -139,6 +168,48 @@ export default async function ShiftDetailPage({
       travelCents: t.costCents,
     });
     return { t, margin };
+  }
+
+  // PR-3.1: full signal (incl. distance/margin) + rank. Blocked → bottom.
+  function signalsFor(chefId: string, score: number): CandidateSignals {
+    const base = candidateSignals(chefId, score);
+    const tm = travelFor(chefId);
+    return { ...base, distanceKm: tm?.t.km ?? null, marginTone: tm?.margin.tone ?? null };
+  }
+  const rankedMatches = [...matches].sort(
+    (a, b) => getRankScore(signalsFor(b.chef.id, b.score)) - getRankScore(signalsFor(a.chef.id, a.score)),
+  );
+
+  async function toggleClientChef(formData: FormData) {
+    "use server";
+    const session = await requireRole("owner");
+    const chefId = String(formData.get("chefId") ?? "");
+    const kind = String(formData.get("kind") ?? "");
+    const clientId = String(formData.get("clientId") ?? "");
+    if (!chefId || !clientId) return;
+    const [cl] = await db
+      .select({ fav: clients.favoriteChefIds, blk: clients.blockedChefIds })
+      .from(clients)
+      .where(eq(clients.id, clientId))
+      .limit(1);
+    if (!cl) return;
+    const current = (kind === "blocked" ? cl.blk : cl.fav) ?? [];
+    const turningOn = !current.includes(chefId);
+    const next = turningOn
+      ? [...current, chefId]
+      : current.filter((x) => x !== chefId);
+    await db
+      .update(clients)
+      .set(kind === "blocked" ? { blockedChefIds: next } : { favoriteChefIds: next })
+      .where(eq(clients.id, clientId));
+    await db.insert(auditLog).values({
+      userId: session.user.id,
+      action: kind === "blocked" ? "clients.block_chef" : "clients.favorite_chef",
+      resource: "clients",
+      resourceId: clientId,
+      after: { chefId, on: turningOn },
+    });
+    redirect(`/admin/business/shifts/${id}`);
   }
 
   async function logContact(formData: FormData) {
@@ -560,21 +631,27 @@ export default async function ShiftDetailPage({
             Vul deze dienst — beste matches (top {matches.length})
           </h2>
           <p className="mt-2 text-sm text-ink-700">
-            Gerankt op vakniveau × segment × ervaring. Bestaande voorstellen
-            zijn uitgesloten.
+            Gerankt op match × beschikbaarheid × afstand × marge × historie ·
+            klant-favorieten boven, geblokkeerde chefs onderaan. Bestaande
+            voorstellen zijn uitgesloten.
           </p>
           <ul className="mt-4 space-y-2">
-            {matches.map((m) => {
+            {rankedMatches.map((m) => {
               const c = chefById.get(m.chef.id);
-              const sig = candidateSignals(m.chef.id, m.score);
+              const sig = signalsFor(m.chef.id, m.score);
               const conf = getMatchConfidenceLabel(sig);
+              const expl = getChefMatchExplanation(sig);
               const badges = getChefCandidateBadges(sig);
-              const candWarnings = getChefCandidateWarnings(sig);
-              const allWarnings = [...new Set([...m.warnings, ...candWarnings])];
+              const allWarnings = [...new Set([...m.warnings, ...expl.warnings])];
               const phoneDigits = c?.phone?.replace(/\D/g, "") ?? "";
               const tm = travelFor(m.chef.id);
               return (
-                <li key={m.chef.id} className="rounded-lg border border-ink-200 bg-white p-4">
+                <li
+                  key={m.chef.id}
+                  className={`rounded-lg border bg-white p-4 ${
+                    sig.isBlocked ? "border-red-300 bg-red-50/40" : "border-ink-200"
+                  }`}
+                >
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -591,6 +668,16 @@ export default async function ShiftDetailPage({
                           {conf.label}
                           {conf.reason ? ` · ${conf.reason}` : ""}
                         </span>
+                        {sig.isFavorite && (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-ui text-[10px] font-medium uppercase tracking-wider text-emerald-700">
+                            ★ favoriet
+                          </span>
+                        )}
+                        {sig.isBlocked && (
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 font-ui text-[10px] font-medium uppercase tracking-wider text-red-700">
+                            ⊘ geblokkeerd
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 text-xs text-ink-500">
                         {m.chef.vakniveau ?? "—"} · {m.chef.city ?? "—"}
@@ -638,6 +725,12 @@ export default async function ShiftDetailPage({
                           ))}
                         </ul>
                       )}
+                      {expl.nextCheck.length > 0 && (
+                        <p className="mt-1.5 text-[11px] text-ink-500">
+                          <span className="font-medium text-ink-700">Checken:</span>{" "}
+                          {expl.nextCheck.join(" · ")}
+                        </p>
+                      )}
                     </div>
                     <form action={propose}>
                       <input type="hidden" name="chefId" value={m.chef.id} />
@@ -673,6 +766,39 @@ export default async function ShiftDetailPage({
                         Log
                       </button>
                     </form>
+                    {/* PR-2B: klant-favoriet / blokkeer toggle */}
+                    <div className="ml-auto flex items-center gap-1.5">
+                      <form action={toggleClientChef}>
+                        <input type="hidden" name="chefId" value={m.chef.id} />
+                        <input type="hidden" name="clientId" value={shift.clientId} />
+                        <input type="hidden" name="kind" value="favorite" />
+                        <button
+                          type="submit"
+                          className={`rounded-full border px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] ${
+                            sig.isFavorite
+                              ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                              : "border-ink-200 bg-white text-ink-700 hover:border-emerald-300 hover:text-emerald-700"
+                          }`}
+                        >
+                          {sig.isFavorite ? "★ favoriet" : "☆ favoriet"}
+                        </button>
+                      </form>
+                      <form action={toggleClientChef}>
+                        <input type="hidden" name="chefId" value={m.chef.id} />
+                        <input type="hidden" name="clientId" value={shift.clientId} />
+                        <input type="hidden" name="kind" value="blocked" />
+                        <button
+                          type="submit"
+                          className={`rounded-full border px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] ${
+                            sig.isBlocked
+                              ? "border-red-300 bg-red-50 text-red-700"
+                              : "border-ink-200 bg-white text-ink-700 hover:border-red-300 hover:text-red-700"
+                          }`}
+                        >
+                          {sig.isBlocked ? "⊘ geblokkeerd" : "⊘ blokkeer"}
+                        </button>
+                      </form>
+                    </div>
                   </div>
                 </li>
               );
