@@ -18,12 +18,38 @@ type FilterStatus =
 export default async function ChefsListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: FilterStatus; q?: string }>;
+  searchParams: Promise<{
+    status?: FilterStatus;
+    q?: string;
+    transport?: string;
+    pref?: string;
+    employment?: string;
+    data?: string;
+  }>;
 }) {
   await requireRole("owner");
   const params = await searchParams;
   const status: FilterStatus = params.status ?? "active";
   const q = params.q?.trim() ?? "";
+  const transport = params.transport ?? "";
+  const pref = params.pref ?? "";
+  const employment = params.employment ?? "";
+  const dataFilter = params.data ?? "";
+
+  // PR-2.1: preserve every active filter across pill clicks.
+  const cur = { status, q, transport, pref, employment, data: dataFilter };
+  const toHref = (over: Partial<typeof cur>): string => {
+    const m = { ...cur, ...over };
+    const sp = new URLSearchParams();
+    if (m.status !== "active") sp.set("status", m.status);
+    if (m.q) sp.set("q", m.q);
+    if (m.transport) sp.set("transport", m.transport);
+    if (m.pref) sp.set("pref", m.pref);
+    if (m.employment) sp.set("employment", m.employment);
+    if (m.data) sp.set("data", m.data);
+    const s = sp.toString();
+    return `/admin/business/chefs${s ? `?${s}` : ""}`;
+  };
 
   // Build WHERE
   const whereParts = [isNull(chefs.deletedAt)];
@@ -37,6 +63,10 @@ export default async function ChefsListPage({
       )!,
     );
   }
+  if (transport) whereParts.push(eq(chefs.transportMode, transport as "car" | "motorbike" | "ebike" | "none"));
+  if (pref) whereParts.push(sql`${pref} = ANY(${chefs.preferences})`);
+  if (employment) whereParts.push(eq(chefs.employmentType, employment as "payroll" | "zzp" | "both"));
+  if (dataFilter === "incomplete") whereParts.push(or(isNull(chefs.postcode), isNull(chefs.transportMode))!);
 
   const rows = await db
     .select({
@@ -50,6 +80,9 @@ export default async function ChefsListPage({
       yearsExperience: chefs.yearsExperience,
       status: chefs.status,
       joinedAt: chefs.joinedAt,
+      transportMode: chefs.transportMode,
+      preferences: chefs.preferences,
+      postcode: chefs.postcode,
     })
     .from(chefs)
     .where(and(...whereParts))
@@ -95,7 +128,7 @@ export default async function ChefsListPage({
               key={s}
               label={`${statusLabel(s)} (${countByStatus(s)})`}
               active={status === s}
-              href={qs({ status: s, q })}
+              href={toHref({ status: s })}
             />
           ),
         )}
@@ -122,6 +155,35 @@ export default async function ChefsListPage({
         </form>
       </div>
 
+      {/* PR-2.1: smart views */}
+      <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-ink-100 pt-3">
+        <span className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Snelweergaven</span>
+        <FilterPill
+          label="Ontbijt + auto"
+          active={pref === "breakfast" && transport === "car"}
+          href={
+            pref === "breakfast" && transport === "car"
+              ? toHref({ pref: "", transport: "" })
+              : toHref({ pref: "breakfast", transport: "car" })
+          }
+        />
+        <FilterPill label="Mist profieldata" active={dataFilter === "incomplete"} href={toHref({ data: dataFilter === "incomplete" ? "" : "incomplete" })} />
+        <FilterPill label="ZZP" active={employment === "zzp"} href={toHref({ employment: employment === "zzp" ? "" : "zzp" })} />
+        <FilterPill label="Payroll" active={employment === "payroll"} href={toHref({ employment: employment === "payroll" ? "" : "payroll" })} />
+      </div>
+
+      {/* PR-2.1: verfijn — vervoer + voorkeur */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <span className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Vervoer</span>
+        {(["car", "motorbike", "ebike", "none"] as const).map((tt) => (
+          <FilterPill key={tt} label={TRANSPORT_FILTER_LABELS[tt]} active={transport === tt} href={toHref({ transport: transport === tt ? "" : tt })} />
+        ))}
+        <span className="ml-2 font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Voorkeur</span>
+        {(["breakfast", "bbq", "hotels", "banqueting", "michelin"] as const).map((pp) => (
+          <FilterPill key={pp} label={PREF_FILTER_LABELS[pp]} active={pref === pp} href={toHref({ pref: pref === pp ? "" : pp })} />
+        ))}
+      </div>
+
       {rows.length === 0 ? (
         <div className="mt-10 rounded-lg border border-ink-200 bg-white p-10 text-center">
           <p className="font-serif text-xl text-ink-900">Geen chefs gevonden</p>
@@ -141,6 +203,7 @@ export default async function ChefsListPage({
                 <Th>Naam</Th>
                 <Th>Vakniveau</Th>
                 <Th>Stad</Th>
+                <Th>Vervoer / voorkeur</Th>
                 <Th>Ervaring</Th>
                 <Th>Contact</Th>
                 <Th>Status</Th>
@@ -165,6 +228,15 @@ export default async function ChefsListPage({
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-700">
                     {r.city ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-ink-700">
+                    {r.transportMode ? TRANSPORT_FILTER_LABELS[r.transportMode] : "—"}
+                    {(r.preferences ?? []).length > 0
+                      ? ` · ${(r.preferences ?? [])
+                          .slice(0, 2)
+                          .map((p) => PREF_FILTER_LABELS[p as keyof typeof PREF_FILTER_LABELS] ?? p)
+                          .join(", ")}`
+                      : ""}
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-700">
                     {r.yearsExperience ? `${r.yearsExperience}j` : "—"}
@@ -247,10 +319,16 @@ function statusLabel(s: FilterStatus): string {
   );
 }
 
-function qs({ status, q }: { status: FilterStatus; q: string }) {
-  const sp = new URLSearchParams();
-  if (status !== "active") sp.set("status", status);
-  if (q) sp.set("q", q);
-  const s = sp.toString();
-  return `/admin/business/chefs${s ? `?${s}` : ""}`;
-}
+const TRANSPORT_FILTER_LABELS: Record<string, string> = {
+  car: "Auto",
+  motorbike: "Motor",
+  ebike: "E-bike",
+  none: "OV/geen",
+};
+const PREF_FILTER_LABELS: Record<string, string> = {
+  breakfast: "Ontbijt",
+  bbq: "BBQ",
+  hotels: "Hotels",
+  banqueting: "Banqueting",
+  michelin: "Michelin",
+};

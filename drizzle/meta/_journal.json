@@ -211,6 +211,13 @@
       "when": 1779991761084,
       "tag": "0029_shift_geo",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1779996039271,
+      "tag": "0030_profile_data_requests",
+      "breakpoints": true
     }
   ]
 }

@@ -170,7 +170,8 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | PR-1.6 | Chef 360 read model + work-history/feedback panels | ✅ live (`domain/chef-history.ts` getChefWorkSummary/FeedbackSummary/RecentShifts/**getChefClientHistory** (canonical "worked here" — PR-3.1 reuses) · chef detail Chef 360 section: snapshot (uren/diensten/rating/laatst) + reliability counts + topClients/topSegments + "Wat klanten zeggen" feedback + recente diensten · HARDENED: hours only from admin_approved/exported · smoke-chef-history.mts 16/16) |
 | PR-2 | Rich chef intake from Jotform | ✅ live (migr 0028 · chefs + chef_submissions get street/house_number/postcode/lat/lng + transport_mode(car/motorbike/ebike/none) + preferences[] + employment_type(payroll/zzp/both) + applying_as(chef/front_of_house) · `intake/jotform.ts` parses them from the live form · `conversions.ts` carries to chefs · chef detail "Profiel & voorkeuren" chips + completeness% · AVG: erase nulls address/geo, export Full · matching soft-reason folded into PR-3.1 · smoke-chef-intake.mts 15/15) |
 | PR-3 | Travel-cost + margin engine (free, PDOK) | ✅ live (migr 0029 shifts lat/lng · `domain/geo.ts` keyless PDOK geocode + haversine · `domain/travel.ts` estimateTravel (×1.3 road · per-km car .23/motor .21/ebike .05/OV .18) + estimateMargin (revenue−chef−reis, tone ok/low/negatief) · shift-detail candidate chip "≈ €X reis · Y km · {basis}" + marge · `scripts/geocode-backfill.mts` (chefs postcode + shifts city → coords) · smoke-travel.mts 17/17. NB: chips light up once geocode-backfill runs / chefs have postcodes) |
-| PR-2.1·2B·3.1·4·5 | filters+missing-data · client requirements · ranking · availability · explanation | ⏳ (see plan; built out of strict order — PR-3 was unblocked + flagship) |
+| PR-2.1 | Chef filters + missing-data workflow | ✅ live (migr 0030 `profile_data_requests` · chefs list filters: vervoer/voorkeur/employment/mist-data + smart views "Ontbijt+auto"/"Mist profieldata"/ZZP/Payroll + Vervoer-voorkeur kolom · `domain/profile-data-requests.ts` (createProfileDataRequest → email via ProfileDataRequestEmail + contact_logs + row · markCompletedByEmail closes loop on intake) · chef detail "Vraag ontbrekende gegevens" button + request history · AVG erase deletes requests · smoke-profile-requests.mts 11/11) |
+| PR-2B·3.1·4·5 | client requirements + type tags · ranking · availability · explanation | ⏳ (see plan; intake-handler markCompletedByEmail hook still TODO) |
 
 > Cockpit LOCKED: visual language red=actie-nu·amber=risico/onbekend·green=klaar·blue=wacht·grey=afgerond·purple=AI(PR-5) · drill-down layers roster→shift→chef-drawer→full-profile · intelligence deterministic (no AI until PR-5) · don't fake structured filters from rawPayload (structure first, PR-2).
 
@@ -247,6 +248,7 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | 0027_user_settings.sql | user_settings (user_id pk · prefs jsonb) — per-employee cockpit settings hub (Cockpit PR-1.7) | applied (May 28) |
 | 0028_chef_intake_rich.sql | chefs + chef_submissions: address (street/house_number/postcode/lat/lng) + transport_mode/preferences[]/employment_type/applying_as enums (Cockpit PR-2) | applied (May 28) |
 | 0029_shift_geo.sql | shifts latitude/longitude (PDOK geocoded) for travel-cost (Cockpit PR-3) | applied (May 28) |
+| 0030_profile_data_requests.sql | profile_data_requests (chef · type/fields/channel/status · sent/completed) — missing-data workflow (Cockpit PR-2.1) | applied (May 28) |
 
 ---
 

@@ -29,6 +29,7 @@ import {
   notifications,
   privacyErasureTombstones,
   privacyRequests,
+  profileDataRequests,
   ratings,
   users,
 } from "@/lib/db/schema";
@@ -233,6 +234,9 @@ export async function eraseUserData(args: {
       .update(ratings)
       .set({ comment: null })
       .where(eq(ratings.chefId, subject.chefId));
+
+    // PR-2.1: missing-data requests hold the chef's contact (sent_to) — delete them.
+    await db.delete(profileDataRequests).where(eq(profileDataRequests.chefId, subject.chefId));
   }
 
   // ----- klant path -----

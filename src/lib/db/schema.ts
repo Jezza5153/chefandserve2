@@ -1901,6 +1901,51 @@ export type UserSettings = typeof userSettings.$inferSelect;
 export type NewUserSettings = typeof userSettings.$inferInsert;
 
 /* =============================================================================
+ * Profile-data requests (Cockpit PR-2.1) — the "vraag ontbrekende gegevens"
+ * workflow. When a chef profile is incomplete (no postcode/transport/voorkeuren),
+ * an admin one-click sends a form/request and the cockpit tracks it: who got
+ * which form, which fields, sent vs completed vs no-reply. Text columns (not
+ * enums) mirror contact_logs' flexible style.
+ * =========================================================================== */
+
+export const profileDataRequests = pgTable(
+  "profile_data_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    /** 'profile_update' | 'availability' | 'documents' */
+    requestType: text("request_type").notNull().default("profile_update"),
+    /** Which fields we asked for (postcode, transport, preferences, …). */
+    requestedFields: text("requested_fields").array(),
+    /** 'email' | 'whatsapp' | 'phone' */
+    channel: text("channel").notNull().default("email"),
+    /** 'draft' | 'sent' | 'completed' | 'expired' | 'failed' */
+    status: text("status").notNull().default("draft"),
+    sentTo: text("sent_to"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    messageTemplateKey: text("message_template_key"),
+    /** Jotform submission that completed this request (matched by email). */
+    jotformSubmissionId: text("jotform_submission_id"),
+    contactLogId: uuid("contact_log_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    chefIdx: index("profile_data_requests_chef_idx").on(t.chefId, t.status),
+  }),
+);
+
+export type ProfileDataRequest = typeof profileDataRequests.$inferSelect;
+export type NewProfileDataRequest = typeof profileDataRequests.$inferInsert;
+
+/* =============================================================================
  * AVG / GDPR (PR-CHEF-10) — consent_log + privacy_requests + DPA + retention.
  *
  * Plain-Dutch UX in front, full audit trail in back. Consent is append-only.

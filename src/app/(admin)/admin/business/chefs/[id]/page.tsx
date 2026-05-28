@@ -27,6 +27,10 @@ import {
   getChefWorkSummary,
 } from "@/lib/domain/chef-history";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
+import {
+  createProfileDataRequest,
+  listProfileDataRequests,
+} from "@/lib/domain/profile-data-requests";
 import { getChefAverageForAdmin } from "@/lib/domain/ratings";
 import { RATING_TAG_LABELS, type RatingTag } from "@/lib/rating-tags";
 import { sendEmail } from "@/lib/email";
@@ -53,6 +57,9 @@ const PREF_LABELS: Record<string, string> = {
   bbq: "BBQ", breakfast: "Ontbijt", banqueting: "Banqueting", beachclub: "Beachclub",
   early_shifts: "Vroege diensten", hotels: "Hotels", restaurants: "Restaurants",
   michelin: "Michelin", flexible: "Flexibel",
+};
+const REQ_STATUS_LABELS: Record<string, string> = {
+  draft: "concept", sent: "verzonden", completed: "ingevuld", expired: "verlopen", failed: "mislukt",
 };
 
 const VAKNIVEAU_OPTIONS = [
@@ -143,6 +150,21 @@ export default async function ChefDetailPage({
     transportMode: chef.transportMode,
     preferences: chef.preferences,
   });
+
+  // PR-2.1: missing-data request history + send-form action.
+  const dataRequests = await listProfileDataRequests(id);
+
+  async function doRequestData(formData: FormData) {
+    "use server";
+    const session = await requireRole("owner");
+    const fields = String(formData.get("fields") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const channel = String(formData.get("channel") ?? "email") as "email" | "whatsapp" | "phone";
+    await createProfileDataRequest({ chefId: id, requestedFields: fields, channel, createdBy: session.user.id });
+    redirect(`/admin/business/chefs/${id}`);
+  }
 
   // Documents (with fresh presigned download URLs)
   const documents = await listChefDocuments(chef.id);
@@ -906,6 +928,45 @@ export default async function ChefDetailPage({
           )}
           {completeness.missingCritical.length > 0 && (
             <p className="mt-1 text-[11px] text-amber-700">Mist: {completeness.missingCritical.join(", ")}</p>
+          )}
+          {(completeness.missingCritical.length > 0 || completeness.score < 80) && (
+            <form action={doRequestData} className="mt-3">
+              <input
+                type="hidden"
+                name="fields"
+                value={[...completeness.missingCritical, ...completeness.missingNiceToHave].join(",")}
+              />
+              <button
+                type="submit"
+                className="rounded-full border border-burgundy/40 bg-white px-4 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy hover:bg-burgundy/5"
+              >
+                Vraag ontbrekende gegevens (e-mail)
+              </button>
+            </form>
+          )}
+          {dataRequests.length > 0 && (
+            <div className="mt-3 border-t border-ink-100 pt-2">
+              <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Verzoeken</p>
+              <ul className="mt-1 space-y-0.5 text-[11px] text-ink-700">
+                {dataRequests.map((rq) => (
+                  <li key={rq.id}>
+                    {rq.requestType} · {rq.channel} ·{" "}
+                    <span
+                      className={
+                        rq.status === "completed"
+                          ? "text-emerald-700"
+                          : rq.status === "failed"
+                            ? "text-red-700"
+                            : "text-ink-500"
+                      }
+                    >
+                      {REQ_STATUS_LABELS[rq.status] ?? rq.status}
+                    </span>
+                    {rq.sentAt ? ` · ${fmtNlDate(rq.sentAt)}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
 
