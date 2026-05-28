@@ -134,7 +134,7 @@
 | PR-KLANT-1 | Profile editing (sectioned, paymentTerms→request) | ✅ live (migration 0021 · /client/profile sectioned: Contactpersoon · Shiftlocatie · Facturatie · request-change · client_change_requests table · admin Wijzigingsverzoeken tab · BillingEmailChangedKlantEmail to OLD address · recipientsForClient outcome email) |
 | PR-KLANT-2 | Requests list + cancel + change/cancel for existing shifts | ✅ live (migration 0022 · /client/requests list + retract · shift hub change/cancel modals · client_shift_change_requests + one-open-per-shift-per-kind unique index · submission_status cancelled_by_client · admin inbox decision queue · ClientChangeRequestAdminEmail + ClientChangeRequestOutcomeKlantEmail) |
 | PR-KLANT-3 | Chef preview + structured comments + email | ✅ live (no schema · hub proposed-chef card + "Waarom voorgesteld?" reasons via getMatchReasonsForPlacement · ChefFeedbackForm → placement_comments client_visible (NEVER notes) · admin shift-detail comment thread + visibility-scoped reply · proposePlacement adds ChefProposedKlantEmail + chef_proposed notification · klant comment → admin email) |
-| PR-KLANT-4 | Recurring templates + exceptions + overnight + preview | ⏳ (migration 0023) |
+| PR-KLANT-4 | Recurring templates + exceptions + overnight + preview | ✅ live (migration 0023 · shift_templates + shift_template_exceptions · shifts.source_template_id/date + idempotency index · generate-recurring-shifts worker (Europe/Amsterdam, overnight ends_next_day, ON CONFLICT partial-index) · admin templates list/new/[id] + live preview-before-save + ExceptionsManager + activate toggle · /client/templates friendly view + change-request) |
 | PR-KLANT-5 | Rating loop + tags + N≥5 rule + email | ⏳ (migration 0024) |
 | PR-KLANT-DOCS | CLAUDE.md + WORKFLOW link-complete + MEMORY resume-header | ⏳ (runs last) |
 
@@ -162,7 +162,7 @@
 
 **Shifts/placements**: `shifts` · `placements`
 
-**Klant phase (live)**: `placement_comments` (visibility-scoped, PR-KLANT-0) · `client_contacts` (routing seam, PR-KLANT-0) · `client_change_requests` (PR-KLANT-1) · `client_shift_change_requests` (PR-KLANT-2, one-open-per-shift-per-kind) · `clients.shiftAddress`/`shiftArrivalNotes`/`billingAddress` (PR-KLANT-0) · `client_submissions.cancelled_by_client*` (PR-KLANT-2)
+**Klant phase (live)**: `placement_comments` (visibility-scoped, PR-KLANT-0) · `client_contacts` (routing seam, PR-KLANT-0) · `client_change_requests` (PR-KLANT-1) · `client_shift_change_requests` (PR-KLANT-2, one-open-per-shift-per-kind) · `shift_templates` + `shift_template_exceptions` (PR-KLANT-4) · `clients.shiftAddress`/`shiftArrivalNotes`/`billingAddress` (PR-KLANT-0) · `client_submissions.cancelled_by_client*` (PR-KLANT-2) · `shifts.source_template_id`/`source_template_date` (PR-KLANT-4)
 
 ### Tables (planned per active plan)
 
@@ -204,6 +204,7 @@
 | 0020_klant_foundations.sql | placement_comments + client_contacts + clients address split (PR-KLANT-0) | applied (May 28) |
 | 0021_client_change_requests.sql | client_change_requests + client_change_status enum (PR-KLANT-1) | applied (May 28) |
 | 0022_client_change_cancel.sql | client_shift_change_requests + 2 enums + submission_status 'cancelled_by_client' + client_submissions cancel cols (PR-KLANT-2) | applied (May 28) |
+| 0023_shift_templates.sql | shift_templates + shift_template_exceptions + shifts.source_template_id/date + idempotency index (PR-KLANT-4) | applied (May 28) |
 
 ---
 
@@ -259,6 +260,9 @@
 | Hours reminders | `workers/hours-reminders.ts` | daily | PLAN: PR-CHEF-1 |
 | Document expiry | `workers/document-expiry.ts` | daily | PLAN: PR-CHEF-12 |
 | Payroll export | `workers/payroll-export.ts` | manual | PLAN: PR-CHEF-7 |
+| Generate recurring shifts | `workers/generate-recurring-shifts.ts` | daily 04:00 Amsterdam | ✅ live (registered in supervisor JOBS, PR-KLANT-4) |
+
+> ⚠️ Scheduling note: `supervisor.ts` JOBS currently registers weekly-digest, error-digest, embedding-refresh, payingit-sync, generate-recurring-shifts. `complete-placements` + `document-expiry` are NOT yet in JOBS (flagged as a follow-up task) — they exist but aren't fired by the supervisor cron.
 
 ---
 

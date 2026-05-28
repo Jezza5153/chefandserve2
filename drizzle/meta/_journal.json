@@ -162,6 +162,13 @@
       "when": 1779959705746,
       "tag": "0022_client_change_cancel",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1779961089248,
+      "tag": "0023_shift_templates",
+      "breakpoints": true
     }
   ]
 }

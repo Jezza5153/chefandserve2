@@ -349,6 +349,46 @@ klanten is deferred (needs chef-photo API authz for clientVisible+verified).
 Client component: `ChefFeedbackForm`. Email: `ChefProposedKlantEmail`.
 AI playbook: `docs/ai/workflow-playbooks/chef-preview-comment.md`.
 
+## 1.13 — Recurring shift templates (PR-KLANT-4, migration 0023)
+
+Admin defines a weekly pattern; a daily worker materializes real shifts.
+Overnight (17:00–01:00) + DST handled in Postgres via AT TIME ZONE. Generated
+shifts are independent — editing a template never rewrites existing shifts.
+
+```
+ADMIN /admin/business/templates/new → createTemplate()
+   INSERT shift_templates (day_of_week [Postgres DOW 0=Sun], starts/ends time,
+     ends_next_day, headcount, rates, generate_horizon_days)
+   live preview-before-save (TemplateForm client component, no round-trip)
+   AUDIT shift_templates.created
+   ↓
+WORKER workers/generate-recurring-shifts.ts (daily 04:00 Amsterdam, in supervisor JOBS)
+   for each active template not generated in 6h:
+     INSERT shifts SELECT generate_series(today, today+horizon) filtered by DOW,
+       minus shift_template_exceptions, startsAt/endsAt via
+       AT TIME ZONE 'Europe/Amsterdam' (+1 day when ends_next_day OR end<=start),
+       location ← clients.shift_address (snapshot), status='open'
+     ON CONFLICT (source_template_id, source_template_date)
+       WHERE source_template_id IS NOT NULL DO NOTHING   ← partial-index match!
+   UPDATE last_generated_at ; AUDIT shift_templates.generated
+   ↓
+ADMIN /admin/business/templates/[id]:
+   addException / removeException (skip dates) · toggleActive (pause/resume)
+   shows next dates AND exceptions side-by-side
+   ↓
+KLANT /client/templates: friendly weekly view + requestTemplateChange()
+   → client_change_requests field='template:<id>' (admin sees in same tab)
+```
+
+Pure helpers: `src/lib/shift-template-format.ts` (previewDates, formatPattern,
+formatTimeRange, durationHours — used by both admin preview + klant view).
+Client components: `TemplateForm` · `ExceptionsManager`.
+AI playbook: `docs/ai/workflow-playbooks/recurring-shift-template-change.md`.
+
+> **Gotcha (caught by smoke):** a PARTIAL unique index requires the matching
+> predicate in `ON CONFLICT … WHERE …` or Postgres errors 42P10. Both the
+> worker and `scripts/smoke-klant-templates.mjs` include it.
+
 ---
 
 # Part 2 — Planned workflows (per active plan)
@@ -599,6 +639,9 @@ CRON workers/document-expiry.ts (daily):
 | `decideShiftRequest` | `(admin)/admin/business/inbox/page.tsx` | requireRole(owner) | atomic decide client_shift_change_requests · klant outcome email + notification |
 | `sendChefComment` | `(client)/client/shifts/[shiftId]/page.tsx` | requireAuth + own shift | addPlacementComment(client/client_visible) · admin email |
 | `replyComment` | `(admin)/admin/business/shifts/[id]/page.tsx` | requireRole(owner) | addPlacementComment(admin, visibility selectable) |
+| `createTemplate` | `(admin)/admin/business/templates/new/page.tsx` | requireRole(owner) | INSERT shift_templates · audit |
+| `addException` / `removeException` / `toggleActive` | `(admin)/admin/business/templates/[id]/page.tsx` | requireRole(owner) | mutate shift_template_exceptions / shift_templates.active · audit |
+| `requestTemplateChange` | `(client)/client/templates/page.tsx` | requireAuth + own template | INSERT client_change_requests field='template:<id>' · admin email |
 
 ### Planned (per active plan)
 
@@ -663,6 +706,7 @@ CRON workers/document-expiry.ts (daily):
 | `workers/payingit-sync.ts` | TBD | (stub) Payroll API call | placements, hours | external |
 | `workers/retention.ts` | (stub) | AVG retention purging | * | DELETE per retention_policies |
 | `workers/supervisor.ts` | hourly | Health checks | * | error_log |
+| `workers/generate-recurring-shifts.ts` | daily 04:00 Amsterdam (in supervisor JOBS) | Materialize recurring-template shifts (overnight-aware, idempotent) | shift_templates, shift_template_exceptions, clients | shifts |
 | `workers/complete-placements.ts` (PLANNED) | 30 min | Flip placement.confirmed → completed when endsAt+1h past, create draft shift_hours | placements, shifts | placements, shift_hours |
 | `workers/hours-reminders.ts` (PLANNED) | daily | Chef nudges + klant timeouts + admin alerts | shift_hours | createNotification + sendEmail |
 | `workers/document-expiry.ts` (PLANNED) | daily | 30d-out expiry warnings | chef_documents | notifications + sendEmail |
@@ -896,7 +940,10 @@ Chef portal:
 
 Klant portal:
   /client · /client/profile · /client/shifts · /client/shifts/[shiftId] (hub)
-  /client/shifts/[shiftId]/hours · /client/request
+  /client/shifts/[shiftId]/hours · /client/requests · /client/templates · /client/request
+
+Admin templates (PR-KLANT-4):
+  /admin/business/templates · /admin/business/templates/new · /admin/business/templates/[id]
 
 API:
   /api/health · /api/csp-report
@@ -938,6 +985,8 @@ client.profile_updated · client.change_requested · client.change_approved · c
 client_submission.cancelled_by_client (PR-KLANT-2)
 client_shift_change.change_requested · .cancel_requested · .approved · .rejected (PR-KLANT-2)
 placement_comments.created (PR-KLANT-0 helper, wired PR-KLANT-3: klant comment + admin reply)
+shift_templates.created · .generated · .exception_added · .exception_removed · .activated · .paused (PR-KLANT-4)
+client.template_change_requested (PR-KLANT-4)
 ```
 
 ## Planned audit actions
@@ -960,7 +1009,7 @@ email.message_recorded · email.event_recorded
 notification.created · notification.read · notification.suppressed
 backup_runs.created · backup_runs.failed
 restore_drills.created
-shift_templates.* (PR-KLANT-4) · ratings.created (PR-KLANT-5)
+ratings.created (PR-KLANT-5)
 ```
 
 ---

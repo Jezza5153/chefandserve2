@@ -38,6 +38,8 @@ const JOBS: Job[] = [
   { name: "error-digest", schedule: "0 7 * * *", script: "error-digest.ts" },
   { name: "embedding-refresh", schedule: "0 3 * * *", script: "embedding-refresh.ts" },
   { name: "payingit-sync", schedule: "0 17 * * 5", script: "payingit-sync.ts" },
+  // PR-KLANT-4: materialize recurring-template shifts daily (04:00 Amsterdam).
+  { name: "generate-recurring-shifts", schedule: "0 4 * * *", script: "generate-recurring-shifts.ts" },
 ];
 
 function ts(): string {

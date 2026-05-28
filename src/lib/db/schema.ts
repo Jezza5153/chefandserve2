@@ -24,6 +24,8 @@ import {
   integer,
   boolean,
   timestamp,
+  time,
+  date,
   uuid,
   jsonb,
   primaryKey,
@@ -816,6 +818,18 @@ export const shifts = pgTable("shifts", {
   status: shiftStatusEnum("status").notNull().default("request"),
   notes: text("notes"),
 
+  /* ----- PR-KLANT-4: recurring-template provenance -------------------
+   * Set when a shift was auto-generated from a shift_template. The
+   * (sourceTemplateId, sourceTemplateDate) pair is UNIQUE so the worker is
+   * idempotent — re-running never duplicates a generated shift. Editing a
+   * template does NOT touch already-generated shifts (they are independent).
+   */
+  sourceTemplateId: uuid("source_template_id").references(
+    () => shiftTemplates.id,
+    { onDelete: "set null" },
+  ),
+  sourceTemplateDate: date("source_template_date"),
+
   /* ----- audit ----- */
   createdBy: text("created_by").references(() => users.id, {
     onDelete: "set null",
@@ -828,7 +842,11 @@ export const shifts = pgTable("shifts", {
     .defaultNow(),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   cancelledReason: text("cancelled_reason"),
-});
+}, (t) => ({
+  templateDateUnique: uniqueIndex("shifts_template_date_unique")
+    .on(t.sourceTemplateId, t.sourceTemplateDate)
+    .where(sql`${t.sourceTemplateId} IS NOT NULL`),
+}));
 
 /**
  * Chef documents — metadata only. Bytes live in Cloudflare R2.
@@ -1600,6 +1618,93 @@ export type ClientShiftChangeRequest =
   typeof clientShiftChangeRequests.$inferSelect;
 export type NewClientShiftChangeRequest =
   typeof clientShiftChangeRequests.$inferInsert;
+
+/* =============================================================================
+ * Recurring shift templates + exceptions (PR-KLANT-4).
+ *
+ * Admin creates a weekly pattern ("elke vrijdag 17:00 sous-chef"); a daily
+ * worker materializes real `shifts` rows over a rolling horizon. Exceptions
+ * skip specific dates (Kerst, renovatie). Overnight shifts (17:00–01:00) set
+ * ends_next_day so the worker computes endsAt across midnight in
+ * Europe/Amsterdam. Generated shifts are INDEPENDENT — editing the template
+ * never rewrites shifts already created.
+ *
+ * day_of_week uses Postgres DOW convention: 0=Sunday … 6=Saturday.
+ * =========================================================================== */
+
+export const shiftTemplates = pgTable(
+  "shift_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    roleNeeded: vakniveauEnum("role_needed").notNull(),
+    segment: segmentEnum("segment"),
+    /** Postgres DOW: 0=Sunday … 6=Saturday. */
+    dayOfWeek: integer("day_of_week").notNull(),
+    startsAtTime: time("starts_at_time").notNull(),
+    endsAtTime: time("ends_at_time").notNull(),
+    /** True when the shift ends the next calendar day (e.g. 17:00–01:00). */
+    endsNextDay: boolean("ends_next_day").notNull().default(false),
+    headcount: integer("headcount").notNull().default(1),
+    chefRateCents: integer("chef_rate_cents"),
+    clientRateCents: integer("client_rate_cents"),
+    notes: text("notes"),
+    active: boolean("active").notNull().default(true),
+    /** How far ahead the worker materializes shifts (rolling window). */
+    generateHorizonDays: integer("generate_horizon_days").notNull().default(28),
+    lastGeneratedAt: timestamp("last_generated_at", { withTimezone: true }),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    dowCheck: check(
+      "shift_templates_dow_check",
+      sql`${t.dayOfWeek} BETWEEN 0 AND 6`,
+    ),
+    activeUnique: uniqueIndex("shift_templates_client_dow_role_unique")
+      .on(t.clientId, t.dayOfWeek, t.startsAtTime, t.roleNeeded)
+      .where(sql`${t.active} = true`),
+  }),
+);
+
+export const shiftTemplateExceptions = pgTable(
+  "shift_template_exceptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    templateId: uuid("template_id")
+      .notNull()
+      .references(() => shiftTemplates.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    reason: text("reason"),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    templateDateUnique: uniqueIndex("shift_template_exceptions_unique").on(
+      t.templateId,
+      t.date,
+    ),
+  }),
+);
+
+export type ShiftTemplate = typeof shiftTemplates.$inferSelect;
+export type NewShiftTemplate = typeof shiftTemplates.$inferInsert;
+export type ShiftTemplateException = typeof shiftTemplateExceptions.$inferSelect;
+export type NewShiftTemplateException =
+  typeof shiftTemplateExceptions.$inferInsert;
 
 /* =============================================================================
  * Backup runs + restore drills (PR-CHEF-13) — backup ops record-keeping.
