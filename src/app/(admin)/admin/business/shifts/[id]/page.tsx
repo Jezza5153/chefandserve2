@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -7,6 +7,7 @@ import {
   auditLog,
   chefs,
   clients,
+  contactLogs,
   placements,
   shifts,
 } from "@/lib/db/schema";
@@ -15,6 +16,13 @@ import {
   findMatchesForShift,
   proposePlacement,
 } from "@/lib/domain/matching";
+import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
+import {
+  getChefCandidateBadges,
+  getChefCandidateWarnings,
+  getMatchConfidenceLabel,
+  type CandidateSignals,
+} from "@/lib/domain/staffing-intelligence";
 import { requireRole } from "@/lib/permissions";
 
 export const metadata = { title: "Shift" };
@@ -55,6 +63,80 @@ export default async function ShiftDetailPage({
     confirmedCount < shift.headcount
       ? await findMatchesForShift(id, { limit: 10 })
       : [];
+
+  // PR-1.5 "Vul deze dienst" — enrich candidates with proof signals (current
+  // data only: full chef row for rate/contact/completeness + worked-here count
+  // for THIS client). Availability is deferred to PR-4, so it reads "onbekend".
+  const candidateChefIds = matches.map((m) => m.chef.id);
+  const candChefs = candidateChefIds.length
+    ? await db.select().from(chefs).where(inArray(chefs.id, candidateChefIds))
+    : [];
+  const chefById = new Map(candChefs.map((c) => [c.id, c]));
+  const workedHereRows = candidateChefIds.length
+    ? await db
+        .select({ chefId: placements.chefId, n: sql<number>`count(*)::int` })
+        .from(placements)
+        .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+        .where(
+          and(
+            inArray(placements.chefId, candidateChefIds),
+            eq(shifts.clientId, shift.clientId),
+            inArray(placements.status, ["confirmed", "completed"]),
+          ),
+        )
+        .groupBy(placements.chefId)
+    : [];
+  const workedHereById = new Map(workedHereRows.map((r) => [r.chefId, r.n]));
+
+  function candidateSignals(chefId: string, score: number): CandidateSignals {
+    const c = chefById.get(chefId);
+    return {
+      matchScore: score,
+      rateCents: c?.hourlyRateMinCents ?? null,
+      workedHereCount: workedHereById.get(chefId) ?? 0,
+      completeness: c
+        ? getProfileCompleteness({
+            vakniveau: c.vakniveau,
+            city: c.city,
+            segments: c.segments,
+            yearsExperience: c.yearsExperience,
+            hourlyRateMinCents: c.hourlyRateMinCents,
+            hourlyRateMaxCents: c.hourlyRateMaxCents,
+            email: c.email,
+            phone: c.phone,
+            specialties: c.specialties,
+            languages: c.languages,
+          })
+        : null,
+    };
+  }
+
+  async function logContact(formData: FormData) {
+    "use server";
+    const session = await requireRole("owner");
+    const chefId = String(formData.get("chefId") ?? "").trim();
+    if (!chefId) return;
+    const outcome = String(formData.get("outcome") ?? "note_only");
+    const note = String(formData.get("note") ?? "").trim() || null;
+    await db.insert(contactLogs).values({
+      actorUserId: session.user.id,
+      targetType: "chef",
+      targetId: chefId,
+      channel: "phone",
+      entityType: "shift",
+      entityId: id,
+      outcome,
+      note,
+    });
+    await db.insert(auditLog).values({
+      userId: session.user.id,
+      action: "contact_logs.created",
+      resource: "contact_logs",
+      resourceId: chefId,
+      after: { shiftId: id, outcome },
+    });
+    redirect(`/admin/business/shifts/${id}`);
+  }
 
   async function propose(formData: FormData) {
     "use server";
@@ -445,73 +527,106 @@ export default async function ShiftDetailPage({
       {matches.length > 0 && (
         <section className="mt-10">
           <h2 className="font-serif text-xl text-ink-900">
-            Match-suggesties (top {matches.length})
+            Vul deze dienst — beste matches (top {matches.length})
           </h2>
           <p className="mt-2 text-sm text-ink-700">
             Gerankt op vakniveau × segment × ervaring. Bestaande voorstellen
             zijn uitgesloten.
           </p>
           <ul className="mt-4 space-y-2">
-            {matches.map((m) => (
-              <li
-                key={m.chef.id}
-                className="flex items-start justify-between gap-4 rounded-lg border border-ink-200 bg-white p-4"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-3">
-                    <Link
-                      href={`/admin/business/chefs/${m.chef.id}`}
-                      className="font-serif text-base text-ink-900 hover:text-burgundy hover:underline"
-                    >
-                      {m.chef.fullName}
-                    </Link>
-                    <span
-                      className={`rounded-full px-2 py-0.5 font-ui text-[10px] font-medium uppercase tracking-wider ${scoreTone(m.score)}`}
-                    >
-                      {m.score}
-                    </span>
+            {matches.map((m) => {
+              const c = chefById.get(m.chef.id);
+              const sig = candidateSignals(m.chef.id, m.score);
+              const conf = getMatchConfidenceLabel(sig);
+              const badges = getChefCandidateBadges(sig);
+              const candWarnings = getChefCandidateWarnings(sig);
+              const allWarnings = [...new Set([...m.warnings, ...candWarnings])];
+              const phoneDigits = c?.phone?.replace(/\D/g, "") ?? "";
+              return (
+                <li key={m.chef.id} className="rounded-lg border border-ink-200 bg-white p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/admin/business/chefs/${m.chef.id}`}
+                          className="font-serif text-base text-ink-900 hover:text-burgundy hover:underline"
+                        >
+                          {m.chef.fullName}
+                        </Link>
+                        <span className={`rounded-full px-2 py-0.5 font-ui text-[10px] font-medium uppercase tracking-wider ${scoreTone(m.score)}`}>
+                          {m.score}
+                        </span>
+                        <span className={`rounded-full px-2 py-0.5 font-ui text-[10px] font-medium uppercase tracking-wider ${confTone(conf.label)}`}>
+                          {conf.label}
+                          {conf.reason ? ` · ${conf.reason}` : ""}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-ink-500">
+                        {m.chef.vakniveau ?? "—"} · {m.chef.city ?? "—"}
+                        {m.chef.yearsExperience ? ` · ${m.chef.yearsExperience}j ervaring` : ""}
+                      </p>
+                      {badges.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {badges.map((b, i) => (
+                            <span key={i} className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badgeTone(b.tone)}`}>
+                              {b.label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {m.reasons.length > 0 && (
+                        <ul className="mt-2 flex flex-wrap gap-1">
+                          {m.reasons.map((r) => (
+                            <li key={r} className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">✓ {r}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {allWarnings.length > 0 && (
+                        <ul className="mt-1 flex flex-wrap gap-1">
+                          {allWarnings.map((w) => (
+                            <li key={w} className="rounded bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">⚠ {w}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <form action={propose}>
+                      <input type="hidden" name="chefId" value={m.chef.id} />
+                      <input type="hidden" name="matchScore" value={m.score} />
+                      <button type="submit" className="shrink-0 rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900">
+                        Voorstel
+                      </button>
+                    </form>
                   </div>
-                  <p className="mt-1 text-xs text-ink-500">
-                    {m.chef.vakniveau ?? "—"} · {m.chef.city ?? "—"}
-                    {m.chef.yearsExperience && ` · ${m.chef.yearsExperience}j ervaring`}
-                  </p>
-                  {m.reasons.length > 0 && (
-                    <ul className="mt-2 flex flex-wrap gap-1">
-                      {m.reasons.map((r) => (
-                        <li
-                          key={r}
-                          className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700"
-                        >
-                          ✓ {r}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {m.warnings.length > 0 && (
-                    <ul className="mt-1 flex flex-wrap gap-1">
-                      {m.warnings.map((w) => (
-                        <li
-                          key={w}
-                          className="rounded bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700"
-                        >
-                          ⚠ {w}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <form action={propose}>
-                  <input type="hidden" name="chefId" value={m.chef.id} />
-                  <input type="hidden" name="matchScore" value={m.score} />
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900"
-                  >
-                    Voorstel
-                  </button>
-                </form>
-              </li>
-            ))}
+                  {/* Contact actions (one-click + log) */}
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink-100 pt-3">
+                    {phoneDigits && (
+                      <a href={`https://wa.me/${phoneDigits}`} target="_blank" rel="noopener noreferrer" className="rounded-full border border-ink-200 bg-white px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-ink-700 hover:border-burgundy hover:text-burgundy">
+                        App
+                      </a>
+                    )}
+                    {c?.email && (
+                      <a href={`mailto:${c.email}`} className="rounded-full border border-ink-200 bg-white px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-ink-700 hover:border-burgundy hover:text-burgundy">
+                        Mail
+                      </a>
+                    )}
+                    <form action={logContact} className="flex items-center gap-1.5">
+                      <input type="hidden" name="chefId" value={m.chef.id} />
+                      <select name="outcome" className="rounded border border-ink-200 bg-white px-2 py-1 text-[11px] text-ink-700">
+                        <option value="spoken">Gesproken</option>
+                        <option value="no_answer">Geen gehoor</option>
+                        <option value="callback_requested">Teruggebeld</option>
+                        <option value="not_suitable">Niet passend</option>
+                        <option value="note_only">Notitie</option>
+                      </select>
+                      <input name="note" placeholder="notitie" className="w-28 rounded border border-ink-200 bg-white px-2 py-1 text-[11px] text-ink-700" />
+                      <button type="submit" className="rounded-full border border-burgundy/40 bg-white px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy hover:bg-burgundy/5">
+                        Log
+                      </button>
+                    </form>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
@@ -631,6 +746,23 @@ function scoreTone(score: number): string {
   if (score >= 60) return "bg-blue-100 text-blue-700";
   if (score >= 40) return "bg-amber-100 text-amber-700";
   return "bg-bg-gray text-ink-500";
+}
+
+function confTone(label: "hoog" | "midden" | "laag"): string {
+  if (label === "hoog") return "bg-emerald-100 text-emerald-700";
+  if (label === "midden") return "bg-amber-100 text-amber-800";
+  return "bg-red-100 text-red-700";
+}
+
+function badgeTone(tone: "green" | "amber" | "blue" | "grey" | "red"): string {
+  const map = {
+    green: "bg-emerald-100 text-emerald-700",
+    amber: "bg-amber-100 text-amber-800",
+    blue: "bg-blue-100 text-blue-700",
+    grey: "bg-bg-gray text-ink-600",
+    red: "bg-red-100 text-red-700",
+  } as const;
+  return map[tone];
 }
 
 function CommentVisibilityTag({ visibility }: { visibility: string }) {
