@@ -14,6 +14,8 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   auditLog,
+  chefs,
+  clients,
   privacyRequestMessages,
   privacyRequests,
   users,
@@ -342,6 +344,135 @@ export async function decidePrivacyRequest(args: {
         outcome: args.outcome,
         decisionNotes: args.decisionNotes,
         retainedExplanation: args.retainedExplanation,
+      }),
+    });
+    if (send.ok) {
+      await recordEmailMessage({
+        providerMessageId: send.id,
+        toEmail: contact.email,
+        template: "PrivacyRequestOutcomeEmail",
+        eventKey: "privacy_request",
+        entityType: "privacy_requests",
+        entityId: args.requestId,
+      });
+    }
+  }
+  return { ok: true };
+}
+
+/* =============================================================================
+ * Correction (art. 16) — PR-AVG-2.
+ *
+ * No vague "manual fulfilled": the admin links the request to an EXACT
+ * entity/field, previews before→after, then applies. We store the scope on the
+ * request (correctionScope) and audit the before/after so the change is provable.
+ * Allow-listed columns only — a correction can never write an arbitrary column.
+ * =========================================================================== */
+
+export type CorrectableTable = "chefs" | "clients";
+
+const CORRECTABLE_FIELDS: Record<CorrectableTable, readonly string[]> = {
+  chefs: ["fullName", "email", "phone", "city", "specialties"],
+  clients: ["companyName", "contactName", "email", "phone", "billingEmail", "kvk", "btw"],
+};
+
+export function correctableFields(table: CorrectableTable): readonly string[] {
+  return CORRECTABLE_FIELDS[table] ?? [];
+}
+
+export async function previewCorrection(args: {
+  table: CorrectableTable;
+  entityId: string;
+  field: string;
+}): Promise<{ ok: true; oldValue: unknown } | { ok: false; error: string }> {
+  if (!CORRECTABLE_FIELDS[args.table]?.includes(args.field))
+    return { ok: false, error: "Dit veld mag niet via een correctie worden aangepast." };
+  const tbl = args.table === "chefs" ? chefs : clients;
+  const [row] = await db.select().from(tbl).where(eq(tbl.id, args.entityId)).limit(1);
+  if (!row) return { ok: false, error: "Record niet gevonden." };
+  return { ok: true, oldValue: (row as Record<string, unknown>)[args.field] };
+}
+
+export async function applyCorrection(args: {
+  requestId: string;
+  actorId: string;
+  table: CorrectableTable;
+  entityId: string;
+  field: string;
+  newValue: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  if (!CORRECTABLE_FIELDS[args.table]?.includes(args.field))
+    return { ok: false, error: "Dit veld mag niet via een correctie worden aangepast." };
+
+  const tbl = args.table === "chefs" ? chefs : clients;
+  const [row] = await db.select().from(tbl).where(eq(tbl.id, args.entityId)).limit(1);
+  if (!row) return { ok: false, error: "Record niet gevonden." };
+  const oldValue = (row as Record<string, unknown>)[args.field];
+  const newValue = args.newValue?.trim() || null;
+
+  if (args.table === "chefs") {
+    await db
+      .update(chefs)
+      .set({ [args.field]: newValue } as Partial<typeof chefs.$inferInsert>)
+      .where(eq(chefs.id, args.entityId));
+  } else {
+    await db
+      .update(clients)
+      .set({ [args.field]: newValue } as Partial<typeof clients.$inferInsert>)
+      .where(eq(clients.id, args.entityId));
+  }
+
+  const updated = await db
+    .update(privacyRequests)
+    .set({
+      correctionScope: {
+        table: args.table,
+        entityId: args.entityId,
+        field: args.field,
+        oldValue,
+        newValue,
+      },
+      correctionAppliedAt: new Date(),
+      correctionAppliedBy: args.actorId,
+      status: "fulfilled",
+      handledBy: args.actorId,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(privacyRequests.id, args.requestId),
+        inArray(privacyRequests.status, ["pending", "in_progress"]),
+      ),
+    )
+    .returning({
+      id: privacyRequests.id,
+      userId: privacyRequests.userId,
+      requesterEmail: privacyRequests.requesterEmail,
+      requesterName: privacyRequests.requesterName,
+    });
+  if (updated.length === 0) return { ok: false, error: "Verzoek is al afgehandeld." };
+
+  await db.insert(auditLog).values({
+    userId: args.actorId,
+    action: "privacy.correction_applied",
+    resource: args.table,
+    resourceId: args.entityId,
+    before: { [args.field]: oldValue },
+    after: { [args.field]: newValue },
+  });
+
+  // Notify the requester (reuse the outcome email).
+  const contact = await resolveRequesterContact(updated[0]);
+  if (contact.email) {
+    const send = await sendEmail({
+      to: contact.email,
+      subject: "Privacyverzoek (correctie) — uitkomst",
+      react: PrivacyRequestOutcomeEmail({
+        requesterName: contact.name,
+        type: "correction",
+        outcome: "fulfilled",
+        decisionNotes: `Het veld "${args.field}" is gecorrigeerd.`,
+        retainedExplanation: null,
       }),
     });
     if (send.ok) {

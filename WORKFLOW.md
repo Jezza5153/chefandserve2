@@ -708,6 +708,8 @@ CRON workers/document-expiry.ts (daily):
 | `submit` (privacy) | `(chef)/chef/privacy/page.tsx` · `(client)/client/privacy/page.tsx` | requireAuth (self) | createPrivacyRequest(channel=portal, identity=verified) · admin email |
 | `create` (manual privacy intake) | `(admin)/admin/system/privacy-requests/new/page.tsx` | requireRole(super_admin, strict) | createPrivacyRequest(off-portal, identity=not_started) · audit |
 | `doClaim` / `doSetIdentity` / `doLogMessage` / `doExtendSla` / `doWithdraw` / `doDecide` | `(admin)/admin/system/privacy-requests/[id]/page.tsx` | requireRole(super_admin, strict) | atomic UPDATE privacy_requests / INSERT privacy_request_messages · audit · requester email (extension/outcome) |
+| `doBuildExport` / `doApplyCorrection` / `doErase` (PR-AVG-2) | `(admin)/admin/system/privacy-requests/[id]/page.tsx` | requireRole(super_admin, strict) + identity verified + typed-confirm (erase) | buildUserDataExport (zip→R2) · applyCorrection (allow-listed field, before/after audit) · eraseUserData (anonymise + R2 purge + legal-hold-aware + tombstone) |
+| `GET` download | `(admin)/admin/system/privacy-requests/[id]/download/route.ts` | requireRole(super_admin, strict) | createExportDownloadLink → 302 to presigned R2 link (~7d) · audit export_download_link_created |
 
 ### Planned (per active plan)
 
@@ -1061,6 +1063,7 @@ shift_templates.created · .generated · .exception_added · .exception_removed 
 client.template_change_requested (PR-KLANT-4)
 ratings.created (PR-KLANT-5)
 privacy.request_created · .claimed · .identity_verified · .message_logged · .request_extended · .request_withdrawn · .fulfilled · .rejected (PR-AVG-1)
+privacy.export_generated · .export_download_link_created · .correction_applied · .erasure_executed · .erasure_partial (PR-AVG-2)
 ```
 
 ## Planned audit actions
@@ -1085,6 +1088,7 @@ backup_runs.created · backup_runs.failed
 restore_drills.created
 ratings.created (PR-KLANT-5)
 privacy.request_created · .claimed · .identity_verified · .message_logged · .request_extended · .request_withdrawn · .fulfilled · .rejected (PR-AVG-1)
+privacy.export_generated · .export_download_link_created · .correction_applied · .erasure_executed · .erasure_partial (PR-AVG-2)
 ```
 
 ---
@@ -1108,6 +1112,7 @@ are covered by Parts 1–4 above.
 | Recurring templates §1.13 | admin `templates[/new,/[id]]` · `/client/templates` | `createTemplate` · `add/removeException` · `toggleActive` · `requestTemplateChange` · worker `generate-recurring-shifts` | template-change inline | — | 0023 | recurring-shift-template-change.md |
 | Rating loop §1.14 | `/client/shifts/[shiftId]/rate` | `submitRatingAction` → `submitRating` (+ `approveHoursRow` trigger) | RatingPendingKlantEmail | rating_pending | 0024 | client-rating-feedback.md |
 | Privacy fulfillment §1.15 | admin `/admin/system/privacy-requests[/new,/[id]]` · `/chef/privacy` · `/client/privacy` | `createPrivacyRequest` · `claim/setIdentity/logMessage/extendSla/withdraw/decidePrivacyRequest` | PrivacyRequest{Received,Outcome,Extension}Email | privacy_request | 0025 | privacy-request.md |
+| Privacy export/correct/erase §1.15 (PR-AVG-2) | admin `/admin/system/privacy-requests/[id][/download]` | `previewUserDataExport` · `buildUserDataExport` · `createExportDownloadLink` · `previewCorrection`/`applyCorrection` · `previewUserErasure`/`eraseUserData` · `getLegalHoldsForUser` · tombstones | (reuses Outcome email) | erasure_r2_failure | 0026 | privacy-request.md |
 | Contact routing (seam) | (no UI V1) | `recipientsForClient` | (all klant mail) | — | 0020 | client-contact-routing.md |
 
 ## 7.2 — Seam helpers (one source of truth — touch these, not call sites)

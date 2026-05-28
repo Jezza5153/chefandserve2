@@ -131,7 +131,12 @@
 - Tables without `deletedAt` that are **not** under legal hold can be hard-deleted on cascade when the parent
   `users`/`chefs`/`clients` row is removed (most `onDelete: "cascade"` children: `notifications`,
   `chef_availability`, `consent_log` — note consent is retained for proof, so suppress rather than delete).
-- The planned **`privacy_erasure_tombstones`** table (*not yet in schema — planned PR-AVG-2*) will record a
-  hashed, non-reversible marker of each erased subject so a re-submission of the same source data is not
-  silently re-imported and to prove the erasure happened. Until it ships, record erasure scope on
+- The **`privacy_erasure_tombstones`** table (shipped PR-AVG-2, migration 0026) records a hashed,
+  non-reversible marker (HMAC of the lower-cased email via `RATE_LIMIT_HASH_SECRET`) of each erased
+  subject so a re-submission of the same source data is not silently re-imported (`findTombstoneByEmail`),
+  to prove the erasure happened (`retained_entities_summary`), and to survive backup restore
+  (`scripts/replay-erasure-tombstones.mjs`, PR-AVG-3). The erasure scope is also written to
   `privacy_requests.decisionNotes`.
+- Erasure + export are implemented in `src/lib/domain/privacy-{export,erasure,subject}.ts`. The redaction
+  allow-list above is enforced there and covered by `scripts/smoke-avg-erasure.mts` (30 assertions:
+  own-data present + 5 third-party fixtures excluded + legal-hold preservation + tombstone).

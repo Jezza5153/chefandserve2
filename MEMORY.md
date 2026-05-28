@@ -155,8 +155,8 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 |---|---|---|
 | PR-AVG-pre | docs/privacy/pii-inventory.md (51 tables) + retention-matrix.md | ✅ |
 | PR-AVG-1 | Privacy-request intake (portal + off-portal manual) + identity verification + correspondence log + SLA extension + withdrawal + super_admin compliance queue | ✅ live (migration 0025 · privacy_requests intake/identity/SLA/correction cols + user_id nullable + other/withdrawn enum values · privacy_request_messages · domain/privacy.ts · chef+klant /privacy capture · /admin/system/privacy-requests list+new+[id] · 3 emails · privacy_request notification event) |
-| PR-AVG-2 | Preview + export package (redacted) + correction + erasure + tombstones | ⏳ next (migration 0026) |
-| PR-AVG-3 | Retention purge worker (double-gated) + retention admin + backup replay | ⏳ |
+| PR-AVG-2 | Preview + export package (redacted, zip→R2, ~7d on-demand links) + correction (art.16) + erasure (art.17, legal-hold-aware) + tombstones | ✅ live (migration 0026 · privacy_erasure_tombstones · domain/privacy-{subject,export,erasure}.ts + applyCorrection · getLegalHoldsForUser · jszip dep · r2.putObject + EXPORT_DOWNLOAD_TTL · admin [id] export/correct/erase panels + [id]/download route · smoke-avg-erasure.mts 30/30 incl. 5 third-party redaction fixtures) |
+| PR-AVG-3 | Retention purge worker (double-gated) + retention admin + backup replay | ⏳ next |
 
 > AVG rules (load-bearing): user requests / super_admin fulfills (no autonomous erasure) · identity verified before export/erase · soft-delete-first · Payingit 7-year hold = structured legal holds · never export third-party PII (redact) · preview before execute · erasure tombstones + backup replay · 30-day SLA (extendable, art. 12(3)) · `AVG_CONSENT_ENFORCED` stays false until lawyer fills privacy text.
 
@@ -229,6 +229,7 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | 0023_shift_templates.sql | shift_templates + shift_template_exceptions + shifts.source_template_id/date + idempotency index (PR-KLANT-4) | applied (May 28) |
 | 0024_ratings.sql | ratings + chefs.average_rating/rating_count rollup (PR-KLANT-5) | applied (May 28) |
 | 0025_avg_fulfillment.sql | privacy_requests intake/identity/SLA/correction cols + user_id nullable + other/withdrawn enum values + privacy_request_messages (PR-AVG-1) | applied (May 28) |
+| 0026_avg_tombstones.sql | privacy_erasure_tombstones (HMAC email hash · retained_entities_summary · per-subject ids) (PR-AVG-2) | applied (May 28) |
 
 ---
 

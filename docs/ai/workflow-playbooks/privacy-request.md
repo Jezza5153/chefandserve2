@@ -201,3 +201,31 @@ Routing event key: `privacy_request` (super_admin only).
 5. **Incomplete erasure**: documented response includes scope (app DB) and explicit out-of-scope (Payingit retention).
 
 If the AI ever helps create a privacy request for someone other than the caller, that's a P0 boundary failure. Identity verification = `session.user.id === request.userId` always.
+
+---
+
+## PR-AVG-1/2 update — the full fulfillment workflow (shipped)
+
+V1's "manual PDF" note above is superseded. The workflow is now a real
+privacy-operations stepper. Domain code: `src/lib/domain/privacy.ts`
+(lifecycle + correction), `privacy-subject.ts` (resolve + legal holds +
+tombstone hash), `privacy-export.ts` (collect/preview/build/link),
+`privacy-erasure.ts` (preview/erase). UI: `/admin/system/privacy-requests[/new,/[id]]`.
+
+### Stepper (admin `[id]` page)
+
+1. **Identity** — `setIdentityVerification` (status/method/notes). Export + erasure are **blocked** until `identity_status='verified'`.
+2. **Correspondence** — `logRequestMessage` (inbound/outbound/internal_note); `internal_note` rows are never exported.
+3. **Export / Correction / Erasure** (by request type — preview always shown first):
+   - **Export (art. 15/20)**: `previewUserDataExport` → `buildUserDataExport` (zip of `README.html` + `personal-data.json` + `documents-manifest.json` + `retained-data-explanation.md` to R2) → `createExportDownloadLink` (presigned ~7d, on demand). Redaction is an **allow-list** (pii-inventory.md): own data only, third parties stripped, raw payloads/admin-notes/credentials/audit-log excluded, ratings as aggregate only.
+   - **Correction (art. 16)**: `previewCorrection` (current value) → `applyCorrection` (allow-listed field, before/after audit, requester emailed).
+   - **Erasure (art. 17)**: `previewUserErasure` (verwijderd / bewaard + reden / risico's) → `eraseUserData` behind identity-gate + "identiteit gecontroleerd" checkbox + typed-confirm `VERWIJDER <NAAM>`. Soft-delete/anonymise; **legal-held rows preserved** (→ `partially_fulfilled`); R2 doc bytes purged (fail → `erasure_r2_failure` + partial); a **tombstone** (HMAC email hash) is written for proof + re-import detection + backup replay.
+4. **Decide** — `decidePrivacyRequest` (fulfilled / partially_fulfilled / rejected) + requester email. `extendSla` (reason + notice, never silent) and `withdrawRequest` also live here.
+
+### Legal holds are the single source of truth
+
+`getLegalHoldsForUser({chefId, clientId})` returns the fiscale-bewaarplicht holds
+(shift_hours / payroll_batch_lines / shift_hour_corrections, ≈7 jaar). It feeds the
+export's `retained-data-explanation`, the erasure preview, the decision notes, and
+the AI's "what we keep and why" answer. The AI must NEVER claim data is fully
+erased when this returns rows.

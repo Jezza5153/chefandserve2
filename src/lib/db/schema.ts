@@ -2012,6 +2012,53 @@ export const privacyRequestMessages = pgTable(
   }),
 );
 
+/**
+ * PR-AVG-2: erasure tombstones — a non-reversible marker of every erased data
+ * subject. Three jobs:
+ *   1. PROVE the erasure happened (accountability — art. 5(2)) without keeping
+ *      the erased PII. We store an HMAC of the email, never the email itself.
+ *   2. PREVENT silent re-import — if the same person re-submits via Jotform, a
+ *      lookup on hashedEmail flags "this subject was erased; reconfirm intent".
+ *   3. SURVIVE backup restore — `scripts/replay-erasure-tombstones.mjs` re-applies
+ *      every tombstone after a restore so old PII does not resurrect (art. 17 +
+ *      `docs/privacy/backup-erasure-policy.md`).
+ *
+ * Deliberately holds NO recoverable PII: only opaque ids + a one-way email hash
+ * + a jsonb summary of what was retained under legal hold and why.
+ */
+export const privacyErasureTombstones = pgTable(
+  "privacy_erasure_tombstones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** The request that authorised this erasure (kept for the compliance trail). */
+    privacyRequestId: uuid("privacy_request_id").references(
+      () => privacyRequests.id,
+      { onDelete: "set null" },
+    ),
+    /** Opaque ids of the erased subject. No FK — must survive the row's anonymisation/removal. */
+    originalUserId: text("original_user_id"),
+    originalChefId: text("original_chef_id"),
+    originalClientId: text("original_client_id"),
+    /** HMAC-SHA256 of the lower-cased email (RATE_LIMIT_HASH_SECRET). One-way. */
+    hashedEmail: text("hashed_email"),
+    requesterKind: privacyRequesterKindEnum("requester_kind"),
+    erasedAt: timestamp("erased_at", { withTimezone: true }).notNull().defaultNow(),
+    erasedBy: text("erased_by").references(() => users.id, { onDelete: "set null" }),
+    reason: text("reason"),
+    /** What we kept + why (legal-hold scope) — proof of partial fulfilment. */
+    retainedEntitiesSummary: jsonb("retained_entities_summary"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    hashedEmailIdx: index("privacy_erasure_tombstones_hashed_email_idx").on(
+      t.hashedEmail,
+    ),
+    userIdx: index("privacy_erasure_tombstones_user_idx").on(t.originalUserId),
+  }),
+);
+
 export const dataProcessingAgreements = pgTable("data_processing_agreements", {
   id: uuid("id").primaryKey().defaultRandom(),
   clientId: text("client_id")
@@ -2052,6 +2099,10 @@ export type NewPrivacyRequest = typeof privacyRequests.$inferInsert;
 export type PrivacyRequestMessage = typeof privacyRequestMessages.$inferSelect;
 export type NewPrivacyRequestMessage =
   typeof privacyRequestMessages.$inferInsert;
+export type PrivacyErasureTombstone =
+  typeof privacyErasureTombstones.$inferSelect;
+export type NewPrivacyErasureTombstone =
+  typeof privacyErasureTombstones.$inferInsert;
 export type DPA = typeof dataProcessingAgreements.$inferSelect;
 export type NewDPA = typeof dataProcessingAgreements.$inferInsert;
 export type RetentionPolicy = typeof retentionPolicies.$inferSelect;
