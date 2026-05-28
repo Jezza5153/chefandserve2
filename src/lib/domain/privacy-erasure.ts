@@ -214,6 +214,12 @@ export async function eraseUserData(args: {
         languages: null,
         segments: null,
         notes: null,
+        // PR-2: structured intake PII (address + home geo) — erase too.
+        street: null,
+        houseNumber: null,
+        postcode: null,
+        latitude: null,
+        longitude: null,
         deletedAt: new Date(),
         updatedAt: new Date(),
       })

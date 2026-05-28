@@ -46,6 +46,14 @@ export async function convertChefSubmission(
       city: submission.locationPreference,
       yearsExperience: submission.yearsExperience,
       notes: submission.notes,
+      // PR-2: carry structured intake onto the master record.
+      street: submission.street,
+      houseNumber: submission.houseNumber,
+      postcode: submission.postcode,
+      transportMode: submission.transportMode,
+      preferences: submission.preferences,
+      employmentType: submission.employmentType,
+      applyingAs: submission.applyingAs,
       status: "onboarding",
       createdBy: actingUserId,
     })

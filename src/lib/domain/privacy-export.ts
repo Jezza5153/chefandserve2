@@ -134,6 +134,14 @@ export async function collectUserData(
         hourlyRateMaxCents: chefs.hourlyRateMaxCents,
         status: chefs.status,
         joinedAt: chefs.joinedAt,
+        // PR-2 structured intake — the subject's own data, exportable.
+        street: chefs.street,
+        houseNumber: chefs.houseNumber,
+        postcode: chefs.postcode,
+        transportMode: chefs.transportMode,
+        preferences: chefs.preferences,
+        employmentType: chefs.employmentType,
+        applyingAs: chefs.applyingAs,
         // ratings aggregate ONLY (never individual klant comments/authors).
         averageRating: chefs.averageRating,
         ratingCount: chefs.ratingCount,

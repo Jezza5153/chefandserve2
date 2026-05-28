@@ -95,6 +95,23 @@ export const segmentEnum = pgEnum("segment", [
   "michelin",
 ]);
 
+/* ----- PR-2: structured chef intake (from the live Jotform) ----------------- */
+/** "Do you have your own transportation?" → Car / Motorbike / Electric bike / No. */
+export const transportModeEnum = pgEnum("transport_mode", [
+  "car",
+  "motorbike",
+  "ebike",
+  "none",
+]);
+/** "Payroll, ZZP or both?" */
+export const employmentTypeEnum = pgEnum("employment_type", [
+  "payroll",
+  "zzp",
+  "both",
+]);
+/** "Are you applying as a Chef or Front of house?" */
+export const applyingAsEnum = pgEnum("applying_as", ["chef", "front_of_house"]);
+
 /** Chef availability lifecycle. */
 export const chefStatusEnum = pgEnum("chef_status", [
   "onboarding", // intake done, paperwork in progress
@@ -523,6 +540,15 @@ export const chefSubmissions = pgTable(
     /** Free-text notes the chef wrote. */
     notes: text("notes"),
 
+    /* ----- PR-2: structured intake (mirrors chefs; shown in triage) ----- */
+    street: text("street"),
+    houseNumber: text("house_number"),
+    postcode: text("postcode"),
+    transportMode: transportModeEnum("transport_mode"),
+    preferences: text("preferences").array(),
+    employmentType: employmentTypeEnum("employment_type"),
+    applyingAs: applyingAsEnum("applying_as"),
+
     status: submissionStatusEnum("status").notNull().default("new"),
     triagedAt: timestamp("triaged_at", { withTimezone: true }),
     triagedBy: text("triaged_by").references(() => users.id, {
@@ -653,6 +679,20 @@ export const chefs = pgTable("chefs", {
   /* ----- external IDs ----- */
   /** Payingit's employee ID once enrolled. Phase 5. */
   payingitEmployeeId: text("payingit_employee_id"),
+
+  /* ----- PR-2: address (structured from Jotform → geocoded in PR-3) ----- */
+  street: text("street"),
+  houseNumber: text("house_number"),
+  postcode: text("postcode"),
+  latitude: numeric("latitude", { precision: 9, scale: 6 }),
+  longitude: numeric("longitude", { precision: 9, scale: 6 }),
+
+  /* ----- PR-2: structured Jotform intake (feeds matching + filters) ----- */
+  transportMode: transportModeEnum("transport_mode"),
+  /** Multi-pick "what you like most": bbq/breakfast/banqueting/beachclub/early_shifts/hotels/restaurants/michelin/flexible. */
+  preferences: text("preferences").array(),
+  employmentType: employmentTypeEnum("employment_type"),
+  applyingAs: applyingAsEnum("applying_as"),
 
   /* ----- ratings rollup (PR-KLANT-5) -------------------------------
    * Recomputed in the same tx as each rating insert. averageRating stays

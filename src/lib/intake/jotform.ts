@@ -104,6 +104,61 @@ function lowerEmail(s: string | null): string | null {
   return s ? s.trim().toLowerCase() : null;
 }
 
+/* ----- PR-2: structured-intake mappers (from the live chef Jotform) ------- */
+
+function mapTransport(s: string | null): "car" | "motorbike" | "ebike" | "none" | null {
+  if (!s) return null;
+  const v = s.toLowerCase();
+  if (v.includes("motor")) return "motorbike";
+  if (v.includes("electric") || v.includes("e-bike") || v.includes("ebike") || v.includes("fiets"))
+    return "ebike";
+  if (v.includes("car") || v.includes("auto")) return "car";
+  if (v.includes("no") || v.includes("geen") || v.includes("none")) return "none";
+  return null;
+}
+
+/** Maps the "what you like most" multi-pick free text to preference keys. */
+const PREF_MAP: [string, string][] = [
+  ["breakfast", "breakfast"],
+  ["ontbijt", "breakfast"],
+  ["banqueting", "banqueting"],
+  ["banket", "banqueting"],
+  ["bbq", "bbq"],
+  ["barbecue", "bbq"],
+  ["beach", "beachclub"],
+  ["early", "early_shifts"],
+  ["vroege", "early_shifts"],
+  ["hotel", "hotels"],
+  ["restaurant", "restaurants"],
+  ["michelin", "michelin"],
+  ["flexible", "flexible"],
+  ["flexibel", "flexible"],
+];
+function parsePreferences(s: string | null): string[] | null {
+  if (!s) return null;
+  const v = s.toLowerCase();
+  const out = new Set<string>();
+  for (const [needle, key] of PREF_MAP) if (v.includes(needle)) out.add(key);
+  return out.size > 0 ? [...out] : null;
+}
+
+function mapEmployment(s: string | null): "payroll" | "zzp" | "both" | null {
+  if (!s) return null;
+  const v = s.toLowerCase();
+  if (v.includes("both") || v.includes("beide")) return "both";
+  if (v.includes("zzp")) return "zzp";
+  if (v.includes("payroll")) return "payroll";
+  return null;
+}
+
+function mapApplyingAs(s: string | null): "chef" | "front_of_house" | null {
+  if (!s) return null;
+  const v = s.toLowerCase();
+  if (v.includes("front")) return "front_of_house";
+  if (v.includes("chef") || v.includes("kok")) return "chef";
+  return null;
+}
+
 /**
  * Map a Jotform chef-intake payload to a chef_submissions row.
  * Required: externalId (submissionID) — caller throws if missing.
@@ -150,6 +205,14 @@ export function extractChefSubmission(
       ["bericht", "opmerking", "notes", "message", "comment"],
       ["bericht", "opmerking", "notes", "message", "comment"],
     ),
+    // PR-2: structured intake (address for travel-cost + matching signals).
+    street: extract(body, raw, ["street name", "straatnaam", "street", "straat"], ["street", "straat"]),
+    houseNumber: extract(body, raw, ["house number", "huisnummer"], ["house", "huisnummer"]),
+    postcode: extract(body, raw, ["zip code", "zip", "postcode", "postal"], ["zip", "postcode", "postal"]),
+    transportMode: mapTransport(extract(body, raw, ["transportation", "transport", "vervoer"], ["transport", "vervoer"])),
+    preferences: parsePreferences(extract(body, raw, ["like to do the most", "like most", "what you like", "voorkeur"], ["like", "voorkeur"])),
+    employmentType: mapEmployment(extract(body, raw, ["payroll", "zzp"], ["payroll", "zzp"])),
+    applyingAs: mapApplyingAs(extract(body, raw, ["applying as", "chef or front", "front of house"], ["applying", "front"])),
     status: "new",
   };
 }

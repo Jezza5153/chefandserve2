@@ -26,6 +26,7 @@ import {
   getChefRecentShifts,
   getChefWorkSummary,
 } from "@/lib/domain/chef-history";
+import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { getChefAverageForAdmin } from "@/lib/domain/ratings";
 import { RATING_TAG_LABELS, type RatingTag } from "@/lib/rating-tags";
 import { sendEmail } from "@/lib/email";
@@ -43,6 +44,15 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   certificate: "Certificaat",
   id_document: "ID-bewijs",
   other: "Overig",
+};
+
+const TRANSPORT_LABELS: Record<string, string> = {
+  car: "Auto", motorbike: "Motor", ebike: "E-bike", none: "Geen (OV)",
+};
+const PREF_LABELS: Record<string, string> = {
+  bbq: "BBQ", breakfast: "Ontbijt", banqueting: "Banqueting", beachclub: "Beachclub",
+  early_shifts: "Vroege diensten", hotels: "Hotels", restaurants: "Restaurants",
+  michelin: "Michelin", flexible: "Flexibel",
 };
 
 const VAKNIVEAU_OPTIONS = [
@@ -116,6 +126,23 @@ export default async function ChefDetailPage({
     getChefFeedbackSummary(id),
     getChefRecentShifts(id, 8),
   ]);
+
+  // PR-2: profile completeness over the structured intake fields.
+  const completeness = getProfileCompleteness({
+    vakniveau: chef.vakniveau,
+    city: chef.city,
+    segments: chef.segments,
+    yearsExperience: chef.yearsExperience,
+    hourlyRateMinCents: chef.hourlyRateMinCents,
+    hourlyRateMaxCents: chef.hourlyRateMaxCents,
+    email: chef.email,
+    phone: chef.phone,
+    specialties: chef.specialties,
+    languages: chef.languages,
+    postcode: chef.postcode,
+    transportMode: chef.transportMode,
+    preferences: chef.preferences,
+  });
 
   // Documents (with fresh presigned download URLs)
   const documents = await listChefDocuments(chef.id);
@@ -833,6 +860,54 @@ export default async function ChefDetailPage({
         <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
           Chef 360 — staat van dienst
         </h2>
+
+        {/* PR-2: profiel & voorkeuren (uit Jotform) */}
+        <div className="mt-3 rounded-lg border border-ink-200 bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Profiel & voorkeuren</p>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                completeness.score >= 80
+                  ? "bg-emerald-100 text-emerald-700"
+                  : completeness.score >= 55
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-red-100 text-red-700"
+              }`}
+            >
+              profiel {completeness.score}% · {completeness.label}
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {chef.transportMode && (
+              <span className="rounded-full bg-burgundy/5 px-2 py-0.5 text-xs text-burgundy">
+                {TRANSPORT_LABELS[chef.transportMode] ?? chef.transportMode}
+              </span>
+            )}
+            {(chef.preferences ?? []).map((p) => (
+              <span key={p} className="rounded-full bg-bg-gray px-2 py-0.5 text-xs text-ink-700">
+                {PREF_LABELS[p] ?? p}
+              </span>
+            ))}
+            {chef.employmentType && (
+              <span className="rounded-full bg-bg-gray px-2 py-0.5 text-xs text-ink-700">
+                {chef.employmentType.toUpperCase()}
+              </span>
+            )}
+            {!chef.transportMode && (chef.preferences ?? []).length === 0 && (
+              <span className="text-xs text-ink-500">Nog niet uit Jotform overgenomen.</span>
+            )}
+          </div>
+          {(chef.street || chef.postcode) && (
+            <p className="mt-2 text-xs text-ink-500">
+              {[chef.street, chef.houseNumber].filter(Boolean).join(" ")}
+              {chef.postcode ? `, ${chef.postcode}` : ""}
+              {chef.city ? ` ${chef.city}` : ""}
+            </p>
+          )}
+          {completeness.missingCritical.length > 0 && (
+            <p className="mt-1 text-[11px] text-amber-700">Mist: {completeness.missingCritical.join(", ")}</p>
+          )}
+        </div>
 
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Snap label="Uren gewerkt" value={`${workSummary.totalHoursWorked} u`} note="goedgekeurd" />
