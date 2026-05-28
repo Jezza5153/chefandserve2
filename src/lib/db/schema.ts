@@ -692,9 +692,24 @@ export const clients = pgTable("clients", {
   /* ----- profile ----- */
   /** casual | fine_dining | hotel | banqueting | catering | event | corporate */
   segment: segmentEnum("segment"),
-  /** Address — free-text for now; Phase 9 adds geocoding. */
+  /**
+   * Legacy ambiguous address — kept for backward compat. New code uses the
+   * disambiguated columns below (PR-KLANT-0). Backfilled into shiftAddress.
+   */
   address: text("address"),
   city: text("city"),
+
+  /* ----- PR-KLANT-0: disambiguated addresses -------------------------
+   * "address" was ambiguous (billing? shift location? office?). Split:
+   *   shiftAddress       — where chefs physically report (klant-editable)
+   *   shiftArrivalNotes  — gate code, which entrance, ask-for-X
+   *   billingAddress     — legal/invoice address (admin-approved change only)
+   * Shifts snapshot their own location at creation, so editing these here
+   * NEVER rewrites existing shifts (correction round 3, #2).
+   */
+  shiftAddress: text("shift_address"),
+  shiftArrivalNotes: text("shift_arrival_notes"),
+  billingAddress: text("billing_address"),
 
   /* ----- external IDs ----- */
   payingitClientId: text("payingit_client_id"),
@@ -1720,3 +1735,107 @@ export type PayrollBatchLine = typeof payrollBatchLines.$inferSelect;
 export type NewPayrollBatchLine = typeof payrollBatchLines.$inferInsert;
 export type ShiftHourCorrection = typeof shiftHourCorrections.$inferSelect;
 export type NewShiftHourCorrection = typeof shiftHourCorrections.$inferInsert;
+
+/* =============================================================================
+ * Klant workflow foundations (PR-KLANT-0) — the keystone before klant features.
+ *
+ * 1. placement_comments — structured multi-actor comments with per-row
+ *    visibility. REPLACES appending klant feedback to placements.notes.
+ *    The notes blob mixes admin/matching/klant/chef scopes and is a privacy
+ *    leak. Comments here are visibility-scoped + length-capped + plain-text.
+ *
+ * 2. client_contacts — email-routing seam. V1 has no UI (one klant user gets
+ *    all mail via recipientsForClient()); V2 resolves by role. Schema exists
+ *    now so V2 doesn't require a migration mid-flight.
+ *
+ * See plan ~/.claude/plans/goofy-moseying-truffle.md PR-KLANT-0.
+ * =========================================================================== */
+
+export const commentVisibilityEnum = pgEnum("comment_visibility", [
+  "internal", // admin-only — Maarten's private + matching notes
+  "client_visible", // klant of this shift can see
+  "chef_visible", // chef of this placement can see
+]);
+
+export const commentAuthorKindEnum = pgEnum("comment_author_kind", [
+  "client",
+  "admin",
+  "chef",
+  "system",
+]);
+
+export const placementComments = pgTable(
+  "placement_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    placementId: text("placement_id")
+      .notNull()
+      .references(() => placements.id, { onDelete: "cascade" }),
+    authorUserId: text("author_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    authorKind: commentAuthorKindEnum("author_kind").notNull(),
+    visibility: commentVisibilityEnum("visibility").notNull(),
+    /** Plain text only. Renderers MUST NOT use dangerouslySetInnerHTML. */
+    body: text("body").notNull(),
+    /** Future AI: summaries, sentiment, source, email/thread ids. */
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    placementIdx: index("placement_comments_placement_idx").on(
+      t.placementId,
+      t.createdAt,
+    ),
+    visibilityIdx: index("placement_comments_visibility_idx").on(
+      t.placementId,
+      t.visibility,
+    ),
+    // 1..1000 chars — a bad client can't write a megabyte (correction r3 #5).
+    bodyLen: check(
+      "placement_comments_body_len",
+      sql`char_length(${t.body}) BETWEEN 1 AND 1000`,
+    ),
+  }),
+);
+
+export const clientContactRoleEnum = pgEnum("client_contact_role", [
+  "planning",
+  "onsite",
+  "finance",
+  "hours_approval",
+  "emergency",
+]);
+
+export const clientContacts = pgTable(
+  "client_contacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    phone: text("phone"),
+    role: clientContactRoleEnum("role").notNull(),
+    receivesNotifications: boolean("receives_notifications")
+      .notNull()
+      .default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    clientIdx: index("client_contacts_client_idx").on(t.clientId, t.role),
+  }),
+);
+
+export type PlacementComment = typeof placementComments.$inferSelect;
+export type NewPlacementComment = typeof placementComments.$inferInsert;
+export type ClientContact = typeof clientContacts.$inferSelect;
+export type NewClientContact = typeof clientContacts.$inferInsert;

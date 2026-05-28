@@ -124,6 +124,54 @@ This is the grounding contract for Layer 1 (per `../../AI_INTEGRATION.md`). The 
 | AI may say | "Match-score op het moment van voorstel was 92." |
 | AI may NOT say | Present matchScore as if it were a live recomputation; or to a chef. |
 
+### Shift location (snapshotted)
+
+| | |
+|---|---|
+| Canonical table | `shifts.location`, `shifts.city` — **snapshotted at shift creation** from `clients.shiftAddress` / `clients.city`. |
+| Who can change | System at creation (and the recurring-shift worker copies `clients.shiftAddress → shifts.location`). NOT retroactively changed by a klant profile edit. |
+| Freshness budget | immutable per shift once created |
+| AI access | `read_filtered` — klant sees own; chef sees shifts they're placed on; admin all. |
+| AI may say | "De chef meldt zich op {shifts.location}." (the snapshot for that shift) |
+| AI may NOT say | That an existing shift's location changed because the klant edited `clients.shiftAddress` — profile edits affect only FUTURE requests/templates. |
+
+### Placement comments (the multi-actor comment store)
+
+| | |
+|---|---|
+| Canonical table | `placement_comments` (`author_kind`, `visibility` enum `internal`/`client_visible`/`chef_visible`, `body` 1–1000 chars plain text). **This is the canonical store — NOT `placements.notes`.** |
+| Who can change | Append-only: klant (`client_visible`), admin (any visibility), chef where admin shared (`chef_visible`). Via `addPlacementComment()`; reads via `listVisibleComments()`. |
+| Freshness budget | live |
+| AI access | `read_filtered` by visibility — klant sees `client_visible`; chef sees `chef_visible`; admin sees all. `placements.notes` is `restricted` (admin tool only) and NEVER surfaced to klant/chef. |
+| AI may say | "Je vroeg op 6 juni of Daniel HACCP heeft; Chef & Serve antwoordde ..." (from `client_visible` rows) |
+| AI may NOT say | Quote an `internal` or `chef_visible` comment to a klant. Read `placements.notes` for a klant-facing answer. |
+
+---
+
+## Klant control facts (PR-KLANT-0 / PR-KLANT-1)
+
+### Payment term
+
+| | |
+|---|---|
+| Canonical table | `clients.paymentTermsDays` |
+| Who can change | **Admin-controlled.** The klant *requests* a change (`client_change_requests`, `field='paymentTermsDays'`); an admin approves. The klant can NEVER set it directly. |
+| Freshness budget | live |
+| AI access | `restricted` — admin + own klant (read). |
+| AI may say | "Je betaaltermijn is 14 dagen." (to that klant) · "Hotel X heeft een wijziging naar 60 dagen aangevraagd, wacht op akkoord." (admin) |
+| AI may NOT say | "Ik heb je betaaltermijn op 60 gezet." The AI never mutates it; it drafts a request, an admin approves. |
+
+### Klant profile field authority (direct vs. request-change)
+
+| | |
+|---|---|
+| Canonical table | `clients` — direct: `contactName`, `phone`, `billingEmail`, `shiftAddress`, `shiftArrivalNotes`, `city`. Request-change: `companyName`, `kvk`, `btw`, `email`, `paymentTermsDays`, `billingAddress`. |
+| Who can change | Direct fields: klant immediately (audited, outbox `client.updated`). Request-change fields: klant requests, admin approves (`client_change_requests`). |
+| Freshness budget | live |
+| AI access | `read_filtered` — klant own; admin all. |
+| AI may say | "Telefoon kun je direct wijzigen; bedrijfsnaam gaat via een verzoek." |
+| AI may NOT say | Offer to directly edit a request-change field. Change `billingEmail` without noting the OLD-address confirmation safeguard. |
+
 ---
 
 ## Hours + payroll facts (planned, PR-CHEF-1, PR-CHEF-7)

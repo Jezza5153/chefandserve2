@@ -141,6 +141,13 @@
       "when": 1779912405970,
       "tag": "0019_payroll_batches",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779957367280,
+      "tag": "0020_klant_foundations",
+      "breakpoints": true
     }
   ]
 }

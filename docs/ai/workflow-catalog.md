@@ -21,6 +21,21 @@ The point of a playbook is so the AI can answer "what happens when X?" without i
 | 9 | [Privacy request (inzage / correctie / verwijdering / export)](./workflow-playbooks/privacy-request.md) | Part 2.6 | PR-CHEF-10 |
 | 10 | [Backup + restore drill](./workflow-playbooks/backup-restore.md) | Part 3.3 (workers) | PR-CHEF-13 |
 
+### Klant (hotel) workflows — PR-KLANT phase
+
+| # | Playbook | WORKFLOW.md reference | Ships with PR |
+|---|---|---|---|
+| 11 | [Client shift hub (single source of truth)](./workflow-playbooks/client-shift-hub.md) | Part 2 (klant) | PR-KLANT-0 |
+| 12 | [Client profile change (direct vs. request)](./workflow-playbooks/client-profile-change.md) | Part 2.3 (klant) | PR-KLANT-1 |
+| 13 | [Client request cancellation (pending submission)](./workflow-playbooks/client-request-cancellation.md) | Part 1.7 / 2 (klant) | PR-KLANT-2 |
+| 14 | [Client shift change / cancel request](./workflow-playbooks/client-shift-change-request.md) | Part 2 (klant) | PR-KLANT-2 |
+| 15 | [Chef preview + klant comment (view + comment, no veto)](./workflow-playbooks/chef-preview-comment.md) | Part 2 (klant) | PR-KLANT-3 |
+| 16 | [Recurring shift template change (admin-owned)](./workflow-playbooks/recurring-shift-template-change.md) | Part 2 / 3.3 (klant) | PR-KLANT-4 |
+| 17 | [Client rating / feedback (internal-only, tags)](./workflow-playbooks/client-rating-feedback.md) | Part 2 (klant) | PR-KLANT-5 |
+| 18 | [Client contact routing (recipientsForClient)](./workflow-playbooks/client-contact-routing.md) | Part 4 (routing) | PR-KLANT-0 |
+
+Matching tool contracts: [`client-tools.md`](./tool-contracts/client-tools.md), [`client-request-tools.md`](./tool-contracts/client-request-tools.md), [`client-template-tools.md`](./tool-contracts/client-template-tools.md), [`rating-tools.md`](./tool-contracts/rating-tools.md).
+
 ---
 
 ## Cross-cutting concerns (covered in every playbook)
@@ -76,3 +91,9 @@ When a PR-CHEF-N ships its code, it ALSO ships the body of its playbook. The bas
 | PR-CHEF-7 | `payroll-export.md` |
 | PR-CHEF-10 | `avg-consent.md` · `privacy-request.md` |
 | PR-CHEF-13 | `backup-restore.md` |
+| PR-KLANT-0 | `client-shift-hub.md` · `client-contact-routing.md` (+ all 8 base bodies scaffolded) |
+| PR-KLANT-1 | `client-profile-change.md` |
+| PR-KLANT-2 | `client-request-cancellation.md` · `client-shift-change-request.md` |
+| PR-KLANT-3 | `chef-preview-comment.md` |
+| PR-KLANT-4 | `recurring-shift-template-change.md` |
+| PR-KLANT-5 | `client-rating-feedback.md` |

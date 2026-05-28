@@ -166,7 +166,7 @@ export default async function ClientDashboardPage() {
                   key={h.id}
                   label={chefName}
                   meta={formatShiftDateShort(shiftStart)}
-                  href={`/client/shifts/${shiftId}/hours`}
+                  href={`/client/shifts/${shiftId}`}
                   cta="Controleer →"
                 />
               ))}
@@ -188,6 +188,8 @@ export default async function ClientDashboardPage() {
                   key={p.id}
                   label={`${chef.fullName} · ${s.roleNeeded}`}
                   meta={formatShiftDateShort(s.startsAt)}
+                  href={`/client/shifts/${s.id}`}
+                  cta="Bekijk →"
                 />
               ))}
             </ActionCard>
@@ -240,22 +242,24 @@ export default async function ClientDashboardPage() {
         ) : (
           <ul className="mt-3 space-y-2">
             {thisWeek.map(({ p, s, chef }) => (
-              <li
-                key={p.id}
-                className="rounded border border-ink-200 bg-white p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-serif text-base text-ink-900">
-                      {chef.fullName} · {s.roleNeeded}
-                    </p>
-                    <p className="mt-0.5 text-xs text-ink-500">
-                      {formatShiftDateShort(s.startsAt)} ·{" "}
-                      {formatTime(s.startsAt)} – {formatTime(s.endsAt)}
-                    </p>
+              <li key={p.id}>
+                <Link
+                  href={`/client/shifts/${s.id}`}
+                  className="block rounded border border-ink-200 bg-white p-4 hover:border-burgundy/40"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-serif text-base text-ink-900">
+                        {chef.fullName} · {s.roleNeeded}
+                      </p>
+                      <p className="mt-0.5 text-xs text-ink-500">
+                        {formatShiftDateShort(s.startsAt)} ·{" "}
+                        {formatTime(s.startsAt)} – {formatTime(s.endsAt)}
+                      </p>
+                    </div>
+                    <StatusPill status={p.status} />
                   </div>
-                  <StatusPill status={p.status} />
-                </div>
+                </Link>
               </li>
             ))}
           </ul>

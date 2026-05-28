@@ -186,3 +186,43 @@ For every Access-filtered chunk, the indexer MUST attach metadata:
 - [ ] Refresh trigger?
 - [ ] Add a row to "Source-to-bucket lookup" above.
 - [ ] If financial / identity / health-document → put in `Restricted` or `NEVER`. Be paranoid.
+
+---
+
+## Klant comment store rule (PR-KLANT-0)
+
+> **NEVER read `placements.notes` for klant-facing answers.** Use `placement_comments WHERE visibility='client_visible'` (via `listVisibleComments(placementId, { kind:'client' })`) or the curated `ai_client_shift_summary_view`.
+
+`placements.notes` is a single free-text blob that historically mixed admin private notes, Maarten's matching notes, klant-visible notes, klant feedback, and chef-visible notes — a privacy leak waiting to happen. PR-KLANT-0 replaced it with the structured `placement_comments` table, where every row carries an explicit `visibility` enum (`internal` / `client_visible` / `chef_visible`). The retriever and every tool MUST honour this:
+
+| Viewer | May read |
+|---|---|
+| admin | `placement_comments` all visibilities |
+| klant (own shift) | `placement_comments` `visibility='client_visible'` only |
+| chef (own placement) | `placement_comments` `visibility='chef_visible'` only |
+
+Source-to-bucket additions:
+
+| Table | Bucket | Notes |
+|---|---|---|
+| `placements` (`notes`) | Restricted (tool only, admin) | Legacy blob. NEVER surfaced to klant/chef. Prefer `placement_comments`. |
+| `placement_comments` | Access-filtered | Visibility enum is the filter. `client_visible` → klant-own + admin; `chef_visible` → chef-own + admin; `internal` → admin only. Plain-text bodies, 1–1000 chars. |
+| `client_contacts` (email, phone) | Restricted (tool only) | Klant-own + admin. Routing seam; don't put contact methods in RAG. |
+| `client_change_requests`, `client_shift_change_requests` | Access-filtered (admin + own klant) | Free-text reason/decision_notes; PII-tag per klant. |
+| `shift_templates` (`chef_rate_cents`, `client_rate_cents`) | Restricted (tool only, admin) | Financial. Klant projection omits rates. |
+| `ratings` (stars, tags, comment) | Restricted (tool only) | Internal-only V1. Admin full; chef own-average at N≥5; klant never. |
+
+---
+
+## Proposed klant read-model views (future-curated sources)
+
+These SQL views do not exist yet (same status as `ai_hours_queue_view` et al. in `source-of-truth-map.md`). They are the **future-curated, safe-by-construction** sources klant-facing tools should read from instead of base tables. Until they ship, tools synthesise from base tables while honouring the visibility rules above.
+
+| View | Purpose | Safety property |
+|---|---|---|
+| `ai_client_shift_summary_view` | One row per shift: `humanStatus`, `nextAction`, `proposedChefsSafeSummary` (clientVisible only), `confirmedChefs`, `hoursStatus`, `ratingStatus`, `allowedClientActions`. | Pre-redacted to clientVisible fields; never includes `placements.notes`, internal comments, or ratings. |
+| `ai_client_request_queue_view` | One row per submission / shift change request: `humanStatus`, `nextStep`, `canCancel`, `canRequestChange`. | Own-klant scoped. |
+| `ai_recurring_template_summary_view` | One row per template: `humanPattern`, `nextGeneratedDates`, `pendingChangeRequest`, `allowedActions`. | Klant projection omits `chef_rate_cents`/`client_rate_cents`. |
+| `ai_client_feedback_view` | One row per placement: `commentSummary`, `visibility`, `adminActionNeeded`. | Visibility-tagged; chef/klant rating exposure follows the N≥5 + internal-only rules. |
+
+When these views ship, the contract above is the test they must pass: a klant-scoped query through them must be incapable of returning `placements.notes`, an `internal`/`chef_visible` comment, or any chef rating.

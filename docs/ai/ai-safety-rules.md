@@ -223,3 +223,40 @@ When reviewing AI-related code, ask:
 - [ ] Is the response in Dutch (for user-facing) with human labels?
 
 If any answer is "no", block the PR.
+
+---
+
+## Klant-side rules (PR-KLANT-0)
+
+The hotel (klant) workflows add their own boundaries. These bind every klant-facing tool, prompt, and code path exactly like the 10 hard rules above. They are grounded in the klant playbooks under [`workflow-playbooks/`](./workflow-playbooks/) and the tool contracts (`client-tools.md`, `client-request-tools.md`, `client-template-tools.md`, `rating-tools.md`).
+
+### What the AI MAY do (klant side)
+
+- **Draft klant comments** on proposed chefs (via `placement_comments`, `visibility='client_visible'`), **cancellation/change requests** (submissions + shifts), and **rating summaries for admins only**.
+- **Explain a proposed chef using ONLY `clientVisible` fields** (name, vakniveau, ervaring, languages; photo only if `clientVisible+verified`) plus the `getMatchReasons()` "Waarom voorgesteld?" bullets.
+- **Explain who receives which klant email** via `recipientsForClient(clientId, eventKey)` (V1 single address vs. V2 role contacts).
+
+### What the AI MUST NEVER do (klant side)
+
+- **Never reveal a chef's internal ratings to another klant.** Ratings are internal-only V1; `getChefPreviewForKlant()` returns no rating data. (Tested in the eval set.)
+- **Never reveal private admin notes.** Only `placement_comments` rows with `visibility='client_visible'` reach a klant. The AI must never read `placements.notes` for a klant-facing answer (see `rag-source-catalog.md`).
+- **Never sign hours on behalf of a klant.** The klant clicks "Akkoord" on the hours sub-page themselves; the AI only deep-links.
+- **Never cancel a confirmed shift autonomously.** The AI may draft a *cancel request*; an admin executes the real cancellation via the chef-facing path. The AI never flips a `placement`/`shift` to `cancelled`.
+- **Never approve a recurring-template change, a rate change, or a payment-term change.** Templates are admin-owned; `paymentTermsDays` and rates are request-and-approve. The AI drafts requests; admins approve. It never edits `shift_templates` or `chef_rate_cents`/`client_rate_cents`, and never directly sets `clients.paymentTermsDays`.
+- **Never expose a non-`clientVisible` document** (or an unverified/`!clientVisible` chef photo).
+
+### Rating discipline (matching safety)
+
+- **Rating tags are soft matching hints only** — never a hard signal.
+- **A single rating must never dominate** a chef's matchability (no one bad klant poisons a chef).
+- **`average_rating` is weak below `rating_count = 5`** and must not act as a strong signal until then; the chef themselves sees the average only at N≥5.
+- **Negative tags (`te_laat`, `tempo_te_langzaam`, `communicatie_kon_beter`) require human review** before they penalise a chef in matching — the AI surfaces them to an admin, it never auto-deranks.
+
+### Klant additions to the forbidden list (autonomous, always)
+
+- `client.approve_change` (klant approving their own request) — does not exist.
+- Direct mutation of `clients.paymentTermsDays` — request-and-approve only.
+- `shift.cancel_confirmed` autonomously — draft request only; admin executes.
+- `template.edit` / `template.change_rate` — admin-only UI.
+- `rating.expose_to_other_klant` — never.
+- `rating.submit_on_behalf` — never.

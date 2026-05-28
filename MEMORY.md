@@ -117,13 +117,26 @@
 | PR-CHEF-7 | Payroll batches + corrections + CSV export | ⏳ |
 | PR-CHEF-8 | Email delivery tracking (Resend webhooks) | ✅ live (POST /api/webhooks/resend with svix-signature HMAC verify · recordEmailEventFromWebhook updates email_messages.status) |
 | PR-CHEF-9 | In-app notification inbox UI | ✅ live (bell with unread badge in all 3 layouts · /chef/notifications · /client/notifications · /admin/notifications · markRead + markAllRead) |
-| PR-CHEF-10 | AVG consent + privacy requests + retention policies | ⏳ |
+| PR-CHEF-10 | AVG consent + privacy requests + retention policies | ✅ live (migration 0018 · consent_log + privacy_requests + DPA + retention_policies · ConsentGate modal flag-gated · /privacy-chef + /privacy-klant placeholders) |
 | PR-CHEF-11 | Calendar ICS feeds (chef + klant) | ✅ live (migration 0015 calendar_token · src/lib/calendar/ics.ts · /chef/calendar.ics + /client/calendar.ics public-by-token · /chef/calendar + /client/calendar UI with copy URL + rotate secret) |
 | PR-CHEF-12 | Document verification + expiry + visibility | ✅ live (migration 0016 · clientVisible+verifiedAt/By+expiresAt+status on chef_documents · /api/chef-document/[id] 3-way access · workers/document-expiry.ts · profile doc list with visibility chips) |
 | PR-CHEF-13 | Backup + restore drill + encryption | ✅ live (migration 0017 · backup-neon.sh + restore-drill.sh + backup-install.sh + launchd plist + age-encryption support + 12-week retention · backup_runs + restore_drills tables) |
-| PR-CHEF-14 | Polish: countdown, empty/late states, doc visibility labels | ⏳ |
+| PR-CHEF-7 | Payroll batches + corrections + CSV export | ✅ live (migration 0019 · payroll_batches + lines + shift_hour_corrections · /admin/business/payroll + CSV export route) |
+| PR-CHEF-14 | Polish: countdown, empty/late states, doc visibility labels | ✅ folded into PR-CHEF-2 (countdown/earnings) + PR-CHEF-12 (doc labels) + PR-CHEF-5 (rejection reason) |
 | PR-CHEF-15 | Web Push (DEFERRED) | 💤 deferred |
 | PR-CHEF-FUT | Reserved API/webhook schemas (no UI) | 💤 reserved |
+
+### Klant (hotel) phase — active
+
+| PR | Description | Status |
+|---|---|---|
+| PR-KLANT-0 | Foundations: shift hub + placement_comments + client_contacts + recipients + AI docs | ✅ live (migration 0020 · /client/shifts/[shiftId] hub · comments.ts visibility-scoped · client-recipients.ts · client-shift-labels.ts · 8 playbooks + 4 tool contracts) |
+| PR-KLANT-1 | Profile editing (sectioned, paymentTerms→request) | ⏳ next (migration 0021) |
+| PR-KLANT-2 | Requests list + cancel + change/cancel for existing shifts | ⏳ (migration 0022) |
+| PR-KLANT-3 | Chef preview + structured comments + email | ⏳ |
+| PR-KLANT-4 | Recurring templates + exceptions + overnight + preview | ⏳ (migration 0023) |
+| PR-KLANT-5 | Rating loop + tags + N≥5 rule + email | ⏳ (migration 0024) |
+| PR-KLANT-DOCS | CLAUDE.md + WORKFLOW link-complete + MEMORY resume-header | ⏳ (runs last) |
 
 ---
 
