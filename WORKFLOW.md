@@ -520,31 +520,30 @@ These are documented HERE before the code lands so we don't forget the linkage w
    (Tier 3 only: copy includes [Bel Maarten] tel: link)
 ```
 
-## 2.3 — Profile change request (PR-CHEF-4)
+## 2.3 — Profile change request (PR-CHEF-4) — ✅ SHIPPED (admin review added post-klant-phase)
 
 ```
-/chef/profile → "Verzoek wijziging" on locked field (rate / vakniveau / name / email)
+/chef/profile → "Verzoek wijziging" on locked field (hourlyRate / vakniveau / fullName / email)
    ↓
-   requestChange(field, proposedValue, reason)
+   requestChange(field, proposedValue, reason)   src/app/(chef)/chef/profile/page.tsx
    ↓
    INSERT profile_change_requests (status='pending')
-   AUDIT: 'chef.profile_change_requested'
-   createNotification(admin recipients, 'profile_change_request')
-   sendEmail(ProfileChangeRequestAdminEmail)
+   AUDIT: 'chef.profile_change_requested' ; admin notify email
    ↓
-ADMIN: /admin/business/chefs/[id] → "Wijzigingsverzoeken" tab → approve/reject
+ADMIN: /admin/business/chefs/[id] → "Wijzigingsverzoeken" section → Goedkeuren/Afwijzen
    ↓
-   approveChangeRequest(reqId, decisionNotes) OR rejectChangeRequest(...)
+   approveProfileChange / rejectProfileChange (→ decideProfileChange helper)
    ↓
-   ON approve:
-     UPDATE chefs SET <field>=proposedValue
-     UPDATE profile_change_requests SET status='approved', decidedAt, decidedBy
-     AUDIT: 'chef.profile_change_approved'
-     enqueueIntegrationEvent('chef.updated')  ← future Payingit rate sync
-     createNotification(chef.user, 'profile_change_approved')
-     sendEmail(ProfileChangeApprovedChefEmail)
-   ON reject: similar, status='rejected', no chef field change
+   ON approve: apply field → chefs column(s) — hourlyRate writes BOTH
+     hourlyRateMinCents + hourlyRateMaxCents from proposedValue {min,max}
+   atomic UPDATE profile_change_requests SET status WHERE id=? AND status='pending'
+   AUDIT: 'chef.profile_change_approved' | 'chef.profile_change_rejected'
+   EMAIL chef outcome (inline-React, direct to chefs.email + recordEmailMessage)
+   ON reject: status='rejected', no chef field change
 ```
+
+(The chef-request side shipped in PR-CHEF-4; the admin review UI was a gap
+closed afterwards — mirrors the klant Wijzigingsverzoeken flow §1.10.)
 
 ## 2.4 — Hours correction after export (PR-CHEF-7)
 
@@ -684,7 +683,7 @@ CRON workers/document-expiry.ts (daily):
 | `manualAddHours` | `(admin)/admin/business/shifts/[id]/page.tsx` | requireRole(owner) | INSERT shift_hours with status, audit reason |
 | `saveProfile` (direct) | `(chef)/chef/profile/page.tsx` | requireAuth + chefSelf | UPDATE chefs · audit |
 | `requestChange` | same | requireAuth + chefSelf | INSERT profile_change_requests |
-| `approveChangeRequest` / `rejectChangeRequest` | admin chef detail | requireRole(owner) | UPDATE chefs · UPDATE profile_change_requests · email |
+| `approveProfileChange` / `rejectProfileChange` (→ `decideProfileChange`) | `(admin)/admin/business/chefs/[id]/page.tsx` | requireRole(owner) | apply field → chefs · atomic UPDATE profile_change_requests · chef outcome email — ✅ SHIPPED |
 | `cancelShift` (chef) | `(chef)/chef/shifts/[placementId]/page.tsx` | requireAuth + chefSelf | UPDATE placements · outbox · 2 emails |
 | `logContact` | (admin shift/chef detail) | requireRole(owner) | INSERT contact_logs |
 | `acceptConsent` | `(chef)/chef/_components/ConsentGate.tsx` server action | requireAuth | INSERT consent_log |

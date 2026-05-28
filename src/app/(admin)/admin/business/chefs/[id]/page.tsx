@@ -1,9 +1,15 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { auditLog, chefSubmissions, chefs, users } from "@/lib/db/schema";
+import {
+  auditLog,
+  chefSubmissions,
+  chefs,
+  profileChangeRequests,
+  users,
+} from "@/lib/db/schema";
 import {
   listChefDocuments,
   requestChefDocumentUpload,
@@ -17,6 +23,8 @@ import {
 } from "@/lib/domain/portal-invites";
 import { getChefAverageForAdmin } from "@/lib/domain/ratings";
 import { RATING_TAG_LABELS, type RatingTag } from "@/lib/rating-tags";
+import { sendEmail } from "@/lib/email";
+import { recordEmailMessage } from "@/lib/integrations";
 import { requireRole } from "@/lib/permissions";
 import { r2IsConfigured } from "@/lib/r2";
 
@@ -73,6 +81,16 @@ export default async function ChefDetailPage({
 
   // PR-KLANT-5: rating summary (admin always sees full picture).
   const rating = await getChefAverageForAdmin(id);
+
+  // PR-CHEF-4 (admin review): chef-submitted profile change requests.
+  const changeRequests = await db
+    .select()
+    .from(profileChangeRequests)
+    .where(eq(profileChangeRequests.chefId, id))
+    .orderBy(desc(profileChangeRequests.createdAt))
+    .limit(25);
+  const pendingChanges = changeRequests.filter((r) => r.status === "pending");
+  const decidedChanges = changeRequests.filter((r) => r.status !== "pending");
 
   // Load originating submission (if any) for "back to inbox" link
   const sourceSubmission = chef.sourceSubmissionId
@@ -214,6 +232,149 @@ export default async function ChefDetailPage({
     redirect(`/admin/business/chefs/${id}`);
   }
 
+  /* ---------- PR-CHEF-4 admin review: decide profile change requests ----- */
+  async function decideProfileChange(
+    formData: FormData,
+    decision: "approved" | "rejected",
+  ) {
+    "use server";
+    const session = await requireRole("owner");
+    const requestId = String(formData.get("requestId") ?? "");
+    const decisionNotes =
+      String(formData.get("decisionNotes") ?? "").trim() || null;
+    if (!requestId) return;
+
+    const [req] = await db
+      .select()
+      .from(profileChangeRequests)
+      .where(eq(profileChangeRequests.id, requestId))
+      .limit(1);
+    if (!req || req.chefId !== id || req.status !== "pending") {
+      redirect(`/admin/business/chefs/${id}?err=request-gone`);
+    }
+
+    // Apply the proposed value on approval.
+    if (decision === "approved") {
+      const pv = req.proposedValue as unknown;
+      if (req.field === "hourlyRate" && pv && typeof pv === "object") {
+        const { min, max } = pv as { min?: number; max?: number };
+        await db
+          .update(chefs)
+          .set({
+            hourlyRateMinCents: typeof min === "number" ? min : null,
+            hourlyRateMaxCents: typeof max === "number" ? max : null,
+            updatedAt: new Date(),
+          })
+          .where(eq(chefs.id, id));
+      } else if (req.field === "fullName") {
+        await db
+          .update(chefs)
+          .set({ fullName: String(pv), updatedAt: new Date() })
+          .where(eq(chefs.id, id));
+      } else if (req.field === "email") {
+        await db
+          .update(chefs)
+          .set({ email: String(pv).toLowerCase(), updatedAt: new Date() })
+          .where(eq(chefs.id, id));
+      } else if (req.field === "vakniveau") {
+        await db
+          .update(chefs)
+          .set({ vakniveau: String(pv) as never, updatedAt: new Date() })
+          .where(eq(chefs.id, id));
+      }
+    }
+
+    // Atomic transition — only flip a still-pending request.
+    const updated = await db
+      .update(profileChangeRequests)
+      .set({
+        status: decision,
+        decidedAt: new Date(),
+        decidedBy: session.user.id,
+        decisionNotes,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(profileChangeRequests.id, requestId),
+          eq(profileChangeRequests.status, "pending"),
+        ),
+      )
+      .returning({ id: profileChangeRequests.id });
+    if (updated.length === 0) redirect(`/admin/business/chefs/${id}?err=request-gone`);
+
+    await db.insert(auditLog).values({
+      userId: session.user.id,
+      action:
+        decision === "approved"
+          ? "chef.profile_change_approved"
+          : "chef.profile_change_rejected",
+      resource: "profile_change_requests",
+      resourceId: requestId,
+      after: { field: req.field, decision, decisionNotes },
+    });
+
+    // Outcome email to the chef (direct — chefs have no recipientsFor seam).
+    if (chef!.email) {
+      const fieldLabel = chefChangeFieldLabel(req.field);
+      const send = await sendEmail({
+        to: chef!.email,
+        subject:
+          decision === "approved"
+            ? `Wijziging doorgevoerd: ${fieldLabel}`
+            : `Wijzigingsverzoek niet doorgevoerd: ${fieldLabel}`,
+        react: (
+          <div>
+            <h1>
+              {decision === "approved"
+                ? "Je wijziging is doorgevoerd"
+                : "Je wijzigingsverzoek is niet doorgevoerd"}
+            </h1>
+            <p>
+              <strong>Onderdeel:</strong> {fieldLabel}
+              {decision === "approved" ? (
+                <>
+                  <br />
+                  <strong>Nieuwe waarde:</strong>{" "}
+                  {formatChefChangeValue(req.field, req.proposedValue)}
+                </>
+              ) : null}
+              {decisionNotes ? (
+                <>
+                  <br />
+                  <strong>Toelichting van Chef &amp; Serve:</strong> {decisionNotes}
+                </>
+              ) : null}
+            </p>
+            <p>Vragen? Mail of bel het kantoor — we helpen je graag.</p>
+          </div>
+        ),
+      });
+      if (send.ok) {
+        await recordEmailMessage({
+          providerMessageId: send.id,
+          toEmail: chef!.email,
+          template: "ChefProfileChangeOutcomeInline",
+          eventKey: "profile_change_request",
+          entityType: "profile_change_requests",
+          entityId: requestId,
+          userId: chef!.userId ?? undefined,
+        });
+      }
+    }
+
+    redirect(`/admin/business/chefs/${id}?ok=change-${decision}`);
+  }
+
+  async function approveProfileChange(formData: FormData) {
+    "use server";
+    await decideProfileChange(formData, "approved");
+  }
+  async function rejectProfileChange(formData: FormData) {
+    "use server";
+    await decideProfileChange(formData, "rejected");
+  }
+
   /* ---------- view --------------------------------------------- */
   return (
     <div className="mx-auto max-w-3xl">
@@ -296,6 +457,111 @@ export default async function ChefDetailPage({
             </ul>
           </>
         )}
+      </section>
+
+      {/* PR-CHEF-4 admin review: chef-submitted change requests */}
+      <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
+        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          Wijzigingsverzoeken
+        </h2>
+        <p className="mt-1 text-sm text-ink-700">
+          Velden die de chef via het portaal heeft aangevraagd. Goedkeuren
+          voert de wijziging direct door.
+        </p>
+
+        {pendingChanges.length === 0 ? (
+          <p className="mt-4 rounded bg-bg-gray px-3 py-2 text-xs text-ink-500">
+            Geen openstaande verzoeken.
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-4">
+            {pendingChanges.map((r) => (
+              <li
+                key={r.id}
+                className="rounded-lg border border-amber-300 bg-amber-50/50 p-4"
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+                    {chefChangeFieldLabel(r.field)}
+                  </p>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider text-amber-800">
+                    Wacht op akkoord
+                  </span>
+                </div>
+                <div className="mt-2 grid gap-1 text-sm text-ink-900">
+                  <p>
+                    <span className="text-ink-500">Huidig:</span>{" "}
+                    {formatChefChangeValue(r.field, r.currentValue)}
+                  </p>
+                  <p>
+                    <span className="text-ink-500">Voorgesteld:</span>{" "}
+                    <strong>{formatChefChangeValue(r.field, r.proposedValue)}</strong>
+                  </p>
+                  {r.reason ? (
+                    <p className="text-xs text-ink-500">
+                      Toelichting chef: {r.reason}
+                    </p>
+                  ) : null}
+                </div>
+
+                <form action={approveProfileChange} className="mt-3">
+                  <input type="hidden" name="requestId" value={r.id} />
+                  <textarea
+                    name="decisionNotes"
+                    rows={2}
+                    placeholder="Optionele toelichting (gedeeld met de chef)"
+                    className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="submit"
+                      className="rounded-full bg-emerald-600 px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-emerald-700"
+                    >
+                      Goedkeuren
+                    </button>
+                    <button
+                      type="submit"
+                      formAction={rejectProfileChange}
+                      className="rounded-full border border-red-300 bg-white px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-red-700 hover:bg-red-50"
+                    >
+                      Afwijzen
+                    </button>
+                  </div>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {decidedChanges.length > 0 ? (
+          <details className="mt-5">
+            <summary className="cursor-pointer font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500 hover:text-burgundy">
+              Geschiedenis ({decidedChanges.length})
+            </summary>
+            <ul className="mt-3 space-y-2 text-sm">
+              {decidedChanges.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex items-baseline justify-between gap-3 border-b border-ink-200 pb-2"
+                >
+                  <span className="text-ink-900">
+                    {chefChangeFieldLabel(r.field)} →{" "}
+                    {formatChefChangeValue(r.field, r.proposedValue)}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider ${
+                      r.status === "approved"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-bg-gray text-ink-500"
+                    }`}
+                  >
+                    {r.status === "approved" ? "Doorgevoerd" : "Afgewezen"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </section>
 
       <form
@@ -641,4 +907,27 @@ function StatusBadge({ status }: { status: string }) {
       {labels[status] ?? status}
     </span>
   );
+}
+
+/* ----- PR-CHEF-4 admin review helpers ----- */
+function chefChangeFieldLabel(field: string): string {
+  return (
+    {
+      fullName: "Naam",
+      email: "E-mailadres",
+      vakniveau: "Vakniveau",
+      hourlyRate: "Uurtarief",
+    } as Record<string, string>
+  )[field] ?? field;
+}
+
+function formatChefChangeValue(field: string, value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (field === "hourlyRate" && typeof value === "object") {
+    const { min, max } = value as { min?: number; max?: number };
+    const fmt = (c?: number) => (typeof c === "number" ? `€${(c / 100).toFixed(0)}` : "—");
+    return `${fmt(min)} – ${fmt(max)} per uur`;
+  }
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  return JSON.stringify(value);
 }
