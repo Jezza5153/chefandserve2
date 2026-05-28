@@ -21,6 +21,11 @@ import {
   disablePortalUser,
   inviteChefToPortal,
 } from "@/lib/domain/portal-invites";
+import {
+  getChefFeedbackSummary,
+  getChefRecentShifts,
+  getChefWorkSummary,
+} from "@/lib/domain/chef-history";
 import { getChefAverageForAdmin } from "@/lib/domain/ratings";
 import { RATING_TAG_LABELS, type RatingTag } from "@/lib/rating-tags";
 import { sendEmail } from "@/lib/email";
@@ -103,6 +108,14 @@ export default async function ChefDetailPage({
   const portalUser = chef.userId
     ? await db.query.users.findFirst({ where: eq(users.id, chef.userId) })
     : null;
+
+  // PR-1.6: Chef 360 read model (hours from FINAL hours only · feedback from
+  // real ratings · reliability = raw counts).
+  const [workSummary, feedback, recentShifts] = await Promise.all([
+    getChefWorkSummary(id),
+    getChefFeedbackSummary(id),
+    getChefRecentShifts(id, 8),
+  ]);
 
   // Documents (with fresh presigned download URLs)
   const documents = await listChefDocuments(chef.id);
@@ -815,15 +828,165 @@ export default async function ChefDetailPage({
         />
       </section>
 
-      <div className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
-        <h2 className="font-serif text-lg text-ink-900">Binnenkort op deze pagina</h2>
-        <ul className="mt-3 space-y-2 text-sm text-ink-700">
-          <li>· Beschikbaarheidskalender (Phase 4)</li>
-          <li>· Plaatsings-geschiedenis (Phase 3)</li>
-          <li>· Ratings van klanten (Phase 6)</li>
-        </ul>
-      </div>
+      {/* PR-1.6: Chef 360 — track record at a glance */}
+      <section className="mt-8">
+        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          Chef 360 — staat van dienst
+        </h2>
+
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Snap label="Uren gewerkt" value={`${workSummary.totalHoursWorked} u`} note="goedgekeurd" />
+          <Snap
+            label="Diensten afgerond"
+            value={String(workSummary.completedShifts)}
+            note={workSummary.upcomingShifts > 0 ? `${workSummary.upcomingShifts} gepland` : undefined}
+          />
+          <Snap
+            label="Beoordeling"
+            value={workSummary.averageRating != null ? `${workSummary.averageRating.toFixed(1)}★` : "—"}
+            note={workSummary.ratingCount > 0 ? `${workSummary.ratingCount} reviews` : "geen reviews"}
+          />
+          <Snap
+            label="Laatst gewerkt"
+            value={workSummary.lastWorkedAt ? fmtNlDate(workSummary.lastWorkedAt) : "—"}
+          />
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Rel label="Geaccepteerd" n={workSummary.acceptedCount} />
+          <Rel label="Geweigerd" n={workSummary.declinedCount} />
+          <Rel label="Geannuleerd" n={workSummary.cancelledCount} tone={workSummary.cancelledCount > 0 ? "amber" : undefined} />
+          <Rel label="No-show" n={workSummary.noShowCount} tone={workSummary.noShowCount > 0 ? "red" : undefined} />
+        </div>
+        <p className="mt-1 text-[10px] text-ink-500">
+          Uren uit goedgekeurde urenstaten · betrouwbaarheid uit plaatsingen · beoordelingen uit klantfeedback.
+        </p>
+
+        {(workSummary.topClients.length > 0 || workSummary.topSegments.length > 0) && (
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            {workSummary.topClients.length > 0 && (
+              <div className="rounded-lg border border-ink-200 bg-white p-4">
+                <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Meeste ervaring bij</p>
+                <ul className="mt-2 space-y-1 text-sm text-ink-900">
+                  {workSummary.topClients.map((c) => (
+                    <li key={c.name} className="flex justify-between gap-2">
+                      <span className="truncate">{c.name}</span>
+                      <span className="shrink-0 text-ink-500">{c.count}×</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {workSummary.topSegments.length > 0 && (
+              <div className="rounded-lg border border-ink-200 bg-white p-4">
+                <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Sterk in</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {workSummary.topSegments.map((s) => (
+                    <span key={s.segment} className="rounded-full bg-burgundy/5 px-2 py-0.5 text-xs text-burgundy">
+                      {s.segment} · {s.count}×
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="mt-4 rounded-lg border border-ink-200 bg-white p-4">
+          <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">Wat klanten zeggen</p>
+          {feedback.topTags.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1">
+              <span className="text-[11px] text-ink-500">Meest genoemd:</span>
+              {feedback.topTags.map((t) => (
+                <span key={t.tag} className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
+                  {RATING_TAG_LABELS[t.tag as RatingTag] ?? t.tag} ({t.count})
+                </span>
+              ))}
+            </div>
+          )}
+          {feedback.recent.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-500">Nog geen beoordelingen.</p>
+          ) : (
+            <ul className="mt-3 space-y-3">
+              {feedback.recent.map((f, i) => (
+                <li key={i} className="border-t border-ink-100 pt-2 first:border-t-0 first:pt-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-amber-500">
+                      {"★".repeat(f.stars)}
+                      <span className="text-ink-200">{"★".repeat(5 - f.stars)}</span>
+                    </span>
+                    <span className="text-[11px] text-ink-500">{f.clientName ?? "Klant"} · {fmtNlDate(f.createdAt)}</span>
+                  </div>
+                  {f.tags.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {f.tags.map((t) => (
+                        <span key={t} className="rounded bg-bg-gray px-1.5 py-0.5 text-[10px] text-ink-700">
+                          {RATING_TAG_LABELS[t as RatingTag] ?? t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {f.comment && <p className="mt-1 text-sm text-ink-700">&ldquo;{f.comment}&rdquo;</p>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="mt-4 rounded-lg border border-ink-200 bg-white p-4">
+          <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">Recente diensten</p>
+          {recentShifts.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-500">Nog geen plaatsingen.</p>
+          ) : (
+            <ul className="mt-2 space-y-1.5">
+              {recentShifts.map((s) => (
+                <li key={s.shiftId}>
+                  <Link
+                    href={`/admin/business/shifts/${s.shiftId}`}
+                    className="flex flex-wrap items-center gap-x-2 text-sm hover:text-burgundy"
+                  >
+                    <span className="text-ink-500">{fmtNlDate(s.startsAt)}</span>
+                    <span className="text-ink-900">{s.clientName ?? "Onbekende klant"}</span>
+                    <span className="text-ink-500">· {s.roleNeeded}{s.city ? ` · ${s.city}` : ""}</span>
+                    <span className="ml-auto rounded-full bg-bg-gray px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-500">
+                      {s.placementStatus}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
     </div>
+  );
+}
+
+function fmtNlDate(d: Date | string): string {
+  return new Date(d).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function Snap({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="rounded-lg border border-ink-200 bg-white p-4">
+      <p className="font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">{label}</p>
+      <p className="mt-1 font-serif text-2xl text-ink-900">{value}</p>
+      {note && <p className="mt-0.5 text-[11px] text-ink-500">{note}</p>}
+    </div>
+  );
+}
+
+function Rel({ label, n, tone }: { label: string; n: number; tone?: "amber" | "red" }) {
+  const cls =
+    tone === "red"
+      ? "bg-red-100 text-red-700"
+      : tone === "amber"
+        ? "bg-amber-100 text-amber-800"
+        : "bg-bg-gray text-ink-700";
+  return (
+    <span className={`rounded-full px-2.5 py-1 font-ui text-[11px] ${cls}`}>
+      {label}: <strong>{n}</strong>
+    </span>
   );
 }
 
