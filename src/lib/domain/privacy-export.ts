@@ -24,6 +24,7 @@ import JSZip from "jszip";
 import { and, eq, isNull, or, sql, type SQL } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
+import { assertImpersonationAllowed } from "@/lib/domain/impersonation";
 import { recordAuditFromRequest } from "@/lib/audit";
 import {
   chefAvailability,
@@ -678,6 +679,7 @@ export async function buildUserDataExport(args: {
   | { ok: true; key: string; preview: ExportPreview }
   | { ok: false; error: string }
 > {
+  await assertImpersonationAllowed();
   const [req] = await db
     .select()
     .from(privacyRequests)
@@ -733,6 +735,7 @@ export async function createExportDownloadLink(args: {
   requestId: string;
   actorId: string;
 }): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  await assertImpersonationAllowed();
   const [req] = await db
     .select({ key: privacyRequests.responseFileKey })
     .from(privacyRequests)

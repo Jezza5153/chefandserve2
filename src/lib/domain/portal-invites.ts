@@ -25,6 +25,7 @@
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
+import { assertImpersonationAllowed } from "@/lib/domain/impersonation";
 import { recordAuditFromRequest } from "@/lib/audit";
 import {
   chefs,
@@ -237,6 +238,7 @@ export async function inviteInternalStaff(args: {
   role: "owner" | "super_admin";
   actingUserId: string;
 }): Promise<InviteResult> {
+  await assertImpersonationAllowed();
   const email = args.email.trim().toLowerCase();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { ok: false, error: "Ongeldig e-mailadres" };
@@ -317,6 +319,7 @@ export async function disablePortalUser(
   userId: string,
   actingUserId: string,
 ): Promise<{ ok: true }> {
+  await assertImpersonationAllowed();
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
   if (!user) return { ok: true };
 

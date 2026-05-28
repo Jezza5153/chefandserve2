@@ -196,3 +196,27 @@ export function assertNotImpersonating(session: Session): void {
     throw new Error("IMPERSONATION_VIEW_ONLY");
   }
 }
+
+/**
+ * Defense-in-depth guard for GENUINELY DESTRUCTIVE / irreversible actions
+ * (AVG erasure + personal-data export, payroll mutations/export, user
+ * disable / privilege grant, irreversible shift cancellation, …). Throws
+ * `IMPERSONATION_DESTRUCTIVE_BLOCKED` when a super_admin "Bekijk als" session
+ * is active (the `cs_impersonate_target` cookie is set).
+ *
+ * This is the SECOND layer behind the middleware denylist: even if a path is
+ * missed there, the action itself aborts. Cookie-based (not session-based) so
+ * it is a single source of truth that also covers session-less domain
+ * functions. Request-scoped — outside a request (worker/script) it no-ops.
+ */
+export async function assertImpersonationAllowed(): Promise<void> {
+  let target: string | undefined;
+  try {
+    target = (await cookies()).get(IMPERSONATE_TARGET)?.value;
+  } catch {
+    return; // no request scope (worker/script) — never impersonated
+  }
+  if (target) {
+    throw new Error("IMPERSONATION_DESTRUCTIVE_BLOCKED");
+  }
+}

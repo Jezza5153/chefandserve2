@@ -17,6 +17,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/lib/db/client";
+import { assertImpersonationAllowed } from "@/lib/domain/impersonation";
 import { recordAuditFromRequest } from "@/lib/audit";
 import {
   payrollBatches,
@@ -39,6 +40,7 @@ export const dynamic = "force-dynamic";
 async function createBatch(formData: FormData) {
   "use server";
   const session = await requireRole("owner");
+  await assertImpersonationAllowed();
   const start = String(formData.get("periodStart") ?? "");
   const end = String(formData.get("periodEnd") ?? "");
   if (!start || !end) redirect("/admin/business/payroll?error=missing-dates");
@@ -111,6 +113,7 @@ async function createBatch(formData: FormData) {
 async function markExported(formData: FormData) {
   "use server";
   const session = await requireRole("owner");
+  await assertImpersonationAllowed();
   const batchId = String(formData.get("batchId") ?? "");
   if (!batchId) return;
 

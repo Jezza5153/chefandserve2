@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
+import { assertImpersonationAllowed } from "@/lib/domain/impersonation";
 import { recordAuditFromRequest } from "@/lib/audit";
 import {
   chefAvailability,
@@ -278,6 +279,11 @@ export default async function ShiftDetailPage({
       | "confirmed"
       | "rejected"
       | "cancelled";
+
+    // Irreversible cancellation is destructive — blocked during "Bekijk als".
+    if (newStatus === "cancelled") {
+      await assertImpersonationAllowed();
+    }
 
     const setMap: Record<string, Date> = {
       accepted: new Date(),

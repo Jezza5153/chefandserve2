@@ -19,6 +19,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
+import { assertImpersonationAllowed } from "@/lib/domain/impersonation";
 import { recordAuditFromRequest } from "@/lib/audit";
 import {
   chefAvailability,
@@ -170,6 +171,7 @@ export async function eraseUserData(args: {
     }
   | { ok: false; error: string }
 > {
+  await assertImpersonationAllowed();
   const reason = args.reason.trim();
   if (!reason) return { ok: false, error: "Reden is verplicht." };
 
