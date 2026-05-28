@@ -132,7 +132,7 @@
 |---|---|---|
 | PR-KLANT-0 | Foundations: shift hub + placement_comments + client_contacts + recipients + AI docs | ✅ live (migration 0020 · /client/shifts/[shiftId] hub · comments.ts visibility-scoped · client-recipients.ts · client-shift-labels.ts · 8 playbooks + 4 tool contracts) |
 | PR-KLANT-1 | Profile editing (sectioned, paymentTerms→request) | ✅ live (migration 0021 · /client/profile sectioned: Contactpersoon · Shiftlocatie · Facturatie · request-change · client_change_requests table · admin Wijzigingsverzoeken tab · BillingEmailChangedKlantEmail to OLD address · recipientsForClient outcome email) |
-| PR-KLANT-2 | Requests list + cancel + change/cancel for existing shifts | ⏳ (migration 0022) |
+| PR-KLANT-2 | Requests list + cancel + change/cancel for existing shifts | ✅ live (migration 0022 · /client/requests list + retract · shift hub change/cancel modals · client_shift_change_requests + one-open-per-shift-per-kind unique index · submission_status cancelled_by_client · admin inbox decision queue · ClientChangeRequestAdminEmail + ClientChangeRequestOutcomeKlantEmail) |
 | PR-KLANT-3 | Chef preview + structured comments + email | ⏳ |
 | PR-KLANT-4 | Recurring templates + exceptions + overnight + preview | ⏳ (migration 0023) |
 | PR-KLANT-5 | Rating loop + tags + N≥5 rule + email | ⏳ (migration 0024) |
@@ -162,7 +162,7 @@
 
 **Shifts/placements**: `shifts` · `placements`
 
-**Klant phase (live)**: `placement_comments` (visibility-scoped, PR-KLANT-0) · `client_contacts` (routing seam, PR-KLANT-0) · `client_change_requests` (PR-KLANT-1) · `clients.shiftAddress`/`shiftArrivalNotes`/`billingAddress` (PR-KLANT-0)
+**Klant phase (live)**: `placement_comments` (visibility-scoped, PR-KLANT-0) · `client_contacts` (routing seam, PR-KLANT-0) · `client_change_requests` (PR-KLANT-1) · `client_shift_change_requests` (PR-KLANT-2, one-open-per-shift-per-kind) · `clients.shiftAddress`/`shiftArrivalNotes`/`billingAddress` (PR-KLANT-0) · `client_submissions.cancelled_by_client*` (PR-KLANT-2)
 
 ### Tables (planned per active plan)
 
@@ -203,6 +203,7 @@
 | 0019_payroll_batches.sql | payroll_batches + lines + shift_hour_corrections (PR-CHEF-7) | applied |
 | 0020_klant_foundations.sql | placement_comments + client_contacts + clients address split (PR-KLANT-0) | applied (May 28) |
 | 0021_client_change_requests.sql | client_change_requests + client_change_status enum (PR-KLANT-1) | applied (May 28) |
+| 0022_client_change_cancel.sql | client_shift_change_requests + 2 enums + submission_status 'cancelled_by_client' + client_submissions cancel cols (PR-KLANT-2) | applied (May 28) |
 
 ---
 

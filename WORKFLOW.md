@@ -278,6 +278,42 @@ Emails: `BillingEmailChangedKlantEmail` + 2 inline-React (admin notify, klant
 outcome). AI playbook: `docs/ai/workflow-playbooks/client-profile-change.md` ·
 Migration: `drizzle/0021_client_change_requests.sql`.
 
+## 1.11 — Klant never trapped: retract submission + change/cancel any shift (PR-KLANT-2)
+
+Two escape hatches so a klant always has an action.
+
+```
+A) RETRACT a still-pending portal submission — /client/requests
+   cancelSubmission(formData) → cancelClientSubmission()  (domain)
+   ↓ ownership: source='client_portal' + companyName match
+   ↓ atomic UPDATE client_submissions SET status='cancelled_by_client'
+     WHERE id=? AND status IN ('new','triaged')  (else "al in behandeling")
+   AUDIT client_submission.cancelled_by_client ; admin notify email
+
+B) CHANGE / CANCEL an existing shift — /client/shifts/[shiftId] (hub modals)
+   requestShiftChangeAction(formData)  →  createShiftChangeRequest()  (domain)
+   ↓ reason >= 5 ; ownership (shift.clientId == client.id)
+   ↓ one OPEN request per (shift, kind): pre-check + partial-unique backstop
+     → duplicate → "Je hebt al een verzoek openstaan"
+   INSERT client_shift_change_requests (status='pending')
+   AUDIT client_shift_change.{change,cancel}_requested
+   EMAIL admin ClientChangeRequestAdminEmail (recipientsFor 'client_portal_request')
+   ↓
+ADMIN: /admin/business/inbox "Klant-verzoeken" queue
+   decideShiftRequest(formData) → decideShiftChangeRequest()  (domain)
+   ↓ atomic flip pending→approved/rejected ; admin coordinates the actual
+     shift change manually (chefs are committed — this records + closes)
+   AUDIT client_shift_change.{approved,rejected}
+   EMAIL klant ClientChangeRequestOutcomeKlantEmail (recipientsForClient
+     'client_shift_change_requested') + notification 'client_shift_change_decided'
+```
+
+Domain: `src/lib/domain/shift-change-requests.tsx` (`createShiftChangeRequest`,
+`cancelClientSubmission`, `decideShiftChangeRequest`). Client components:
+`ChangeRequestModal` · `CancelRequestModal` · `_components/RequestStatusBadge`.
+AI playbooks: `docs/ai/workflow-playbooks/client-request-cancellation.md` ·
+`client-shift-change-request.md` · Migration: `drizzle/0022_client_change_cancel.sql`.
+
 ---
 
 # Part 2 — Planned workflows (per active plan)
@@ -523,6 +559,9 @@ CRON workers/document-expiry.ts (daily):
 | `saveClientProfile` | `(client)/client/profile/page.tsx` | requireAuth + own client | UPDATE clients · audit · outbox · (billing-email-changed mail to OLD addr) |
 | `requestClientChange` | `(client)/client/profile/page.tsx` | requireAuth + own client | INSERT client_change_requests · admin email |
 | `approveClientChange` / `rejectClientChange` | `(admin)/admin/business/clients/[id]/page.tsx` | requireRole(owner) | atomic UPDATE client_change_requests · apply value · outbox · klant outcome email |
+| `cancelSubmission` | `(client)/client/requests/page.tsx` | requireAuth + own client | atomic UPDATE client_submissions → cancelled_by_client · admin notify |
+| `requestShiftChangeAction` | `(client)/client/shifts/[shiftId]/page.tsx` | requireAuth + own client | INSERT client_shift_change_requests (dup-guarded) · admin email |
+| `decideShiftRequest` | `(admin)/admin/business/inbox/page.tsx` | requireRole(owner) | atomic decide client_shift_change_requests · klant outcome email + notification |
 
 ### Planned (per active plan)
 
@@ -837,7 +876,8 @@ MagicLinkEmail · PortalInviteEmail · RecoveryEmail
 ShiftProposedEmail · ShiftConfirmedClientEmail
 Hours* (9 templates, PR-CHEF-1) · ShiftConfirmedChefEmail · ShiftCancelledByChefClientEmail
 BillingEmailChangedKlantEmail (PR-KLANT-1, → OLD billing address)
-+ inline-React: client change-request admin notify · klant change outcome
+ClientChangeRequestAdminEmail · ClientChangeRequestOutcomeKlantEmail (PR-KLANT-2)
++ inline-React: client change-request admin notify · klant change outcome · submission-cancelled admin notify
 ```
 
 ## All current audit actions
@@ -857,6 +897,8 @@ placements.proposed · placements.chef_accepted · placements.chef_rejected · p
 chef.availability_updated · chef.availability_range_updated
 client.portal_request_submitted
 client.profile_updated · client.change_requested · client.change_approved · client.change_rejected (PR-KLANT-1)
+client_submission.cancelled_by_client (PR-KLANT-2)
+client_shift_change.change_requested · .cancel_requested · .approved · .rejected (PR-KLANT-2)
 ```
 
 ## Planned audit actions
@@ -880,7 +922,6 @@ notification.created · notification.read · notification.suppressed
 backup_runs.created · backup_runs.failed
 restore_drills.created
 placement_comments.created (helper shipped PR-KLANT-0; wired PR-KLANT-3)
-client_shift_change_requests.* (PR-KLANT-2)
 shift_templates.* (PR-KLANT-4) · ratings.created (PR-KLANT-5)
 ```
 

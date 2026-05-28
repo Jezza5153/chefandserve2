@@ -16,21 +16,25 @@
  * until then so the hub is never a dead end.
  */
 
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { ChangeRequestModal } from "./ChangeRequestModal";
+import { CancelRequestModal } from "./CancelRequestModal";
 import { WhatHappensNext } from "@/components/client/WhatHappensNext";
 import { db } from "@/lib/db/client";
 import {
   chefs,
   clients,
+  clientShiftChangeRequests,
   placements,
   shiftHours,
   shifts,
 } from "@/lib/db/schema";
 import { actionAllowed, getClientShiftLabel } from "@/lib/client-shift-labels";
 import { listVisibleComments } from "@/lib/domain/comments";
+import { createShiftChangeRequest } from "@/lib/domain/shift-change-requests";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata = { title: "Shift", robots: { index: false } };
@@ -52,11 +56,14 @@ async function requireClientSelf() {
 
 export default async function ClientShiftHubPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ shiftId: string }>;
+  searchParams: Promise<{ ok?: string; err?: string }>;
 }) {
-  const { client } = await requireClientSelf();
+  const { client, session } = await requireClientSelf();
   const { shiftId } = await params;
+  const sp = await searchParams;
 
   const [shift] = await db
     .select()
@@ -65,6 +72,40 @@ export default async function ClientShiftHubPage({
     .limit(1);
   if (!shift) notFound();
   if (shift.clientId !== client.id) notFound();
+
+  // Server action: file a change OR cancel request (kind from the form).
+  async function requestShiftChangeAction(formData: FormData) {
+    "use server";
+    const kind = String(formData.get("kind") ?? "") === "cancel" ? "cancel" : "change";
+    const reason = String(formData.get("reason") ?? "");
+    const topic = String(formData.get("topic") ?? "") || null;
+    const res = await createShiftChangeRequest({
+      shiftId,
+      clientId: client.id,
+      requestedBy: session.user.id,
+      kind,
+      reason,
+      proposedChange: topic ? { topic } : null,
+    });
+    redirect(
+      res.ok
+        ? `/client/shifts/${shiftId}?ok=${kind}`
+        : `/client/shifts/${shiftId}?err=${res.error}`,
+    );
+  }
+
+  // Open change/cancel requests for this shift (one per kind max).
+  const openRequests = await db
+    .select({ kind: clientShiftChangeRequests.kind })
+    .from(clientShiftChangeRequests)
+    .where(
+      and(
+        eq(clientShiftChangeRequests.shiftId, shiftId),
+        inArray(clientShiftChangeRequests.status, ["pending", "in_progress"]),
+      ),
+    );
+  const hasOpenChange = openRequests.some((r) => r.kind === "change");
+  const hasOpenCancel = openRequests.some((r) => r.kind === "cancel");
 
   // All placements on this shift + chef + hours
   const placementRows = await db
@@ -130,6 +171,25 @@ export default async function ClientShiftHubPage({
       <p className="mt-2 text-sm text-ink-700">{formatRange(shift.startsAt, shift.endsAt)}</p>
       {shift.location ? (
         <p className="mt-1 text-sm text-ink-500">{shift.location}</p>
+      ) : null}
+
+      {sp.ok === "change" || sp.ok === "cancel" ? (
+        <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+          ✓ Je {sp.ok === "cancel" ? "annulerings" : "wijzigings"}verzoek is
+          verstuurd. Chef &amp; Serve neemt contact met je op.
+        </p>
+      ) : null}
+      {sp.err === "duplicate" ? (
+        <p className="mt-4 rounded border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          Je hebt al een verzoek van dit type openstaan voor deze shift. We
+          nemen dit mee en koppelen z.s.m. terug.
+        </p>
+      ) : null}
+      {sp.err && sp.err !== "duplicate" ? (
+        <p className="mt-4 rounded border border-burgundy/30 bg-burgundy/5 px-4 py-2 text-sm text-burgundy">
+          Er ging iets mis bij het versturen. Probeer het opnieuw of bel het
+          kantoor.
+        </p>
       ) : null}
 
       {/* 2. Status + Wat gebeurt er nu? */}
@@ -230,18 +290,31 @@ export default async function ClientShiftHubPage({
         <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
           Acties
         </h2>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <span className="rounded-full border border-ink-200 bg-white px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-ink-400">
-            Wijziging aanvragen · binnenkort
-          </span>
-          <span className="rounded-full border border-ink-200 bg-white px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-ink-400">
-            Annulering aanvragen · binnenkort
-          </span>
+        <div className="mt-3 flex flex-wrap items-start gap-2">
+          <ChangeRequestModal
+            action={requestShiftChangeAction}
+            hasOpenRequest={hasOpenChange}
+          />
+          <CancelRequestModal
+            action={requestShiftChangeAction}
+            hasOpenRequest={hasOpenCancel}
+          />
         </div>
-        <p className="mt-2 text-xs text-ink-500">
-          Wil je nu al iets wijzigen of annuleren? Mail of bel het kantoor — de
-          knoppen hierboven komen in de volgende update.
-        </p>
+        {hasOpenChange || hasOpenCancel ? (
+          <p className="mt-2 text-xs text-ink-500">
+            Je hebt al een verzoek openstaan voor deze shift. We koppelen z.s.m.
+            terug — je vindt de status onder{" "}
+            <Link href="/client/requests" className="text-burgundy hover:underline">
+              Mijn aanvragen
+            </Link>
+            .
+          </p>
+        ) : (
+          <p className="mt-2 text-xs text-ink-500">
+            Iets wijzigen of de shift annuleren? Dien een verzoek in — Chef &amp;
+            Serve stemt het af met de ingeplande chef.
+          </p>
+        )}
       </section>
 
       {/* 7. Berichten */}

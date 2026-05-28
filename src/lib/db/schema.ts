@@ -59,6 +59,7 @@ export const submissionStatusEnum = pgEnum("submission_status", [
   "converted", // promoted to a chef or client record
   "rejected", // not pursuing
   "duplicate", // already exists as chef/client
+  "cancelled_by_client", // klant retracted a portal submission (PR-KLANT-2)
 ]);
 
 /** Vakniveau (chef skill ladder) — ordered from junior to senior. */
@@ -580,6 +581,12 @@ export const clientSubmissions = pgTable(
     /** Set when status='converted'. Phase 2's clients.id (text uuid). */
     convertedToClientId: text("converted_to_client_id"),
     rejectedReason: text("rejected_reason"),
+
+    /* ----- PR-KLANT-2: klant self-cancel of a pending portal submission ----- */
+    cancelledByClientAt: timestamp("cancelled_by_client_at", {
+      withTimezone: true,
+    }),
+    cancelledByClientReason: text("cancelled_by_client_reason"),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1518,6 +1525,81 @@ export const clientChangeRequests = pgTable(
 
 export type ClientChangeRequest = typeof clientChangeRequests.$inferSelect;
 export type NewClientChangeRequest = typeof clientChangeRequests.$inferInsert;
+
+/* =============================================================================
+ * Client shift change/cancel requests (PR-KLANT-2).
+ *
+ * After a request is converted into a real shift, the klant is never trapped:
+ * they can request a CHANGE (date/time/headcount/role/other) or a CANCEL on
+ * ANY shift status. These are REQUESTS — Chef & Serve mediates (chefs are
+ * already committed), never an instant mutation.
+ *
+ * One open request per shift per kind (partial unique index) so a klant
+ * can't spam; they wait for admin to resolve before filing another.
+ * =========================================================================== */
+
+export const clientShiftChangeKindEnum = pgEnum("client_shift_change_kind", [
+  "change",
+  "cancel",
+]);
+
+export const clientShiftChangeStatusEnum = pgEnum("client_shift_change_status", [
+  "pending",
+  "in_progress",
+  "approved",
+  "rejected",
+]);
+
+export const clientShiftChangeRequests = pgTable(
+  "client_shift_change_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    shiftId: text("shift_id")
+      .notNull()
+      .references(() => shifts.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    requestedBy: text("requested_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    kind: clientShiftChangeKindEnum("kind").notNull(),
+    reason: text("reason").notNull(),
+    /** e.g. { "startsAt": "...", "headcount": 2, "topic": "datetime" } */
+    proposedChange: jsonb("proposed_change"),
+    status: clientShiftChangeStatusEnum("status").notNull().default("pending"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decidedBy: text("decided_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    decisionNotes: text("decision_notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    clientIdx: index("client_shift_change_requests_client_idx").on(
+      t.clientId,
+      t.status,
+    ),
+    shiftIdx: index("client_shift_change_requests_shift_idx").on(
+      t.shiftId,
+      t.status,
+    ),
+    // One OPEN request per shift per kind — prevents duplicate spam.
+    openUnique: uniqueIndex("client_shift_change_open_unique")
+      .on(t.shiftId, t.kind)
+      .where(sql`${t.status} IN ('pending', 'in_progress')`),
+  }),
+);
+
+export type ClientShiftChangeRequest =
+  typeof clientShiftChangeRequests.$inferSelect;
+export type NewClientShiftChangeRequest =
+  typeof clientShiftChangeRequests.$inferInsert;
 
 /* =============================================================================
  * Backup runs + restore drills (PR-CHEF-13) — backup ops record-keeping.

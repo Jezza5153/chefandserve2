@@ -1,15 +1,47 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { chefSubmissions, clientSubmissions } from "@/lib/db/schema";
+import {
+  chefSubmissions,
+  clientShiftChangeRequests,
+  clientSubmissions,
+  clients,
+  shifts,
+} from "@/lib/db/schema";
+import { decideShiftChangeRequest } from "@/lib/domain/shift-change-requests";
 import { requireRole } from "@/lib/permissions";
 
 export const metadata = { title: "Inbox" };
 
 /** Possible filter values. Mirrors `submission_status` enum minus the all-purpose meta. */
-type FilterStatus = "all" | "new" | "triaged" | "converted" | "rejected" | "duplicate";
+type FilterStatus =
+  | "all"
+  | "new"
+  | "triaged"
+  | "converted"
+  | "rejected"
+  | "duplicate"
+  | "cancelled_by_client";
 type FilterKind = "all" | "chef" | "client";
+
+async function decideShiftRequest(formData: FormData) {
+  "use server";
+  const session = await requireRole("owner");
+  const requestId = String(formData.get("requestId") ?? "");
+  const decision =
+    String(formData.get("decision") ?? "") === "approved" ? "approved" : "rejected";
+  const decisionNotes = String(formData.get("decisionNotes") ?? "");
+  if (!requestId) redirect("/admin/business/inbox");
+  await decideShiftChangeRequest({
+    requestId,
+    decidedBy: session.user.id,
+    decision,
+    decisionNotes,
+  });
+  redirect("/admin/business/inbox?decided=1");
+}
 
 export default async function InboxPage({
   searchParams,
@@ -66,6 +98,24 @@ export default async function InboxPage({
           .limit(50);
 
   const [chefRows, clientRows] = await Promise.all([chefRowsPromise, clientRowsPromise]);
+
+  // PR-KLANT-2: open klant shift change/cancel requests needing a decision.
+  const pendingShiftRequests = await db
+    .select({
+      r: clientShiftChangeRequests,
+      companyName: clients.companyName,
+      shiftRole: shifts.roleNeeded,
+      shiftStart: shifts.startsAt,
+      shiftId: shifts.id,
+    })
+    .from(clientShiftChangeRequests)
+    .innerJoin(clients, eq(clients.id, clientShiftChangeRequests.clientId))
+    .innerJoin(shifts, eq(shifts.id, clientShiftChangeRequests.shiftId))
+    .where(
+      inArray(clientShiftChangeRequests.status, ["pending", "in_progress"]),
+    )
+    .orderBy(desc(clientShiftChangeRequests.createdAt))
+    .limit(25);
 
   type Row =
     | {
@@ -135,13 +185,85 @@ export default async function InboxPage({
         .
       </p>
 
+      {/* PR-KLANT-2: klant shift change/cancel requests needing a decision */}
+      {pendingShiftRequests.length > 0 ? (
+        <section className="mt-8 rounded-lg border border-amber-300 bg-amber-50/60 p-5">
+          <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+            Klant-verzoeken — wijzigen / annuleren ({pendingShiftRequests.length})
+          </h2>
+          <p className="mt-1 text-sm text-ink-700">
+            Chefs zijn al ingepland. Stem af met klant + chef, voer de wijziging
+            handmatig door op de shift, en sluit hier af.
+          </p>
+          <ul className="mt-4 space-y-3">
+            {pendingShiftRequests.map(({ r, companyName, shiftRole, shiftStart, shiftId }) => (
+              <li key={r.id} className="rounded-lg border border-ink-200 bg-white p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="font-serif text-base text-ink-900">
+                    {r.kind === "cancel" ? "Annulering" : "Wijziging"} ·{" "}
+                    {companyName}
+                  </p>
+                  <Link
+                    href={`/admin/business/shifts/${shiftId}`}
+                    className="font-ui text-[10px] uppercase tracking-[0.15em] text-burgundy hover:underline"
+                  >
+                    {shiftRole} ·{" "}
+                    {new Date(shiftStart).toLocaleDateString("nl-NL", {
+                      day: "numeric",
+                      month: "short",
+                    })}{" "}
+                    →
+                  </Link>
+                </div>
+                <p className="mt-1 text-sm text-ink-700">{r.reason}</p>
+                {r.proposedChange &&
+                typeof r.proposedChange === "object" &&
+                "topic" in (r.proposedChange as Record<string, unknown>) ? (
+                  <p className="mt-0.5 text-xs text-ink-500">
+                    Onderwerp: {String((r.proposedChange as Record<string, unknown>).topic)}
+                  </p>
+                ) : null}
+
+                <form action={decideShiftRequest} className="mt-3">
+                  <input type="hidden" name="requestId" value={r.id} />
+                  <textarea
+                    name="decisionNotes"
+                    rows={2}
+                    placeholder="Toelichting (gedeeld met de klant)"
+                    className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="submit"
+                      name="decision"
+                      value="approved"
+                      className="rounded-full bg-emerald-600 px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-emerald-700"
+                    >
+                      Doorgevoerd
+                    </button>
+                    <button
+                      type="submit"
+                      name="decision"
+                      value="rejected"
+                      className="rounded-full border border-red-300 bg-white px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-red-700 hover:bg-red-50"
+                    >
+                      Niet doorgevoerd
+                    </button>
+                  </div>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {/* Filters */}
       <div className="mt-8 flex flex-wrap items-center gap-2">
         <FilterPill label="Alle types" active={kind === "all"} href={qs({ kind: "all", status })} />
         <FilterPill label="Chefs" active={kind === "chef"} href={qs({ kind: "chef", status })} />
         <FilterPill label="Klanten" active={kind === "client"} href={qs({ kind: "client", status })} />
         <span className="mx-2 h-4 w-px bg-ink-200" aria-hidden />
-        {(["new", "triaged", "converted", "rejected", "all"] as FilterStatus[]).map((s) => (
+        {(["new", "triaged", "converted", "rejected", "cancelled_by_client", "all"] as FilterStatus[]).map((s) => (
           <FilterPill
             key={s}
             label={statusLabel(s)}
@@ -220,6 +342,7 @@ function statusLabel(s: FilterStatus): string {
       converted: "Geconverteerd",
       rejected: "Afgewezen",
       duplicate: "Dubbel",
+      cancelled_by_client: "Ingetrokken door klant",
     } as const
   )[s];
 }
