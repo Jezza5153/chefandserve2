@@ -449,6 +449,37 @@ clientVisible         boolean
 
 ---
 
+## Domain intelligence modules (derived facts + helpers)
+
+These `src/lib/domain/*` (and `src/lib/*`) modules compute DERIVED facts from the
+canonical tables above. The AI reads their OUTPUT (it never re-derives the logic
+itself). All are read-only unless noted; RBAC = the calling surface's role.
+
+| Module (`src/lib/...`) | Computes | AI access |
+|---|---|---|
+| `domain/roster-format` | Roster row formatting + bezetting / onderbezet labels for the cockpit | read |
+| `domain/staffing-intelligence` | Candidate ranking + "waarom (niet) nr 1?" explanation for a shift | read (admin/owner) |
+| `domain/chef-history` | A chef's placement history, top segments, top klanttype | read_filtered |
+| `domain/profile-completeness` | `getProfileCompleteness` — % complete + missing fields (chef/client) | read_filtered |
+| `domain/client-taxonomy` | Client type / tags / favorite-blocked classification | read (admin/owner) |
+| `domain/dashboard-intel` | Business cockpit attention ranking + delta rule | read (admin/owner) |
+| `domain/system-intel` | System cockpit attention ranking + health rollup | read (super_admin) |
+| `geo` | Postcode → lat/long, distance | read |
+| `travel` | Travel-time / route estimation between chef + venue | read |
+| `domain/profile-data-requests` | Admin-initiated "fill in your data" requests (chef/client) | read + assisted_execute (admin) |
+| `domain/user-settings` | Per-user settings (notification prefs, etc.) | read + assisted_execute (own/admin) |
+| `domain/impersonation` | Bekijk-als start/stop/overlay + `assertImpersonationAllowed` guard | read-only for AI (never sets impersonation) |
+| `lib/impersonation-denylist` | Pure path/method destructive denylist used by middleware | read (informs PA what is blocked) |
+| `lib/audit` | `recordAuditCore` / `recordAuditFromRequest` — canonical audit writers | write (the PA logs through `recordAuditCore`) |
+
+Tool surfaces wrapping these: `tool-contracts/matching-tools.md`,
+`tool-contracts/cockpit-tools.md`, `tool-contracts/system-tools.md`,
+`tool-contracts/client-taxonomy-tools.md`,
+`tool-contracts/profile-data-request-tools.md`,
+`tool-contracts/impersonation-tools.md`.
+
+---
+
 ## How the AI uses this map
 
 When a user asks "X", the AI:

@@ -338,6 +338,16 @@ The `lib/domain/` boundary is critical. Every "verb" the system supports is a fu
 
 `audit_log.action = "ai.proposePlacement"` (vs. `"placements.create"` for a human). So if Maarten audits "show me everything Lisa did Friday", AI-suggested-then-approved actions are differentiated from pure manual.
 
+**"Who really did it" is now first-class.** `audit_log.impersonator_user_id`
+(migration 0032) records the real super_admin behind a human **Bekijk als**
+session; every impersonated write also carries `after._imp = <session id>`, so
+one SQL query returns a whole session (start → writes → stop). The future AI PA
+acts under its OWN service identity and records `after._pa = { requestedBy,
+target, reason, tool }`. Canonical writers live in `src/lib/audit.ts`
+(`recordAuditCore` pure / `recordAuditFromRequest` request-scoped). Full model:
+`docs/ai/ai-pa-access-model.md`; correlation detail:
+`docs/ai/ai-audit-and-logging.md`.
+
 ---
 
 ## 9. Phased AI rollout plan
@@ -396,7 +406,10 @@ Goal: when we land in Phase 9 and start wiring AI, this doc is the brief. Zero a
 
 ---
 
-**Last updated:** Phase 0 → 4 + 6 all shipped. Phase 5 (Payingit) blocked on integration spec. Phase 7 (Resend polish) pending. AI layer = Phase 9+.
+**Last updated:** Phases 0 → 7 + AVG + cockpits shipped. Business + system
+cockpits live; human write-impersonation ("Bekijk als") live + audited (migr
+0032). AI-PA access model specced (`docs/ai/ai-pa-access-model.md`). Phase 5
+(Payingit) blocked on integration spec. AI copilot layer = Phase 9+.
 
 ### Data inventory status (vs. plan)
 
@@ -422,3 +435,14 @@ surface — UI/admin calls them today, future AI will call the same.
 
 Conversion primitives shipped in Phase 2: `convertChefSubmission()` +
 `convertClientSubmission()`. Already audit-logged with stable action keys.
+
+**Cockpit + impersonation (this phase).** `/admin/business` (business cockpit)
+and `/admin/system` (system cockpit) expose read primitives — `dashboard-intel`,
+`system-intel`, `/api/health`, usage — that become the cockpit/system AI tools.
+Human **write-impersonation** ("Bekijk als") is live: a super_admin can act as
+any chef/klant/owner; every write is audited as the impersonator, with a verified
+destructive denylist (`src/lib/impersonation-denylist.ts`) +
+`assertImpersonationAllowed()` action guard. New tool contracts:
+`docs/ai/tool-contracts/{cockpit,system,impersonation,matching,profile-data-request,client-taxonomy}-tools.md`.
+The AI-PA access model (own service identity, NOT impersonation) is specced in
+`docs/ai/ai-pa-access-model.md` so the PA isn't blocked when it lands.

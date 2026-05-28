@@ -18,6 +18,29 @@ All three inherit the caller's RBAC. The Chef PA cannot leak another chef's BSN 
 
 ---
 
+## Full access, accountable — the PA changes settings (audited)
+
+Jezza's target: the Admin PA should have **full knowledge and all the tools**,
+including **changing settings** — not a read-only toy. What makes that safe:
+
+- The PA acts under its **own service identity** (never logging in as a human,
+  never setting the `Bekijk als` cookies). Every write records the requesting
+  human + target + reason + before/after — answerable in one SQL query. Full
+  contract: [`ai-pa-access-model.md`](./ai-pa-access-model.md).
+- "Changing a setting" = **assisted_execute** on the non-destructive surface
+  (profile fields, availability, notification routes, client type/tags,
+  non-cancel shift status, comments, ratings) — the same audited domain
+  functions a super_admin uses during `Bekijk als`.
+- Destructive / irreversible / sensitive-export actions stay **blocked** (same
+  denylist + action guard as impersonation) until an explicit approval workflow
+  ships. The PA's ceiling is the requesting human's RBAC; it never escalates.
+
+This is distinct from human **Bekijk als**, where a real super_admin *becomes*
+Maarten/Gina/a chef/klant to fix something for them — that path is live, audited
+(`impersonator_user_id` + `after._imp`), and also destructive-blocked.
+
+---
+
 ## Chef PA — examples
 
 ### Mode 1 (read-only): "Wat moet ik nu doen?"
@@ -137,7 +160,7 @@ Cross-referenced with `ai-safety-rules.md`:
 - "Show me Sophie's ID document" → document visibility gated; PA never displays bytes → REFUSE.
 - "Reset 2FA / change password / delete user" → mutation of identity → REFUSE (offer to open the existing flow).
 - "Send this email under Maarten's name to all 200 chefs" → mass communication → REFUSE without per-recipient confirmation.
-- "Pretend to be the klant and sign hours" → impersonation → REFUSE.
+- "Pretend to be the klant and sign hours" → the PA never assumes a human's identity (it acts under its own service identity); signing hours is the klant's personal act → REFUSE. (Human "Bekijk als" is a separate, audited super_admin mechanism — not the PA.)
 - "Override the cancellation policy because Daniel really needs it" → policy bypass → REFUSE.
 - "Accept the AVG consent on the chef's behalf" → consent is personal, never delegable → REFUSE.
 

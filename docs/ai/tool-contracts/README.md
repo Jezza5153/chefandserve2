@@ -86,6 +86,16 @@ How to undo (correction row · void · soft-delete · manual).
 | [`profile-tools.md`](./profile-tools.md) | Reading profiles, drafting change requests, approving/rejecting. |
 | [`integration-tools.md`](./integration-tools.md) | Outbox health, retry, payroll batches, R2 access. |
 | [`privacy-tools.md`](./privacy-tools.md) | Privacy requests, consent reading. `consent.accept` is FORBIDDEN. |
+| [`client-tools.md`](./client-tools.md) | Klant portal — profile + shift hub reads. |
+| [`client-request-tools.md`](./client-request-tools.md) | Klant shift request submit / cancel / change. |
+| [`client-template-tools.md`](./client-template-tools.md) | Recurring shift templates (admin-owned). |
+| [`rating-tools.md`](./rating-tools.md) | Klant rating / feedback (internal-only, N≥5 averages). |
+| [`cockpit-tools.md`](./cockpit-tools.md) | Business cockpit reads — bezetting / loonkost + attention queue. |
+| [`system-tools.md`](./system-tools.md) | System cockpit — health rollup, attention queue, usage (super_admin). |
+| [`matching-tools.md`](./matching-tools.md) | Candidate ranking + "waarom niet nr 1?" explanation. |
+| [`profile-data-request-tools.md`](./profile-data-request-tools.md) | Admin "vul je gegevens aan" requests + completeness. |
+| [`client-taxonomy-tools.md`](./client-taxonomy-tools.md) | Klant type / tags / favorite-blocked steering inputs. |
+| [`impersonation-tools.md`](./impersonation-tools.md) | "Bekijk als" — read-active only; start/stop are HUMAN-only. |
 
 ---
 

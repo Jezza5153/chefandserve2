@@ -36,6 +36,15 @@ The point of a playbook is so the AI can answer "what happens when X?" without i
 
 Matching tool contracts: [`client-tools.md`](./tool-contracts/client-tools.md), [`client-request-tools.md`](./tool-contracts/client-request-tools.md), [`client-template-tools.md`](./tool-contracts/client-template-tools.md), [`rating-tools.md`](./tool-contracts/rating-tools.md).
 
+### Operator / AI-assistant workflows — impersonation + AI-PA phase
+
+| # | Playbook | Reference | Ships with |
+|---|---|---|---|
+| 19 | [Act as a user to fix a setting (Bekijk als)](./workflow-playbooks/act-as-user-to-fix-setting.md) | impersonation modules | write-impersonation phase |
+| 20 | [AI changes a setting (PA assisted-execute)](./workflow-playbooks/ai-changes-a-setting.md) | [`ai-pa-access-model.md`](./ai-pa-access-model.md) | Layer 4 (PA) |
+
+Matching tool contracts: [`impersonation-tools.md`](./tool-contracts/impersonation-tools.md), [`cockpit-tools.md`](./tool-contracts/cockpit-tools.md), [`system-tools.md`](./tool-contracts/system-tools.md), [`matching-tools.md`](./tool-contracts/matching-tools.md), [`profile-data-request-tools.md`](./tool-contracts/profile-data-request-tools.md), [`client-taxonomy-tools.md`](./tool-contracts/client-taxonomy-tools.md).
+
 ---
 
 ## Cross-cutting concerns (covered in every playbook)

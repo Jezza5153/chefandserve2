@@ -45,6 +45,58 @@ For Mode 1 (read) and Mode 2 (draft) actions, only the `ai.<surface>.<action>` r
 
 ---
 
+## "Who really did it" — impersonation + AI-delegation correlation
+
+Two columns + two JSON markers make every action attributable to the REAL actor,
+no matter the channel. Canonical writer: `src/lib/audit.ts` — `recordAuditCore`
+(pure, runtime-safe) and `recordAuditFromRequest` (adds the impersonation stamps
+from the `cs_impersonate_*` cookies).
+
+### `audit_log.impersonator_user_id` (column)
+
+When a super_admin acts during **Bekijk als**, `user_id` is the TARGET and
+`impersonator_user_id` is the real super_admin. `null` on normal actions. Added
+in migration `0032`.
+
+### `after._imp` (impersonation session id)
+
+`startImpersonation` mints a UUID (`cs_impersonate_sid` cookie); the
+`impersonation.start` row, **every** impersonated write, and the
+`impersonation.stop` row all carry `after._imp = <sid>`. One session reads back
+as start → writes → stop:
+
+```sql
+SELECT created_at, user_id, impersonator_user_id, action
+FROM   audit_log
+WHERE  after->>'_imp' = '<session-id>'
+ORDER  BY created_at;
+```
+
+### `after._pa` (AI-PA delegation block)
+
+The future PA acts under its OWN service identity (`user_id = pa_service`,
+`impersonator_user_id = null`) and records the requesting human + target +
+reason + tool in `after._pa`. See `ai-pa-access-model.md`. Forensic query:
+`WHERE user_id = <pa> AND after->'_pa'->>'requestedBy' = <human>`.
+
+### Impersonation lifecycle events
+
+| Event | When | Notable payload |
+|---|---|---|
+| `impersonation.start` | super_admin begins Bekijk als | `after = { targetEmail, targetKind, _imp }` |
+| `impersonation.stop` | super_admin ends it | `after = { _imp }` |
+| _(any business event during the session)_ | impersonated write | `impersonator_user_id` set + `after._imp` |
+
+### Fail-closed caveat (neon-http)
+
+The DB driver is neon-http (no interactive transactions), so a mutation and its
+audit row are **not** in one transaction. We implement fail-closed by
+`await`-ing the audit (a failure throws and aborts the action). True same-tx
+atomicity is a flagged follow-up needing a websocket connection — not claimed
+done.
+
+---
+
 ## The full event catalog
 
 ### Read events (Mode 1)

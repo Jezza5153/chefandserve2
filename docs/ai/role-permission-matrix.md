@@ -122,6 +122,37 @@ A confirmation button containing the exact action and destination must be clicke
 
 ---
 
+## super_admin "Bekijk als" (impersonation)
+
+When a super_admin views AS another user, the **effective** session is the
+target's — so the matrix above applies with the **target's** column, not
+super_admin's. Two extra rules layer on top (shipped + audited):
+
+- **Destructive carve-out.** Regardless of the target's column, genuinely
+  destructive / irreversible / sensitive-export actions are BLOCKED while
+  impersonating — enforced by `isImpersonationDeniedPath` (path + method, in
+  middleware) AND `assertImpersonationAllowed()` (action layer, two layers). See
+  `../../src/lib/impersonation-denylist.ts`. Blocked set: AVG erasure/export,
+  user/role mgmt + invite disable, payroll mutations/export, billing, chef/client
+  delete/deactivate/archive, irreversible cancellation, integration tokens,
+  webhook secrets, bulk destructive.
+- **Audited as the real super_admin.** Every impersonated write records
+  `impersonator_user_id` = the real super_admin and `after._imp` = the
+  impersonation session id, so "who really did it" is always answerable.
+
+The AI never SETS impersonation (there is no `bekijk_als.*` write tool — see
+`tool-contracts/impersonation-tools.md`). It may READ whether an impersonation
+session is active to caveat its answers.
+
+## AI-PA service-identity tier
+
+The future AI PA is **not** a role in this table — it acts under its **own
+service identity** and inherits the **requesting human's** ceiling from this
+matrix (it can never exceed the human's cells). On top of that ceiling, the PA
+is held to the same destructive carve-out as impersonation (same guards), and
+destructive actions stay blocked pending an explicit approval workflow. Full
+contract: `ai-pa-access-model.md`.
+
 ## Future role: `bookkeeper`
 
 When PR-CHEF-7 ships its admin-bookkeeper distinction, the bookkeeper role:
