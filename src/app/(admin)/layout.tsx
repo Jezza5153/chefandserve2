@@ -28,34 +28,36 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const session = await requireAuth();
+  const roleLabel = session.user.roles.includes("owner")
+    ? "Eigenaar"
+    : session.user.roles.includes("super_admin")
+      ? "Beheerder"
+      : session.user.roles.join(", ");
 
   return (
     <div className="flex min-h-screen bg-bg-gray">
-      <aside className="hidden w-64 shrink-0 border-r border-ink-200 bg-white md:flex md:flex-col">
-        <div className="border-b border-ink-200 px-6 py-5">
+      <aside className="hidden w-60 shrink-0 border-r border-ink-200 bg-white md:flex md:flex-col">
+        <div className="px-6 py-6">
           <Link
             href="/admin"
-            className="font-serif text-xl tracking-[0.04em] text-ink-900"
+            className="font-serif text-xl uppercase tracking-wide leading-none text-burgundy"
           >
-            Chef <span className="text-burgundy">&amp;</span> Serve
+            Chef&nbsp;&amp;&nbsp;Serve
           </Link>
-          <p className="mt-1 font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
-            Operations
-          </p>
         </div>
 
-        <SidebarNav session={session} />
+        <SidebarNav roles={session.user.roles} />
 
-        <div className="border-t border-ink-200 px-6 py-4">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-xs leading-relaxed text-ink-700">
-              <strong className="text-ink-900 block">
+        <div className="space-y-1 border-t border-ink-200 px-3 py-4">
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-ink-200 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-[13px] text-ink-900">
                 {session.user.name ?? session.user.email}
-              </strong>
-              <span className="text-ink-500">
-                {session.user.roles.join(", ")}
-              </span>
-            </p>
+              </p>
+              <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
+                {roleLabel}
+              </p>
+            </div>
             <NotificationBell
               userId={session.user.id}
               notificationsHref="/admin/notifications"

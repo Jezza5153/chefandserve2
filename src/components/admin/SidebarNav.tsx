@@ -1,125 +1,111 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-import { hasRole } from "@/lib/permissions";
-
-import type { Session } from "next-auth";
+import { Icon, type IconName } from "@/components/admin/icons";
 
 /**
- * Role-aware sidebar nav.
+ * Role-aware cockpit nav (V3 look): icon rows, active highlight, optional badge.
+ * Takes `roles` (not the session object) so it stays a clean client component.
  *
- * Layout:
- *   - super_admin: System + Operations sections
- *   - owner:       Operations section only
- *
- * "Binnenkort" items render as disabled rows with a burgundy pill —
- * keeps the future shape visible without dead links.
+ * "Binnenkort" items render disabled — keeps the future shape visible, no dead
+ * links. Ambiguous V3 labels map to the nearest real route:
+ *   Planning → /shifts · Uren & loon → /hours (payroll via Exporteren/footer).
+ * Analyse has no page yet → binnenkort. Templates/Payroll stay reachable from
+ * the dashboard toolbar; super-admins keep the full Systeem group.
  */
 
-type NavItem = {
-  label: string;
-  href?: string;
-  badge?: "binnenkort";
-};
+type Item = { label: string; href?: string; icon: IconName; soon?: boolean };
 
-type NavSection = {
-  label: string;
-  items: NavItem[];
-};
+const MAIN: Item[] = [
+  { label: "Cockpit", href: "/admin/business", icon: "dashboard" },
+  { label: "Rooster", href: "/admin/business/roster", icon: "calendar-days" },
+  { label: "Planning", href: "/admin/business/shifts", icon: "list" },
+  { label: "Chefs", href: "/admin/business/chefs", icon: "users" },
+  { label: "Klanten", href: "/admin/business/clients", icon: "building" },
+  { label: "Inbox", href: "/admin/business/inbox", icon: "inbox" },
+  { label: "Uren & loon", href: "/admin/business/hours", icon: "wallet" },
+  { label: "Analyse", icon: "bar-chart", soon: true },
+  { label: "Instellingen", href: "/admin/account/instellingen", icon: "settings" },
+];
 
-const SYSTEM_NAV: NavSection = {
-  label: "System",
-  items: [
-    { label: "Dashboard", href: "/admin/system" },
-    { label: "Errors", href: "/admin/system/errors" },
-    { label: "Audit", href: "/admin/system/audit" },
-    { label: "Webhooks", href: "/admin/system/webhooks" },
-    { label: "Emails", href: "/admin/system/emails" },
-    { label: "Notificaties", href: "/admin/system/notifications" },
-    { label: "Privacyverzoeken", href: "/admin/system/privacy-requests" },
-    { label: "Retentie", href: "/admin/system/retention" },
-    { label: "Integraties", href: "/admin/business/integrations" },
-    { label: "Health", href: "/admin/system/health" },
-    { label: "Users", href: "/admin/system/users" },
-    { label: "Roles", href: "/admin/system/roles" },
-  ],
-};
+const SYSTEM: Item[] = [
+  { label: "Systeem", href: "/admin/system", icon: "dashboard" },
+  { label: "Errors", href: "/admin/system/errors", icon: "alert-triangle" },
+  { label: "Audit", href: "/admin/system/audit", icon: "list" },
+  { label: "Webhooks", href: "/admin/system/webhooks", icon: "arrow-right" },
+  { label: "Emails", href: "/admin/system/emails", icon: "message" },
+  { label: "Notificaties", href: "/admin/system/notifications", icon: "bell" },
+  { label: "Privacyverzoeken", href: "/admin/system/privacy-requests", icon: "shield-check" },
+  { label: "Retentie", href: "/admin/system/retention", icon: "clock" },
+  { label: "Integraties", href: "/admin/business/integrations", icon: "settings" },
+  { label: "Health", href: "/admin/system/health", icon: "check-circle" },
+  { label: "Users", href: "/admin/system/users", icon: "users" },
+  { label: "Roles", href: "/admin/system/roles", icon: "user-round" },
+];
 
-const OPS_NAV: NavSection = {
-  label: "Operations",
-  items: [
-    { label: "Dashboard", href: "/admin/business" },
-    { label: "Rooster", href: "/admin/business/roster" },
-    { label: "Inbox", href: "/admin/business/inbox" },
-    { label: "Chefs", href: "/admin/business/chefs" },
-    { label: "Clients", href: "/admin/business/clients" },
-    { label: "Shifts", href: "/admin/business/shifts" },
-    { label: "Templates", href: "/admin/business/templates" },
-    { label: "Uren keuren", href: "/admin/business/hours" },
-    { label: "Payroll", href: "/admin/business/payroll" },
-  ],
-};
+/** Exact for the two section "home" hrefs, prefix-match for everything else. */
+function isActive(pathname: string, href: string): boolean {
+  if (href === "/admin/business" || href === "/admin/system") return pathname === href;
+  return pathname === href || pathname.startsWith(href + "/");
+}
 
-const ACCOUNT_NAV: NavSection = {
-  label: "Mijn account",
-  items: [
-    { label: "Instellingen", href: "/admin/account/instellingen" },
-    { label: "2FA", href: "/admin/account/2fa" },
-  ],
-};
-
-export function SidebarNav({ session }: { session: Session }) {
-  const isSuperAdmin = hasRole(session, "super_admin");
+export function SidebarNav({ roles }: { roles: string[] }) {
+  const pathname = usePathname() ?? "";
+  const isSuperAdmin = roles.includes("super_admin");
 
   return (
-    <nav className="flex-1 px-3 py-6" aria-label="Admin navigation">
-      {isSuperAdmin && <NavGroup section={SYSTEM_NAV} />}
-      <NavGroup
-        section={OPS_NAV}
-        className={isSuperAdmin ? "mt-8" : ""}
-      />
-      <NavGroup section={ACCOUNT_NAV} className="mt-8" />
+    <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4" aria-label="Admin navigatie">
+      <ul className="space-y-0.5">
+        {MAIN.map((item) => (
+          <NavRow key={item.label} item={item} active={!!item.href && isActive(pathname, item.href)} />
+        ))}
+      </ul>
+      {isSuperAdmin && (
+        <div>
+          <p className="px-3 pb-1 font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">Systeem</p>
+          <ul className="space-y-0.5">
+            {SYSTEM.map((item) => (
+              <NavRow key={item.label} item={item} active={!!item.href && isActive(pathname, item.href)} />
+            ))}
+          </ul>
+        </div>
+      )}
     </nav>
   );
 }
 
-function NavGroup({
-  section,
-  className = "",
-}: {
-  section: NavSection;
-  className?: string;
-}) {
-  return (
-    <div className={className}>
-      <p className="px-3 font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
-        {section.label}
-      </p>
-      <ul className="mt-2 space-y-1">
-        {section.items.map((item) =>
-          item.href ? (
-            <li key={item.label}>
-              <Link
-                href={item.href}
-                className="block rounded px-3 py-2 font-ui text-sm text-ink-900 hover:bg-burgundy/5 hover:text-burgundy"
-              >
-                {item.label}
-              </Link>
-            </li>
-          ) : (
-            <li
-              key={item.label}
-              className="flex items-center justify-between rounded px-3 py-2 font-ui text-sm text-ink-500"
-            >
-              <span>{item.label}</span>
-              {item.badge === "binnenkort" && (
-                <span className="rounded-full bg-burgundy/10 px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider text-burgundy">
-                  Binnenkort
-                </span>
-              )}
-            </li>
-          ),
+function NavRow({ item, active }: { item: Item; active: boolean }) {
+  if (!item.href) {
+    return (
+      <li className="flex items-center justify-between rounded-lg px-3 py-2.5 font-ui text-[13px] text-ink-500">
+        <span className="flex items-center gap-3">
+          <Icon name={item.icon} className="h-[18px] w-[18px]" />
+          {item.label}
+        </span>
+        {item.soon && (
+          <span className="rounded-full bg-burgundy/10 px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider text-burgundy">
+            Binnenkort
+          </span>
         )}
-      </ul>
-    </div>
+      </li>
+    );
+  }
+  return (
+    <li>
+      <Link
+        href={item.href}
+        aria-current={active ? "page" : undefined}
+        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 font-ui text-[13px] ${
+          active
+            ? "bg-burgundy font-medium text-white"
+            : "text-ink-700 hover:bg-bg-gray hover:text-burgundy"
+        }`}
+      >
+        <Icon name={item.icon} className="h-[18px] w-[18px]" />
+        {item.label}
+      </Link>
+    </li>
   );
 }

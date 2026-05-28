@@ -31,7 +31,8 @@ import {
   type ShiftIntelInput,
 } from "@/lib/roster-format";
 
-import { HEALTH_META, RosterShiftCard } from "./_components/RosterShiftCard";
+import { HEALTH_META } from "@/components/admin/shiftVisuals";
+import { RosterShiftCard } from "./_components/RosterShiftCard";
 
 export const metadata = { title: "Rooster" };
 export const dynamic = "force-dynamic";

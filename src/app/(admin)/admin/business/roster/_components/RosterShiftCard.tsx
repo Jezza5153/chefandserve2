@@ -1,30 +1,7 @@
 import Link from "next/link";
 
+import { FILL_META, HEALTH_META } from "@/components/admin/shiftVisuals";
 import type { FillState, ShiftHealth } from "@/lib/roster-format";
-
-/** Locked visual language → Tailwind tones + Dutch labels. Reused by month dots. */
-export const HEALTH_META: Record<
-  ShiftHealth,
-  { label: string; dot: string; badge: string }
-> = {
-  healthy: { label: "Gezond", dot: "bg-emerald-500", badge: "bg-emerald-100 text-emerald-700" },
-  attention: { label: "Aandacht", dot: "bg-amber-500", badge: "bg-amber-100 text-amber-800" },
-  underfilled: { label: "Onderbezet", dot: "bg-amber-500", badge: "bg-amber-100 text-amber-800" },
-  empty: { label: "Geen chef", dot: "bg-amber-600", badge: "bg-amber-100 text-amber-800" },
-  critical: { label: "Kritiek", dot: "bg-red-500", badge: "bg-red-100 text-red-700" },
-  done: { label: "Afgerond", dot: "bg-ink-500", badge: "bg-bg-gray text-ink-500" },
-  cancelled: { label: "Geannuleerd", dot: "bg-ink-500", badge: "bg-bg-gray text-ink-500" },
-};
-
-const FILL_META: Record<FillState, string> = {
-  full: "bg-emerald-100 text-emerald-700",
-  partial: "bg-amber-100 text-amber-800",
-  empty: "bg-amber-100 text-amber-800",
-  emptySoon: "bg-red-100 text-red-700",
-  unknown: "bg-amber-100 text-amber-800",
-  done: "bg-bg-gray text-ink-500",
-  cancelled: "bg-bg-gray text-ink-500",
-};
 
 function time(d: Date | string): string {
   return new Date(d).toLocaleTimeString("nl-NL", {
