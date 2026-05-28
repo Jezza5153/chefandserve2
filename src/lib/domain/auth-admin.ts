@@ -26,7 +26,8 @@
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { auditLog, userRecoveryCodes, users } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { userRecoveryCodes, users } from "@/lib/db/schema";
 
 export type ResetResult =
   | { ok: true; affectedUserId: string }
@@ -62,7 +63,7 @@ export async function resetInternalUser2FA(args: {
     .delete(userRecoveryCodes)
     .where(eq(userRecoveryCodes.userId, target.id));
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.actingUserId,
     action: "auth.totp_reset_by_admin",
     resource: "users",

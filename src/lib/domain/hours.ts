@@ -17,8 +17,8 @@
 import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   chefs,
   clients,
   shiftHours,
@@ -119,7 +119,7 @@ export async function approveHoursRow(args: {
   }
   const row = updated[0];
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.approverUserId,
     action: "shift_hours.admin_approved",
     resource: "shift_hours",
@@ -307,7 +307,7 @@ export async function rejectHoursRow(args: {
 
   if (updated.length === 0) return { ok: false, reason: "stale" };
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.rejecterUserId,
     action: "shift_hours.admin_rejected",
     resource: "shift_hours",

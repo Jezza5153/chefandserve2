@@ -21,7 +21,8 @@
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { auditLog, users } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { users } from "@/lib/db/schema";
 import { sendEmail } from "@/lib/email";
 import { createIntent, type RecoveryIntentKind } from "@/lib/recovery-intents";
 
@@ -84,20 +85,18 @@ export async function requestRecovery(args: {
   // Best-effort audit. We log SUCCESS distinctly from REQUEST so an attacker
   // brute-forcing emails can't tell which got delivered (they only see the
   // /verify redirect, never the audit log).
-  await db
-    .insert(auditLog)
-    .values({
-      userId: user.id,
-      action: "auth.recovery_requested",
-      resource: "users",
-      resourceId: user.id,
-      after: {
-        intent: args.intent,
-        emailSent: send.ok,
-        // Keep the email logged purely for forensics on the user's own row.
-        targetEmail: user.email,
-      },
-    })
+  await recordAuditFromRequest({
+    userId: user.id,
+    action: "auth.recovery_requested",
+    resource: "users",
+    resourceId: user.id,
+    after: {
+      intent: args.intent,
+      emailSent: send.ok,
+      // Keep the email logged purely for forensics on the user's own row.
+      targetEmail: user.email,
+    },
+  })
     .catch(() => {});
 
   // Resend handles its own quota; don't surface errors to caller. The plan

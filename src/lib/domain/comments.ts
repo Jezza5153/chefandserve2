@@ -19,7 +19,8 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { auditLog, placementComments } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { placementComments } from "@/lib/db/schema";
 
 export type CommentAuthorKind = "client" | "admin" | "chef" | "system";
 export type CommentVisibility = "internal" | "client_visible" | "chef_visible";
@@ -61,20 +62,17 @@ export async function addPlacementComment(
       })
       .returning({ id: placementComments.id });
 
-    await db
-      .insert(auditLog)
-      .values({
-        userId: args.authorUserId ?? undefined,
-        action: "placement_comments.created",
-        resource: "placement_comments",
-        resourceId: row.id,
-        after: {
-          placementId: args.placementId,
-          authorKind: args.authorKind,
-          visibility: args.visibility,
-        },
-      })
-      .catch(() => {});
+    await recordAuditFromRequest({
+      userId: args.authorUserId ?? undefined,
+      action: "placement_comments.created",
+      resource: "placement_comments",
+      resourceId: row.id,
+      after: {
+        placementId: args.placementId,
+        authorKind: args.authorKind,
+        visibility: args.visibility,
+      },
+    });
 
     return { ok: true, id: row.id };
   } catch (err) {

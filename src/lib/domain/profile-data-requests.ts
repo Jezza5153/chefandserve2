@@ -11,7 +11,8 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { auditLog, chefs, contactLogs, profileDataRequests } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { chefs, contactLogs, profileDataRequests } from "@/lib/db/schema";
 import { sendEmail } from "@/lib/email";
 import { recordEmailMessage } from "@/lib/integrations";
 import { site } from "@/lib/site";
@@ -111,7 +112,7 @@ export async function createProfileDataRequest(args: {
     })
     .returning({ id: profileDataRequests.id });
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.createdBy,
     action: "profile_data_request.created",
     resource: "profile_data_requests",

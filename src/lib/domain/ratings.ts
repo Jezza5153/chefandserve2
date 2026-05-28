@@ -13,7 +13,8 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { auditLog, chefs, placements, ratings, shifts } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { chefs, placements, ratings, shifts } from "@/lib/db/schema";
 import { CHEF_AVERAGE_MIN_COUNT, sanitizeTags } from "@/lib/rating-tags";
 
 export type SubmitRatingResult =
@@ -84,7 +85,7 @@ export async function submitRating(args: {
     })
     .where(eq(chefs.id, row.chefId));
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.createdBy,
     action: "ratings.created",
     resource: "ratings",

@@ -19,8 +19,8 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   chefAvailability,
   chefDocuments,
   chefs,
@@ -350,7 +350,7 @@ export async function eraseUserData(args: {
     })
     .where(eq(privacyRequests.id, args.requestId));
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.actorId,
     action: outcome === "fulfilled" ? "privacy.erasure_executed" : "privacy.erasure_partial",
     resource: "privacy_requests",
@@ -375,7 +375,7 @@ export async function eraseUserData(args: {
       entityType: "privacy_requests",
       entityId: args.requestId,
     });
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: args.actorId,
       action: "privacy.erasure_partial",
       resource: "privacy_requests",

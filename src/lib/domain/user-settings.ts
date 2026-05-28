@@ -12,7 +12,8 @@
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { auditLog, userSettings } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { userSettings } from "@/lib/db/schema";
 import { DEFAULT_ROSTER_SETTINGS, type RosterSettings } from "@/lib/roster-format";
 
 export type RosterView = "week" | "month";
@@ -69,7 +70,7 @@ export async function saveRosterSettings(args: {
       target: userSettings.userId,
       set: { prefs: next as never, updatedAt: new Date() },
     });
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.userId,
     action: "user_settings.updated",
     resource: "user_settings",

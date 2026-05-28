@@ -43,7 +43,8 @@ import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { auditLog, roles, userRoles, users } from "@/lib/db/schema";
+import { recordAuditCore } from "@/lib/audit";
+import { roles, userRoles, users } from "@/lib/db/schema";
 
 import type { Session } from "next-auth";
 
@@ -90,7 +91,7 @@ export async function startImpersonation(
     path: "/",
   });
 
-  await db.insert(auditLog).values({
+  await recordAuditCore({
     userId: actorUserId,
     action: "impersonation.start",
     resource: "users",
@@ -110,7 +111,7 @@ export async function stopImpersonation(): Promise<void> {
   cookieStore.delete(IMPERSONATE_ACTOR);
 
   if (target && actor) {
-    await db.insert(auditLog).values({
+    await recordAuditCore({
       userId: actor,
       action: "impersonation.stop",
       resource: "users",

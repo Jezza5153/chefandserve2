@@ -14,8 +14,8 @@
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   clientShiftChangeRequests,
   clientSubmissions,
   clients,
@@ -105,7 +105,7 @@ export async function createShiftChangeRequest(
     return { ok: false, error: "db" };
   }
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.requestedBy,
     action: args.kind === "cancel" ? "client_shift_change.cancel_requested" : "client_shift_change.change_requested",
     resource: "client_shift_change_requests",
@@ -194,7 +194,7 @@ export async function cancelClientSubmission(args: {
     .returning({ id: clientSubmissions.id });
   if (updated.length === 0) return { ok: false, error: "wrong_status" };
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.requestedBy,
     action: "client_submission.cancelled_by_client",
     resource: "client_submissions",
@@ -277,7 +277,7 @@ export async function decideShiftChangeRequest(args: {
     .returning({ id: clientShiftChangeRequests.id });
   if (updated.length === 0) return { ok: false, error: "wrong_status" };
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.decidedBy,
     action: args.decision === "approved" ? "client_shift_change.approved" : "client_shift_change.rejected",
     resource: "client_shift_change_requests",

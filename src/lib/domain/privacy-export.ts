@@ -24,8 +24,8 @@ import JSZip from "jszip";
 import { and, eq, isNull, or, sql, type SQL } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   chefAvailability,
   chefDocuments,
   chefSubmissions,
@@ -708,7 +708,7 @@ export async function buildUserDataExport(args: {
     .set({ responseFileKey: key, updatedAt: new Date() })
     .where(eq(privacyRequests.id, args.requestId));
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.actorId,
     action: "privacy.export_generated",
     resource: "privacy_requests",
@@ -743,7 +743,7 @@ export async function createExportDownloadLink(args: {
     return { ok: false, error: "R2 is niet geconfigureerd." };
 
   const url = await getDownloadUrl(req.key, EXPORT_DOWNLOAD_TTL_SECONDS);
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.actorId,
     action: "privacy.export_download_link_created",
     resource: "privacy_requests",

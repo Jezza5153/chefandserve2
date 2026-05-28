@@ -12,8 +12,8 @@
 import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   chefs,
   clients,
   privacyRequestMessages,
@@ -88,7 +88,7 @@ export async function createPrivacyRequest(args: {
     })
     .returning({ id: privacyRequests.id });
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.actorId ?? args.userId ?? null,
     action: "privacy.request_created",
     resource: "privacy_requests",
@@ -141,7 +141,7 @@ export async function claimPrivacyRequest(args: {
     .where(and(eq(privacyRequests.id, args.requestId), eq(privacyRequests.status, "pending")))
     .returning({ id: privacyRequests.id });
   if (updated.length === 0) return { ok: false };
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.actorId,
     action: "privacy.request_claimed",
     resource: "privacy_requests",
@@ -168,7 +168,7 @@ export async function setIdentityVerification(args: {
       updatedAt: new Date(),
     })
     .where(eq(privacyRequests.id, args.requestId));
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.actorId,
     action: "privacy.identity_verified",
     resource: "privacy_requests",
@@ -197,7 +197,7 @@ export async function logRequestMessage(args: {
       createdBy: args.actorId,
     })
     .returning({ id: privacyRequestMessages.id });
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.actorId,
     action: "privacy.message_logged",
     resource: "privacy_request_messages",
@@ -258,7 +258,7 @@ export async function extendSla(args: {
       updatedAt: new Date(),
     })
     .where(eq(privacyRequests.id, args.requestId));
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.actorId,
     action: "privacy.request_extended",
     resource: "privacy_requests",
@@ -284,7 +284,7 @@ export async function withdrawRequest(args: {
     )
     .returning({ id: privacyRequests.id });
   if (updated.length === 0) return { ok: false };
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.actorId,
     action: "privacy.request_withdrawn",
     resource: "privacy_requests",
@@ -325,7 +325,7 @@ export async function decidePrivacyRequest(args: {
   if (updated.length === 0) return { ok: false };
   const req = updated[0];
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.actorId,
     action: args.outcome === "rejected" ? "privacy.rejected" : "privacy.fulfilled",
     resource: "privacy_requests",
@@ -452,7 +452,7 @@ export async function applyCorrection(args: {
     });
   if (updated.length === 0) return { ok: false, error: "Verzoek is al afgehandeld." };
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.actorId,
     action: "privacy.correction_applied",
     resource: args.table,

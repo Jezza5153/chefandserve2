@@ -25,8 +25,8 @@
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   chefs,
   clients,
   roles,
@@ -94,7 +94,7 @@ export async function inviteChefToPortal(
     .set({ userId, updatedAt: new Date() })
     .where(eq(chefs.id, chefId));
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: actingUserId,
     action: "portal.invite",
     resource: "users",
@@ -155,7 +155,7 @@ export async function inviteClientToPortal(
     .set({ userId, updatedAt: new Date() })
     .where(eq(clients.id, clientId));
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: actingUserId,
     action: "portal.invite",
     resource: "users",
@@ -187,7 +187,7 @@ export async function activatePortalUser(
     })
     .where(eq(users.id, userId));
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: actingUserId,
     action: "users.activate",
     resource: "users",
@@ -286,7 +286,7 @@ export async function inviteInternalStaff(args: {
     grantedBy: args.actingUserId,
   });
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: args.actingUserId,
     action: "users.invite_internal",
     resource: "users",
@@ -329,7 +329,7 @@ export async function disablePortalUser(
     })
     .where(eq(users.id, userId));
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: actingUserId,
     action: "users.disable",
     resource: "users",

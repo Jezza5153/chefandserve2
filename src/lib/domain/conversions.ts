@@ -12,8 +12,8 @@
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   chefSubmissions,
   chefs,
   clientSubmissions,
@@ -71,7 +71,7 @@ export async function convertChefSubmission(
     })
     .where(eq(chefSubmissions.id, submission.id));
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: actingUserId,
     action: "chefs.create",
     resource: "chefs",
@@ -126,7 +126,7 @@ export async function convertClientSubmission(
     })
     .where(eq(clientSubmissions.id, submission.id));
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: actingUserId,
     action: "clients.create",
     resource: "clients",
