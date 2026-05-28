@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 
 import { SignOutLink } from "@/app/(admin)/_components/SignOutLink";
 import { ConsentGate } from "@/components/ConsentGate";
+import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 import { NotificationBell } from "@/components/NotificationBell";
 import { hasCurrentConsent, isConsentEnforced, recordConsent } from "@/lib/consent";
 import { requireAuth } from "@/lib/permissions";
@@ -56,6 +57,7 @@ export default async function ClientLayout({
 
   return (
     <div className="flex min-h-screen flex-col bg-bg-gray">
+      <ImpersonationBanner session={session} />
       <header className="border-b border-ink-200 bg-white">
         <div className="mx-auto max-w-4xl px-4 py-4">
           <div className="flex items-center justify-between">

@@ -17,6 +17,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { permissions, rolePermissions, roles } from "@/lib/db/schema";
+import { applyImpersonation } from "@/lib/domain/impersonation";
 
 import type { Session } from "next-auth";
 
@@ -56,11 +57,14 @@ export function hasRole(
  * Use in any server component that requires auth.
  */
 export async function requireAuth(nextPath = "/admin"): Promise<Session> {
-  const session = await auth();
-  if (!session?.user) {
+  const real = await auth();
+  if (!real?.user) {
     redirect(`/login?next=${encodeURIComponent(nextPath)}`);
   }
-  return session;
+  // Phase B: overlay impersonation (no-op unless a super_admin is actively
+  // impersonating). Safe fallback to `real` on any failure.
+  const session = await applyImpersonation(real);
+  return session ?? real;
 }
 
 /**

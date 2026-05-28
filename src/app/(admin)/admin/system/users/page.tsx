@@ -133,6 +133,9 @@ export default async function UsersPage() {
               <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
                 Laatste login
               </th>
+              <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
+                Bekijk als
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -194,6 +197,30 @@ export default async function UsersPage() {
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-500">
                     {relativeTime(lastSigninByUser.get(u.id))}
+                  </td>
+                  <td className="px-4 py-3">
+                    {u.status === "active" &&
+                    !(rolesByUser.get(u.id) ?? []).includes("super_admin") ? (
+                      <form method="POST" action={`/api/impersonate/${u.id}`}>
+                        <button
+                          type="submit"
+                          className="rounded-full border border-burgundy/40 px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-burgundy hover:bg-burgundy/5"
+                        >
+                          Bekijk als
+                        </button>
+                      </form>
+                    ) : (
+                      <span
+                        className="font-ui text-[10px] uppercase tracking-wider text-ink-400"
+                        title={
+                          (rolesByUser.get(u.id) ?? []).includes("super_admin")
+                            ? "Kan geen super-admin impersoneren"
+                            : "Account niet actief"
+                        }
+                      >
+                        {(rolesByUser.get(u.id) ?? []).includes("super_admin") ? "—" : "geen toegang"}
+                      </span>
+                    )}
                   </td>
                 </tr>
               );

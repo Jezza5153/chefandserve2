@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 import { NotificationBell } from "@/components/NotificationBell";
 import { SidebarNav } from "@/components/admin/SidebarNav";
 import { requireAuth } from "@/lib/permissions";
@@ -68,6 +69,7 @@ export default async function AdminLayout({
       </aside>
 
       <main className="flex-1 overflow-x-auto">
+        <ImpersonationBanner session={session} />
         <header className="flex items-center justify-between border-b border-ink-200 bg-white px-6 py-4 md:hidden">
           <Link
             href="/admin"

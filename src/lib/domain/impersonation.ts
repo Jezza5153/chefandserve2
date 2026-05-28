@@ -45,6 +45,8 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { auditLog, roles, userRoles, users } from "@/lib/db/schema";
 
+import type { Session } from "next-auth";
+
 const IMPERSONATE_TARGET = "cs_impersonate_target";
 const IMPERSONATE_ACTOR = "cs_impersonate_actor";
 const COOKIE_MAX_AGE_SECONDS = 60 * 60; // 1 hour
@@ -127,4 +129,69 @@ export async function getImpersonation(): Promise<{
   const actor = cookieStore.get(IMPERSONATE_ACTOR)?.value;
   if (!target || !actor) return null;
   return { targetUserId: target, actorUserId: actor };
+}
+
+/* ----- effective session overlay (Phase B) -------------------------------- */
+
+/**
+ * Overlay impersonation onto the REAL session. Returns a session shaped as the
+ * target user (tagged `impersonator`) ONLY when every guard holds; otherwise
+ * returns `real` unchanged. Defensive by construction: any missing cookie,
+ * mismatch, or error → the real session, so normal login is never affected.
+ *
+ * Guards: real user is super_admin · actor cookie == real user id · target
+ * exists + `status='active'` + is NOT super_admin. `requireAuth`/`requireRole`
+ * call this so the whole app resolves the effective user from one place
+ * (we never touch the Auth.js JWT callback).
+ */
+export async function applyImpersonation(real: Session | null): Promise<Session | null> {
+  if (!real?.user) return real;
+  if (!real.user.roles?.includes("super_admin")) return real;
+  try {
+    const imp = await getImpersonation();
+    if (!imp) return real;
+    if (imp.actorUserId !== real.user.id) return real;
+
+    const target = await db.query.users.findFirst({
+      where: eq(users.id, imp.targetUserId),
+    });
+    if (!target || target.status !== "active") return real;
+
+    const targetRoleRows = await db
+      .select({ key: roles.key })
+      .from(userRoles)
+      .innerJoin(roles, eq(roles.id, userRoles.roleId))
+      .where(eq(userRoles.userId, target.id));
+    const roleKeys = targetRoleRows.map((r) => r.key);
+    if (roleKeys.includes("super_admin")) return real; // never impersonate a super_admin
+
+    return {
+      ...real,
+      user: {
+        ...real.user,
+        id: target.id,
+        email: target.email,
+        name: target.name,
+        kind: target.kind,
+        roles: roleKeys,
+        totpEnabled: Boolean(target.totpEnabled),
+        hasPassword: Boolean(target.passwordHash),
+        impersonator: { id: real.user.id, name: real.user.name ?? null },
+      },
+    };
+  } catch {
+    return real; // safe fallback — impersonation never breaks a real session
+  }
+}
+
+/**
+ * Phase B1 view-only guard. Mutating server actions reachable while
+ * impersonating (chef/client portal actions) call this so writes are blocked
+ * until B2 wires `recordAudit` (which records the impersonator on every write).
+ * Throws `IMPERSONATION_VIEW_ONLY`; callers surface a "stop bekijk-als" message.
+ */
+export function assertNotImpersonating(session: Session): void {
+  if (session.user.impersonator) {
+    throw new Error("IMPERSONATION_VIEW_ONLY");
+  }
 }

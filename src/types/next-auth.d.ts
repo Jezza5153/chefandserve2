@@ -23,6 +23,12 @@ declare module "next-auth" {
       hasPassword: boolean;
       /** PR-C0 — embedded in cs_2fa_verified cookie so admin reset invalidates it. */
       totpEnrolledAtMs: number | null;
+      /**
+       * Phase B impersonation — set ONLY on an effective (impersonated) session
+       * by `applyImpersonation`. Present = a super_admin is viewing AS this user.
+       * `null`/absent on every normal session. Phase B1 = view-only (writes 403).
+       */
+      impersonator?: { id: string; name: string | null } | null;
     };
   }
 }
