@@ -26,8 +26,8 @@ import { redirect } from "next/navigation";
 import { ClientProfileForm } from "./ClientProfileForm";
 import { ClientRequestChangeFormSection } from "./ClientRequestChangeFormSection";
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   clientChangeRequests,
   clients,
   users,
@@ -100,7 +100,7 @@ async function saveClientProfile(formData: FormData) {
     .set({ ...after, updatedAt: new Date() })
     .where(eq(clients.id, c.id));
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "client.profile_updated",
     resource: "clients",
@@ -199,7 +199,7 @@ async function requestClientChange(formData: FormData) {
     })
     .returning({ id: clientChangeRequests.id });
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "client.change_requested",
     resource: "client_change_requests",

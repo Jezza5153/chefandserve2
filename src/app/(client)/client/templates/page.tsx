@@ -10,8 +10,8 @@ import { and, asc, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   clientChangeRequests,
   clients,
   shiftTemplateExceptions,
@@ -70,7 +70,7 @@ async function requestTemplateChange(formData: FormData) {
     })
     .returning({ id: clientChangeRequests.id });
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "client.template_change_requested",
     resource: "client_change_requests",

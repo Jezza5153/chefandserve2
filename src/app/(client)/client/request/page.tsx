@@ -25,7 +25,8 @@ import { redirect } from "next/navigation";
 import { Resend } from "resend";
 
 import { db } from "@/lib/db/client";
-import { auditLog, clients, clientSubmissions } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { clients, clientSubmissions } from "@/lib/db/schema";
 import { env } from "@/lib/env";
 import { recipientsFor } from "@/lib/notifications";
 import { requireAuth } from "@/lib/permissions";
@@ -154,7 +155,7 @@ async function submitPortalRequest(formData: FormData) {
     .values(submission)
     .returning({ id: clientSubmissions.id });
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     action: "client.portal_request_submitted",
     resource: "client_submissions",
     resourceId: row?.id ?? null,

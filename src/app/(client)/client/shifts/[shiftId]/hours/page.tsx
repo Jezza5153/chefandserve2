@@ -25,8 +25,8 @@ import { HumanStatusBadge } from "@/components/hours/HumanStatusBadge";
 import { RejectForm } from "./RejectForm";
 import { TrustTimeline } from "@/components/hours/TrustTimeline";
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   chefs,
   clients,
   shiftHours,
@@ -113,7 +113,7 @@ async function sign(formData: FormData) {
   }
   const row = updated[0];
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "shift_hours.client_signed",
     resource: "shift_hours",
@@ -266,7 +266,7 @@ async function reject(formData: FormData) {
   }
   const row = updated[0];
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "shift_hours.client_rejected",
     resource: "shift_hours",
