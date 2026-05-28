@@ -16,16 +16,18 @@
  * until then so the hub is never a dead end.
  */
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { ChangeRequestModal } from "./ChangeRequestModal";
 import { CancelRequestModal } from "./CancelRequestModal";
+import { ChefAvatar } from "./ChefAvatar";
 import { ChefFeedbackForm } from "./ChefFeedbackForm";
 import { WhatHappensNext } from "@/components/client/WhatHappensNext";
 import { db } from "@/lib/db/client";
 import {
+  chefDocuments,
   chefs,
   clients,
   clientShiftChangeRequests,
@@ -218,6 +220,27 @@ export default async function ClientShiftHubPage({
   );
   const reasonsByPlacement = new Map(reasonsEntries);
 
+  // clientVisible + verified photo doc per chef on this shift (PR-KLANT-3 /
+  // photo authz). The /api/chef-photo route enforces the same gate server-side.
+  const chefIds = [...new Set(placementRows.map((r) => r.p.chefId))];
+  const photoRows = chefIds.length
+    ? await db
+        .select({ chefId: chefDocuments.chefId, id: chefDocuments.id })
+        .from(chefDocuments)
+        .where(
+          and(
+            inArray(chefDocuments.chefId, chefIds),
+            eq(chefDocuments.type, "photo"),
+            eq(chefDocuments.clientVisible, true),
+            isNotNull(chefDocuments.verifiedAt),
+            isNull(chefDocuments.deletedAt),
+          ),
+        )
+        .orderBy(desc(chefDocuments.createdAt))
+    : [];
+  const photoByChef = new Map<string, string>();
+  for (const p of photoRows) if (!photoByChef.has(p.chefId)) photoByChef.set(p.chefId, p.id);
+
   // Best (most-progressed) placement for the headline status
   const rank = (s: string) =>
     ["proposed", "accepted", "confirmed", "completed", "cancelled", "rejected", "no_show"].indexOf(s);
@@ -324,12 +347,18 @@ export default async function ClientShiftHubPage({
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-serif text-lg text-ink-900">{chefName}</h3>
-                    <p className="mt-0.5 text-sm text-ink-500">
-                      {chefVakniveau ?? "—"}
-                      {chefYears ? ` · ${chefYears} jaar ervaring` : ""}
-                    </p>
+                  <div className="flex items-start gap-3">
+                    <ChefAvatar
+                      photoId={photoByChef.get(p.chefId) ?? null}
+                      name={chefName}
+                    />
+                    <div>
+                      <h3 className="font-serif text-lg text-ink-900">{chefName}</h3>
+                      <p className="mt-0.5 text-sm text-ink-500">
+                        {chefVakniveau ?? "—"}
+                        {chefYears ? ` · ${chefYears} jaar ervaring` : ""}
+                      </p>
+                    </div>
                   </div>
                   <PlacementPill status={p.status} />
                 </div>

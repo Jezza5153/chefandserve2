@@ -344,8 +344,11 @@ KLANT hub "Berichten": admin replies with visibility='client_visible' appear.
 ```
 
 `getMatchReasonsForPlacement` reuses the extracted `buildReasonsAndWarnings`
-(shared with `findMatchesForShift` — one source of truth). Photo display for
-klanten is deferred (needs chef-photo API authz for clientVisible+verified).
+(shared with `findMatchesForShift` — one source of truth). Chef photo IS shown
+on the hub (`ChefAvatar`, initials fallback) — `/api/chef-photo/[id]` authz
+was extended so a klant can load a clientVisible+verified photo of a chef
+placed on one of THEIR shifts (no enumeration); same gate enforced in the hub
+query (`chefDocuments` where clientVisible + verifiedAt + not deleted).
 Client component: `ChefFeedbackForm`. Email: `ChefProposedKlantEmail`.
 AI playbook: `docs/ai/workflow-playbooks/chef-preview-comment.md`.
 
@@ -711,7 +714,7 @@ CRON workers/document-expiry.ts (daily):
 | Route | Method | Auth | Purpose |
 |---|---|---|---|
 | `/api/auth/[...nextauth]` | * | none/jwt | Auth.js endpoints (signin/callback) |
-| `/api/chef-photo/[id]` | GET | requireAuth + ownership-or-admin | Presigned R2 image |
+| `/api/chef-photo/[id]` | GET | chef-self · super_admin · **klant** (clientVisible+verified photo of a chef on their shift — PR-KLANT-3) | Presigned R2 image |
 | `/api/admin/r2/upload-url` | POST | requireRole(owner) | Presigned PUT URL |
 
 ### Planned
