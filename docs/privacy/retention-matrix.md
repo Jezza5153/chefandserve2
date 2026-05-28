@@ -97,3 +97,16 @@
 - **Discretionary ("no longer than necessary"):** everything else — submissions (pre-conversion),
   `placement_comments`, `contact_logs`, `notifications`, `chef_availability`, templates, `ratings` free-text,
   diagnostics/webhooks/email events, and short-lived security tokens.
+
+---
+
+## Enforcement (PR-AVG-3)
+
+These periods live in the `retention_policies` table (seed: `scripts/seed-retention-policies.mjs`,
+editable at `/admin/system/retention`). The weekly **`workers/retention.ts`** worker reads them and
+purges only **soft-deleted** rows past their window — and only for entity types it has a coded,
+legal-hold-aware strategy for (`chef_documents`, `chefs`, `clients`). It is **DOUBLE-GATED**:
+`RETENTION_ENABLED` (default false) **and** `RETENTION_DRY_RUN` (default true) must both be flipped on
+Railway for a live purge — otherwise it logs "disabled" or reports a dry-run and deletes nothing. A row
+is never purged while a legal hold (`shift_hours`/payroll, also enforced by FK `RESTRICT`) attaches.
+Backups are re-erased on restore via `scripts/replay-erasure-tombstones.mjs` (see `backup-erasure-policy.md`).

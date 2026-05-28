@@ -36,6 +36,7 @@ const SYSTEM_NAV: NavSection = {
     { label: "Emails", href: "/admin/system/emails" },
     { label: "Notificaties", href: "/admin/system/notifications" },
     { label: "Privacyverzoeken", href: "/admin/system/privacy-requests" },
+    { label: "Retentie", href: "/admin/system/retention" },
     { label: "Integraties", href: "/admin/business/integrations" },
     { label: "Health", href: "/admin/system/health" },
     { label: "Users", href: "/admin/system/users" },

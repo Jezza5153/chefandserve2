@@ -710,6 +710,7 @@ CRON workers/document-expiry.ts (daily):
 | `doClaim` / `doSetIdentity` / `doLogMessage` / `doExtendSla` / `doWithdraw` / `doDecide` | `(admin)/admin/system/privacy-requests/[id]/page.tsx` | requireRole(super_admin, strict) | atomic UPDATE privacy_requests / INSERT privacy_request_messages · audit · requester email (extension/outcome) |
 | `doBuildExport` / `doApplyCorrection` / `doErase` (PR-AVG-2) | `(admin)/admin/system/privacy-requests/[id]/page.tsx` | requireRole(super_admin, strict) + identity verified + typed-confirm (erase) | buildUserDataExport (zip→R2) · applyCorrection (allow-listed field, before/after audit) · eraseUserData (anonymise + R2 purge + legal-hold-aware + tombstone) |
 | `GET` download | `(admin)/admin/system/privacy-requests/[id]/download/route.ts` | requireRole(super_admin, strict) | createExportDownloadLink → 302 to presigned R2 link (~7d) · audit export_download_link_created |
+| `updatePolicy` (PR-AVG-3) | `(admin)/admin/system/retention/page.tsx` | requireRole(super_admin, strict) | UPDATE retention_policies (period/basis/desc) · audit retention_policies.updated |
 
 ### Planned (per active plan)
 
@@ -772,7 +773,7 @@ CRON workers/document-expiry.ts (daily):
 | `workers/error-digest.ts` | daily | Summarizes error_log → email Jezza | error_log | sendEmail |
 | `workers/weekly-digest.ts` | Monday 08:00 | KPI digest → Maarten | placements, shifts | sendEmail |
 | `workers/payingit-sync.ts` | TBD | (stub) Payroll API call | placements, hours | external |
-| `workers/retention.ts` | (stub) | AVG retention purging | * | DELETE per retention_policies |
+| `workers/retention.ts` ✅ (supervisor JOBS, Sun 02:00 Amsterdam — PR-AVG-3) | weekly | AVG storage-limitation purge. **DOUBLE-GATED**: RETENTION_ENABLED!=="true" → disabled/exit; else RETENTION_DRY_RUN!=="false" → dry-run report; else live. Purges soft-deleted chef_documents (+ R2 bytes) / orphan chefs / clients past retention_policies period, skipping legal holds | retention_policies, chef_documents, chefs, clients, shift_hours | DELETE + R2 deleteObject + audit retention.purge_executed |
 | `workers/supervisor.ts` | hourly | Health checks | * | error_log |
 | `workers/generate-recurring-shifts.ts` | daily 04:00 Amsterdam (in supervisor JOBS) | Materialize recurring-template shifts (overnight-aware, idempotent) | shift_templates, shift_template_exceptions, clients | shifts |
 | `workers/complete-placements.ts` ✅ (supervisor JOBS, every 30 min) | 30 min | Flip placement.confirmed → completed when endsAt+1h past, create draft shift_hours | placements, shifts | placements, shift_hours |
@@ -1014,8 +1015,9 @@ Klant portal:
 Admin templates (PR-KLANT-4):
   /admin/business/templates · /admin/business/templates/new · /admin/business/templates/[id]
 
-Admin privacy (PR-AVG-1, super_admin):
+Admin privacy (PR-AVG-1/2/3, super_admin):
   /admin/system/privacy-requests · /admin/system/privacy-requests/new · /admin/system/privacy-requests/[id]
+  /admin/system/privacy-requests/[id]/download (PR-AVG-2) · /admin/system/retention (PR-AVG-3)
 
 API:
   /api/health · /api/csp-report
@@ -1064,6 +1066,7 @@ client.template_change_requested (PR-KLANT-4)
 ratings.created (PR-KLANT-5)
 privacy.request_created · .claimed · .identity_verified · .message_logged · .request_extended · .request_withdrawn · .fulfilled · .rejected (PR-AVG-1)
 privacy.export_generated · .export_download_link_created · .correction_applied · .erasure_executed · .erasure_partial (PR-AVG-2)
+retention.purge_executed · retention_policies.updated (PR-AVG-3)
 ```
 
 ## Planned audit actions
@@ -1089,6 +1092,7 @@ restore_drills.created
 ratings.created (PR-KLANT-5)
 privacy.request_created · .claimed · .identity_verified · .message_logged · .request_extended · .request_withdrawn · .fulfilled · .rejected (PR-AVG-1)
 privacy.export_generated · .export_download_link_created · .correction_applied · .erasure_executed · .erasure_partial (PR-AVG-2)
+retention.purge_executed · retention_policies.updated (PR-AVG-3)
 ```
 
 ---
@@ -1113,6 +1117,7 @@ are covered by Parts 1–4 above.
 | Rating loop §1.14 | `/client/shifts/[shiftId]/rate` | `submitRatingAction` → `submitRating` (+ `approveHoursRow` trigger) | RatingPendingKlantEmail | rating_pending | 0024 | client-rating-feedback.md |
 | Privacy fulfillment §1.15 | admin `/admin/system/privacy-requests[/new,/[id]]` · `/chef/privacy` · `/client/privacy` | `createPrivacyRequest` · `claim/setIdentity/logMessage/extendSla/withdraw/decidePrivacyRequest` | PrivacyRequest{Received,Outcome,Extension}Email | privacy_request | 0025 | privacy-request.md |
 | Privacy export/correct/erase §1.15 (PR-AVG-2) | admin `/admin/system/privacy-requests/[id][/download]` | `previewUserDataExport` · `buildUserDataExport` · `createExportDownloadLink` · `previewCorrection`/`applyCorrection` · `previewUserErasure`/`eraseUserData` · `getLegalHoldsForUser` · tombstones | (reuses Outcome email) | erasure_r2_failure | 0026 | privacy-request.md |
+| Retention purge §1.15 (PR-AVG-3) | worker `workers/retention.ts` · admin `/admin/system/retention` | retention worker (double-gated) · `updatePolicy` · `scripts/{seed-retention-policies,replay-erasure-tombstones}.mjs` | — | — | (uses 0026 tombstones) | retention-matrix.md · backup-erasure-policy.md |
 | Contact routing (seam) | (no UI V1) | `recipientsForClient` | (all klant mail) | — | 0020 | client-contact-routing.md |
 
 ## 7.2 — Seam helpers (one source of truth — touch these, not call sites)

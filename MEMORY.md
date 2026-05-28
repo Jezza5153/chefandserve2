@@ -156,7 +156,7 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | PR-AVG-pre | docs/privacy/pii-inventory.md (51 tables) + retention-matrix.md | ✅ |
 | PR-AVG-1 | Privacy-request intake (portal + off-portal manual) + identity verification + correspondence log + SLA extension + withdrawal + super_admin compliance queue | ✅ live (migration 0025 · privacy_requests intake/identity/SLA/correction cols + user_id nullable + other/withdrawn enum values · privacy_request_messages · domain/privacy.ts · chef+klant /privacy capture · /admin/system/privacy-requests list+new+[id] · 3 emails · privacy_request notification event) |
 | PR-AVG-2 | Preview + export package (redacted, zip→R2, ~7d on-demand links) + correction (art.16) + erasure (art.17, legal-hold-aware) + tombstones | ✅ live (migration 0026 · privacy_erasure_tombstones · domain/privacy-{subject,export,erasure}.ts + applyCorrection · getLegalHoldsForUser · jszip dep · r2.putObject + EXPORT_DOWNLOAD_TTL · admin [id] export/correct/erase panels + [id]/download route · smoke-avg-erasure.mts 30/30 incl. 5 third-party redaction fixtures) |
-| PR-AVG-3 | Retention purge worker (double-gated) + retention admin + backup replay | ⏳ next |
+| PR-AVG-3 | Retention purge worker (double-gated) + retention admin + backup replay | ✅ live (workers/retention.ts 3-state gate RETENTION_ENABLED/RETENTION_DRY_RUN both default safe · supervisor JOBS weekly Sun 02:00 · legal-hold-aware purge of soft-deleted chef_documents/chefs/clients + R2 byte purge via workers/_r2.ts · /admin/system/retention view/edit policies + risk banner · scripts/{seed-retention-policies,replay-erasure-tombstones}.mjs · docs/privacy/backup-erasure-policy.md · smoke-avg-retention.mjs 13/13) |
 
 > AVG rules (load-bearing): user requests / super_admin fulfills (no autonomous erasure) · identity verified before export/erase · soft-delete-first · Payingit 7-year hold = structured legal holds · never export third-party PII (redact) · preview before execute · erasure tombstones + backup replay · 30-day SLA (extendable, art. 12(3)) · `AVG_CONSENT_ENFORCED` stays false until lawyer fills privacy text.
 
@@ -285,13 +285,16 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | Document expiry | `workers/document-expiry.ts` | daily 06:00 Amsterdam | ✅ live (supervisor JOBS, PR-CHEF-12) |
 | Payroll export | `workers/payroll-export.ts` | manual | PLAN: PR-CHEF-7 |
 | Generate recurring shifts | `workers/generate-recurring-shifts.ts` | daily 04:00 Amsterdam | ✅ live (registered in supervisor JOBS, PR-KLANT-4) |
+| Retention purge | `workers/retention.ts` | weekly Sun 02:00 Amsterdam | ✅ live (supervisor JOBS, PR-AVG-3 — DOUBLE-GATED RETENTION_ENABLED+RETENTION_DRY_RUN, both default safe → no-op until deliberately flipped) |
 | Hours reminders | `workers/hours-reminders.ts` | daily | PLAN: PR-CHEF-1 — file not yet created |
 
 > All scheduled workers run via `workers/supervisor.ts` JOBS (node-cron,
 > Europe/Amsterdam): weekly-digest · error-digest · embedding-refresh ·
 > payingit-sync · generate-recurring-shifts · complete-placements ·
-> document-expiry. `hours-reminders` is referenced in the plan but the file
-> doesn't exist yet; `payroll-export` is manual.
+> document-expiry · retention (double-gated). `hours-reminders` is referenced in
+> the plan but the file doesn't exist yet; `payroll-export` is manual.
+> RETENTION env: `RETENTION_ENABLED` (default false) + `RETENTION_DRY_RUN`
+> (default true) must BOTH be set deliberately on Railway for a live purge.
 
 ---
 

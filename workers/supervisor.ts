@@ -18,6 +18,7 @@
  *   - generate-recurring-shifts 0 4 * * *    (04:00 daily — materialize template shifts)
  *   - complete-placements      every 30 min  (hours trust chain — confirmed→completed + draft hours)
  *   - document-expiry          0 6 * * *     (06:00 daily — chef-document expiry warnings)
+ *   - retention                0 2 * * 0     (Sun 02:00 — storage-limitation purge; DOUBLE-GATED, no-op by default)
  *
  * Times in Europe/Amsterdam.
  *
@@ -48,6 +49,10 @@ const JOBS: Job[] = [
   { name: "complete-placements", schedule: "*/30 * * * *", script: "complete-placements.ts" },
   // PR-CHEF-12: daily chef-document expiry warnings (06:00 Amsterdam).
   { name: "document-expiry", schedule: "0 6 * * *", script: "document-expiry.ts" },
+  // PR-AVG-3: storage-limitation purge (Sun 02:00 Amsterdam). DOUBLE-GATED —
+  // RETENTION_ENABLED + RETENTION_DRY_RUN both default safe, so this is a
+  // no-op ("disabled") until a human deliberately flips both flags.
+  { name: "retention", schedule: "0 2 * * 0", script: "retention.ts" },
 ];
 
 function ts(): string {
