@@ -47,21 +47,25 @@ export default auth(async (request: NextRequest & {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Phase B1 — view-only impersonation. While a super_admin is viewing AS
-  // someone (cs_impersonate_target cookie present), block ALL mutating requests
-  // (server-action POSTs land on these matched page routes) so no write is ever
-  // attributed to the target. No-op for everyone else (cookie only set by the
-  // impersonate route). Stop lives at /api/impersonate/* — NOT matched by this
-  // middleware — so it always works. Lifted in B2 once recordAudit logs the
-  // impersonator on every write.
+  // Impersonation write-gate. While a super_admin is viewing AS someone
+  // (cs_impersonate_target cookie present), block mutating requests EXCEPT where
+  // the audit trail records the impersonator (recordAudit). B2 covers the chef
+  // portal, so /chef writes are allowed — but the AVG privacy flow (/chef/privacy)
+  // and the client/admin surfaces stay view-only until their audit sites are
+  // covered. No-op for everyone else. Stop lives at /api/impersonate/* (not
+  // matched here), so it always works.
   if (
     request.cookies.get("cs_impersonate_target")?.value &&
     !["GET", "HEAD", "OPTIONS"].includes(request.method)
   ) {
-    return NextResponse.json(
-      { error: "impersonation_view_only", message: "Stop bekijk-als om wijzigingen te doen." },
-      { status: 403 },
-    );
+    const auditCoveredWrite =
+      path.startsWith("/chef") && !path.startsWith("/chef/privacy");
+    if (!auditCoveredWrite) {
+      return NextResponse.json(
+        { error: "impersonation_view_only", message: "Stop bekijk-als om wijzigingen te doen." },
+        { status: 403 },
+      );
+    }
   }
 
   // Setup-wizard gate (PR-S2D) — internal users must complete password +

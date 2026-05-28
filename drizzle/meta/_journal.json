@@ -225,6 +225,13 @@
       "when": 1779996829784,
       "tag": "0031_client_shift_requirements",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1780006821855,
+      "tag": "0032_audit_impersonator",
+      "breakpoints": true
     }
   ]
 }

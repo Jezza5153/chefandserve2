@@ -17,12 +17,12 @@ import { CancelShiftSection } from "./CancelShiftSection";
 import { RejectWithReason } from "./RejectWithReason";
 import { db } from "@/lib/db/client";
 import {
-  auditLog,
   chefs,
   clients,
   placements,
   shifts,
 } from "@/lib/db/schema";
+import { recordAudit } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
 import {
   createNotificationsFanOut,
@@ -72,7 +72,7 @@ async function respond(formData: FormData) {
     })
     .where(eq(placements.id, placementId));
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     userId: session.user.id,
     action: `placements.chef_${decision}`,
     resource: "placements",
@@ -126,7 +126,7 @@ async function cancel(formData: FormData) {
     redirect(`/chef/shifts/${placementId}?error=stale`);
   }
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     userId: session.user.id,
     action: "placements.chef_cancelled",
     resource: "placements",

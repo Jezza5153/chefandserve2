@@ -55,7 +55,7 @@ export default async function ChefLayout({
 
   return (
     <div className="flex min-h-screen flex-col bg-bg-gray">
-      <ImpersonationBanner session={session} />
+      <ImpersonationBanner session={session} writesEnabled />
       <header className="border-b border-ink-200 bg-white">
         <div className="mx-auto max-w-3xl px-4 py-4">
           <div className="flex items-center justify-between">

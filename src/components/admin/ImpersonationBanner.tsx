@@ -9,7 +9,15 @@
 
 import type { Session } from "next-auth";
 
-export function ImpersonationBanner({ session }: { session: Session }) {
+export function ImpersonationBanner({
+  session,
+  writesEnabled = false,
+}: {
+  session: Session;
+  /** When true (B2-covered surface, e.g. chef portal), actions are allowed and
+   *  audit-logged to the real super_admin. Otherwise the surface is view-only. */
+  writesEnabled?: boolean;
+}) {
   const imp = session.user.impersonator;
   if (!imp) return null;
 
@@ -26,7 +34,10 @@ export function ImpersonationBanner({ session }: { session: Session }) {
         <span className="font-semibold uppercase tracking-[0.12em]">Bekijk als</span>{" "}
         — je ziet het scherm van{" "}
         <span className="font-semibold">{session.user.name ?? session.user.email}</span>{" "}
-        ({roleLabel}) · acties uitgeschakeld
+        ({roleLabel}) ·{" "}
+        {writesEnabled
+          ? "acties worden op jouw naam vastgelegd"
+          : "acties uitgeschakeld"}
       </p>
       <form method="POST" action="/api/impersonate/stop">
         <button

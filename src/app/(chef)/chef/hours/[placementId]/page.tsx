@@ -22,13 +22,13 @@ import { notFound, redirect } from "next/navigation";
 import { HoursForm } from "./HoursForm";
 import { db } from "@/lib/db/client";
 import {
-  auditLog,
   chefs,
   clients,
   shiftHours,
   shifts,
   users,
 } from "@/lib/db/schema";
+import { recordAudit } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
 import {
   createNotification,
@@ -133,7 +133,7 @@ async function submitHours(formData: FormData) {
     redirect(`/chef/hours/${placementId}?error=stale`);
   }
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     userId: session.user.id,
     action: "shift_hours.submit",
     resource: "shift_hours",

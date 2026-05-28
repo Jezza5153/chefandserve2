@@ -352,6 +352,14 @@ export const userRoles = pgTable(
 export const auditLog = pgTable("audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  /**
+   * Phase B2 — when a super_admin performs this action while impersonating
+   * (`Bekijk als`), `userId` is the TARGET and this is the real super_admin.
+   * Null on normal actions. Lets us answer "who really did this?" forever.
+   */
+  impersonatorUserId: text("impersonator_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   action: text("action").notNull(), // e.g. 'auth.signin', 'chefs.update'
   resource: text("resource").notNull(),
   resourceId: text("resource_id"),

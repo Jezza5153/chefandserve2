@@ -16,7 +16,8 @@
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { auditLog, chefDocuments } from "@/lib/db/schema";
+import { chefDocuments } from "@/lib/db/schema";
+import { recordAudit } from "@/lib/audit";
 import {
   chefDocumentKey,
   getDownloadUrl,
@@ -79,7 +80,7 @@ export async function requestChefDocumentUpload(args: {
 
   const { url, expiresAt } = await getUploadUrl(r2Key, args.mimeType);
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     userId: args.uploadedBy,
     action: "chef_documents.upload_requested",
     resource: "chef_documents",
@@ -157,7 +158,7 @@ export async function softDeleteChefDocument(
     .set({ deletedAt: new Date() })
     .where(eq(chefDocuments.id, documentId));
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     userId: actingUserId,
     action: "chef_documents.deleted",
     resource: "chef_documents",

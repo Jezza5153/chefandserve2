@@ -20,7 +20,8 @@ import { and, eq, gte, lte } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { auditLog, chefAvailability, chefs } from "@/lib/db/schema";
+import { chefAvailability, chefs } from "@/lib/db/schema";
+import { recordAudit } from "@/lib/audit";
 import { requireAuth } from "@/lib/permissions";
 
 import { AvailabilityCalendar } from "./_components/AvailabilityCalendar";
@@ -82,7 +83,7 @@ async function toggleDate(isoDate: string, blocked: boolean): Promise<void> {
       );
   }
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     action: "chef.availability_updated",
     resource: "chef_availability",
     resourceId: chefId,
@@ -139,7 +140,7 @@ async function setRange(
       );
   }
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     action: "chef.availability_range_updated",
     resource: "chef_availability",
     resourceId: chefId,
