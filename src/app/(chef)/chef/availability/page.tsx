@@ -21,7 +21,7 @@ import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
 import { chefAvailability, chefs } from "@/lib/db/schema";
-import { recordAudit } from "@/lib/audit";
+import { recordAuditFromRequest } from "@/lib/audit";
 import { requireAuth } from "@/lib/permissions";
 
 import { AvailabilityCalendar } from "./_components/AvailabilityCalendar";
@@ -83,7 +83,7 @@ async function toggleDate(isoDate: string, blocked: boolean): Promise<void> {
       );
   }
 
-  await recordAudit({
+  await recordAuditFromRequest({
     action: "chef.availability_updated",
     resource: "chef_availability",
     resourceId: chefId,
@@ -140,7 +140,7 @@ async function setRange(
       );
   }
 
-  await recordAudit({
+  await recordAuditFromRequest({
     action: "chef.availability_range_updated",
     resource: "chef_availability",
     resourceId: chefId,

@@ -22,7 +22,7 @@ import {
   placements,
   shifts,
 } from "@/lib/db/schema";
-import { recordAudit } from "@/lib/audit";
+import { recordAuditFromRequest } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
 import {
   createNotificationsFanOut,
@@ -72,7 +72,7 @@ async function respond(formData: FormData) {
     })
     .where(eq(placements.id, placementId));
 
-  await recordAudit({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: `placements.chef_${decision}`,
     resource: "placements",
@@ -126,7 +126,7 @@ async function cancel(formData: FormData) {
     redirect(`/chef/shifts/${placementId}?error=stale`);
   }
 
-  await recordAudit({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "placements.chef_cancelled",
     resource: "placements",

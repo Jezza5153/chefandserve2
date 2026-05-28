@@ -25,7 +25,7 @@ import {
   chefs,
   profileChangeRequests,
 } from "@/lib/db/schema";
-import { recordAudit } from "@/lib/audit";
+import { recordAuditFromRequest } from "@/lib/audit";
 import { getChefSummaryForChef } from "@/lib/domain/ratings";
 import { sendEmail } from "@/lib/email";
 import {
@@ -86,7 +86,7 @@ async function saveProfile(formData: FormData) {
     })
     .where(eq(chefs.id, chef.id));
 
-  await recordAudit({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "chef.profile_updated",
     resource: "chefs",
@@ -171,7 +171,7 @@ async function requestChange(formData: FormData) {
     })
     .returning({ id: profileChangeRequests.id });
 
-  await recordAudit({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "chef.profile_change_requested",
     resource: "profile_change_requests",

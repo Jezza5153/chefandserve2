@@ -28,7 +28,7 @@ import {
   shifts,
   users,
 } from "@/lib/db/schema";
-import { recordAudit } from "@/lib/audit";
+import { recordAuditFromRequest } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
 import {
   createNotification,
@@ -133,7 +133,7 @@ async function submitHours(formData: FormData) {
     redirect(`/chef/hours/${placementId}?error=stale`);
   }
 
-  await recordAudit({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "shift_hours.submit",
     resource: "shift_hours",
