@@ -264,6 +264,7 @@ export default async function BusinessDashboardPage() {
 
       {/* Quick actions */}
       <div className="mt-10 flex flex-wrap gap-3">
+        <ActionLink href="/admin/business/roster" label="Rooster" />
         <ActionLink href="/admin/business/inbox" label="Open inbox" />
         <ActionLink href="/admin/business/shifts/new" label="Nieuwe shift" />
         <ActionLink href="/admin/business/chefs" label="Chefs" muted />
@@ -320,10 +321,10 @@ export default async function BusinessDashboardPage() {
             Komende 7 dagen
           </h2>
           <Link
-            href="/admin/business/shifts"
+            href="/admin/business/roster"
             className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy hover:underline"
           >
-            Alle shifts →
+            Open rooster →
           </Link>
         </div>
 

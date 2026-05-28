@@ -160,6 +160,16 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 
 > AVG rules (load-bearing): user requests / super_admin fulfills (no autonomous erasure) · identity verified before export/erase · soft-delete-first · Payingit 7-year hold = structured legal holds · never export third-party PII (redact) · preview before execute · erasure tombstones + backup replay · 30-day SLA (extendable, art. 12(3)) · `AVG_CONSENT_ENFORCED` stays false until lawyer fills privacy text.
 
+### Admin Staffing Cockpit phase — active (plan: `~/.claude/plans/goofy-moseying-truffle.md`)
+
+| PR | Description | Status |
+|---|---|---|
+| PR-1 | Visual roster + deterministic intelligence (no schema/deps/AI) | ✅ live (`/admin/business/roster` week+month · `src/lib/roster-format.ts` shift health/next-action/warnings/fill + Amsterdam-DST bucketing · `RosterShiftCard` · "Aandacht nodig" strip + glance header · SidebarNav "Rooster" + dashboard wiring · **tunable seam** `DEFAULT_ROSTER_SETTINGS{criticalHours:24,labels}` ready for Instellingen · smoke-roster-intel.mts 49/49) |
+| PR-1.7 (next) | **Instellingen** — per-employee fine-tuning of cockpit thresholds/labels (wires the seam) | ⏳ planning |
+| PR-1.5·1.6·2·2.1·2B·3·3.1·4·5 | candidate panel · Chef 360 · rich Jotform intake · filters+missing-data · client requirements · travel+margin · ranking · availability · explanation | ⏳ (see plan) |
+
+> Cockpit LOCKED: visual language red=actie-nu·amber=risico/onbekend·green=klaar·blue=wacht·grey=afgerond·purple=AI(PR-5) · drill-down layers roster→shift→chef-drawer→full-profile · intelligence deterministic (no AI until PR-5) · don't fake structured filters from rawPayload (structure first, PR-2).
+
 ---
 
 ## DB schema state (Drizzle — `src/lib/db/schema.ts`)

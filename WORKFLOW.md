@@ -1118,6 +1118,7 @@ are covered by Parts 1–4 above.
 | Privacy fulfillment §1.15 | admin `/admin/system/privacy-requests[/new,/[id]]` · `/chef/privacy` · `/client/privacy` | `createPrivacyRequest` · `claim/setIdentity/logMessage/extendSla/withdraw/decidePrivacyRequest` | PrivacyRequest{Received,Outcome,Extension}Email | privacy_request | 0025 | privacy-request.md |
 | Privacy export/correct/erase §1.15 (PR-AVG-2) | admin `/admin/system/privacy-requests/[id][/download]` | `previewUserDataExport` · `buildUserDataExport` · `createExportDownloadLink` · `previewCorrection`/`applyCorrection` · `previewUserErasure`/`eraseUserData` · `getLegalHoldsForUser` · tombstones | (reuses Outcome email) | erasure_r2_failure | 0026 | privacy-request.md |
 | Retention purge §1.15 (PR-AVG-3) | worker `workers/retention.ts` · admin `/admin/system/retention` | retention worker (double-gated) · `updatePolicy` · `scripts/{seed-retention-policies,replay-erasure-tombstones}.mjs` | — | — | (uses 0026 tombstones) | retention-matrix.md · backup-erasure-policy.md |
+| Roster + intelligence (Cockpit PR-1) | admin `/admin/business/roster` | `roster-format` (`getShiftHealth`/`getShiftNextAction`/`getShiftWarnings`/`getFillState` + Amsterdam-DST bucketing, tunable `DEFAULT_ROSTER_SETTINGS`) · `RosterShiftCard` | — | — | (no migration) | plan: goofy-moseying-truffle |
 | Contact routing (seam) | (no UI V1) | `recipientsForClient` | (all klant mail) | — | 0020 | client-contact-routing.md |
 
 ## 7.2 — Seam helpers (one source of truth — touch these, not call sites)
