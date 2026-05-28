@@ -10,7 +10,8 @@ import { redirect } from "next/navigation";
 
 import { TemplateForm } from "../TemplateForm";
 import { db } from "@/lib/db/client";
-import { auditLog, clients, shiftTemplates } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { clients, shiftTemplates } from "@/lib/db/schema";
 import { requireRole } from "@/lib/permissions";
 
 export const metadata = { title: "Nieuwe template" };
@@ -63,7 +64,7 @@ export default async function NewTemplatePage({
       })
       .returning({ id: shiftTemplates.id });
 
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: "shift_templates.created",
       resource: "shift_templates",

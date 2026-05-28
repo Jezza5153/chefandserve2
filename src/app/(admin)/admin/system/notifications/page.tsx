@@ -10,7 +10,8 @@ import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { auditLog, notificationRoutes, users } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { notificationRoutes, users } from "@/lib/db/schema";
 import {
   ALL_EVENTS,
   EVENT_LABELS,
@@ -77,7 +78,7 @@ async function saveRoute(formData: FormData) {
       },
     });
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "notification.route_updated",
     resource: "notification_routes",

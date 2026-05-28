@@ -13,7 +13,8 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { auditLog, users } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { users } from "@/lib/db/schema";
 import { requireRole } from "@/lib/permissions";
 import { clearAll, verifyAndConsume } from "@/lib/recovery-codes";
 import { decryptSecret, verifyCode } from "@/lib/totp";
@@ -67,15 +68,13 @@ async function disable2FA(formData: FormData) {
   }
 
   if (!factorOk) {
-    await db
-      .insert(auditLog)
-      .values({
-        userId: u.id,
-        action: "auth.totp_disable_rejected",
-        resource: "users",
-        resourceId: u.id,
-        after: { reason: "wrong-factor" },
-      })
+    await recordAuditFromRequest({
+      userId: u.id,
+      action: "auth.totp_disable_rejected",
+      resource: "users",
+      resourceId: u.id,
+      after: { reason: "wrong-factor" },
+    })
       .catch(() => {});
     redirect("/admin/account/2fa/disable?error=wrong-factor");
   }
@@ -96,7 +95,7 @@ async function disable2FA(formData: FormData) {
 
   await clearAll(u.id);
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: u.id,
     action: "auth.totp_disabled",
     resource: "users",

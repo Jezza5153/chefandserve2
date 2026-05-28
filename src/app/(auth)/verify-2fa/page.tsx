@@ -21,7 +21,8 @@ import { eq } from "drizzle-orm";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
-import { auditLog, users } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { users } from "@/lib/db/schema";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { verifyAndConsume } from "@/lib/recovery-codes";
 import { buildCookieValue, TWOFA_COOKIE_NAME } from "@/lib/totp-cookie";
@@ -45,15 +46,13 @@ async function submit(formData: FormData) {
   // Rate-limit attempts per user.
   const gate = await checkRateLimit("totp_verify", session.user.id);
   if (!gate.ok) {
-    await db
-      .insert(auditLog)
-      .values({
-        userId: session.user.id,
-        action: "auth.totp_rate_limited",
-        resource: "users",
-        resourceId: session.user.id,
-        after: { retryAfterSec: gate.retryAfterSec },
-      })
+    await recordAuditFromRequest({
+      userId: session.user.id,
+      action: "auth.totp_rate_limited",
+      resource: "users",
+      resourceId: session.user.id,
+      after: { retryAfterSec: gate.retryAfterSec },
+    })
       .catch(() => {});
     redirect(`/verify-2fa?error=too-many&next=${encodeURIComponent(next)}`);
   }
@@ -93,14 +92,12 @@ async function submit(formData: FormData) {
   }
 
   if (!ok) {
-    await db
-      .insert(auditLog)
-      .values({
-        userId: u.id,
-        action: "auth.totp_verify_failed",
-        resource: "users",
-        resourceId: u.id,
-      })
+    await recordAuditFromRequest({
+      userId: u.id,
+      action: "auth.totp_verify_failed",
+      resource: "users",
+      resourceId: u.id,
+    })
       .catch(() => {});
     redirect(`/verify-2fa?error=wrong-code&next=${encodeURIComponent(next)}`);
   }
@@ -124,7 +121,7 @@ async function submit(formData: FormData) {
     path: "/",
   });
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: u.id,
     action: "auth.totp_verified",
     resource: "users",

@@ -20,7 +20,8 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { auditLog, users } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { users } from "@/lib/db/schema";
 import { requireRole } from "@/lib/permissions";
 import { countUnused, generateAndPersist } from "@/lib/recovery-codes";
 import {
@@ -89,7 +90,7 @@ async function confirmEnrollment(formData: FormData) {
 
   const recoveryCodes = await generateAndPersist(session.user.id);
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "auth.totp_enrolled",
     resource: "users",

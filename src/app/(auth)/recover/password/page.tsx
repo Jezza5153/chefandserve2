@@ -28,7 +28,8 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { auditLog, users } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { users } from "@/lib/db/schema";
 import {
   hashPassword,
   PASSWORD_MIN_LENGTH,
@@ -93,15 +94,13 @@ async function submit(formData: FormData) {
   const ip = extractClientIp(reqHeaders);
   const gate = await checkRateLimit("totp_verify", peeked.userId);
   if (!gate.ok) {
-    await db
-      .insert(auditLog)
-      .values({
-        userId: peeked.userId,
-        action: "auth.totp_rate_limited",
-        resource: "users",
-        resourceId: peeked.userId,
-        after: { origin: "recover/password", retryAfterSec: gate.retryAfterSec },
-      })
+    await recordAuditFromRequest({
+      userId: peeked.userId,
+      action: "auth.totp_rate_limited",
+      resource: "users",
+      resourceId: peeked.userId,
+      after: { origin: "recover/password", retryAfterSec: gate.retryAfterSec },
+    })
       .catch(() => {});
     redirect(`/recover/password?token=${encodeURIComponent(token)}&error=too-many`);
   }
@@ -141,15 +140,13 @@ async function submit(formData: FormData) {
     ok = await consumeRecoveryCode(u.id, totp);
   }
   if (!ok) {
-    await db
-      .insert(auditLog)
-      .values({
-        userId: u.id,
-        action: "auth.totp_verify_failed",
-        resource: "users",
-        resourceId: u.id,
-        after: { origin: "recover/password", ip },
-      })
+    await recordAuditFromRequest({
+      userId: u.id,
+      action: "auth.totp_verify_failed",
+      resource: "users",
+      resourceId: u.id,
+      after: { origin: "recover/password", ip },
+    })
       .catch(() => {});
     redirect(`/recover/password?token=${encodeURIComponent(token)}&error=wrong-totp`);
   }
@@ -173,7 +170,7 @@ async function submit(formData: FormData) {
     })
     .where(eq(users.id, u.id));
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: u.id,
     action: "auth.password_reset",
     resource: "users",

@@ -3,8 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   chefSubmissions,
   chefs,
   profileChangeRequests,
@@ -285,7 +285,7 @@ export default async function ChefDetailPage({
       })
       .where(eq(chefs.id, id));
 
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: "chefs.update",
       resource: "chefs",
@@ -366,7 +366,7 @@ export default async function ChefDetailPage({
       .returning({ id: profileChangeRequests.id });
     if (updated.length === 0) redirect(`/admin/business/chefs/${id}?err=request-gone`);
 
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action:
         decision === "approved"

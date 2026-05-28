@@ -20,8 +20,8 @@ import { HumanStatusBadge } from "@/components/hours/HumanStatusBadge";
 import { TrustTimeline } from "@/components/hours/TrustTimeline";
 import { AdminRejectForm } from "./AdminRejectForm";
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   chefs,
   clients,
   shiftHours,
@@ -115,7 +115,7 @@ async function approve(formData: FormData) {
     redirect(`/admin/business/hours/${id}?error=stale`);
   }
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "shift_hours.admin_approved",
     resource: "shift_hours",
@@ -230,7 +230,7 @@ async function reject(formData: FormData) {
     redirect(`/admin/business/hours/${id}?error=stale`);
   }
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "shift_hours.admin_rejected",
     resource: "shift_hours",

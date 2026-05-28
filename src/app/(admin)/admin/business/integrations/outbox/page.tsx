@@ -8,8 +8,8 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 
-import { db } from "@/lib/db/client";
-import { auditLog } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+
 import {
   invalidateHealthCache,
   listPendingOutbox,
@@ -29,14 +29,12 @@ async function retry(formData: FormData) {
   await retryRow(outboxId);
   invalidateHealthCache();
 
-  await db
-    .insert(auditLog)
-    .values({
-      userId: session.user.id,
-      action: "integration.outbox_retried",
-      resource: "integration_outbox",
-      resourceId: outboxId,
-    })
+  await recordAuditFromRequest({
+    userId: session.user.id,
+    action: "integration.outbox_retried",
+    resource: "integration_outbox",
+    resourceId: outboxId,
+  })
     .catch(() => {});
 
   revalidatePath("/admin/business/integrations/outbox");

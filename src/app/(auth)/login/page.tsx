@@ -7,7 +7,8 @@ import { AuthError } from "next-auth";
 import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 import { auth, signIn } from "@/lib/auth";
 import { db } from "@/lib/db/client";
-import { auditLog, errorLog } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { errorLog } from "@/lib/db/schema";
 import { env } from "@/lib/env";
 import { defaultLandingFor } from "@/lib/permissions";
 import {
@@ -68,31 +69,27 @@ async function runGates(
   // Two-gate rate limit. Scopes never mix identifiers.
   const emailGate = await checkRateLimit("magic_link_email", email);
   if (!emailGate.ok) {
-    await db
-      .insert(auditLog)
-      .values({
-        action: "auth.rate_limited",
-        resource: "auth",
-        after: {
-          scope: "magic_link_email",
-          retryAfterSec: emailGate.retryAfterSec,
-        },
-      })
+    await recordAuditFromRequest({
+      action: "auth.rate_limited",
+      resource: "auth",
+      after: {
+        scope: "magic_link_email",
+        retryAfterSec: emailGate.retryAfterSec,
+      },
+    })
       .catch(() => {});
     redirect(`/login?error=too-many&retry=${emailGate.retryAfterSec}`);
   }
   const ipGate = await checkRateLimit("magic_link_ip", ip);
   if (!ipGate.ok) {
-    await db
-      .insert(auditLog)
-      .values({
-        action: "auth.rate_limited",
-        resource: "auth",
-        after: {
-          scope: "magic_link_ip",
-          retryAfterSec: ipGate.retryAfterSec,
-        },
-      })
+    await recordAuditFromRequest({
+      action: "auth.rate_limited",
+      resource: "auth",
+      after: {
+        scope: "magic_link_ip",
+        retryAfterSec: ipGate.retryAfterSec,
+      },
+    })
       .catch(() => {});
     redirect(`/login?error=too-many&retry=${ipGate.retryAfterSec}`);
   }

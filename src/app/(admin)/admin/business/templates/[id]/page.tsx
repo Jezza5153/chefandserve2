@@ -13,8 +13,8 @@ import { notFound, redirect } from "next/navigation";
 
 import { ExceptionsManager } from "./ExceptionsManager";
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   clients,
   shiftTemplateExceptions,
   shiftTemplates,
@@ -74,7 +74,7 @@ export default async function TemplateDetailPage({
       .insert(shiftTemplateExceptions)
       .values({ templateId: id, date, reason, createdBy: session.user.id })
       .onConflictDoNothing();
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: "shift_templates.exception_added",
       resource: "shift_templates",
@@ -92,7 +92,7 @@ export default async function TemplateDetailPage({
     await db
       .delete(shiftTemplateExceptions)
       .where(eq(shiftTemplateExceptions.id, exceptionId));
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: "shift_templates.exception_removed",
       resource: "shift_templates",
@@ -115,7 +115,7 @@ export default async function TemplateDetailPage({
       .update(shiftTemplates)
       .set({ active: next, updatedAt: new Date() })
       .where(eq(shiftTemplates.id, id));
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: next ? "shift_templates.activated" : "shift_templates.paused",
       resource: "shift_templates",

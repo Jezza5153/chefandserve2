@@ -3,8 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   chefSubmissions,
   clientSubmissions,
 } from "@/lib/db/schema";
@@ -114,7 +114,7 @@ export default async function InboxDetailPage({
       .update(table)
       .set({ status: "triaged", triagedAt: new Date(), triagedBy: session.user.id, updatedAt: new Date() })
       .where(eq(table.id, id));
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: "intake.triaged",
       resource: `${kind}_submission`,
@@ -138,7 +138,7 @@ export default async function InboxDetailPage({
         updatedAt: new Date(),
       })
       .where(eq(table.id, id));
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: "intake.rejected",
       resource: `${kind}_submission`,

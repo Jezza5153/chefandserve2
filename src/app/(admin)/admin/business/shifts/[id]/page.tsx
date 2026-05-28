@@ -3,8 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   chefAvailability,
   chefs,
   clients,
@@ -207,7 +207,7 @@ export default async function ShiftDetailPage({
       .update(clients)
       .set(kind === "blocked" ? { blockedChefIds: next } : { favoriteChefIds: next })
       .where(eq(clients.id, clientId));
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: kind === "blocked" ? "clients.block_chef" : "clients.favorite_chef",
       resource: "clients",
@@ -234,7 +234,7 @@ export default async function ShiftDetailPage({
       outcome,
       note,
     });
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: "contact_logs.created",
       resource: "contact_logs",
@@ -258,7 +258,7 @@ export default async function ShiftDetailPage({
       matchScore,
     });
 
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: "placements.propose",
       resource: "placements",
@@ -299,7 +299,7 @@ export default async function ShiftDetailPage({
       })
       .where(eq(placements.id, placementId));
 
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: `placements.${newStatus}`,
       resource: "placements",

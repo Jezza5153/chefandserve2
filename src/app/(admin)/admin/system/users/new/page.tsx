@@ -13,8 +13,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
-import { db } from "@/lib/db/client";
-import { auditLog } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+
 import { inviteInternalStaff } from "@/lib/domain/portal-invites";
 import { requireRole } from "@/lib/permissions";
 
@@ -36,14 +36,12 @@ async function inviteStaff(formData: FormData) {
   const role = String(formData.get("role") ?? "");
 
   if (role !== "owner" && role !== "super_admin") {
-    await db
-      .insert(auditLog)
-      .values({
-        userId: session.user.id,
-        action: "auth.invite_rejected",
-        resource: "users",
-        after: { reason: "invalid-role", role },
-      })
+    await recordAuditFromRequest({
+      userId: session.user.id,
+      action: "auth.invite_rejected",
+      resource: "users",
+      after: { reason: "invalid-role", role },
+    })
       .catch(() => {});
     redirect("/admin/system/users/new?error=invalid-role");
   }

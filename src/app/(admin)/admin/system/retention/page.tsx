@@ -9,7 +9,8 @@ import { asc, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { auditLog, retentionPolicies } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { retentionPolicies } from "@/lib/db/schema";
 import { requireRole } from "@/lib/permissions";
 
 export const metadata = { title: "Retentiebeleid" };
@@ -54,7 +55,7 @@ export default async function RetentionAdminPage() {
       .set({ retentionPeriod: period, legalBasis: basis, description, updatedAt: new Date() })
       .where(eq(retentionPolicies.entityType, entityType));
 
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: s.user.id,
       action: "retention_policies.updated",
       resource: "retention_policies",

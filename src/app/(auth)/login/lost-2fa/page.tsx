@@ -20,7 +20,8 @@ import { redirect } from "next/navigation";
 
 import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 import { db } from "@/lib/db/client";
-import { auditLog, errorLog } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { errorLog } from "@/lib/db/schema";
 import { requestRecovery } from "@/lib/domain/recovery";
 import { env } from "@/lib/env";
 import { checkRateLimit, extractClientIp } from "@/lib/rate-limit";
@@ -59,13 +60,11 @@ async function submit(formData: FormData) {
 
   const emailGate = await checkRateLimit("magic_link_email", email);
   if (!emailGate.ok) {
-    await db
-      .insert(auditLog)
-      .values({
-        action: "auth.rate_limited",
-        resource: "auth",
-        after: { scope: "magic_link_email", origin: "lost-2fa" },
-      })
+    await recordAuditFromRequest({
+      action: "auth.rate_limited",
+      resource: "auth",
+      after: { scope: "magic_link_email", origin: "lost-2fa" },
+    })
       .catch(() => {});
     redirect(
       `/login/lost-2fa?error=too-many&retry=${emailGate.retryAfterSec}`,
@@ -73,13 +72,11 @@ async function submit(formData: FormData) {
   }
   const ipGate = await checkRateLimit("magic_link_ip", ip);
   if (!ipGate.ok) {
-    await db
-      .insert(auditLog)
-      .values({
-        action: "auth.rate_limited",
-        resource: "auth",
-        after: { scope: "magic_link_ip", origin: "lost-2fa" },
-      })
+    await recordAuditFromRequest({
+      action: "auth.rate_limited",
+      resource: "auth",
+      after: { scope: "magic_link_ip", origin: "lost-2fa" },
+    })
       .catch(() => {});
     redirect(
       `/login/lost-2fa?error=too-many&retry=${ipGate.retryAfterSec}`,

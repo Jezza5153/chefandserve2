@@ -3,8 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   chefs,
   clientChangeRequests,
   clientSubmissions,
@@ -85,7 +85,7 @@ export default async function ClientDetailPage({
         updatedAt: new Date(),
       })
       .where(eq(clients.id, id));
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: "clients.update_type",
       resource: "clients",
@@ -109,7 +109,7 @@ export default async function ClientDetailPage({
       .update(clients)
       .set(kind === "blocked" ? { blockedChefIds: next } : { favoriteChefIds: next })
       .where(eq(clients.id, id));
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: kind === "blocked" ? "clients.unblock_chef" : "clients.unfavorite_chef",
       resource: "clients",
@@ -184,7 +184,7 @@ export default async function ClientDetailPage({
       })
       .where(eq(clients.id, id));
 
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: "clients.update",
       resource: "clients",
@@ -264,7 +264,7 @@ export default async function ClientDetailPage({
       .returning({ id: clientChangeRequests.id });
     if (updated.length === 0) redirect(`/admin/business/clients/${id}?err=request-gone`);
 
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: decision === "approved" ? "client.change_approved" : "client.change_rejected",
       resource: "client_change_requests",

@@ -17,8 +17,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
-  auditLog,
   payrollBatches,
   payrollBatchLines,
   shiftHours,
@@ -95,7 +95,7 @@ async function createBatch(formData: FormData) {
     })),
   );
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "payroll_batches.created",
     resource: "payroll_batches",
@@ -142,7 +142,7 @@ async function markExported(formData: FormData) {
       .where(and(eq(shiftHours.id, l.shiftHoursId), eq(shiftHours.status, "admin_approved")));
   }
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "payroll_batches.exported",
     resource: "payroll_batches",

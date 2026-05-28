@@ -12,7 +12,8 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { auditLog, users } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { users } from "@/lib/db/schema";
 import {
   hashPassword,
   PASSWORD_MIN_LENGTH,
@@ -62,7 +63,7 @@ async function setPassword(formData: FormData) {
     })
     .where(eq(users.id, session.user.id));
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: session.user.id,
     action: "auth.password_set",
     resource: "users",

@@ -28,7 +28,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { auditLog, userRecoveryCodes, users } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { userRecoveryCodes, users } from "@/lib/db/schema";
 import { checkRateLimit, extractClientIp } from "@/lib/rate-limit";
 import { verifyAndConsume as consumeRecoveryCode } from "@/lib/recovery-codes";
 import { consumeIntent, peekIntent } from "@/lib/recovery-intents";
@@ -58,15 +59,13 @@ async function submit(formData: FormData) {
   // sharing the scope is conservative.
   const gate = await checkRateLimit("totp_verify", peeked.userId);
   if (!gate.ok) {
-    await db
-      .insert(auditLog)
-      .values({
-        userId: peeked.userId,
-        action: "auth.totp_rate_limited",
-        resource: "users",
-        resourceId: peeked.userId,
-        after: { origin: "recover/2fa", retryAfterSec: gate.retryAfterSec },
-      })
+    await recordAuditFromRequest({
+      userId: peeked.userId,
+      action: "auth.totp_rate_limited",
+      resource: "users",
+      resourceId: peeked.userId,
+      after: { origin: "recover/2fa", retryAfterSec: gate.retryAfterSec },
+    })
       .catch(() => {});
     redirect(`/recover/2fa?token=${encodeURIComponent(token)}&error=too-many`);
   }
@@ -75,15 +74,13 @@ async function submit(formData: FormData) {
   // URL token so the user can try another code.
   const codeOk = await consumeRecoveryCode(peeked.userId, code);
   if (!codeOk) {
-    await db
-      .insert(auditLog)
-      .values({
-        userId: peeked.userId,
-        action: "auth.recovery_code_failed",
-        resource: "users",
-        resourceId: peeked.userId,
-        after: { origin: "recover/2fa", ip },
-      })
+    await recordAuditFromRequest({
+      userId: peeked.userId,
+      action: "auth.recovery_code_failed",
+      resource: "users",
+      resourceId: peeked.userId,
+      after: { origin: "recover/2fa", ip },
+    })
       .catch(() => {});
     redirect(`/recover/2fa?token=${encodeURIComponent(token)}&error=wrong-code`);
   }
@@ -132,7 +129,7 @@ async function submit(formData: FormData) {
       and(eq(userRecoveryCodes.userId, u.id), isNull(userRecoveryCodes.usedAt)),
     );
 
-  await db.insert(auditLog).values({
+  await recordAuditFromRequest({
     userId: u.id,
     action: "auth.totp_recovery_used",
     resource: "users",

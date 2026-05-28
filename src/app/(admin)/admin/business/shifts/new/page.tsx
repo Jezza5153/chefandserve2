@@ -3,7 +3,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { auditLog, clients, shifts } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { clients, shifts } from "@/lib/db/schema";
 import { requireRole } from "@/lib/permissions";
 
 export const metadata = { title: "Nieuwe shift" };
@@ -100,7 +101,7 @@ export default async function NewShiftPage({
       })
       .returning({ id: shifts.id });
 
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: "shifts.create",
       resource: "shifts",

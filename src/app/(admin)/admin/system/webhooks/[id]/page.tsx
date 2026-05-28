@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { auditLog, webhooksReceived } from "@/lib/db/schema";
+import { recordAuditFromRequest } from "@/lib/audit";
+import { webhooksReceived } from "@/lib/db/schema";
 import { handleJotformWebhook } from "@/lib/intake/handler";
 import { requireRole } from "@/lib/permissions";
 
@@ -53,7 +54,7 @@ export default async function WebhookDetailPage({
 
     const response = await handleJotformWebhook(synthetic, kind);
 
-    await db.insert(auditLog).values({
+    await recordAuditFromRequest({
       userId: session.user.id,
       action: "webhook.replay",
       resource: "webhooks_received",
