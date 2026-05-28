@@ -421,6 +421,37 @@ Client component: `RatingForm`. Email: `RatingPendingKlantEmail`.
 AI playbook: `docs/ai/workflow-playbooks/client-rating-feedback.md` ·
 Tool contract: `docs/ai/tool-contracts/rating-tools.md`.
 
+## 1.15 — Privacy-request fulfillment (PR-AVG-1, migration 0025)
+
+A data subject (chef / klant contact / off-portal person) files an AVG request;
+a super_admin works it through the 30-day SLA. Source of truth for scope:
+`docs/privacy/pii-inventory.md`.
+
+```
+INTAKE (two paths):
+  Portal — /chef/privacy · /client/privacy → createPrivacyRequest(channel='portal',
+    identity='verified' via session) → audit privacy.request_created → admin email
+  Off-portal — /admin/system/privacy-requests/new (super_admin) →
+    createPrivacyRequest(channel=email/phone/whatsapp/letter, identity='not_started')
+  Both: dueDate = now + 30d ; notify recipientsFor('privacy_request') [Maarten + Jezza]
+   ↓
+SUPER_ADMIN cockpit /admin/system/privacy-requests (overdue · due-week · waiting-identity counts)
+   ↓ detail [id] stepper:
+   claimPrivacyRequest (pending→in_progress)            audit privacy.request_claimed
+   setIdentityVerification (status/method/notes)        audit privacy.identity_verified
+   logRequestMessage (inbound/outbound/internal)        audit privacy.message_logged
+   extendSla (reason + new dueDate + requester notice)  audit privacy.request_extended
+   withdrawRequest (→withdrawn)                          audit privacy.request_withdrawn
+   decidePrivacyRequest (fulfilled/partial/rejected + notes → requester email)
+                                                         audit privacy.fulfilled/.rejected
+```
+
+Identity is **evidence** (status/method/by/at/notes), not a checkbox; export +
+erasure execution (PR-AVG-2) are blocked until `identity_status='verified'`.
+Domain: `src/lib/domain/privacy.ts`. Emails: `PrivacyRequestReceivedAdminEmail`
+· `PrivacyRequestOutcomeEmail` · `PrivacyRequestExtensionEmail`. Correspondence
+log: `privacy_request_messages`. AI playbook (extend): `docs/ai/workflow-playbooks/privacy-request.md`.
+
 ---
 
 # Part 2 — Planned workflows (per active plan)
@@ -674,6 +705,9 @@ CRON workers/document-expiry.ts (daily):
 | `addException` / `removeException` / `toggleActive` | `(admin)/admin/business/templates/[id]/page.tsx` | requireRole(owner) | mutate shift_template_exceptions / shift_templates.active · audit |
 | `requestTemplateChange` | `(client)/client/templates/page.tsx` | requireAuth + own template | INSERT client_change_requests field='template:<id>' · admin email |
 | `submitRatingAction` | `(client)/client/shifts/[shiftId]/rate/page.tsx` | requireAuth + own shift | submitRating() · INSERT ratings + recompute chefs rollup |
+| `submit` (privacy) | `(chef)/chef/privacy/page.tsx` · `(client)/client/privacy/page.tsx` | requireAuth (self) | createPrivacyRequest(channel=portal, identity=verified) · admin email |
+| `create` (manual privacy intake) | `(admin)/admin/system/privacy-requests/new/page.tsx` | requireRole(super_admin, strict) | createPrivacyRequest(off-portal, identity=not_started) · audit |
+| `doClaim` / `doSetIdentity` / `doLogMessage` / `doExtendSla` / `doWithdraw` / `doDecide` | `(admin)/admin/system/privacy-requests/[id]/page.tsx` | requireRole(super_admin, strict) | atomic UPDATE privacy_requests / INSERT privacy_request_messages · audit · requester email (extension/outcome) |
 
 ### Planned (per active plan)
 
@@ -690,7 +724,7 @@ CRON workers/document-expiry.ts (daily):
 | `cancelShift` (chef) | `(chef)/chef/shifts/[placementId]/page.tsx` | requireAuth + chefSelf | UPDATE placements · outbox · 2 emails |
 | `logContact` | (admin shift/chef detail) | requireRole(owner) | INSERT contact_logs |
 | `acceptConsent` | `(chef)/chef/_components/ConsentGate.tsx` server action | requireAuth | INSERT consent_log |
-| `createPrivacyRequest` | `(chef)/chef/privacy/page.tsx` | requireAuth | INSERT privacy_requests |
+| `createPrivacyRequest` | `(chef)/chef/privacy/page.tsx` · `(client)/client/privacy/page.tsx` · admin intake | requireAuth / super_admin | INSERT privacy_requests — ✅ SHIPPED (PR-AVG-1, see §1.15) |
 | `verifyDocument` etc. | admin chef detail | requireRole(owner) | UPDATE chef_documents |
 | `createPayrollBatch` / `exportPayrollBatch` | `(admin)/admin/business/payroll/page.tsx` | requireRole(owner) | INSERT batches + lines · CSV to R2 · UPDATE statuses |
 | `createCorrection` | (admin) | requireRole(owner) | INSERT shift_hour_corrections |
@@ -973,9 +1007,13 @@ Chef portal:
 Klant portal:
   /client · /client/profile · /client/shifts · /client/shifts/[shiftId] (hub)
   /client/shifts/[shiftId]/hours · /client/requests · /client/templates · /client/request
+  /client/privacy · /chef/privacy (AVG request capture, PR-AVG-1)
 
 Admin templates (PR-KLANT-4):
   /admin/business/templates · /admin/business/templates/new · /admin/business/templates/[id]
+
+Admin privacy (PR-AVG-1, super_admin):
+  /admin/system/privacy-requests · /admin/system/privacy-requests/new · /admin/system/privacy-requests/[id]
 
 API:
   /api/health · /api/csp-report
@@ -995,6 +1033,7 @@ BillingEmailChangedKlantEmail (PR-KLANT-1, → OLD billing address)
 ClientChangeRequestAdminEmail · ClientChangeRequestOutcomeKlantEmail (PR-KLANT-2)
 ChefProposedKlantEmail (PR-KLANT-3, → klant on propose)
 RatingPendingKlantEmail (PR-KLANT-5, → klant after hours approved)
+PrivacyRequestReceivedAdminEmail · PrivacyRequestOutcomeEmail · PrivacyRequestExtensionEmail (PR-AVG-1)
 + inline-React: client change-request admin notify · klant change outcome · submission-cancelled admin notify · klant-comment admin notify · template-change admin notify
 ```
 
@@ -1021,6 +1060,7 @@ placement_comments.created (PR-KLANT-0 helper, wired PR-KLANT-3: klant comment +
 shift_templates.created · .generated · .exception_added · .exception_removed · .activated · .paused (PR-KLANT-4)
 client.template_change_requested (PR-KLANT-4)
 ratings.created (PR-KLANT-5)
+privacy.request_created · .claimed · .identity_verified · .message_logged · .request_extended · .request_withdrawn · .fulfilled · .rejected (PR-AVG-1)
 ```
 
 ## Planned audit actions
@@ -1044,6 +1084,7 @@ notification.created · notification.read · notification.suppressed
 backup_runs.created · backup_runs.failed
 restore_drills.created
 ratings.created (PR-KLANT-5)
+privacy.request_created · .claimed · .identity_verified · .message_logged · .request_extended · .request_withdrawn · .fulfilled · .rejected (PR-AVG-1)
 ```
 
 ---
@@ -1066,6 +1107,7 @@ are covered by Parts 1–4 above.
 | Chef preview + comments §1.12 | hub + admin `shifts/[id]` | `proposePlacement` · `sendChefComment` · `replyComment` · `addPlacementComment` · `getMatchReasonsForPlacement` | ChefProposedKlantEmail + inline | chef_proposed | (0020 comments) | chef-preview-comment.md |
 | Recurring templates §1.13 | admin `templates[/new,/[id]]` · `/client/templates` | `createTemplate` · `add/removeException` · `toggleActive` · `requestTemplateChange` · worker `generate-recurring-shifts` | template-change inline | — | 0023 | recurring-shift-template-change.md |
 | Rating loop §1.14 | `/client/shifts/[shiftId]/rate` | `submitRatingAction` → `submitRating` (+ `approveHoursRow` trigger) | RatingPendingKlantEmail | rating_pending | 0024 | client-rating-feedback.md |
+| Privacy fulfillment §1.15 | admin `/admin/system/privacy-requests[/new,/[id]]` · `/chef/privacy` · `/client/privacy` | `createPrivacyRequest` · `claim/setIdentity/logMessage/extendSla/withdraw/decidePrivacyRequest` | PrivacyRequest{Received,Outcome,Extension}Email | privacy_request | 0025 | privacy-request.md |
 | Contact routing (seam) | (no UI V1) | `recipientsForClient` | (all klant mail) | — | 0020 | client-contact-routing.md |
 
 ## 7.2 — Seam helpers (one source of truth — touch these, not call sites)

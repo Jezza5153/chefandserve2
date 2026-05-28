@@ -27,7 +27,9 @@ export type NotificationEvent =
   // PR-CHEF-1 — hours chain
   | "hours_signed"
   | "hours_klant_timeout"
-  | "hours_admin_force_approve_needed";
+  | "hours_admin_force_approve_needed"
+  // PR-AVG-1 — privacy request received (portal or off-portal intake)
+  | "privacy_request";
 
 type Route = {
   recipients: string[];
@@ -55,6 +57,10 @@ function envFallback(event: NotificationEvent): string[] {
     case "totp_lockout":
     case "erasure_r2_failure":
       return jezza ? [jezza] : [];
+    case "privacy_request":
+      // Legally sensitive + super_admin-fulfilled → tell both the operator
+      // (awareness) and the super_admin (who actions it).
+      return [maarten, jezza].filter((e): e is string => Boolean(e));
   }
 }
 
@@ -115,6 +121,7 @@ export const ALL_EVENTS: NotificationEvent[] = [
   "hours_signed",
   "hours_klant_timeout",
   "hours_admin_force_approve_needed",
+  "privacy_request",
 ];
 
 export const EVENT_LABELS: Record<NotificationEvent, string> = {
@@ -128,4 +135,5 @@ export const EVENT_LABELS: Record<NotificationEvent, string> = {
   hours_signed: "Klant heeft uren ondertekend — keuren?",
   hours_klant_timeout: "Klant heeft 5 dagen niet getekend",
   hours_admin_force_approve_needed: "Klant 10 dagen overtijd — admin actie nodig",
+  privacy_request: "Privacyverzoek ontvangen (AVG)",
 };

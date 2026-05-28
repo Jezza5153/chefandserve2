@@ -137,7 +137,7 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | PR-CHEF-15 | Web Push (DEFERRED) | 💤 deferred |
 | PR-CHEF-FUT | Reserved API/webhook schemas (no UI) | 💤 reserved |
 
-### Klant (hotel) phase — active
+### Klant (hotel) phase — ✅ shipped
 
 | PR | Description | Status |
 |---|---|---|
@@ -147,7 +147,18 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | PR-KLANT-3 | Chef preview + structured comments + email | ✅ live (no schema · hub proposed-chef card + "Waarom voorgesteld?" reasons via getMatchReasonsForPlacement · ChefFeedbackForm → placement_comments client_visible (NEVER notes) · admin shift-detail comment thread + visibility-scoped reply · proposePlacement adds ChefProposedKlantEmail + chef_proposed notification · klant comment → admin email) |
 | PR-KLANT-4 | Recurring templates + exceptions + overnight + preview | ✅ live (migration 0023 · shift_templates + shift_template_exceptions · shifts.source_template_id/date + idempotency index · generate-recurring-shifts worker (Europe/Amsterdam, overnight ends_next_day, ON CONFLICT partial-index) · admin templates list/new/[id] + live preview-before-save + ExceptionsManager + activate toggle · /client/templates friendly view + change-request) |
 | PR-KLANT-5 | Rating loop + tags + N≥5 rule + email | ✅ live (migration 0024 · ratings table + chefs.average_rating/rating_count rollup · rating-tags.ts vocab · domain/ratings.ts (submit + recompute + 3 visibility-scoped readers: admin-all / chef-N≥5 / klant-none) · /client/shifts/[shiftId]/rate stars+tags form · RatingPendingKlantEmail + bell + dashboard card on approveHoursRow · admin chef-detail feedback section · chef-profile N≥5 summary) |
-| PR-KLANT-DOCS | CLAUDE.md + WORKFLOW link-complete + MEMORY resume-header | ⏳ (runs last) |
+| PR-KLANT-DOCS | CLAUDE.md + WORKFLOW link-complete + MEMORY resume-header | ✅ shipped |
+
+### AVG/GDPR compliance phase — active (plan: privacy-operations workflow)
+
+| PR | Description | Status |
+|---|---|---|
+| PR-AVG-pre | docs/privacy/pii-inventory.md (51 tables) + retention-matrix.md | ✅ |
+| PR-AVG-1 | Privacy-request intake (portal + off-portal manual) + identity verification + correspondence log + SLA extension + withdrawal + super_admin compliance queue | ✅ live (migration 0025 · privacy_requests intake/identity/SLA/correction cols + user_id nullable + other/withdrawn enum values · privacy_request_messages · domain/privacy.ts · chef+klant /privacy capture · /admin/system/privacy-requests list+new+[id] · 3 emails · privacy_request notification event) |
+| PR-AVG-2 | Preview + export package (redacted) + correction + erasure + tombstones | ⏳ next (migration 0026) |
+| PR-AVG-3 | Retention purge worker (double-gated) + retention admin + backup replay | ⏳ |
+
+> AVG rules (load-bearing): user requests / super_admin fulfills (no autonomous erasure) · identity verified before export/erase · soft-delete-first · Payingit 7-year hold = structured legal holds · never export third-party PII (redact) · preview before execute · erasure tombstones + backup replay · 30-day SLA (extendable, art. 12(3)) · `AVG_CONSENT_ENFORCED` stays false until lawyer fills privacy text.
 
 ---
 
@@ -217,6 +228,7 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | 0022_client_change_cancel.sql | client_shift_change_requests + 2 enums + submission_status 'cancelled_by_client' + client_submissions cancel cols (PR-KLANT-2) | applied (May 28) |
 | 0023_shift_templates.sql | shift_templates + shift_template_exceptions + shifts.source_template_id/date + idempotency index (PR-KLANT-4) | applied (May 28) |
 | 0024_ratings.sql | ratings + chefs.average_rating/rating_count rollup (PR-KLANT-5) | applied (May 28) |
+| 0025_avg_fulfillment.sql | privacy_requests intake/identity/SLA/correction cols + user_id nullable + other/withdrawn enum values + privacy_request_messages (PR-AVG-1) | applied (May 28) |
 
 ---
 

@@ -49,6 +49,7 @@ export default async function ChefLayout({
     { label: "Uren", href: "/chef/hours" },
     { label: "Beschikbaarheid", href: "/chef/availability" },
     { label: "Mijn profiel", href: "/chef/profile" },
+    { label: "Privacy", href: "/chef/privacy" },
   ];
 
   return (

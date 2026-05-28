@@ -51,6 +51,7 @@ export default async function ClientLayout({
     { label: "Mijn aanvragen", href: "/client/requests" },
     { label: "Nieuwe aanvraag", href: "/client/request" },
     { label: "Mijn profiel", href: "/client/profile" },
+    { label: "Privacy", href: "/client/privacy" },
   ];
 
   return (

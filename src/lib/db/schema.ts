@@ -1851,6 +1851,9 @@ export const privacyRequestTypeEnum = pgEnum("privacy_request_type", [
   "correction",
   "deletion",
   "export",
+  // PR-AVG-1: catch-all so real-world rights (restriction art.18, objection
+  // art.21, anything else) have an intake path; handled manually via notes.
+  "other",
 ]);
 
 export const privacyRequestStatusEnum = pgEnum("privacy_request_status", [
@@ -1859,6 +1862,36 @@ export const privacyRequestStatusEnum = pgEnum("privacy_request_status", [
   "fulfilled",
   "rejected",
   "partially_fulfilled",
+  "withdrawn", // PR-AVG-1: requester cancelled the request
+]);
+
+/* ----- PR-AVG-1: privacy-request operations enums ------------------- */
+export const privacyRequesterKindEnum = pgEnum("privacy_requester_kind", [
+  "chef",
+  "klant",
+  "unknown",
+  "external",
+]);
+
+export const privacyChannelEnum = pgEnum("privacy_channel", [
+  "portal",
+  "email",
+  "phone",
+  "whatsapp",
+  "letter",
+]);
+
+export const privacyIdentityStatusEnum = pgEnum("privacy_identity_status", [
+  "not_started",
+  "requested",
+  "verified",
+  "failed",
+]);
+
+export const privacyMessageDirectionEnum = pgEnum("privacy_message_direction", [
+  "inbound",
+  "outbound",
+  "internal_note",
 ]);
 
 export const consentLog = pgTable(
@@ -1883,18 +1916,64 @@ export const consentLog = pgTable(
 
 export const privacyRequests = pgTable("privacy_requests", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
+  /**
+   * PR-AVG-1: nullable — off-portal intake (email/phone/letter) can come from
+   * a person without (or with a soft-deleted) account. onDelete=set null so an
+   * erasure of the user never cascades away the compliance record of the
+   * request itself.
+   */
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
   type: privacyRequestTypeEnum("type").notNull(),
   status: privacyRequestStatusEnum("status").notNull().default("pending"),
   reason: text("reason"),
-  /** 30 days from creation (AVG art. 12(3) max). */
+  /** 30 days from creation (AVG art. 12(3) max — moved only via extension). */
   dueDate: timestamp("due_date", { withTimezone: true }).notNull(),
+
+  /* ----- PR-AVG-1: intake (real-world, off-portal) ----- */
+  requesterKind: privacyRequesterKindEnum("requester_kind"),
+  requesterName: text("requester_name"),
+  requesterEmail: text("requester_email"),
+  requesterPhone: text("requester_phone"),
+  originalChannel: privacyChannelEnum("original_channel").notNull().default("portal"),
+  rawRequestText: text("raw_request_text"),
+
+  /* ----- PR-AVG-1: identity verification (evidence, not a checkbox) ----- */
+  identityStatus: privacyIdentityStatusEnum("identity_status")
+    .notNull()
+    .default("not_started"),
+  identityMethod: text("identity_method"),
+  identityVerifiedAt: timestamp("identity_verified_at", { withTimezone: true }),
+  identityVerifiedBy: text("identity_verified_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  identityNotes: text("identity_notes"),
+
+  /* ----- PR-AVG-1: SLA extension (art. 12(3) — never silent) ----- */
+  slaExtendedAt: timestamp("sla_extended_at", { withTimezone: true }),
+  slaExtendedBy: text("sla_extended_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  slaExtensionReason: text("sla_extension_reason"),
+  slaExtensionNotifiedAt: timestamp("sla_extension_notified_at", {
+    withTimezone: true,
+  }),
+
+  /* ----- PR-AVG-2: correction (art. 16) ----- */
+  correctionScope: jsonb("correction_scope"),
+  correctionAppliedAt: timestamp("correction_applied_at", {
+    withTimezone: true,
+  }),
+  correctionAppliedBy: text("correction_applied_by").references(
+    () => users.id,
+    { onDelete: "set null" },
+  ),
+
   handledBy: text("handled_by").references(() => users.id, {
     onDelete: "set null",
   }),
   responseFileUrl: text("response_file_url"),
+  /** R2 key of the export package (presigned on demand — never a public URL). */
+  responseFileKey: text("response_file_key"),
   decisionNotes: text("decision_notes"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -1903,6 +1982,35 @@ export const privacyRequests = pgTable("privacy_requests", {
     .notNull()
     .defaultNow(),
 });
+
+/**
+ * PR-AVG-1: correspondence log for a privacy request — proof of communication
+ * (identity follow-up, extension notice, requester clarification, internal notes).
+ */
+export const privacyRequestMessages = pgTable(
+  "privacy_request_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    privacyRequestId: uuid("privacy_request_id")
+      .notNull()
+      .references(() => privacyRequests.id, { onDelete: "cascade" }),
+    direction: privacyMessageDirectionEnum("direction").notNull(),
+    channel: privacyChannelEnum("channel").notNull(),
+    body: text("body").notNull(),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    requestIdx: index("privacy_request_messages_request_idx").on(
+      t.privacyRequestId,
+      t.createdAt,
+    ),
+  }),
+);
 
 export const dataProcessingAgreements = pgTable("data_processing_agreements", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -1941,6 +2049,9 @@ export type ConsentLog = typeof consentLog.$inferSelect;
 export type NewConsentLog = typeof consentLog.$inferInsert;
 export type PrivacyRequest = typeof privacyRequests.$inferSelect;
 export type NewPrivacyRequest = typeof privacyRequests.$inferInsert;
+export type PrivacyRequestMessage = typeof privacyRequestMessages.$inferSelect;
+export type NewPrivacyRequestMessage =
+  typeof privacyRequestMessages.$inferInsert;
 export type DPA = typeof dataProcessingAgreements.$inferSelect;
 export type NewDPA = typeof dataProcessingAgreements.$inferInsert;
 export type RetentionPolicy = typeof retentionPolicies.$inferSelect;
