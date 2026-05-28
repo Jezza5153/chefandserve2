@@ -190,6 +190,49 @@ ADMIN: /admin/business/shifts/[id] → setPlacementStatus(newStatus='confirmed')
    AUDIT: 'chef.availability_updated' or '.availability_range_updated'
 ```
 
+## 1.9 — Klant shift hub (PR-KLANT-0, the canonical klant route)
+
+`/client/shifts/[shiftId]` is the klant's single source of truth for one
+shift. Every shift-related dashboard card links here FIRST (hub-canonical
+rule); only global actions (nieuwe aanvraag, agenda, profiel) bypass it.
+
+```
+/client/shifts/[shiftId]  →  src/app/(client)/client/shifts/[shiftId]/page.tsx
+   ↓
+   requireClientSelf()  →  resolves clientId via session.user.id → clients.userId
+   ↓
+   getClientShiftLabel({shiftStatus, hasPlacement, placementStatus, hoursStatus})
+      →  src/lib/client-shift-labels.ts
+      →  returns { humanStatus, nextStep, allowedActions[] }  (NO raw statuses)
+      →  hours lifecycle takes precedence over placement lifecycle
+   ↓
+   listVisibleComments(placementId, { kind:'client', userId })
+      →  src/lib/domain/comments.ts  →  ownership checked, then WHERE visibility='client_visible'
+   ↓
+   Renders 7 fixed sections: header · status+WhatHappensNext · chefs ·
+   uren · feedback · acties · berichten
+   (V1 skeleton: chef-preview / change-cancel / rating slots are "binnenkort"
+    placeholders — filled by PR-KLANT-2/3/5)
+```
+
+**Foundations primitives shipped here (wired by later PRs):**
+
+| Primitive | File | Purpose |
+|---|---|---|
+| `getClientShiftLabel()` | `src/lib/client-shift-labels.ts` | status → {humanStatus, nextStep, allowedActions} |
+| `WhatHappensNext` | `src/components/client/WhatHappensNext.tsx` | "Wat gebeurt er nu?" line (tone: neutral/action/done) |
+| `addPlacementComment()` | `src/lib/domain/comments.ts` | trim + validate 1–1000 + plain-text + audit `placement_comments.created` |
+| `listVisibleComments()` | `src/lib/domain/comments.ts` | ownership-checked visibility scopes (admin=all · client=client_visible · chef=chef_visible) |
+| `recipientsForClient()` | `src/lib/domain/client-recipients.ts` | single klant email-routing seam (see Part 4.5) |
+
+> **Rule:** `placement_comments` (with a `visibility` enum) replaces
+> ad-hoc `placements.notes` blobs for all multi-actor comments. Klant
+> input NEVER touches `placements.notes`. See `docs/ai/rag-source-catalog.md`.
+
+AI playbook: `docs/ai/workflow-playbooks/client-shift-hub.md` ·
+Tool contracts: `docs/ai/tool-contracts/client-tools.md` ·
+Migration: `drizzle/0020_klant_foundations.sql`
+
 ---
 
 # Part 2 — Planned workflows (per active plan)
@@ -599,6 +642,51 @@ Planned additions (PR-CHEF-N):
 - `privacy_request` (PR-CHEF-10)
 - `document_needs_review` · `document_expiring_soon` (PR-CHEF-12)
 
+## 4.5 — Klant email routing seam (`recipientsForClient()`, PR-KLANT-0)
+
+The single path for EVERY klant transactional email. No call site in
+PR-KLANT-1…5 may hard-code `client.email` — all route through here.
+`src/lib/domain/client-recipients.ts`.
+
+```
+recipientsForClient(clientId, eventKey): Promise<string[]>
+  V1 → [client.email]  (or [client.billingEmail] for finance events)
+  V2 → resolve by client_contacts.role with fallback to client.email
+```
+
+| eventKey | V2 role(s) | V1 fallback |
+|---|---|---|
+| `chef_proposed` | planning, onsite | client.email |
+| `hours_ready_to_sign` | hours_approval | client.email |
+| `billing_email_changed` | finance | client.billingEmail |
+| `client_shift_change_requested` | planning, emergency | client.email |
+| `rating_pending` | planning | client.email |
+| `generic` | planning | client.email |
+
+`client_contacts` table (roles: planning · onsite · finance ·
+hours_approval · emergency) exists from migration 0020 with NO UI in V1 —
+it's the seam so V2 multi-recipient routing needs no migration.
+AI playbook: `docs/ai/workflow-playbooks/client-contact-routing.md`.
+
+## 4.6 — Comment visibility model (`placement_comments`, PR-KLANT-0)
+
+`placement_comments` (migration 0020) replaces `placements.notes` blobs
+for all multi-actor comments. Each row carries an explicit `visibility`.
+
+| visibility | Who reads it (via `listVisibleComments`) |
+|---|---|
+| `internal` | admin only |
+| `client_visible` | admin + the owning klant |
+| `chef_visible` | admin + the chef on that placement |
+
+- `author_kind` enum: client · admin · chef · system
+- `body` CHECK: 1–1000 chars · trimmed · plain-text (never `dangerouslySetInnerHTML`)
+- `metadata jsonb` reserved for future AI (summaries, sentiment, thread ids)
+- visibility filter happens IN THE QUERY, ownership verified BEFORE it.
+
+> AI rule (`docs/ai/rag-source-catalog.md`): never read `placements.notes`
+> for klant-facing answers — use `placement_comments WHERE visibility='client_visible'`.
+
 ---
 
 # Part 5 — Linkage checklists (use these when adding a new feature)
@@ -683,7 +771,8 @@ Chef portal:
   /chef · /chef/profile · /chef/availability · /chef/hours · /chef/shifts · /chef/shifts/[id]
 
 Klant portal:
-  /client · /client/profile · /client/shifts · /client/request
+  /client · /client/profile · /client/shifts · /client/shifts/[shiftId] (hub)
+  /client/shifts/[shiftId]/hours · /client/request
 
 API:
   /api/health · /api/csp-report
@@ -738,6 +827,9 @@ email.message_recorded · email.event_recorded
 notification.created · notification.read · notification.suppressed
 backup_runs.created · backup_runs.failed
 restore_drills.created
+placement_comments.created (helper shipped PR-KLANT-0; wired PR-KLANT-3)
+client_change_requests.* (PR-KLANT-1) · client_shift_change_requests.* (PR-KLANT-2)
+shift_templates.* (PR-KLANT-4) · ratings.created (PR-KLANT-5)
 ```
 
 ---
