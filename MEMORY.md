@@ -268,13 +268,17 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | Payingit sync | `workers/payingit-sync.ts` | TBD | stub |
 | Retention | `workers/retention.ts` | TBD | stub (AVG1) |
 | Supervisor | `workers/supervisor.ts` | hourly | live |
-| Complete placements | `workers/complete-placements.ts` | 30 min | PLAN: PR-CHEF-1 |
-| Hours reminders | `workers/hours-reminders.ts` | daily | PLAN: PR-CHEF-1 |
-| Document expiry | `workers/document-expiry.ts` | daily | PLAN: PR-CHEF-12 |
+| Complete placements | `workers/complete-placements.ts` | every 30 min | ✅ live (supervisor JOBS — hours trust chain, PR-CHEF-1) |
+| Document expiry | `workers/document-expiry.ts` | daily 06:00 Amsterdam | ✅ live (supervisor JOBS, PR-CHEF-12) |
 | Payroll export | `workers/payroll-export.ts` | manual | PLAN: PR-CHEF-7 |
 | Generate recurring shifts | `workers/generate-recurring-shifts.ts` | daily 04:00 Amsterdam | ✅ live (registered in supervisor JOBS, PR-KLANT-4) |
+| Hours reminders | `workers/hours-reminders.ts` | daily | PLAN: PR-CHEF-1 — file not yet created |
 
-> ⚠️ Scheduling note: `supervisor.ts` JOBS currently registers weekly-digest, error-digest, embedding-refresh, payingit-sync, generate-recurring-shifts. `complete-placements` + `document-expiry` are NOT yet in JOBS (flagged as a follow-up task) — they exist but aren't fired by the supervisor cron.
+> All scheduled workers run via `workers/supervisor.ts` JOBS (node-cron,
+> Europe/Amsterdam): weekly-digest · error-digest · embedding-refresh ·
+> payingit-sync · generate-recurring-shifts · complete-placements ·
+> document-expiry. `hours-reminders` is referenced in the plan but the file
+> doesn't exist yet; `payroll-export` is manual.
 
 ---
 
@@ -300,7 +304,7 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 
 ### Known follow-ups discovered during the klant phase (spawned as side tasks)
 
-8. **Worker scheduling gap** — `complete-placements` (core of the hours trust chain: flips confirmed→completed + creates draft hours) and `document-expiry` exist but are NOT in `workers/supervisor.ts` JOBS, so they never fire in prod. Must be registered (complete-placements every 30 min, document-expiry daily). HIGH priority — the hours flow stalls without it.
+8. ~~**Worker scheduling gap**~~ ✅ RESOLVED — `complete-placements` (every 30 min) + `document-expiry` (daily 06:00) are now registered in `workers/supervisor.ts` JOBS. Worker tsc passes; `complete-placements` sanity-run clean (0 flipped, idempotent). `hours-reminders.ts` does not exist yet (left as PLAN).
 9. ~~**Chef profile-change admin review (PR-CHEF-4 gap)**~~ ✅ RESOLVED — `/admin/business/chefs/[id]` now has a "Wijzigingsverzoeken" section with `approveProfileChange`/`rejectProfileChange` (hourlyRate writes both min/max cents), atomic flip, audit, chef outcome email. Smoke: `scripts/smoke-chef-profile-change.mjs`.
 10. ~~**Chef photo for klanten**~~ ✅ RESOLVED — `/api/chef-photo/[id]` authz extended: a klant can load a clientVisible+verified photo of a chef placed on one of THEIR shifts (no enumeration; chef-self + super_admin paths intact). Hub renders `ChefAvatar` (photo + initials fallback) with the same gate in the query.
 

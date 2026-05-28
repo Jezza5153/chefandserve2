@@ -1,5 +1,5 @@
 /**
- * Supervisor — runs all 4 workers on their cron schedules in one process.
+ * Supervisor — runs all workers on their cron schedules in one process.
  *
  * Why one process: each worker runs for seconds per day, so a single
  * always-on Railway service ($5/mo) is cheaper and simpler than 4 services
@@ -11,10 +11,13 @@
  * running.
  *
  * Schedules:
- *   - weekly-digest      0 8 * * MON   (Mon 08:00 — Maarten's weekly view)
- *   - error-digest       0 7 * * *     (07:00 daily — no email if 0 errors)
- *   - embedding-refresh  0 3 * * *     (03:00 daily — OBSERVE mode without OPENAI_API_KEY)
- *   - payingit-sync      0 17 * * FRI  (Fri 17:00 — DRY-RUN until Phase 5)
+ *   - weekly-digest            0 8 * * MON   (Mon 08:00 — Maarten's weekly view)
+ *   - error-digest             0 7 * * *     (07:00 daily — no email if 0 errors)
+ *   - embedding-refresh        0 3 * * *     (03:00 daily — OBSERVE mode without OPENAI_API_KEY)
+ *   - payingit-sync            0 17 * * FRI  (Fri 17:00 — DRY-RUN until Phase 5)
+ *   - generate-recurring-shifts 0 4 * * *    (04:00 daily — materialize template shifts)
+ *   - complete-placements      every 30 min  (hours trust chain — confirmed→completed + draft hours)
+ *   - document-expiry          0 6 * * *     (06:00 daily — chef-document expiry warnings)
  *
  * Times in Europe/Amsterdam.
  *
@@ -40,6 +43,11 @@ const JOBS: Job[] = [
   { name: "payingit-sync", schedule: "0 17 * * 5", script: "payingit-sync.ts" },
   // PR-KLANT-4: materialize recurring-template shifts daily (04:00 Amsterdam).
   { name: "generate-recurring-shifts", schedule: "0 4 * * *", script: "generate-recurring-shifts.ts" },
+  // PR-CHEF-1: the hours trust chain. Flip confirmed→completed (endsAt+1h) +
+  // create draft shift_hours. Idempotent — runs every 30 min.
+  { name: "complete-placements", schedule: "*/30 * * * *", script: "complete-placements.ts" },
+  // PR-CHEF-12: daily chef-document expiry warnings (06:00 Amsterdam).
+  { name: "document-expiry", schedule: "0 6 * * *", script: "document-expiry.ts" },
 ];
 
 function ts(): string {

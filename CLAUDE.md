@@ -62,6 +62,8 @@ change/cancel request · berichten. Every shift-related dashboard card links her
 
 ## Known open items (see MEMORY.md "open questions")
 
-- `complete-placements` + `document-expiry` workers exist but aren't yet in `supervisor.ts` JOBS (spawned task).
-- Admin review UI for chef `profile_change_requests` (PR-CHEF-4) not built (spawned task).
-- Chef photo not shown to klanten on the hub — needs chef-photo API authz (spawned task).
+The three klant-phase follow-ups are now resolved: worker scheduling
+(`complete-placements` + `document-expiry` in supervisor JOBS), chef
+profile-change admin review, and chef-photo authz for klanten. Remaining
+deferred items (Payingit API, accounting platform, AVG legal text, `hours-reminders`
+worker not yet built, Web Push) live in MEMORY.md "Open questions".

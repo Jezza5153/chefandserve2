@@ -739,9 +739,9 @@ CRON workers/document-expiry.ts (daily):
 | `workers/retention.ts` | (stub) | AVG retention purging | * | DELETE per retention_policies |
 | `workers/supervisor.ts` | hourly | Health checks | * | error_log |
 | `workers/generate-recurring-shifts.ts` | daily 04:00 Amsterdam (in supervisor JOBS) | Materialize recurring-template shifts (overnight-aware, idempotent) | shift_templates, shift_template_exceptions, clients | shifts |
-| `workers/complete-placements.ts` (PLANNED) | 30 min | Flip placement.confirmed → completed when endsAt+1h past, create draft shift_hours | placements, shifts | placements, shift_hours |
-| `workers/hours-reminders.ts` (PLANNED) | daily | Chef nudges + klant timeouts + admin alerts | shift_hours | createNotification + sendEmail |
-| `workers/document-expiry.ts` (PLANNED) | daily | 30d-out expiry warnings | chef_documents | notifications + sendEmail |
+| `workers/complete-placements.ts` ✅ (supervisor JOBS, every 30 min) | 30 min | Flip placement.confirmed → completed when endsAt+1h past, create draft shift_hours | placements, shifts | placements, shift_hours |
+| `workers/document-expiry.ts` ✅ (supervisor JOBS, daily 06:00) | daily | 30d-out expiry warnings | chef_documents | notifications + sendEmail |
+| `workers/hours-reminders.ts` (PLANNED — file not yet created) | daily | Chef nudges + klant timeouts + admin alerts | shift_hours | createNotification + sendEmail |
 | `workers/payroll-export.ts` (PLANNED) | manual | CSV batch generation | payroll_batches | R2 + payroll_batches |
 | `scripts/backup-neon.sh` (PLANNED) | Monday 03:00 local launchd | pg_dump + age encrypt | (DB) | local .age file + backup_runs |
 | `scripts/restore-drill.sh` (PLANNED) | first Monday monthly | Restore last backup to Neon dev branch | local backup | restore_drills |
