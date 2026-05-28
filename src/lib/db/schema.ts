@@ -1463,6 +1463,63 @@ export type ProfileChangeRequest = typeof profileChangeRequests.$inferSelect;
 export type NewProfileChangeRequest = typeof profileChangeRequests.$inferInsert;
 
 /* =============================================================================
+ * Client change requests (PR-KLANT-1) — sibling of profile_change_requests.
+ *
+ * Klant edits contact + shift-location fields directly (instant save). But
+ * finance + structural fields (companyName, kvk, btw, paymentTermsDays,
+ * billingAddress, auth-email) flow through admin approval so offertes,
+ * facturen and afspraken keep matching. One row per requested field change.
+ *
+ * Intentionally NOT shared with chefs' profile_change_requests — different
+ * entity, different field set, different reviewer copy (decision #3).
+ * =========================================================================== */
+
+export const clientChangeStatusEnum = pgEnum("client_change_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+
+export const clientChangeRequests = pgTable(
+  "client_change_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    /** Field name on the clients table (e.g. 'paymentTermsDays', 'companyName'). */
+    field: text("field").notNull(),
+    /** Snapshot of current value at request time (jsonb so works for any type). */
+    currentValue: jsonb("current_value"),
+    /** What the klant proposes. */
+    proposedValue: jsonb("proposed_value"),
+    /** Free-text justification. */
+    reason: text("reason"),
+    status: clientChangeStatusEnum("status").notNull().default("pending"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decidedBy: text("decided_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    decisionNotes: text("decision_notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    clientIdx: index("client_change_requests_client_idx").on(
+      t.clientId,
+      t.status,
+    ),
+  }),
+);
+
+export type ClientChangeRequest = typeof clientChangeRequests.$inferSelect;
+export type NewClientChangeRequest = typeof clientChangeRequests.$inferInsert;
+
+/* =============================================================================
  * Backup runs + restore drills (PR-CHEF-13) — backup ops record-keeping.
  *
  * scripts/backup-neon.sh writes one backup_runs row per backup. Same

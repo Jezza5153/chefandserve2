@@ -233,6 +233,51 @@ AI playbook: `docs/ai/workflow-playbooks/client-shift-hub.md` ·
 Tool contracts: `docs/ai/tool-contracts/client-tools.md` ·
 Migration: `drizzle/0020_klant_foundations.sql`
 
+## 1.10 — Klant profile editing (PR-KLANT-1, sectioned + finance-protected)
+
+`/client/profile` — two authority zones. Field authority is documented in
+`docs/ai/source-of-truth-map.md`.
+
+```
+DIRECT EDIT (instant) — saveClientProfile(formData)
+   src/app/(client)/client/profile/page.tsx
+   fields: contactName · phone · email(comms) · shiftAddress · city ·
+           shiftArrivalNotes · billingEmail
+   ↓
+   UPDATE clients SET … ; AUDIT 'client.profile_updated' ; outbox 'client.updated'
+   ↓
+   if billingEmail changed AND old existed:
+      EMAIL BillingEmailChangedKlantEmail → OLD billing address
+      (anti-takeover; NOT via recipientsForClient — must reach the OLD addr)
+   ↓
+   redirect ?ok=saved
+   NOTE: editing shiftAddress/city affects only FUTURE requests/templates;
+         existing shifts keep their snapshot (correction round 3, #2).
+
+REQUEST CHANGE (admin approves) — requestClientChange(formData)
+   fields: companyName · kvk · btw · paymentTermsDays · billingAddress · authEmail
+   ↓
+   INSERT client_change_requests (status='pending')
+   AUDIT 'client.change_requested'
+   EMAIL admin (recipientsFor 'client_portal_request', inline React)
+   ↓
+   redirect ?ok=requested
+   ↓
+ADMIN: /admin/business/clients/[id] → Wijzigingsverzoeken
+   approveClientChange / rejectClientChange (atomic: WHERE status='pending')
+   ↓
+   on approve: apply value (clients column, or users.email for authEmail) +
+               outbox 'client.updated'
+   AUDIT 'client.change_approved' | 'client.change_rejected'
+   EMAIL klant outcome via recipientsForClient(clientId,'generic') (inline React)
+```
+
+Server actions: `saveClientProfile` · `requestClientChange` (klant page) ·
+`approveClientChange` · `rejectClientChange` (admin clients/[id]).
+Emails: `BillingEmailChangedKlantEmail` + 2 inline-React (admin notify, klant
+outcome). AI playbook: `docs/ai/workflow-playbooks/client-profile-change.md` ·
+Migration: `drizzle/0021_client_change_requests.sql`.
+
 ---
 
 # Part 2 — Planned workflows (per active plan)
@@ -475,6 +520,9 @@ CRON workers/document-expiry.ts (daily):
 | `convertChefSubmission` | (admin chef submissions) | requireRole(owner) | INSERT chefs + UPDATE submissions |
 | `inviteChefToPortal` / `inviteClientToPortal` | (admin chef/client detail) | requireRole(owner) | INSERT users + UPDATE chefs/clients |
 | `activatePortalUser` | (admin) | requireRole(owner) | UPDATE users.status + sendEmail |
+| `saveClientProfile` | `(client)/client/profile/page.tsx` | requireAuth + own client | UPDATE clients · audit · outbox · (billing-email-changed mail to OLD addr) |
+| `requestClientChange` | `(client)/client/profile/page.tsx` | requireAuth + own client | INSERT client_change_requests · admin email |
+| `approveClientChange` / `rejectClientChange` | `(admin)/admin/business/clients/[id]/page.tsx` | requireRole(owner) | atomic UPDATE client_change_requests · apply value · outbox · klant outcome email |
 
 ### Planned (per active plan)
 
@@ -787,6 +835,9 @@ API:
 ```
 MagicLinkEmail · PortalInviteEmail · RecoveryEmail
 ShiftProposedEmail · ShiftConfirmedClientEmail
+Hours* (9 templates, PR-CHEF-1) · ShiftConfirmedChefEmail · ShiftCancelledByChefClientEmail
+BillingEmailChangedKlantEmail (PR-KLANT-1, → OLD billing address)
++ inline-React: client change-request admin notify · klant change outcome
 ```
 
 ## All current audit actions
@@ -805,6 +856,7 @@ shifts.created · shifts.updated
 placements.proposed · placements.chef_accepted · placements.chef_rejected · placements.confirmed
 chef.availability_updated · chef.availability_range_updated
 client.portal_request_submitted
+client.profile_updated · client.change_requested · client.change_approved · client.change_rejected (PR-KLANT-1)
 ```
 
 ## Planned audit actions
@@ -828,7 +880,7 @@ notification.created · notification.read · notification.suppressed
 backup_runs.created · backup_runs.failed
 restore_drills.created
 placement_comments.created (helper shipped PR-KLANT-0; wired PR-KLANT-3)
-client_change_requests.* (PR-KLANT-1) · client_shift_change_requests.* (PR-KLANT-2)
+client_shift_change_requests.* (PR-KLANT-2)
 shift_templates.* (PR-KLANT-4) · ratings.created (PR-KLANT-5)
 ```
 

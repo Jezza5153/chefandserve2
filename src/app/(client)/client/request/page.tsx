@@ -19,6 +19,7 @@
  */
 
 import { eq } from "drizzle-orm";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Resend } from "resend";
@@ -253,18 +254,18 @@ export default async function ClientRequestPage({
         </div>
 
         <div className="mt-6 flex flex-wrap gap-3">
-          <a
+          <Link
             href="/client/request"
             className="inline-block rounded-full bg-burgundy px-5 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900"
           >
             Nog een aanvraag indienen
-          </a>
-          <a
+          </Link>
+          <Link
             href="/client/shifts"
             className="inline-block rounded-full border border-burgundy/30 px-5 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy hover:bg-burgundy/5"
           >
             Mijn shifts bekijken
-          </a>
+          </Link>
         </div>
       </div>
     );

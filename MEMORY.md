@@ -131,7 +131,7 @@
 | PR | Description | Status |
 |---|---|---|
 | PR-KLANT-0 | Foundations: shift hub + placement_comments + client_contacts + recipients + AI docs | ✅ live (migration 0020 · /client/shifts/[shiftId] hub · comments.ts visibility-scoped · client-recipients.ts · client-shift-labels.ts · 8 playbooks + 4 tool contracts) |
-| PR-KLANT-1 | Profile editing (sectioned, paymentTerms→request) | ⏳ next (migration 0021) |
+| PR-KLANT-1 | Profile editing (sectioned, paymentTerms→request) | ✅ live (migration 0021 · /client/profile sectioned: Contactpersoon · Shiftlocatie · Facturatie · request-change · client_change_requests table · admin Wijzigingsverzoeken tab · BillingEmailChangedKlantEmail to OLD address · recipientsForClient outcome email) |
 | PR-KLANT-2 | Requests list + cancel + change/cancel for existing shifts | ⏳ (migration 0022) |
 | PR-KLANT-3 | Chef preview + structured comments + email | ⏳ |
 | PR-KLANT-4 | Recurring templates + exceptions + overnight + preview | ⏳ (migration 0023) |
@@ -161,6 +161,8 @@
 **Master records**: `chefs` · `clients` · `chef_availability` · `chef_documents`
 
 **Shifts/placements**: `shifts` · `placements`
+
+**Klant phase (live)**: `placement_comments` (visibility-scoped, PR-KLANT-0) · `client_contacts` (routing seam, PR-KLANT-0) · `client_change_requests` (PR-KLANT-1) · `clients.shiftAddress`/`shiftArrivalNotes`/`billingAddress` (PR-KLANT-0)
 
 ### Tables (planned per active plan)
 
@@ -192,7 +194,15 @@
 | 0010_recovery_intents.sql | recovery_intents (PR-C) | applied (May 27) |
 | 0011_integration_spine.sql | integration_connections + integration_outbox + integration_runs + external_refs + email_messages + email_events + notifications + contact_logs (PR-CHEF-0) | applied (May 27) |
 | 0012_shift_hours.sql | shift_hours + shift_hours_status enum (PR-CHEF-1) | applied (May 27) |
-| 0013..pending | profile_change_requests + payroll batches + AVG + … | not yet generated |
+| 0013_profile_change_requests.sql | profile_change_requests (PR-CHEF-4) | applied |
+| 0014_notification_prefs.sql | notification_prefs (PR-CHEF-6) | applied |
+| 0015_calendar_token.sql | calendar ICS tokens (PR-CHEF-11) | applied |
+| 0016_chef_documents_trust.sql | chef_documents trust cols (PR-CHEF-12) | applied |
+| 0017_backup_runs.sql | backup_runs + restore_drills (PR-CHEF-13) | applied |
+| 0018_avg_privacy.sql | consent_log + privacy_requests + retention_policies (PR-CHEF-10) | applied |
+| 0019_payroll_batches.sql | payroll_batches + lines + shift_hour_corrections (PR-CHEF-7) | applied |
+| 0020_klant_foundations.sql | placement_comments + client_contacts + clients address split (PR-KLANT-0) | applied (May 28) |
+| 0021_client_change_requests.sql | client_change_requests + client_change_status enum (PR-KLANT-1) | applied (May 28) |
 
 ---
 

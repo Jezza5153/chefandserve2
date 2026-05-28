@@ -1,19 +1,23 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
 import {
   auditLog,
+  clientChangeRequests,
   clientSubmissions,
   clients,
   users,
 } from "@/lib/db/schema";
+import { recipientsForClient } from "@/lib/domain/client-recipients";
 import {
   activatePortalUser,
   disablePortalUser,
   inviteClientToPortal,
 } from "@/lib/domain/portal-invites";
+import { sendEmail } from "@/lib/email";
+import { enqueueIntegrationEvent, recordEmailMessage } from "@/lib/integrations";
 import { requireRole } from "@/lib/permissions";
 
 export const metadata = { title: "Klant" };
@@ -38,6 +42,16 @@ export default async function ClientDetailPage({
   const portalUser = client.userId
     ? await db.query.users.findFirst({ where: eq(users.id, client.userId) })
     : null;
+
+  // PR-KLANT-1: change requests (pending first, then recent decisions).
+  const changeRequests = await db
+    .select()
+    .from(clientChangeRequests)
+    .where(eq(clientChangeRequests.clientId, id))
+    .orderBy(desc(clientChangeRequests.createdAt))
+    .limit(25);
+  const pendingChanges = changeRequests.filter((r) => r.status === "pending");
+  const decidedChanges = changeRequests.filter((r) => r.status !== "pending");
 
   async function doInviteToPortal() {
     "use server";
@@ -112,6 +126,158 @@ export default async function ClientDetailPage({
     });
 
     redirect(`/admin/business/clients/${id}`);
+  }
+
+  // PR-KLANT-1: which clients column each requestable field maps to.
+  const CLIENT_FIELD_COLUMN: Record<string, keyof typeof clients.$inferInsert> = {
+    companyName: "companyName",
+    kvk: "kvk",
+    btw: "btw",
+    paymentTermsDays: "paymentTermsDays",
+    billingAddress: "billingAddress",
+  };
+
+  async function decideClientChange(formData: FormData, decision: "approved" | "rejected") {
+    "use server";
+    const session = await requireRole("owner");
+    const requestId = String(formData.get("requestId") ?? "");
+    const decisionNotes = String(formData.get("decisionNotes") ?? "").trim() || null;
+    if (!requestId) return;
+
+    const [req] = await db
+      .select()
+      .from(clientChangeRequests)
+      .where(eq(clientChangeRequests.id, requestId))
+      .limit(1);
+    if (!req || req.clientId !== id || req.status !== "pending") {
+      redirect(`/admin/business/clients/${id}?err=request-gone`);
+    }
+
+    // Apply the field change on approval.
+    if (decision === "approved") {
+      if (req.field === "authEmail") {
+        // Auth email lives on users — update it (klant logs in with new email).
+        if (client!.userId) {
+          await db
+            .update(users)
+            .set({ email: String(req.proposedValue).toLowerCase(), updatedAt: new Date() })
+            .where(eq(users.id, client!.userId));
+        }
+      } else if (req.field === "paymentTermsDays") {
+        await db
+          .update(clients)
+          .set({ paymentTermsDays: Number(req.proposedValue), updatedAt: new Date() })
+          .where(eq(clients.id, id));
+      } else {
+        const col = CLIENT_FIELD_COLUMN[req.field];
+        if (col) {
+          await db
+            .update(clients)
+            .set({ [col]: String(req.proposedValue), updatedAt: new Date() })
+            .where(eq(clients.id, id));
+        }
+      }
+    }
+
+    // Atomic state transition — only flip a still-pending request.
+    const updated = await db
+      .update(clientChangeRequests)
+      .set({
+        status: decision,
+        decidedAt: new Date(),
+        decidedBy: session.user.id,
+        decisionNotes,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(clientChangeRequests.id, requestId),
+          eq(clientChangeRequests.status, "pending"),
+        ),
+      )
+      .returning({ id: clientChangeRequests.id });
+    if (updated.length === 0) redirect(`/admin/business/clients/${id}?err=request-gone`);
+
+    await db.insert(auditLog).values({
+      userId: session.user.id,
+      action: decision === "approved" ? "client.change_approved" : "client.change_rejected",
+      resource: "client_change_requests",
+      resourceId: requestId,
+      after: { field: req.field, decision, decisionNotes },
+    });
+
+    if (decision === "approved") {
+      await enqueueIntegrationEvent({
+        provider: "internal",
+        eventType: "client.updated",
+        entityType: "client",
+        entityId: id,
+        payload: { field: req.field, value: req.proposedValue },
+        idempotencyKey: `client.updated:${id}:change:${requestId}`,
+      });
+    }
+
+    // Outcome email to the klant — routes through recipientsForClient (the
+    // single klant email seam), never a hard-coded client.email.
+    const to = await recipientsForClient(id, "generic");
+    if (to.length > 0) {
+      const fieldLabel = clientChangeFieldLabel(req.field);
+      const send = await sendEmail({
+        to,
+        subject:
+          decision === "approved"
+            ? `Wijziging doorgevoerd: ${fieldLabel}`
+            : `Wijzigingsverzoek niet doorgevoerd: ${fieldLabel}`,
+        react: (
+          <div>
+            <h1>
+              {decision === "approved"
+                ? "Je wijziging is doorgevoerd"
+                : "Je wijzigingsverzoek is niet doorgevoerd"}
+            </h1>
+            <p>
+              <strong>Onderdeel:</strong> {fieldLabel}
+              <br />
+              {decision === "approved" ? (
+                <>
+                  <strong>Nieuwe waarde:</strong> {String(req.proposedValue)}
+                </>
+              ) : null}
+              {decisionNotes ? (
+                <>
+                  <br />
+                  <strong>Toelichting van Chef &amp; Serve:</strong> {decisionNotes}
+                </>
+              ) : null}
+            </p>
+            <p>Vragen? Mail of bel het kantoor — we helpen je graag.</p>
+          </div>
+        ),
+      });
+      if (send.ok) {
+        for (const addr of to) {
+          await recordEmailMessage({
+            providerMessageId: send.id,
+            toEmail: addr,
+            template: "ClientChangeOutcomeInline",
+            eventKey: "generic",
+            entityType: "client_change_requests",
+            entityId: requestId,
+          });
+        }
+      }
+    }
+
+    redirect(`/admin/business/clients/${id}?ok=change-${decision}`);
+  }
+
+  async function approveClientChange(formData: FormData) {
+    "use server";
+    await decideClientChange(formData, "approved");
+  }
+  async function rejectClientChange(formData: FormData) {
+    "use server";
+    await decideClientChange(formData, "rejected");
   }
 
   return (
@@ -271,6 +437,109 @@ export default async function ClientDetailPage({
         )}
       </section>
 
+      {/* PR-KLANT-1: Wijzigingsverzoeken */}
+      <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
+        <h2 className="font-serif text-lg text-ink-900">Wijzigingsverzoeken</h2>
+        <p className="mt-1 text-sm text-ink-700">
+          Bedrijfs- en facturatiegegevens die de klant via het portaal heeft
+          aangevraagd. Goedkeuren voert de wijziging direct door.
+        </p>
+
+        {pendingChanges.length === 0 ? (
+          <p className="mt-4 rounded bg-bg-gray px-3 py-2 text-xs text-ink-500">
+            Geen openstaande verzoeken.
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-4">
+            {pendingChanges.map((r) => (
+              <li
+                key={r.id}
+                className="rounded-lg border border-amber-300 bg-amber-50/50 p-4"
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+                    {clientChangeFieldLabel(r.field)}
+                  </p>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider text-amber-800">
+                    Wacht op akkoord
+                  </span>
+                </div>
+                <div className="mt-2 grid gap-1 text-sm text-ink-900">
+                  <p>
+                    <span className="text-ink-500">Huidig:</span>{" "}
+                    {formatChangeValue(r.currentValue)}
+                  </p>
+                  <p>
+                    <span className="text-ink-500">Voorgesteld:</span>{" "}
+                    <strong>{formatChangeValue(r.proposedValue)}</strong>
+                  </p>
+                  {r.reason ? (
+                    <p className="text-xs text-ink-500">
+                      Toelichting klant: {r.reason}
+                    </p>
+                  ) : null}
+                </div>
+
+                <form action={approveClientChange} className="mt-3">
+                  <input type="hidden" name="requestId" value={r.id} />
+                  <textarea
+                    name="decisionNotes"
+                    rows={2}
+                    placeholder="Optionele toelichting (gedeeld met de klant)"
+                    className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="submit"
+                      className="rounded-full bg-emerald-600 px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-emerald-700"
+                    >
+                      Goedkeuren
+                    </button>
+                    <button
+                      type="submit"
+                      formAction={rejectClientChange}
+                      className="rounded-full border border-red-300 bg-white px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-red-700 hover:bg-red-50"
+                    >
+                      Afwijzen
+                    </button>
+                  </div>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {decidedChanges.length > 0 ? (
+          <details className="mt-5">
+            <summary className="cursor-pointer font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500 hover:text-burgundy">
+              Geschiedenis ({decidedChanges.length})
+            </summary>
+            <ul className="mt-3 space-y-2 text-sm">
+              {decidedChanges.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex items-baseline justify-between gap-3 border-b border-ink-200 pb-2"
+                >
+                  <span className="text-ink-900">
+                    {clientChangeFieldLabel(r.field)} →{" "}
+                    {formatChangeValue(r.proposedValue)}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider ${
+                      r.status === "approved"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-bg-gray text-ink-500"
+                    }`}
+                  >
+                    {r.status === "approved" ? "Doorgevoerd" : "Afgewezen"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </section>
+
       <div className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
         <h2 className="font-serif text-lg text-ink-900">Binnenkort op deze pagina</h2>
         <ul className="mt-3 space-y-2 text-sm text-ink-700">
@@ -362,4 +631,24 @@ function StatusBadge({ status }: { status: string }) {
       {labels[status] ?? status}
     </span>
   );
+}
+
+function clientChangeFieldLabel(field: string): string {
+  return (
+    {
+      companyName: "Bedrijfsnaam",
+      kvk: "KvK-nummer",
+      btw: "BTW-nummer",
+      paymentTermsDays: "Betaaltermijn",
+      billingAddress: "Factuuradres",
+      authEmail: "Inlog-e-mailadres",
+    } as Record<string, string>
+  )[field] ?? field;
+}
+
+function formatChangeValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string") return value;
+  return JSON.stringify(value);
 }
