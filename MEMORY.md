@@ -3,7 +3,17 @@
 > Single source of truth for "what's in this codebase right now". Updated after every PR ships.
 > If you're an AI agent or a new dev opening this repo for the first time, **read this first**.
 
-**Last updated:** PR-AI-0 + PR-CHEF-0 + ... (see "PR ledger" below)
+## ▶ Resuming in a fresh chat / new dev?
+
+Read in this order: **CLAUDE.md → MEMORY.md (this file) → WORKFLOW.md**, then
+`docs/ai/` before any AI work. The active plan is at
+`~/.claude/plans/goofy-moseying-truffle.md`. Everything shipped is in the **PR
+ledger** below; anything planned-but-not-built is flagged ⏳ or noted under
+"Open questions". You can pick up mid-phase from here with zero prior context —
+each PR shipped with a migration, a `scripts/smoke-*.mjs`, and WORKFLOW.md
+linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
+
+**Last updated:** Klant phase complete — PR-KLANT-0…5 + PR-KLANT-DOCS (see "PR ledger")
 **Live URL:** https://chefandserve2.vercel.app
 **Repo:** github.com/Jezza5153/chefandserve2
 
@@ -13,6 +23,7 @@
 
 | Topic | File |
 |---|---|
+| Codebase guide (auto-loaded keystone) | `CLAUDE.md` — stack · hard rules · map · how-to-work |
 | Plan (current operating plan) | `~/.claude/plans/goofy-moseying-truffle.md` |
 | Strategic AI architecture | `AI_INTEGRATION.md` (4-layer model · data inventory · phased rollout) |
 | Phase-by-phase tactical brief | `BUILD_PLAN.md` |
@@ -287,7 +298,11 @@
 6. **Cancellation severity thresholds** — 48h/24h/same-day from `src/lib/cancellation-severity.ts`; tune after 1 month real use.
 7. **Web Push** — deferred to PR-CHEF-15; rely on emails + in-app notifications for V1.
 
----
+### Known follow-ups discovered during the klant phase (spawned as side tasks)
+
+8. **Worker scheduling gap** — `complete-placements` (core of the hours trust chain: flips confirmed→completed + creates draft hours) and `document-expiry` exist but are NOT in `workers/supervisor.ts` JOBS, so they never fire in prod. Must be registered (complete-placements every 30 min, document-expiry daily). HIGH priority — the hours flow stalls without it.
+9. **Chef profile-change admin review (PR-CHEF-4 gap)** — chefs can file `profile_change_requests` from `/chef/profile`, but there is NO admin UI to approve/reject them. Mirror the klant Wijzigingsverzoeken flow built in PR-KLANT-1.
+10. **Chef photo for klanten** — the shift hub shows a proposed chef with an initials avatar; the photo isn't shown because `/api/chef-photo/[id]` only authorizes chef-self + super_admin. Extend authz to klanten for clientVisible+verified photos of a chef placed on their shift.
 
 ## How to update this file
 

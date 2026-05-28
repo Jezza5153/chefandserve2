@@ -1046,6 +1046,46 @@ ratings.created (PR-KLANT-5)
 
 ---
 
+# Part 7 — Cross-reference index (PR-KLANT-DOCS)
+
+The one-stop map: **workflow ↔ route ↔ server action ↔ email ↔ notification ↔
+migration ↔ AI playbook**. Use it to find where to fix or extend a behavior.
+Klant phase + the hours spine are fully indexed; older chef-phase workflows
+are covered by Parts 1–4 above.
+
+## 7.1 — Klant phase (PR-KLANT-0…5)
+
+| Workflow | Route(s) | Server action(s) / domain | Email(s) | Notification | Migration | AI playbook |
+|---|---|---|---|---|---|---|
+| Shift hub (canonical) §1.9 | `/client/shifts/[shiftId]` | `getClientShiftLabel` · `listVisibleComments` | — | — | 0020 | client-shift-hub.md |
+| Profile editing §1.10 | `/client/profile` · admin `clients/[id]` | `saveClientProfile` · `requestClientChange` · `approve/rejectClientChange` | BillingEmailChangedKlantEmail + inline | — | 0021 | client-profile-change.md |
+| Retract submission §1.11 | `/client/requests` | `cancelSubmission` → `cancelClientSubmission` | inline admin notify | — | 0022 | client-request-cancellation.md |
+| Shift change/cancel §1.11 | `/client/shifts/[shiftId]` · admin `inbox` | `requestShiftChangeAction` → `createShiftChangeRequest` · `decideShiftRequest` → `decideShiftChangeRequest` | ClientChangeRequestAdminEmail · ClientChangeRequestOutcomeKlantEmail | client_shift_change_decided | 0022 | client-shift-change-request.md |
+| Chef preview + comments §1.12 | hub + admin `shifts/[id]` | `proposePlacement` · `sendChefComment` · `replyComment` · `addPlacementComment` · `getMatchReasonsForPlacement` | ChefProposedKlantEmail + inline | chef_proposed | (0020 comments) | chef-preview-comment.md |
+| Recurring templates §1.13 | admin `templates[/new,/[id]]` · `/client/templates` | `createTemplate` · `add/removeException` · `toggleActive` · `requestTemplateChange` · worker `generate-recurring-shifts` | template-change inline | — | 0023 | recurring-shift-template-change.md |
+| Rating loop §1.14 | `/client/shifts/[shiftId]/rate` | `submitRatingAction` → `submitRating` (+ `approveHoursRow` trigger) | RatingPendingKlantEmail | rating_pending | 0024 | client-rating-feedback.md |
+| Contact routing (seam) | (no UI V1) | `recipientsForClient` | (all klant mail) | — | 0020 | client-contact-routing.md |
+
+## 7.2 — Seam helpers (one source of truth — touch these, not call sites)
+
+| Seam | File | Used by |
+|---|---|---|
+| Klant email recipients | `src/lib/domain/client-recipients.ts` | every klant transactional email |
+| Visibility-scoped comments | `src/lib/domain/comments.ts` | hub thread + admin reply + chef view |
+| Klant shift status labels | `src/lib/client-shift-labels.ts` | hub + dashboard |
+| Match reasons | `src/lib/domain/matching.ts` `buildReasonsAndWarnings` | admin scoring + klant "Waarom voorgesteld?" |
+| Rating visibility | `src/lib/domain/ratings.ts` | admin (all) · chef (N≥5) · klant (none) |
+| Template date math | `src/lib/shift-template-format.ts` + worker `AT TIME ZONE` | admin preview + klant view + generation |
+
+## 7.3 — Tool contracts (for the future AI layer)
+
+`docs/ai/tool-contracts/`: client-tools.md · client-request-tools.md ·
+client-template-tools.md · rating-tools.md. Safety envelope:
+`docs/ai/ai-safety-rules.md`. RAG source rules: `docs/ai/rag-source-catalog.md`
+(NEVER read `placements.notes` for klant-facing answers).
+
+---
+
 ## How to update this file
 
 - **Before** opening a PR: add new wiring rows here so reviewers can see linkage.
