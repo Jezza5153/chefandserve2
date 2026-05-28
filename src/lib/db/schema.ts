@@ -856,6 +856,9 @@ export const shifts = pgTable("shifts", {
   /* ----- where ----- */
   location: text("location"),
   city: text("city"),
+  /* PR-3: geocoded (PDOK) from the klant address/city for travel-cost estimates. */
+  latitude: numeric("latitude", { precision: 9, scale: 6 }),
+  longitude: numeric("longitude", { precision: 9, scale: 6 }),
 
   /* ----- money ----- */
   /** Client-billed rate per chef in cents. */

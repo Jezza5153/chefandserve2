@@ -18,6 +18,12 @@ import {
 } from "@/lib/domain/matching";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import {
+  estimateMargin,
+  estimateTravel,
+  eur,
+  type TransportMode,
+} from "@/lib/domain/travel";
+import {
   getChefCandidateBadges,
   getChefCandidateWarnings,
   getMatchConfidenceLabel,
@@ -109,6 +115,30 @@ export default async function ShiftDetailPage({
           })
         : null,
     };
+  }
+
+  // PR-3: travel + margin per candidate (shown when both ends are geocoded).
+  const shiftCoords =
+    shift.latitude != null && shift.longitude != null
+      ? { lat: Number(shift.latitude), lng: Number(shift.longitude) }
+      : null;
+  const shiftHoursDuration =
+    (new Date(shift.endsAt).getTime() - new Date(shift.startsAt).getTime()) / 3_600_000;
+  function travelFor(chefId: string) {
+    const c = chefById.get(chefId);
+    if (!shiftCoords || !c?.latitude || !c?.longitude) return null;
+    const t = estimateTravel({
+      from: { lat: Number(c.latitude), lng: Number(c.longitude) },
+      to: shiftCoords,
+      mode: (c.transportMode as TransportMode | null) ?? "none",
+    });
+    const margin = estimateMargin({
+      clientRateCents: shift!.clientRateCents,
+      chefRateCents: c.hourlyRateMinCents ?? shift!.chefRateCents,
+      hours: shiftHoursDuration,
+      travelCents: t.costCents,
+    });
+    return { t, margin };
   }
 
   async function logContact(formData: FormData) {
@@ -542,6 +572,7 @@ export default async function ShiftDetailPage({
               const candWarnings = getChefCandidateWarnings(sig);
               const allWarnings = [...new Set([...m.warnings, ...candWarnings])];
               const phoneDigits = c?.phone?.replace(/\D/g, "") ?? "";
+              const tm = travelFor(m.chef.id);
               return (
                 <li key={m.chef.id} className="rounded-lg border border-ink-200 bg-white p-4">
                   <div className="flex items-start justify-between gap-4">
@@ -572,6 +603,25 @@ export default async function ShiftDetailPage({
                               {b.label}
                             </span>
                           ))}
+                        </div>
+                      )}
+                      {tm && (
+                        <div className="mt-1.5 flex flex-wrap gap-1 text-[10px]">
+                          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+                            ≈ {eur(tm.t.costCents)} reis · {tm.t.km} km · {tm.t.basis}
+                          </span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 font-medium ${
+                              tm.margin.tone === "negative"
+                                ? "bg-red-100 text-red-700"
+                                : tm.margin.tone === "low"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-emerald-100 text-emerald-700"
+                            }`}
+                          >
+                            marge {eur(tm.margin.marginCents)}
+                            {tm.margin.tone === "low" ? " (laag)" : tm.margin.tone === "negative" ? " (negatief)" : ""}
+                          </span>
                         </div>
                       )}
                       {m.reasons.length > 0 && (
