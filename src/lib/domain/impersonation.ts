@@ -50,6 +50,7 @@ import type { Session } from "next-auth";
 
 const IMPERSONATE_TARGET = "cs_impersonate_target";
 const IMPERSONATE_ACTOR = "cs_impersonate_actor";
+const IMPERSONATE_SID = "cs_impersonate_sid";
 const COOKIE_MAX_AGE_SECONDS = 60 * 60; // 1 hour
 
 export async function startImpersonation(
@@ -75,28 +76,28 @@ export async function startImpersonation(
     return { ok: false, error: "Cannot impersonate another super_admin" };
   }
 
+  // Correlation id shared by the start row, every impersonated write
+  // (recordAuditFromRequest stamps after._imp) and the stop row — so a forensic
+  // `WHERE after->>'_imp' = '…'` returns one whole "Bekijk als" session.
+  const sessionId = crypto.randomUUID();
+  const cookieOpts = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: COOKIE_MAX_AGE_SECONDS,
+    path: "/",
+  };
   const cookieStore = await cookies();
-  cookieStore.set(IMPERSONATE_TARGET, targetUserId, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: COOKIE_MAX_AGE_SECONDS,
-    path: "/",
-  });
-  cookieStore.set(IMPERSONATE_ACTOR, actorUserId, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: COOKIE_MAX_AGE_SECONDS,
-    path: "/",
-  });
+  cookieStore.set(IMPERSONATE_TARGET, targetUserId, cookieOpts);
+  cookieStore.set(IMPERSONATE_ACTOR, actorUserId, cookieOpts);
+  cookieStore.set(IMPERSONATE_SID, sessionId, cookieOpts);
 
   await recordAuditCore({
     userId: actorUserId,
     action: "impersonation.start",
     resource: "users",
     resourceId: targetUserId,
-    after: { targetEmail: target.email, targetKind: target.kind },
+    after: { targetEmail: target.email, targetKind: target.kind, _imp: sessionId },
   });
 
   return { ok: true };
@@ -106,9 +107,11 @@ export async function stopImpersonation(): Promise<void> {
   const cookieStore = await cookies();
   const target = cookieStore.get(IMPERSONATE_TARGET)?.value;
   const actor = cookieStore.get(IMPERSONATE_ACTOR)?.value;
+  const sessionId = cookieStore.get(IMPERSONATE_SID)?.value;
 
   cookieStore.delete(IMPERSONATE_TARGET);
   cookieStore.delete(IMPERSONATE_ACTOR);
+  cookieStore.delete(IMPERSONATE_SID);
 
   if (target && actor) {
     await recordAuditCore({
@@ -116,6 +119,7 @@ export async function stopImpersonation(): Promise<void> {
       action: "impersonation.stop",
       resource: "users",
       resourceId: target,
+      after: sessionId ? { _imp: sessionId } : null,
     });
   }
 }

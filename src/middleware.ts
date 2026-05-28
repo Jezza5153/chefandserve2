@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { isImpersonationDeniedPath } from "@/lib/impersonation-denylist";
 import { TWOFA_COOKIE_NAME, validateCookieValue } from "@/lib/totp-cookie";
 
 /**
@@ -47,25 +48,26 @@ export default auth(async (request: NextRequest & {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Impersonation write-gate. While a super_admin is viewing AS someone
-  // (cs_impersonate_target cookie present), block mutating requests EXCEPT where
-  // the audit trail records the impersonator (recordAudit). B2 covers the chef
-  // portal, so /chef writes are allowed — but the AVG privacy flow (/chef/privacy)
-  // and the client/admin surfaces stay view-only until their audit sites are
-  // covered. No-op for everyone else. Stop lives at /api/impersonate/* (not
-  // matched here), so it always works.
+  // Impersonation write-gate (broad write-impersonation — FLIPPED). While a
+  // super_admin views AS someone (cs_impersonate_target set), most writes are
+  // allowed and audited as the impersonator (recordAuditFromRequest stamps
+  // impersonator_user_id + after._imp). GENUINELY DESTRUCTIVE / irreversible /
+  // sensitive-export ops stay blocked by the verified path+method denylist;
+  // the matching assertImpersonationAllowed() action guard is the second layer
+  // for the path-shared actions this can't split. Stop lives at
+  // /api/impersonate/* (not matched here), so it always works.
   if (
     request.cookies.get("cs_impersonate_target")?.value &&
-    !["GET", "HEAD", "OPTIONS"].includes(request.method)
+    isImpersonationDeniedPath(path, request.method)
   ) {
-    const auditCoveredWrite =
-      path.startsWith("/chef") && !path.startsWith("/chef/privacy");
-    if (!auditCoveredWrite) {
-      return NextResponse.json(
-        { error: "impersonation_view_only", message: "Stop bekijk-als om wijzigingen te doen." },
-        { status: 403 },
-      );
-    }
+    return NextResponse.json(
+      {
+        error: "impersonation_destructive_blocked",
+        message:
+          "Onomkeerbare acties zijn geblokkeerd tijdens bekijk-als. Stop bekijk-als om dit te doen.",
+      },
+      { status: 403 },
+    );
   }
 
   // Setup-wizard gate (PR-S2D) — internal users must complete password +
