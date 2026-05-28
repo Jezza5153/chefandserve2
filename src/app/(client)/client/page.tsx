@@ -10,7 +10,7 @@
  *   - CTA: nieuwe aanvraag + agenda link (PR-CHEF-11 ICS-feed)
  */
 
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import Link from "next/link";
 
 import { ActionCard, ActionRow } from "@/components/dashboard/ActionCard";
@@ -20,6 +20,7 @@ import {
   clients,
   clientSubmissions,
   placements,
+  ratings,
   shiftHours,
   shifts,
 } from "@/lib/db/schema";
@@ -138,7 +139,34 @@ export default async function ClientDashboardPage() {
     .orderBy(shifts.startsAt)
     .limit(20);
 
-  const hasActions = hoursToSign.length + recentConfirms.length + myPending.length > 0;
+  // Approved shifts still awaiting klant feedback (PR-KLANT-5).
+  const ratingsPending = await db
+    .select({
+      shiftId: shifts.id,
+      chefName: chefs.fullName,
+      shiftStart: shifts.startsAt,
+    })
+    .from(shiftHours)
+    .innerJoin(placements, eq(placements.id, shiftHours.placementId))
+    .innerJoin(shifts, eq(shifts.id, shiftHours.shiftId))
+    .innerJoin(chefs, eq(chefs.id, placements.chefId))
+    .leftJoin(ratings, eq(ratings.placementId, placements.id))
+    .where(
+      and(
+        eq(shiftHours.clientId, client.id),
+        eq(shiftHours.status, "admin_approved"),
+        isNull(ratings.id),
+      ),
+    )
+    .orderBy(desc(shifts.startsAt))
+    .limit(5);
+
+  const hasActions =
+    hoursToSign.length +
+      recentConfirms.length +
+      myPending.length +
+      ratingsPending.length >
+    0;
 
   return (
     <div>
@@ -205,6 +233,23 @@ export default async function ClientDashboardPage() {
                   key={s.id}
                   label={s.roleRequested ?? "Personeel aanvraag"}
                   meta={s.dateNeeded ?? ""}
+                />
+              ))}
+            </ActionCard>
+          )}
+
+          {ratingsPending.length > 0 && (
+            <ActionCard
+              icon="⭐"
+              title={`${ratingsPending.length} ${ratingsPending.length === 1 ? "chef wacht" : "chefs wachten"} op je feedback`}
+            >
+              {ratingsPending.slice(0, 4).map((r) => (
+                <ActionRow
+                  key={r.shiftId}
+                  label={r.chefName}
+                  meta={formatShiftDateShort(r.shiftStart)}
+                  href={`/client/shifts/${r.shiftId}/rate`}
+                  cta="Geef feedback →"
                 />
               ))}
             </ActionCard>

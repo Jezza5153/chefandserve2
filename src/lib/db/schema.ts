@@ -22,6 +22,7 @@ import {
   pgTable,
   text,
   integer,
+  numeric,
   boolean,
   timestamp,
   time,
@@ -652,6 +653,14 @@ export const chefs = pgTable("chefs", {
   /* ----- external IDs ----- */
   /** Payingit's employee ID once enrolled. Phase 5. */
   payingitEmployeeId: text("payingit_employee_id"),
+
+  /* ----- ratings rollup (PR-KLANT-5) -------------------------------
+   * Recomputed in the same tx as each rating insert. averageRating stays
+   * NULL-ish until there's data; chef only SEES their average at N>=5
+   * (enforced in src/lib/domain/ratings.ts, not here). Internal-only V1.
+   */
+  averageRating: numeric("average_rating", { precision: 3, scale: 2 }),
+  ratingCount: integer("rating_count").notNull().default(0),
 
   /* ----- lifecycle ----- */
   status: chefStatusEnum("status").notNull().default("onboarding"),
@@ -1705,6 +1714,53 @@ export type NewShiftTemplate = typeof shiftTemplates.$inferInsert;
 export type ShiftTemplateException = typeof shiftTemplateExceptions.$inferSelect;
 export type NewShiftTemplateException =
   typeof shiftTemplateExceptions.$inferInsert;
+
+/* =============================================================================
+ * Ratings (PR-KLANT-5) — klant feedback on a completed placement.
+ *
+ * Stars (1–5) + soft tags (Dutch labels, see src/lib/rating-tags.ts) +
+ * optional comment. INTERNAL-ONLY in V1: admin always sees; chef sees their
+ * average only at ratingCount>=5; other klanten never see it. One rating per
+ * placement (UNIQUE). ON DELETE RESTRICT preserves the signal (chefs/clients
+ * soft-delete elsewhere; a rating must not silently vanish).
+ *
+ * Negative tags are a soft matching hint — they require human review before
+ * penalizing a chef (documented in docs/ai/ai-safety-rules.md).
+ * =========================================================================== */
+
+export const ratings = pgTable(
+  "ratings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    placementId: text("placement_id")
+      .notNull()
+      .unique()
+      .references(() => placements.id, { onDelete: "restrict" }),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "restrict" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "restrict" }),
+    stars: integer("stars").notNull(),
+    /** Dutch tag keys from RATING_TAGS (positive + negative). */
+    tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
+    comment: text("comment"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+  },
+  (t) => ({
+    starsCheck: check("ratings_stars_check", sql`${t.stars} BETWEEN 1 AND 5`),
+    chefIdx: index("ratings_chef_idx").on(t.chefId, t.createdAt),
+  }),
+);
+
+export type Rating = typeof ratings.$inferSelect;
+export type NewRating = typeof ratings.$inferInsert;
 
 /* =============================================================================
  * Backup runs + restore drills (PR-CHEF-13) — backup ops record-keeping.

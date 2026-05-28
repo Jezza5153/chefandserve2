@@ -24,6 +24,7 @@ import {
   shiftHours,
   shifts,
 } from "@/lib/db/schema";
+import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { sendEmail } from "@/lib/email";
 import {
   computeChefAmountCents,
@@ -39,6 +40,7 @@ import {
 import { HoursApprovedChefEmail } from "@/emails/HoursApprovedChefEmail";
 import { HoursApprovedKlantEmail } from "@/emails/HoursApprovedKlantEmail";
 import { HoursRejectedByAdminEmail } from "@/emails/HoursRejectedByAdminEmail";
+import { RatingPendingKlantEmail } from "@/emails/RatingPendingKlantEmail";
 
 /**
  * Bulk-approve eligibility rules.
@@ -224,6 +226,46 @@ export async function approveHoursRow(args: {
         entityId: row.id,
         userId: ctx.clientUserId ?? undefined,
       });
+    }
+  }
+
+  // PR-KLANT-5: invite the klant to give feedback now that the shift is done.
+  if (ctx.clientUserId) {
+    await createNotification({
+      userId: ctx.clientUserId,
+      type: "rating_pending",
+      title: `Geef feedback over ${ctx.chefName}`,
+      body: "Je feedback helpt ons volgende matches beter te maken.",
+      actionUrl: `/client/shifts/${row.shiftId}/rate`,
+      entityType: "shift_hours",
+      entityId: row.id,
+    });
+  }
+  {
+    const to = await recipientsForClient(row.clientId, "rating_pending");
+    if (to.length > 0) {
+      const send = await sendEmail({
+        to,
+        subject: `Geef feedback over ${ctx.chefName}`,
+        react: RatingPendingKlantEmail({
+          companyName: ctx.clientName,
+          chefName: ctx.chefName,
+          shiftDate,
+          rateUrl: `${process.env.NEXT_PUBLIC_APP_URL}/client/shifts/${row.shiftId}/rate`,
+        }),
+      });
+      if (send.ok) {
+        for (const addr of to) {
+          await recordEmailMessage({
+            providerMessageId: send.id,
+            toEmail: addr,
+            template: "RatingPendingKlantEmail",
+            eventKey: "rating_pending",
+            entityType: "shift_hours",
+            entityId: row.id,
+          });
+        }
+      }
     }
   }
 

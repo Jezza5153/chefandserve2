@@ -389,6 +389,35 @@ AI playbook: `docs/ai/workflow-playbooks/recurring-shift-template-change.md`.
 > predicate in `ON CONFLICT … WHERE …` or Postgres errors 42P10. Both the
 > worker and `scripts/smoke-klant-templates.mjs` include it.
 
+## 1.14 — Rating loop (PR-KLANT-5, migration 0024)
+
+Structured klant feedback (stars + tags) — INTERNAL-ONLY V1.
+
+```
+approveHoursRow() (src/lib/domain/hours.ts) — after hours admin-approved:
+   EMAIL RatingPendingKlantEmail (recipientsForClient 'rating_pending')
+   + notification 'rating_pending' → /client/shifts/[id]/rate
+   + /client dashboard "Beoordeel je chef" card (approved hours, no rating yet)
+   ↓
+KLANT /client/shifts/[shiftId]/rate → submitRatingAction → submitRating()
+   ownership (placement→shift→client) · stars 1–5 · sanitizeTags (drops unknown)
+   INSERT ratings (placement_id UNIQUE = double-submit guard)
+   then recompute chefs.average_rating + rating_count (sequential — neon-http
+   has no interactive tx; rollup is a self-healing cache, ratings is truth)
+   AUDIT ratings.created
+   ↓
+VISIBILITY (encoded in src/lib/domain/ratings.ts, not just docs):
+   getChefAverageForAdmin → full avg + count + recent (admin chef-detail)
+   getChefSummaryForChef  → average NULL until ratingCount>=5 (chef profile)
+   getChefPreviewForKlant → no rating data at all (V1)
+```
+
+Tags: `src/lib/rating-tags.ts` (positive + negative, Dutch labels, soft hints;
+negative tags need human review before penalizing — `ai-safety-rules.md`).
+Client component: `RatingForm`. Email: `RatingPendingKlantEmail`.
+AI playbook: `docs/ai/workflow-playbooks/client-rating-feedback.md` ·
+Tool contract: `docs/ai/tool-contracts/rating-tools.md`.
+
 ---
 
 # Part 2 — Planned workflows (per active plan)
@@ -642,6 +671,7 @@ CRON workers/document-expiry.ts (daily):
 | `createTemplate` | `(admin)/admin/business/templates/new/page.tsx` | requireRole(owner) | INSERT shift_templates · audit |
 | `addException` / `removeException` / `toggleActive` | `(admin)/admin/business/templates/[id]/page.tsx` | requireRole(owner) | mutate shift_template_exceptions / shift_templates.active · audit |
 | `requestTemplateChange` | `(client)/client/templates/page.tsx` | requireAuth + own template | INSERT client_change_requests field='template:<id>' · admin email |
+| `submitRatingAction` | `(client)/client/shifts/[shiftId]/rate/page.tsx` | requireAuth + own shift | submitRating() · INSERT ratings + recompute chefs rollup |
 
 ### Planned (per active plan)
 
@@ -962,7 +992,8 @@ Hours* (9 templates, PR-CHEF-1) · ShiftConfirmedChefEmail · ShiftCancelledByCh
 BillingEmailChangedKlantEmail (PR-KLANT-1, → OLD billing address)
 ClientChangeRequestAdminEmail · ClientChangeRequestOutcomeKlantEmail (PR-KLANT-2)
 ChefProposedKlantEmail (PR-KLANT-3, → klant on propose)
-+ inline-React: client change-request admin notify · klant change outcome · submission-cancelled admin notify · klant-comment admin notify
+RatingPendingKlantEmail (PR-KLANT-5, → klant after hours approved)
++ inline-React: client change-request admin notify · klant change outcome · submission-cancelled admin notify · klant-comment admin notify · template-change admin notify
 ```
 
 ## All current audit actions
@@ -987,6 +1018,7 @@ client_shift_change.change_requested · .cancel_requested · .approved · .rejec
 placement_comments.created (PR-KLANT-0 helper, wired PR-KLANT-3: klant comment + admin reply)
 shift_templates.created · .generated · .exception_added · .exception_removed · .activated · .paused (PR-KLANT-4)
 client.template_change_requested (PR-KLANT-4)
+ratings.created (PR-KLANT-5)
 ```
 
 ## Planned audit actions

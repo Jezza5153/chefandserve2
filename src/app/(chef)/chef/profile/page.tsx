@@ -26,6 +26,7 @@ import {
   chefs,
   profileChangeRequests,
 } from "@/lib/db/schema";
+import { getChefSummaryForChef } from "@/lib/domain/ratings";
 import { sendEmail } from "@/lib/email";
 import {
   createNotificationsFanOut,
@@ -271,6 +272,9 @@ export default async function ChefProfilePage({
     )
     .orderBy(desc(profileChangeRequests.createdAt));
 
+  // PR-KLANT-5: own rating summary (average only at N>=5, no comments).
+  const ratingSummary = await getChefSummaryForChef(chef.id);
+
   const flashOk =
     sp.ok === "saved"
       ? "✓ Profiel opgeslagen."
@@ -356,6 +360,27 @@ export default async function ChefProfilePage({
               : "—"}{" "}
             per uur
           </p>
+
+          {ratingSummary.hasFeedback ? (
+            <>
+              <p className="mt-3 font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
+                Feedback van klanten
+              </p>
+              <p className="text-ink-900">
+                {ratingSummary.ratingCount}{" "}
+                {ratingSummary.ratingCount === 1 ? "klant heeft" : "klanten hebben"}{" "}
+                feedback gegeven
+                {ratingSummary.averageRating != null ? (
+                  <> · gemiddeld {ratingSummary.averageRating.toFixed(1)} ★</>
+                ) : (
+                  <span className="text-ink-500">
+                    {" "}
+                    · gemiddelde vanaf 5 feedbacks
+                  </span>
+                )}
+              </p>
+            </>
+          ) : null}
         </div>
       </div>
 

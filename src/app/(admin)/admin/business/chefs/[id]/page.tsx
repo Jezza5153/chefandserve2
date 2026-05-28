@@ -15,6 +15,8 @@ import {
   disablePortalUser,
   inviteChefToPortal,
 } from "@/lib/domain/portal-invites";
+import { getChefAverageForAdmin } from "@/lib/domain/ratings";
+import { RATING_TAG_LABELS, type RatingTag } from "@/lib/rating-tags";
 import { requireRole } from "@/lib/permissions";
 import { r2IsConfigured } from "@/lib/r2";
 
@@ -68,6 +70,9 @@ export default async function ChefDetailPage({
 
   const chef = await db.query.chefs.findFirst({ where: eq(chefs.id, id) });
   if (!chef) notFound();
+
+  // PR-KLANT-5: rating summary (admin always sees full picture).
+  const rating = await getChefAverageForAdmin(id);
 
   // Load originating submission (if any) for "back to inbox" link
   const sourceSubmission = chef.sourceSubmissionId
@@ -249,6 +254,49 @@ export default async function ChefDetailPage({
         </div>
         <StatusBadge status={chef.status} />
       </div>
+
+      {/* PR-KLANT-5: rating summary (internal — admin only) */}
+      <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
+        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          Klant-feedback (intern)
+        </h2>
+        {rating.ratingCount === 0 ? (
+          <p className="mt-2 text-sm text-ink-500">Nog geen feedback ontvangen.</p>
+        ) : (
+          <>
+            <p className="mt-2 text-sm text-ink-900">
+              <span className="font-serif text-2xl">
+                {rating.averageRating?.toFixed(2) ?? "—"}
+              </span>{" "}
+              gemiddeld · {rating.ratingCount} feedback
+              {rating.ratingCount === 1 ? "" : "s"}
+              {rating.ratingCount < 5 ? (
+                <span className="ml-2 text-xs text-ink-500">
+                  (chef ziet eigen gemiddelde pas vanaf 5)
+                </span>
+              ) : null}
+            </p>
+            <ul className="mt-3 space-y-1.5 text-sm">
+              {rating.recent.map((r, i) => (
+                <li key={i} className="border-b border-ink-100 pb-1.5">
+                  <span className="text-burgundy">{"★".repeat(r.stars)}</span>
+                  <span className="text-ink-200">{"★".repeat(5 - r.stars)}</span>
+                  {r.tags.length > 0 ? (
+                    <span className="ml-2 text-xs text-ink-500">
+                      {r.tags
+                        .map((t) => RATING_TAG_LABELS[t as RatingTag] ?? t)
+                        .join(" · ")}
+                    </span>
+                  ) : null}
+                  {r.comment ? (
+                    <p className="mt-0.5 text-xs text-ink-700">{r.comment}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
 
       <form
         action={updateBasics}

@@ -395,9 +395,20 @@ export default async function ClientShiftHubPage({
           <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
             Feedback
           </h2>
-          <div className="mt-3 rounded-lg border border-ink-200 bg-white p-4 text-sm text-ink-500">
-            Feedback geven kan binnenkort hier (PR-KLANT-5).
-          </div>
+          <Link
+            href={`/client/shifts/${shiftId}/rate`}
+            className="mt-3 flex items-center justify-between rounded-lg border border-ink-200 bg-white p-4 hover:border-burgundy/40"
+          >
+            <span className="text-sm text-ink-900">
+              Geef feedback over {best.chefName}
+            </span>
+            <span className="font-ui text-[10px] uppercase tracking-[0.15em] text-burgundy">
+              Geef feedback →
+            </span>
+          </Link>
+          <p className="mt-1 text-xs text-ink-500">
+            Alleen zichtbaar voor Chef &amp; Serve.
+          </p>
         </section>
       ) : null}
 
