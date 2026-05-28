@@ -14,6 +14,7 @@ import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { clients, placements, shifts } from "@/lib/db/schema";
+import { getRosterSettings } from "@/lib/domain/user-settings";
 import { requireRole } from "@/lib/permissions";
 import {
   addDaysToKey,
@@ -47,9 +48,11 @@ export default async function RosterPage({
 }: {
   searchParams: Promise<{ week?: string; view?: string }>;
 }) {
-  await requireRole("owner");
+  const session = await requireRole("owner");
   const sp = await searchParams;
-  const view = sp.view === "month" ? "month" : "week";
+  const rosterSettings = await getRosterSettings(session.user.id);
+  // Explicit ?view wins; otherwise fall back to the employee's saved default.
+  const view = sp.view === "month" ? "month" : sp.view === "week" ? "week" : rosterSettings.defaultView;
 
   const week = view === "week" ? getAmsterdamWeekRange(sp.week) : null;
   const month = view === "month" ? getAmsterdamMonthGrid(sp.week) : null;
@@ -91,6 +94,7 @@ export default async function RosterPage({
       location: r.location,
       city: r.city,
       hasClient: Boolean(r.companyName),
+      settings: { criticalHours: rosterSettings.criticalHours, labels: rosterSettings.labels },
     };
     return {
       row: r,

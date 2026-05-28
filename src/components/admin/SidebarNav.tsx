@@ -61,7 +61,10 @@ const OPS_NAV: NavSection = {
 
 const ACCOUNT_NAV: NavSection = {
   label: "Mijn account",
-  items: [{ label: "2FA", href: "/admin/account/2fa" }],
+  items: [
+    { label: "Instellingen", href: "/admin/account/instellingen" },
+    { label: "2FA", href: "/admin/account/2fa" },
+  ],
 };
 
 export function SidebarNav({ session }: { session: Session }) {

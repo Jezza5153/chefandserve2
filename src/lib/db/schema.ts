@@ -1838,6 +1838,25 @@ export const notificationPrefs = pgTable("notification_prefs", {
 export type NotificationPrefs = typeof notificationPrefs.$inferSelect;
 export type NewNotificationPrefs = typeof notificationPrefs.$inferInsert;
 
+/**
+ * Per-employee settings hub (Cockpit Instellingen). One row per internal user;
+ * `prefs` is a free-form jsonb of sections (e.g. `{ roster: { criticalHours,
+ * defaultView, labels } }`). Code defaults apply when a section/key is absent,
+ * so "no row" = everyone gets the sensible defaults. Notification toggles stay
+ * in `notification_prefs` (the Meldingen section reads/writes that). Keeping this
+ * generic means future settings sections need no new migration.
+ */
+export const userSettings = pgTable("user_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  prefs: jsonb("prefs").notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type UserSettings = typeof userSettings.$inferSelect;
+export type NewUserSettings = typeof userSettings.$inferInsert;
+
 /* =============================================================================
  * AVG / GDPR (PR-CHEF-10) — consent_log + privacy_requests + DPA + retention.
  *

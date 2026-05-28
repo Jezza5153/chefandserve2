@@ -165,7 +165,7 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | PR | Description | Status |
 |---|---|---|
 | PR-1 | Visual roster + deterministic intelligence (no schema/deps/AI) | ✅ live (`/admin/business/roster` week+month · `src/lib/roster-format.ts` shift health/next-action/warnings/fill + Amsterdam-DST bucketing · `RosterShiftCard` · "Aandacht nodig" strip + glance header · SidebarNav "Rooster" + dashboard wiring · **tunable seam** `DEFAULT_ROSTER_SETTINGS{criticalHours:24,labels}` ready for Instellingen · smoke-roster-intel.mts 49/49) |
-| PR-1.7 (next) | **Instellingen** — per-employee fine-tuning of cockpit thresholds/labels (wires the seam) | ⏳ planning |
+| PR-1.7 | **Instellingen hub** — per-employee fine-tuning (broader hub) | ✅ live (migration 0027 `user_settings(user_id pk, prefs jsonb)` · `domain/user-settings.ts` getRosterSettings/saveRosterSettings merge-over-defaults · `/admin/account/instellingen` sections **Rooster** (criticalHours + standaard weergave + actie-labels → feeds roster intel) + **Meldingen** (per-user notification toggles via notification_prefs/setPref) · SidebarNav "Instellingen" · roster page threads getRosterSettings into the helpers + defaultView · smoke-user-settings.mts 11/11) |
 | PR-1.5·1.6·2·2.1·2B·3·3.1·4·5 | candidate panel · Chef 360 · rich Jotform intake · filters+missing-data · client requirements · travel+margin · ranking · availability · explanation | ⏳ (see plan) |
 
 > Cockpit LOCKED: visual language red=actie-nu·amber=risico/onbekend·green=klaar·blue=wacht·grey=afgerond·purple=AI(PR-5) · drill-down layers roster→shift→chef-drawer→full-profile · intelligence deterministic (no AI until PR-5) · don't fake structured filters from rawPayload (structure first, PR-2).
@@ -240,6 +240,7 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | 0024_ratings.sql | ratings + chefs.average_rating/rating_count rollup (PR-KLANT-5) | applied (May 28) |
 | 0025_avg_fulfillment.sql | privacy_requests intake/identity/SLA/correction cols + user_id nullable + other/withdrawn enum values + privacy_request_messages (PR-AVG-1) | applied (May 28) |
 | 0026_avg_tombstones.sql | privacy_erasure_tombstones (HMAC email hash · retained_entities_summary · per-subject ids) (PR-AVG-2) | applied (May 28) |
+| 0027_user_settings.sql | user_settings (user_id pk · prefs jsonb) — per-employee cockpit settings hub (Cockpit PR-1.7) | applied (May 28) |
 
 ---
 
