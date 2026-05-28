@@ -10,6 +10,7 @@ import {
   placements,
   shifts,
 } from "@/lib/db/schema";
+import { addPlacementComment, listVisibleComments } from "@/lib/domain/comments";
 import {
   findMatchesForShift,
   proposePlacement,
@@ -227,6 +228,42 @@ export default async function ShiftDetailPage({
     redirect(`/admin/business/shifts/${id}`);
   }
 
+  // PR-KLANT-3: admin replies to / posts placement comments.
+  async function replyComment(formData: FormData) {
+    "use server";
+    const session = await requireRole("owner");
+    const placementId = String(formData.get("placementId") ?? "");
+    const body = String(formData.get("body") ?? "");
+    const visibility =
+      String(formData.get("visibility") ?? "client_visible") === "internal"
+        ? "internal"
+        : String(formData.get("visibility")) === "chef_visible"
+          ? "chef_visible"
+          : "client_visible";
+    if (!placementId) redirect(`/admin/business/shifts/${id}`);
+    await addPlacementComment({
+      placementId,
+      authorUserId: session.user.id,
+      authorKind: "admin",
+      visibility,
+      body,
+    });
+    redirect(`/admin/business/shifts/${id}`);
+  }
+
+  // Admin sees ALL comments (every visibility) per placement.
+  const commentsByPlacement = new Map(
+    await Promise.all(
+      existingPlacements.map(
+        async ({ placement }) =>
+          [
+            placement.id,
+            await listVisibleComments(placement.id, { kind: "admin" }),
+          ] as const,
+      ),
+    ),
+  );
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6">
@@ -295,49 +332,108 @@ export default async function ShiftDetailPage({
             {existingPlacements.map(({ placement, chef }) => (
               <li
                 key={placement.id}
-                className="flex items-center justify-between gap-4 rounded-lg border border-ink-200 bg-white p-4"
+                className="rounded-lg border border-ink-200 bg-white p-4"
               >
-                <div className="min-w-0 flex-1">
-                  <Link
-                    href={`/admin/business/chefs/${chef.id}`}
-                    className="font-serif text-base text-ink-900 hover:text-burgundy hover:underline"
-                  >
-                    {chef.fullName}
-                  </Link>
-                  <p className="mt-0.5 text-xs text-ink-500">
-                    {chef.vakniveau ?? "—"} · {chef.city ?? "—"}
-                    {placement.matchScore && ` · match-score: ${placement.matchScore}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <PlacementStatusBadge status={placement.status} />
-                  {placement.status === "proposed" && (
-                    <>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/admin/business/chefs/${chef.id}`}
+                      className="font-serif text-base text-ink-900 hover:text-burgundy hover:underline"
+                    >
+                      {chef.fullName}
+                    </Link>
+                    <p className="mt-0.5 text-xs text-ink-500">
+                      {chef.vakniveau ?? "—"} · {chef.city ?? "—"}
+                      {placement.matchScore && ` · match-score: ${placement.matchScore}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <PlacementStatusBadge status={placement.status} />
+                    {placement.status === "proposed" && (
+                      <>
+                        <PlacementAction
+                          action={setPlacementStatus}
+                          placementId={placement.id}
+                          newStatus="accepted"
+                          label="✓ Accepteer"
+                          tone="green"
+                        />
+                        <PlacementAction
+                          action={setPlacementStatus}
+                          placementId={placement.id}
+                          newStatus="rejected"
+                          label="✗ Wijs af"
+                          tone="red"
+                        />
+                      </>
+                    )}
+                    {placement.status === "accepted" && (
                       <PlacementAction
                         action={setPlacementStatus}
                         placementId={placement.id}
-                        newStatus="accepted"
-                        label="✓ Accepteer"
+                        newStatus="confirmed"
+                        label="Bevestig"
                         tone="green"
                       />
-                      <PlacementAction
-                        action={setPlacementStatus}
-                        placementId={placement.id}
-                        newStatus="rejected"
-                        label="✗ Wijs af"
-                        tone="red"
-                      />
-                    </>
+                    )}
+                  </div>
+                </div>
+
+                {/* PR-KLANT-3: comment thread (all visibilities) + reply */}
+                <div className="mt-3 border-t border-ink-100 pt-3">
+                  <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
+                    Berichten
+                  </p>
+                  {(commentsByPlacement.get(placement.id) ?? []).length > 0 ? (
+                    <ul className="mt-2 space-y-1.5">
+                      {(commentsByPlacement.get(placement.id) ?? []).map((c) => (
+                        <li key={c.id} className="text-sm">
+                          <span className="text-ink-900">{c.body}</span>
+                          <span className="ml-2 text-[11px] text-ink-500">
+                            {c.authorKind === "client"
+                              ? "Klant"
+                              : c.authorKind === "chef"
+                                ? "Chef"
+                                : c.authorKind === "admin"
+                                  ? "Chef & Serve"
+                                  : "Systeem"}{" "}
+                            · <CommentVisibilityTag visibility={c.visibility} />
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-xs text-ink-500">Nog geen berichten.</p>
                   )}
-                  {placement.status === "accepted" && (
-                    <PlacementAction
-                      action={setPlacementStatus}
-                      placementId={placement.id}
-                      newStatus="confirmed"
-                      label="Bevestig"
-                      tone="green"
+
+                  <form action={replyComment} className="mt-2">
+                    <input type="hidden" name="placementId" value={placement.id} />
+                    <textarea
+                      name="body"
+                      rows={2}
+                      required
+                      maxLength={1000}
+                      placeholder="Reageer op de klant / chef…"
+                      className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
                     />
-                  )}
+                    <div className="mt-2 flex items-center gap-2">
+                      <select
+                        name="visibility"
+                        defaultValue="client_visible"
+                        className="rounded border border-ink-200 bg-white px-2 py-1.5 text-xs text-ink-900 focus:border-burgundy focus:outline-none"
+                      >
+                        <option value="client_visible">Zichtbaar voor klant</option>
+                        <option value="chef_visible">Zichtbaar voor chef</option>
+                        <option value="internal">Interne notitie</option>
+                      </select>
+                      <button
+                        type="submit"
+                        className="rounded-full bg-burgundy px-4 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900"
+                      >
+                        Plaats bericht
+                      </button>
+                    </div>
+                  </form>
                 </div>
               </li>
             ))}
@@ -535,6 +631,16 @@ function scoreTone(score: number): string {
   if (score >= 60) return "bg-blue-100 text-blue-700";
   if (score >= 40) return "bg-amber-100 text-amber-700";
   return "bg-bg-gray text-ink-500";
+}
+
+function CommentVisibilityTag({ visibility }: { visibility: string }) {
+  const label =
+    visibility === "client_visible"
+      ? "klant ziet dit"
+      : visibility === "chef_visible"
+        ? "chef ziet dit"
+        : "intern";
+  return <span className="italic">{label}</span>;
 }
 
 function formatDateRange(start: Date, end: Date): string {

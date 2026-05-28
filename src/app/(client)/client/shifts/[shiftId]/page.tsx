@@ -22,6 +22,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { ChangeRequestModal } from "./ChangeRequestModal";
 import { CancelRequestModal } from "./CancelRequestModal";
+import { ChefFeedbackForm } from "./ChefFeedbackForm";
 import { WhatHappensNext } from "@/components/client/WhatHappensNext";
 import { db } from "@/lib/db/client";
 import {
@@ -33,8 +34,12 @@ import {
   shifts,
 } from "@/lib/db/schema";
 import { actionAllowed, getClientShiftLabel } from "@/lib/client-shift-labels";
-import { listVisibleComments } from "@/lib/domain/comments";
+import { addPlacementComment, listVisibleComments } from "@/lib/domain/comments";
+import { getMatchReasonsForPlacement } from "@/lib/domain/matching";
 import { createShiftChangeRequest } from "@/lib/domain/shift-change-requests";
+import { sendEmail } from "@/lib/email";
+import { recordEmailMessage } from "@/lib/integrations";
+import { recipientsFor } from "@/lib/notifications";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata = { title: "Shift", robots: { index: false } };
@@ -94,6 +99,82 @@ export default async function ClientShiftHubPage({
     );
   }
 
+  // Server action: klant sends an opmerking about a proposed chef. Writes a
+  // placement_comments row (visibility='client_visible'), NEVER placements.notes.
+  async function sendChefComment(formData: FormData) {
+    "use server";
+    const placementId = String(formData.get("placementId") ?? "");
+    const body = String(formData.get("body") ?? "");
+    if (!placementId) redirect(`/client/shifts/${shiftId}`);
+
+    // Ownership: the placement must be on THIS shift, owned by THIS client.
+    const [own] = await db
+      .select({ id: placements.id })
+      .from(placements)
+      .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+      .where(
+        and(
+          eq(placements.id, placementId),
+          eq(placements.shiftId, shiftId),
+          eq(shifts.clientId, client.id),
+        ),
+      )
+      .limit(1);
+    if (!own) redirect(`/client/shifts/${shiftId}?err=not_found`);
+
+    const res = await addPlacementComment({
+      placementId,
+      authorUserId: session.user.id,
+      authorKind: "client",
+      visibility: "client_visible",
+      body,
+    });
+
+    // Notify admins so they see the klant's opmerking before confirming.
+    if (res.ok) {
+      const adminEmails = await recipientsFor("client_portal_request");
+      if (adminEmails.length > 0) {
+        const send = await sendEmail({
+          to: adminEmails,
+          subject: `Opmerking van ${client.companyName} bij een voorgestelde chef`,
+          react: (
+            <div>
+              <h1>{`${client.companyName} stuurde een opmerking`}</h1>
+              <p>{body.trim().slice(0, 1000)}</p>
+              <p>
+                Bekijk + reageer:{" "}
+                <a
+                  href={`${process.env.NEXT_PUBLIC_APP_URL}/admin/business/shifts/${shiftId}`}
+                >
+                  shift-detail
+                </a>
+                .
+              </p>
+            </div>
+          ),
+        });
+        if (send.ok) {
+          for (const to of adminEmails) {
+            await recordEmailMessage({
+              providerMessageId: send.id,
+              toEmail: to,
+              template: "ClientCommentAdminInline",
+              eventKey: "client_portal_request",
+              entityType: "placements",
+              entityId: placementId,
+            });
+          }
+        }
+      }
+    }
+
+    redirect(
+      res.ok
+        ? `/client/shifts/${shiftId}?ok=comment`
+        : `/client/shifts/${shiftId}?err=comment`,
+    );
+  }
+
   // Open change/cancel requests for this shift (one per kind max).
   const openRequests = await db
     .select({ kind: clientShiftChangeRequests.kind })
@@ -127,6 +208,15 @@ export default async function ClientShiftHubPage({
     .from(shiftHours)
     .where(eq(shiftHours.shiftId, shiftId));
   const hoursByPlacement = new Map(hoursRows.map((h) => [h.placementId, h.status]));
+
+  // "Waarom voorgesteld?" reasons — only for proposed placements (klant-safe).
+  const proposedPlacements = placementRows.filter((r) => r.p.status === "proposed");
+  const reasonsEntries = await Promise.all(
+    proposedPlacements.map(
+      async (r) => [r.p.id, await getMatchReasonsForPlacement(r.p.id)] as const,
+    ),
+  );
+  const reasonsByPlacement = new Map(reasonsEntries);
 
   // Best (most-progressed) placement for the headline status
   const rank = (s: string) =>
@@ -177,6 +267,11 @@ export default async function ClientShiftHubPage({
         <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
           ✓ Je {sp.ok === "cancel" ? "annulerings" : "wijzigings"}verzoek is
           verstuurd. Chef &amp; Serve neemt contact met je op.
+        </p>
+      ) : null}
+      {sp.ok === "comment" ? (
+        <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+          ✓ Je opmerking is verstuurd. Chef &amp; Serve neemt die mee.
         </p>
       ) : null}
       {sp.err === "duplicate" ? (
@@ -238,12 +333,33 @@ export default async function ClientShiftHubPage({
                   </div>
                   <PlacementPill status={p.status} />
                 </div>
-                {/* PR-KLANT-3 fills the "Waarom voorgesteld?" reasons + comment form here */}
                 {p.status === "proposed" ? (
-                  <p className="mt-3 text-xs text-ink-500">
-                    Chef &amp; Serve bekijkt dit voorstel. Opmerking meesturen kan
-                    binnenkort hier.
-                  </p>
+                  <div className="mt-3">
+                    <p className="text-xs text-ink-500">
+                      Dit is het voorstel dat Chef &amp; Serve nu bekijkt. Je kunt
+                      een opmerking meesturen — Maarten of Gina neemt die mee
+                      vóór de shift definitief wordt bevestigd.
+                    </p>
+                    {(reasonsByPlacement.get(p.id) ?? []).length > 0 ? (
+                      <div className="mt-3">
+                        <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
+                          Waarom voorgesteld?
+                        </p>
+                        <ul className="mt-1.5 space-y-1">
+                          {(reasonsByPlacement.get(p.id) ?? []).map((reason) => (
+                            <li
+                              key={reason}
+                              className="flex items-start gap-2 text-sm text-ink-700"
+                            >
+                              <span className="mt-1 text-burgundy">•</span>
+                              {reason}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    <ChefFeedbackForm placementId={p.id} action={sendChefComment} />
+                  </div>
                 ) : null}
               </li>
             ))}

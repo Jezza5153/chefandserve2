@@ -21,8 +21,11 @@ import {
   shifts,
   type Chef,
 } from "@/lib/db/schema";
+import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { sendEmail, formatShiftWhen } from "@/lib/email";
 import { env } from "@/lib/env";
+import { createNotification, recordEmailMessage } from "@/lib/integrations";
+import { ChefProposedKlantEmail } from "@/emails/ChefProposedKlantEmail";
 import { ShiftProposedEmail } from "@/emails/ShiftProposedEmail";
 
 /* ----- ladder (used for vakniveau scoring) -------------------------- */
@@ -99,6 +102,95 @@ function experienceBonus(years: number | null, shiftSegment: string | null): num
   if (years >= 5) return 1.0;
   if (years >= 2) return 0.8;
   return 0.6;
+}
+
+/**
+ * Build the human-readable reasons + warnings for a match. Extracted so both
+ * findMatchesForShift (admin scoring) and getMatchReasonsForPlacement (klant
+ * "Waarom voorgesteld?") share ONE source of truth.
+ *
+ * IMPORTANT: `reasons` are klant-safe (positive, clientVisible). `warnings`
+ * are INTERNAL only — never render them to a klant.
+ */
+function buildReasonsAndWarnings(
+  chef: Pick<Chef, "vakniveau" | "yearsExperience" | "city" | "status" | "segments">,
+  shift: { roleNeeded: string; segment: string | null; city: string | null },
+  v: number,
+  s: number,
+): { reasons: string[]; warnings: string[] } {
+  const reasons: string[] = [];
+  const warnings: string[] = [];
+
+  if (chef.vakniveau === shift.roleNeeded) {
+    reasons.push(`Exacte match: ${chef.vakniveau}`);
+  } else if (v >= 0.7) {
+    reasons.push(`Aansluitend niveau (${chef.vakniveau} ↔ ${shift.roleNeeded})`);
+  } else if (v < 0.5) {
+    warnings.push(`Vakniveau-gap: chef is ${chef.vakniveau}, shift vraagt ${shift.roleNeeded}`);
+  }
+
+  if (s === 1.0 && shift.segment) {
+    reasons.push(`Segment-ervaring: ${shift.segment}`);
+  } else if (s < 0.5 && shift.segment) {
+    warnings.push(`Niet eerder in segment ${shift.segment}`);
+  }
+
+  if (chef.yearsExperience && chef.yearsExperience >= 5) {
+    reasons.push(`${chef.yearsExperience} jaar ervaring`);
+  }
+
+  if (chef.city && shift.city && chef.city.toLowerCase() === shift.city.toLowerCase()) {
+    reasons.push(`Zelfde stad (${chef.city})`);
+  }
+
+  if (chef.status === "onboarding") {
+    warnings.push("Nog in onboarding");
+  }
+
+  return { reasons, warnings };
+}
+
+/**
+ * Klant-facing "Waarom voorgesteld?" reasons for ONE placement. Returns only
+ * the positive, clientVisible reasons — never internal warnings. Used by the
+ * shift hub (PR-KLANT-3). Stable signature so AI can call it later.
+ */
+export async function getMatchReasonsForPlacement(
+  placementId: string,
+): Promise<string[]> {
+  const [row] = await db
+    .select({
+      chefVakniveau: chefs.vakniveau,
+      chefYears: chefs.yearsExperience,
+      chefCity: chefs.city,
+      chefStatus: chefs.status,
+      chefSegments: chefs.segments,
+      shiftRole: shifts.roleNeeded,
+      shiftSegment: shifts.segment,
+      shiftCity: shifts.city,
+    })
+    .from(placements)
+    .innerJoin(chefs, eq(chefs.id, placements.chefId))
+    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .where(eq(placements.id, placementId))
+    .limit(1);
+  if (!row) return [];
+
+  const v = vakniveauScore(row.chefVakniveau, row.shiftRole);
+  const s = segmentScore(row.chefSegments, row.shiftSegment);
+  const { reasons } = buildReasonsAndWarnings(
+    {
+      vakniveau: row.chefVakniveau,
+      yearsExperience: row.chefYears,
+      city: row.chefCity,
+      status: row.chefStatus,
+      segments: row.chefSegments,
+    },
+    { roleNeeded: row.shiftRole, segment: row.shiftSegment, city: row.shiftCity },
+    v,
+    s,
+  );
+  return reasons;
 }
 
 /* ----- main matching function -------------------------------------- */
@@ -204,34 +296,7 @@ export async function findMatchesForShift(
     const composite = v * 0.5 + s * 0.3 + e * 0.2;
     const score = Math.round(composite * 100);
 
-    const reasons: string[] = [];
-    const warnings: string[] = [];
-
-    if (chef.vakniveau === shift.roleNeeded) {
-      reasons.push(`Exacte match: ${chef.vakniveau}`);
-    } else if (v >= 0.7) {
-      reasons.push(`Aansluitend niveau (${chef.vakniveau} ↔ ${shift.roleNeeded})`);
-    } else if (v < 0.5) {
-      warnings.push(`Vakniveau-gap: chef is ${chef.vakniveau}, shift vraagt ${shift.roleNeeded}`);
-    }
-
-    if (s === 1.0 && shift.segment) {
-      reasons.push(`Segment-ervaring: ${shift.segment}`);
-    } else if (s < 0.5 && shift.segment) {
-      warnings.push(`Niet eerder in segment ${shift.segment}`);
-    }
-
-    if (chef.yearsExperience && chef.yearsExperience >= 5) {
-      reasons.push(`${chef.yearsExperience} jaar ervaring`);
-    }
-
-    if (chef.city && shift.city && chef.city.toLowerCase() === shift.city.toLowerCase()) {
-      reasons.push(`Zelfde stad (${chef.city})`);
-    }
-
-    if (chef.status === "onboarding") {
-      warnings.push("Nog in onboarding");
-    }
+    const { reasons, warnings } = buildReasonsAndWarnings(chef, shift, v, s);
 
     results.push({
       chef,
@@ -276,15 +341,19 @@ export async function proposePlacement(
     .set({ status: "open", updatedAt: new Date() })
     .where(and(eq(shifts.id, shiftId), eq(shifts.status, "request")));
 
-  // Best-effort: send shift-proposed email to chef (if they have an email)
+  // Best-effort notifications: chef gets the proposal, klant gets a heads-up.
   // Failure here doesn't abort the placement — admin sees the row regardless.
   try {
     const chef = await db.query.chefs.findFirst({ where: eq(chefs.id, chefId) });
     const shift = await db.query.shifts.findFirst({ where: eq(shifts.id, shiftId) });
-    if (chef?.email && shift) {
-      const client = await db.query.clients.findFirst({
-        where: eq(clients.id, shift.clientId),
-      });
+    if (!shift) return { placementId: placement.id };
+
+    const client = await db.query.clients.findFirst({
+      where: eq(clients.id, shift.clientId),
+    });
+
+    // 1. Chef email
+    if (chef?.email) {
       const placementUrl = `${env.NEXT_PUBLIC_APP_URL}/chef/shifts/${placement.id}`;
       await sendEmail({
         to: chef.email,
@@ -301,8 +370,54 @@ export async function proposePlacement(
         }),
       });
     }
+
+    // 2. Klant email + notification (PR-KLANT-3) — they see the proposed chef
+    //    on the hub and can send a comment before it's confirmed.
+    if (client) {
+      const hubUrl = `${env.NEXT_PUBLIC_APP_URL}/client/shifts/${shiftId}`;
+      const to = await recipientsForClient(client.id, "chef_proposed");
+      if (to.length > 0 && chef) {
+        const send = await sendEmail({
+          to,
+          subject: `Voorgestelde chef voor ${shift.roleNeeded} — ${formatShiftWhen(shift.startsAt, shift.endsAt)}`,
+          react: ChefProposedKlantEmail({
+            contactName: client.contactName,
+            companyName: client.companyName,
+            chefName: chef.fullName,
+            chefVakniveau: chef.vakniveau,
+            chefYears: chef.yearsExperience,
+            shiftWhen: formatShiftWhen(shift.startsAt, shift.endsAt),
+            shiftRole: shift.roleNeeded,
+            hubUrl,
+          }),
+        });
+        if (send.ok) {
+          for (const addr of to) {
+            await recordEmailMessage({
+              providerMessageId: send.id,
+              toEmail: addr,
+              template: "ChefProposedKlantEmail",
+              eventKey: "chef_proposed",
+              entityType: "placements",
+              entityId: placement.id,
+            });
+          }
+        }
+      }
+      if (client.userId) {
+        await createNotification({
+          userId: client.userId,
+          type: "chef_proposed",
+          title: `Voorgestelde chef voor ${shift.roleNeeded}`,
+          body: "Bekijk het voorstel en stuur eventueel een opmerking.",
+          actionUrl: `/client/shifts/${shiftId}`,
+          entityType: "placements",
+          entityId: placement.id,
+        });
+      }
+    }
   } catch (e) {
-    console.error("[propose] notification email failed:", e);
+    console.error("[propose] notification(s) failed:", e);
   }
 
   return { placementId: placement.id };

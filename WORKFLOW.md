@@ -314,6 +314,41 @@ Domain: `src/lib/domain/shift-change-requests.tsx` (`createShiftChangeRequest`,
 AI playbooks: `docs/ai/workflow-playbooks/client-request-cancellation.md` ·
 `client-shift-change-request.md` · Migration: `drizzle/0022_client_change_cancel.sql`.
 
+## 1.12 — Chef preview + structured comments (PR-KLANT-3, no schema)
+
+Klant sees the proposed chef BEFORE confirm, can comment (no veto), reads
+admin replies. All comments are `placement_comments` — `placements.notes` is
+NEVER touched by klant input.
+
+```
+ADMIN proposes → proposePlacement()  src/lib/domain/matching.ts
+   ↓ (existing) chef email
+   ↓ (PR-KLANT-3) klant email ChefProposedKlantEmail (recipientsForClient
+     'chef_proposed') + notification 'chef_proposed' → /client/shifts/[id]
+   ↓
+KLANT hub /client/shifts/[shiftId]:
+   - proposed-chef card: name · vakniveau · ervaring + "Waarom voorgesteld?"
+     reasons (getMatchReasonsForPlacement — positive/clientVisible ONLY,
+     never internal warnings)
+   - ChefFeedbackForm → sendChefComment() → addPlacementComment(
+       authorKind='client', visibility='client_visible')  [ownership-checked]
+   - klant comment → admin email (recipientsFor 'client_portal_request')
+   - copy is "Stuur opmerking" — NEVER "Akkoord/Goedkeuren" (no veto)
+   ↓
+ADMIN shift detail /admin/business/shifts/[id]:
+   - sees ALL comments (listVisibleComments kind='admin')
+   - replyComment() → addPlacementComment(authorKind='admin', visibility
+     selectable: client_visible | chef_visible | internal)
+   ↓
+KLANT hub "Berichten": admin replies with visibility='client_visible' appear.
+```
+
+`getMatchReasonsForPlacement` reuses the extracted `buildReasonsAndWarnings`
+(shared with `findMatchesForShift` — one source of truth). Photo display for
+klanten is deferred (needs chef-photo API authz for clientVisible+verified).
+Client component: `ChefFeedbackForm`. Email: `ChefProposedKlantEmail`.
+AI playbook: `docs/ai/workflow-playbooks/chef-preview-comment.md`.
+
 ---
 
 # Part 2 — Planned workflows (per active plan)
@@ -562,6 +597,8 @@ CRON workers/document-expiry.ts (daily):
 | `cancelSubmission` | `(client)/client/requests/page.tsx` | requireAuth + own client | atomic UPDATE client_submissions → cancelled_by_client · admin notify |
 | `requestShiftChangeAction` | `(client)/client/shifts/[shiftId]/page.tsx` | requireAuth + own client | INSERT client_shift_change_requests (dup-guarded) · admin email |
 | `decideShiftRequest` | `(admin)/admin/business/inbox/page.tsx` | requireRole(owner) | atomic decide client_shift_change_requests · klant outcome email + notification |
+| `sendChefComment` | `(client)/client/shifts/[shiftId]/page.tsx` | requireAuth + own shift | addPlacementComment(client/client_visible) · admin email |
+| `replyComment` | `(admin)/admin/business/shifts/[id]/page.tsx` | requireRole(owner) | addPlacementComment(admin, visibility selectable) |
 
 ### Planned (per active plan)
 
@@ -877,7 +914,8 @@ ShiftProposedEmail · ShiftConfirmedClientEmail
 Hours* (9 templates, PR-CHEF-1) · ShiftConfirmedChefEmail · ShiftCancelledByChefClientEmail
 BillingEmailChangedKlantEmail (PR-KLANT-1, → OLD billing address)
 ClientChangeRequestAdminEmail · ClientChangeRequestOutcomeKlantEmail (PR-KLANT-2)
-+ inline-React: client change-request admin notify · klant change outcome · submission-cancelled admin notify
+ChefProposedKlantEmail (PR-KLANT-3, → klant on propose)
++ inline-React: client change-request admin notify · klant change outcome · submission-cancelled admin notify · klant-comment admin notify
 ```
 
 ## All current audit actions
@@ -899,6 +937,7 @@ client.portal_request_submitted
 client.profile_updated · client.change_requested · client.change_approved · client.change_rejected (PR-KLANT-1)
 client_submission.cancelled_by_client (PR-KLANT-2)
 client_shift_change.change_requested · .cancel_requested · .approved · .rejected (PR-KLANT-2)
+placement_comments.created (PR-KLANT-0 helper, wired PR-KLANT-3: klant comment + admin reply)
 ```
 
 ## Planned audit actions
@@ -921,7 +960,6 @@ email.message_recorded · email.event_recorded
 notification.created · notification.read · notification.suppressed
 backup_runs.created · backup_runs.failed
 restore_drills.created
-placement_comments.created (helper shipped PR-KLANT-0; wired PR-KLANT-3)
 shift_templates.* (PR-KLANT-4) · ratings.created (PR-KLANT-5)
 ```
 
