@@ -14,7 +14,7 @@ import { dayToneOf, dienstLabel, type DayTone } from "@/lib/domain/roster-intel"
 const START_HOUR = 6;
 const END_HOUR = 23;
 const SPAN = END_HOUR - START_HOUR; // 17h
-const RAIL = 180; // hotel rail px
+const RAIL = 200; // hotel rail px
 const ADDCOL = 40; // "+" column px
 
 const TONE: Record<DayTone, { block: string; role: string; ratio: string }> = {
@@ -126,7 +126,7 @@ export function RosterDayTimeline({
                 </p>
               </div>
 
-              <div className="relative h-[60px] flex-1">
+              <div className="relative h-[68px] flex-1">
                 <div className="absolute inset-0 flex">
                   {hours.slice(0, -1).map((h) => (
                     <div key={h} className="flex-1 border-r border-ink-100/60" />
@@ -143,19 +143,19 @@ export function RosterDayTimeline({
                       key={s.row.id}
                       href={`/admin/business/shifts/${s.row.id}`}
                       style={{ left: `${leftPct(start)}%`, width: `${Math.max(widthPct(start, end), 12)}%` }}
-                      className={`absolute top-1.5 flex h-[48px] flex-col justify-center overflow-hidden rounded-md border border-l-[3px] px-2 ${tone.block} hover:ring-1 hover:ring-burgundy/30`}
+                      className={`absolute top-2 flex h-[52px] flex-col justify-center gap-px overflow-hidden rounded-md border border-l-[3px] px-2.5 ${tone.block} hover:ring-1 hover:ring-burgundy/30`}
                       title={`${dienstLabel(s.row.startsAt)} · ${hhmm(s.row.startsAt)}–${hhmm(s.row.endsAt)} · ${s.fill.confirmed}/${s.fill.headcount}`}
                     >
-                      <span className="truncate text-[9px] leading-tight text-ink-500">
+                      <span className="truncate text-[10px] leading-tight text-ink-500">
                         {hhmm(s.row.startsAt)} – {hhmm(s.row.endsAt)}
                       </span>
                       <span className="flex items-center justify-between gap-1 leading-tight">
-                        <span className={`truncate font-ui text-[11px] font-semibold ${tone.role}`}>{dienstLabel(s.row.startsAt)}</span>
-                        <span className={`shrink-0 font-ui text-[10px] font-medium tabular-nums ${tone.ratio}`}>
+                        <span className={`truncate font-ui text-[12px] font-semibold ${tone.role}`}>{dienstLabel(s.row.startsAt)}</span>
+                        <span className={`shrink-0 font-ui text-[12px] font-semibold tabular-nums ${tone.ratio}`}>
                           {s.fill.confirmed}/{s.fill.headcount}
                         </span>
                       </span>
-                      <span className="truncate text-[9px] leading-tight text-ink-500">{names || "–"}</span>
+                      <span className="truncate text-[10px] leading-tight text-ink-500">{names || "–"}</span>
                     </Link>
                   );
                 })}

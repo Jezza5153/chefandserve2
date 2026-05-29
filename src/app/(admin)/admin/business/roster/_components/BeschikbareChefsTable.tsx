@@ -40,29 +40,30 @@ export function BeschikbareChefsTable({ rows, total }: { rows: ChefRow[]; total:
           </thead>
           <tbody>
             {rows.map((c) => (
-              <tr key={c.id} className="border-b border-ink-50 last:border-0">
-                <td className="px-4 py-2">
+              <tr key={c.id} className="h-12 border-b border-ink-50 last:border-0">
+                <td className="px-4 align-middle">
                   <Link href={`/admin/business/chefs/${c.id}`} className="flex items-center gap-2 text-ink-900 hover:text-burgundy">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
-                    <span className="truncate font-ui text-[13px]">{c.fullName}</span>
+                    <span className="block max-w-[180px] truncate font-ui text-[13px]">{c.fullName}</span>
                   </Link>
                 </td>
-                <td className="px-2 py-2">
-                  <span className="flex flex-wrap gap-1">
-                    {c.skills.length === 0 ? (
-                      <span className="text-ink-400">—</span>
-                    ) : (
-                      c.skills.slice(0, 3).map((s) => (
-                        <span key={s} className="rounded-full bg-bg-gray px-2 py-0.5 font-ui text-[10px] text-ink-600">
+                <td className="px-2 align-middle">
+                  {c.skills.length === 0 ? (
+                    <span className="text-ink-300">—</span>
+                  ) : (
+                    <span className="flex items-center gap-1 overflow-hidden">
+                      {c.skills.slice(0, 2).map((s) => (
+                        <span key={s} className="whitespace-nowrap rounded-full bg-bg-gray px-2 py-0.5 font-ui text-[10px] text-ink-600">
                           {s}
                         </span>
-                      ))
-                    )}
-                  </span>
+                      ))}
+                      {c.skills.length > 2 && <span className="shrink-0 font-ui text-[10px] text-ink-400">+{c.skills.length - 2}</span>}
+                    </span>
+                  )}
                 </td>
-                <td className="whitespace-nowrap px-2 py-2 text-ink-500">Hele dag</td>
-                <td className="truncate px-2 py-2 text-ink-600">{c.locatie ?? "—"}</td>
-                <td className="truncate px-4 py-2 text-ink-600">{c.voorkeur ?? "—"}</td>
+                <td className="whitespace-nowrap px-2 align-middle text-ink-500">Hele dag</td>
+                <td className="whitespace-nowrap px-2 align-middle text-ink-600">{c.locatie ?? "—"}</td>
+                <td className="whitespace-nowrap px-4 align-middle text-ink-600">{c.voorkeur ?? "—"}</td>
               </tr>
             ))}
           </tbody>
