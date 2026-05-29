@@ -406,10 +406,11 @@ Goal: when we land in Phase 9 and start wiring AI, this doc is the brief. Zero a
 
 ---
 
-**Last updated:** Phases 0 → 7 + AVG + cockpits shipped. Business + system
-cockpits live; human write-impersonation ("Bekijk als") live + audited (migr
-0032). AI-PA access model specced (`docs/ai/ai-pa-access-model.md`). Phase 5
-(Payingit) blocked on integration spec. AI copilot layer = Phase 9+.
+**Last updated:** Phases 0 → 7 + AVG + cockpits shipped. Business + system +
+**roster** (Day/Week/Maand control tower) cockpits live; human write-impersonation
+("Bekijk als") live + audited (migr 0032); high-risk mutation+audit now same-tx
+atomic (`withTx`). AI-PA access model specced (`docs/ai/ai-pa-access-model.md`).
+Phase 5 (Payingit) blocked on integration spec. AI copilot layer = Phase 9+.
 
 ### Data inventory status (vs. plan)
 
@@ -439,10 +440,20 @@ Conversion primitives shipped in Phase 2: `convertChefSubmission()` +
 **Cockpit + impersonation (this phase).** `/admin/business` (business cockpit)
 and `/admin/system` (system cockpit) expose read primitives — `dashboard-intel`,
 `system-intel`, `/api/health`, usage — that become the cockpit/system AI tools.
+The `/admin/business/roster` **control tower** (Day/Week/Maand) is built the same
+way: one pure engine `domain/roster-intel` (`buildRosterView` + `rosterAiSummary`)
+that the page renders from AND the AI reads, so screen and AI never drift. It is
+**read + navigate** (KPIs are clickable filters; every CTA links to the shift/chef
+detail page) — the interactive *solving* surface (assign/propose/publish) is the
+future `/admin/business/planner` (**Rooster ≠ Planner**). Locked active-fill rule:
+gevuld = confirmed ≥ headcount; `completed` is past-only and never inflates a future
+shift. Deferred (no faked signals): publish-state badges, trend/forecast (need
+history snapshots + a demand model), saved views, financial-lock warning (the
+`hoursApproved`/`payrollLocked` fields exist on the row type as forward-compat).
 Human **write-impersonation** ("Bekijk als") is live: a super_admin can act as
 any chef/klant/owner; every write is audited as the impersonator, with a verified
 destructive denylist (`src/lib/impersonation-denylist.ts`) +
 `assertImpersonationAllowed()` action guard. New tool contracts:
-`docs/ai/tool-contracts/{cockpit,system,impersonation,matching,profile-data-request,client-taxonomy}-tools.md`.
+`docs/ai/tool-contracts/{cockpit,roster,system,impersonation,matching,profile-data-request,client-taxonomy}-tools.md`.
 The AI-PA access model (own service identity, NOT impersonation) is specced in
 `docs/ai/ai-pa-access-model.md` so the PA isn't blocked when it lands.

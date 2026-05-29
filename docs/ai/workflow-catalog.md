@@ -42,8 +42,11 @@ Matching tool contracts: [`client-tools.md`](./tool-contracts/client-tools.md), 
 |---|---|---|---|
 | 19 | [Act as a user to fix a setting (Bekijk als)](./workflow-playbooks/act-as-user-to-fix-setting.md) | impersonation modules | write-impersonation phase |
 | 20 | [AI changes a setting (PA assisted-execute)](./workflow-playbooks/ai-changes-a-setting.md) | [`ai-pa-access-model.md`](./ai-pa-access-model.md) | Layer 4 (PA) |
+| 21 | [Rooster triage (read the cockpit → act on the detail page)](./workflow-playbooks/roster-triage.md) | Part 1.6 (planning surface) | Rooster cockpit (PR-1) |
 
-Matching tool contracts: [`impersonation-tools.md`](./tool-contracts/impersonation-tools.md), [`cockpit-tools.md`](./tool-contracts/cockpit-tools.md), [`system-tools.md`](./tool-contracts/system-tools.md), [`matching-tools.md`](./tool-contracts/matching-tools.md), [`profile-data-request-tools.md`](./tool-contracts/profile-data-request-tools.md), [`client-taxonomy-tools.md`](./tool-contracts/client-taxonomy-tools.md).
+Matching tool contracts: [`impersonation-tools.md`](./tool-contracts/impersonation-tools.md), [`cockpit-tools.md`](./tool-contracts/cockpit-tools.md), [`roster-tools.md`](./tool-contracts/roster-tools.md), [`system-tools.md`](./tool-contracts/system-tools.md), [`matching-tools.md`](./tool-contracts/matching-tools.md), [`profile-data-request-tools.md`](./tool-contracts/profile-data-request-tools.md), [`client-taxonomy-tools.md`](./tool-contracts/client-taxonomy-tools.md).
+
+**Rooster ≠ Planner:** the roster cockpit is read + navigate (it SHOWS the planning truth + links to the shift detail page to act); the interactive solving surface (assign / propose / publish) is the future `/admin/business/planner`, not built. See the playbook for the boundary.
 
 ---
 

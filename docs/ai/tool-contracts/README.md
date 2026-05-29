@@ -91,6 +91,7 @@ How to undo (correction row · void · soft-delete · manual).
 | [`client-template-tools.md`](./client-template-tools.md) | Recurring shift templates (admin-owned). |
 | [`rating-tools.md`](./rating-tools.md) | Klant rating / feedback (internal-only, N≥5 averages). |
 | [`cockpit-tools.md`](./cockpit-tools.md) | Business cockpit reads — bezetting / loonkost + attention queue. |
+| [`roster-tools.md`](./roster-tools.md) | Rooster control-tower reads — Day/Week/Month view-model, open plekken by dagdeel, confirmation pipeline, attention + overlaps, candidates. Read + navigate only (assign/confirm route to `shift-tools.md`). |
 | [`system-tools.md`](./system-tools.md) | System cockpit — health rollup, attention queue, usage (super_admin). |
 | [`matching-tools.md`](./matching-tools.md) | Candidate ranking + "waarom niet nr 1?" explanation. |
 | [`profile-data-request-tools.md`](./profile-data-request-tools.md) | Admin "vul je gegevens aan" requests + completeness. |

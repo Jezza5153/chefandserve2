@@ -464,6 +464,7 @@ itself). All are read-only unless noted; RBAC = the calling surface's role.
 | `domain/client-taxonomy` | Client type / tags / favorite-blocked classification | read (admin/owner) |
 | `domain/dashboard-intel` | Business cockpit attention ranking + delta rule | read (admin/owner) |
 | `domain/system-intel` | System cockpit attention ranking + health rollup | read (super_admin) |
+| `domain/roster-intel` | Rooster Day/Week/Month view-model: KPIs (+ filter links), open plekken by dagdeel, confirmation pipeline (bevestigd / wacht / voorgesteld), priority-ranked attention, double-bookings, beschikbaar-niet-ingepland, bezettingsgraad, `rosterAiSummary`. **Locked defs:** dagdeel from `startsAt` (≠ vakniveau); gevuld = confirmed ≥ headcount; openSlots = headcount − (confirmed+accepted); kritiek = under headcount & ≤ criticalHours; `completed` = past-only (never inflates fill). The page renders ONLY from this engine, and the AI reads the SAME object — screen and AI cannot drift. | read (admin/owner) |
 | `geo` | Postcode → lat/long, distance | read |
 | `travel` | Travel-time / route estimation between chef + venue | read |
 | `domain/profile-data-requests` | Admin-initiated "fill in your data" requests (chef/client) | read + assisted_execute (admin) |
@@ -473,7 +474,8 @@ itself). All are read-only unless noted; RBAC = the calling surface's role.
 | `lib/audit` | `recordAuditCore` / `recordAuditFromRequest` — canonical audit writers | write (the PA logs through `recordAuditCore`) |
 
 Tool surfaces wrapping these: `tool-contracts/matching-tools.md`,
-`tool-contracts/cockpit-tools.md`, `tool-contracts/system-tools.md`,
+`tool-contracts/cockpit-tools.md`, `tool-contracts/roster-tools.md`,
+`tool-contracts/system-tools.md`,
 `tool-contracts/client-taxonomy-tools.md`,
 `tool-contracts/profile-data-request-tools.md`,
 `tool-contracts/impersonation-tools.md`.
