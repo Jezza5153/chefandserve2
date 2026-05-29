@@ -25,6 +25,7 @@
 import { cookies } from "next/headers";
 
 import { db } from "@/lib/db/client";
+import type { TxConn } from "@/lib/db/tx";
 import { auditLog } from "@/lib/db/schema";
 
 // Mirror of the cookie names in src/lib/domain/impersonation.ts (server-set only).
@@ -43,8 +44,8 @@ export type AuditValues = {
   impersonatorUserId?: string | null;
 };
 
-/** Minimal connection shape — the shared `db` (or a future tx) satisfies this. */
-type AuditConn = Pick<typeof db, "insert">;
+/** Either the shared HTTP `db` or an interactive `withTx` transaction handle. */
+type AuditConn = typeof db | TxConn;
 
 /**
  * PURE audit writer. No `next/headers`, safe in any runtime. Inserts exactly
@@ -64,7 +65,14 @@ export async function recordAuditCore(
  * stamps them before delegating to {@link recordAuditCore}. Always `await`ed by
  * callers — a failure throws and aborts the mutation (fail-closed, C0 gate 3).
  */
-export async function recordAuditFromRequest(values: AuditValues): Promise<void> {
+/**
+ * Enrich audit values with the impersonation stamps read from the request
+ * cookies (`impersonatorUserId` + `after._imp`). For the high-risk atomic path,
+ * call this OUTSIDE a `withTx` callback and pass the result into
+ * `recordAuditCore(stamped, tx)` so the audit commits in the SAME transaction as
+ * the mutation. Outside a request scope the cookie reads no-op (no stamp).
+ */
+export async function stampFromRequest(values: AuditValues): Promise<AuditValues> {
   let impersonatorUserId: string | null = null;
   let sessionId: string | null = null;
   try {
@@ -82,7 +90,17 @@ export async function recordAuditFromRequest(values: AuditValues): Promise<void>
       ? stampImpersonationSession(values.after, sessionId)
       : values.after;
 
-  await recordAuditCore({ ...values, after, impersonatorUserId });
+  return { ...values, after, impersonatorUserId };
+}
+
+/**
+ * Request-scoped audit writer (non-transactional). Stamps impersonation from
+ * cookies, then writes through the HTTP `db`. Always `await`ed by callers — a
+ * failure throws and aborts the action (fail-closed). For the high-risk set that
+ * needs strict atomicity, use `withTx` + `recordAuditCore(await stampFromRequest(v), tx)`.
+ */
+export async function recordAuditFromRequest(values: AuditValues): Promise<void> {
+  await recordAuditCore(await stampFromRequest(values));
 }
 
 /** Merge `_imp` into the `after` JSON without clobbering existing keys. */
