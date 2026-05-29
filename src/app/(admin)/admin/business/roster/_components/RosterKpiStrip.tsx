@@ -24,21 +24,21 @@ const PCT_TONE: Record<KpiTile["tone"], string> = {
 
 export function RosterKpiStrip({ items }: { items: KpiTile[] }) {
   return (
-    <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
       {items.map((k) => (
         <Link
           key={k.key}
           href={k.href}
-          className="rounded-xl border border-ink-200 bg-white p-4 transition-colors hover:border-burgundy/40"
+          className="rounded-lg border border-ink-200 bg-white px-3.5 py-2.5 transition-colors hover:border-burgundy/40"
         >
           <div className="flex items-start justify-between gap-2">
-            <p className="font-ui text-[10px] uppercase tracking-[0.14em] text-ink-500">{k.label}</p>
+            <p className="font-ui text-[9px] uppercase tracking-[0.12em] text-ink-500">{k.label}</p>
             {typeof k.pct === "number" && (
-              <span className={`shrink-0 font-ui text-[11px] font-medium ${PCT_TONE[k.tone]}`}>{k.pct}%</span>
+              <span className={`shrink-0 font-ui text-[10px] font-semibold ${PCT_TONE[k.tone]}`}>{k.pct}%</span>
             )}
           </div>
-          <p className="mt-2 font-serif text-3xl text-ink-900">{k.value}</p>
-          {k.detail && <p className="mt-0.5 truncate text-[11px] text-ink-500">{k.detail}</p>}
+          <p className="mt-1 font-serif text-[26px] leading-none text-ink-900">{k.value}</p>
+          {k.detail && <p className="mt-1 truncate text-[10px] text-ink-500">{k.detail}</p>}
         </Link>
       ))}
     </div>

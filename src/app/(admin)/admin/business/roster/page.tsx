@@ -27,6 +27,7 @@ import {
   dagdeelLabel,
   dagdeelOf,
   dayToneOf,
+  dienstLabel,
   detectOverlaps,
   monthCellFor,
   rosterAiSummary,
@@ -302,7 +303,7 @@ export default async function RosterPage({
           shiftId: s.row.id,
           hotel: hotel.companyName,
           start: `${hhmm(s.row.startsAt)} – ${hhmm(s.row.endsAt)}`,
-          dienst: humanize(s.row.roleNeeded),
+          dienst: dienstLabel(s.row.startsAt),
           nodig: Math.max(0, s.fill.headcount - s.fill.confirmed),
           reden: tone === "leeg" ? "kritiek" : "open",
         });
@@ -343,8 +344,8 @@ export default async function RosterPage({
       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">Operations</p>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-serif text-4xl text-ink-900 md:text-5xl">Rooster</h1>
-          <p className="mt-1 font-serif text-lg text-ink-700">{periodLabel}</p>
+          <h1 className="font-serif text-3xl text-ink-900 md:text-4xl">Rooster</h1>
+          <p className="mt-0.5 font-serif text-base text-ink-700">{periodLabel}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex overflow-hidden rounded-full border border-ink-200 bg-white">

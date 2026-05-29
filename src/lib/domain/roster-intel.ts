@@ -122,6 +122,18 @@ export function dagdeelLabel(d: Dagdeel): string {
   return DAGDEEL_LABEL[d];
 }
 
+/**
+ * Board "dienst" name from the Amsterdam start hour — the cockpit's daypart-kok
+ * vocabulary: <10 "Ontbijt kok" · <16 "Allround kok" · else "Avond kok".
+ * (The real vakniveau stays available on the row for the tooltip / detail page.)
+ */
+export function dienstLabel(startsAt: Date | string): string {
+  const h = amsHour(startsAt);
+  if (h < 10) return "Ontbijt kok";
+  if (h < 16) return "Allround kok";
+  return "Avond kok";
+}
+
 function intelInput(row: RosterShiftRow, settings?: Partial<RosterSettings>, now?: Date): ShiftIntelInput {
   return {
     startsAt: row.startsAt,
