@@ -20,7 +20,12 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { assertImpersonationAllowed } from "@/lib/domain/impersonation";
-import { recordAuditFromRequest } from "@/lib/audit";
+import {
+  recordAuditCore,
+  recordAuditFromRequest,
+  stampFromRequest,
+} from "@/lib/audit";
+import { withTx } from "@/lib/db/tx";
 import {
   chefAvailability,
   chefDocuments,
@@ -195,9 +200,10 @@ export async function eraseUserData(args: {
   const deleteFn = args.deleteObjectFn ?? deleteObject;
   let failedDocuments = 0;
 
-  // ----- chef path -----
+  // ----- R2 document purge (chef path) — EXTERNAL + irreversible, BEFORE the tx.
+  // Object deletes can't participate in a DB transaction; failures are counted
+  // (best-effort) and surface as `partially_fulfilled`.
   if (subject.chefId) {
-    // Purge document bytes from R2 first, then soft-delete the rows.
     const docs = await db
       .select({ id: chefDocuments.id, r2Key: chefDocuments.r2Key })
       .from(chefDocuments)
@@ -210,159 +216,171 @@ export async function eraseUserData(args: {
         failedDocuments++;
       }
     }
-    await db
-      .update(chefDocuments)
-      .set({ deletedAt: new Date() })
-      .where(and(eq(chefDocuments.chefId, subject.chefId), isNull(chefDocuments.deletedAt)));
-
-    // Anonymise the chef record (soft-delete; keep the row for retained payroll FKs).
-    await db
-      .update(chefs)
-      .set({
-        fullName: "Verwijderde chef",
-        email: null,
-        phone: null,
-        city: null,
-        specialties: null,
-        languages: null,
-        segments: null,
-        notes: null,
-        // PR-2: structured intake PII (address + home geo) — erase too.
-        street: null,
-        houseNumber: null,
-        postcode: null,
-        latitude: null,
-        longitude: null,
-        deletedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(chefs.id, subject.chefId));
-
-    // Operational own-data: hard delete.
-    await db.delete(chefAvailability).where(eq(chefAvailability.chefId, subject.chefId));
-
-    // Ratings: strip the free-text comment, keep the numeric signal (anonymised).
-    await db
-      .update(ratings)
-      .set({ comment: null })
-      .where(eq(ratings.chefId, subject.chefId));
-
-    // PR-2.1: missing-data requests hold the chef's contact (sent_to) — delete them.
-    await db.delete(profileDataRequests).where(eq(profileDataRequests.chefId, subject.chefId));
-
-    // PR-2B: drop this chef from every klant's favorite/blocked list so the id
-    // doesn't linger. Single idempotent statement (neon-http, no tx) — only
-    // touches rows that actually contain the id.
-    await db
-      .update(clients)
-      .set({
-        favoriteChefIds: sql`array_remove(${clients.favoriteChefIds}, ${subject.chefId})`,
-        blockedChefIds: sql`array_remove(${clients.blockedChefIds}, ${subject.chefId})`,
-        updatedAt: new Date(),
-      })
-      .where(
-        sql`${subject.chefId} = ANY(${clients.favoriteChefIds}) OR ${subject.chefId} = ANY(${clients.blockedChefIds})`,
-      );
   }
 
-  // ----- klant path -----
-  if (subject.clientId) {
-    // Anonymise the contact person; KEEP company/kvk/btw/billing (administration).
-    await db
-      .update(clients)
-      .set({
-        contactName: null,
-        email: null,
-        phone: null,
-        billingEmail: null,
-        notes: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(clients.id, subject.clientId));
-
-    if (subject.email) {
-      await db
-        .delete(clientContacts)
-        .where(
-          and(
-            eq(clientContacts.clientId, subject.clientId),
-            eq(sql`lower(${clientContacts.email})`, subject.email),
-          ),
-        );
-    }
-  }
-
-  // ----- account path -----
-  if (subject.userId) {
-    await db
-      .update(users)
-      .set({
-        // email is NOT NULL + UNIQUE + must equal lower(email) — derive from id.
-        email: `deleted-${subject.userId}@erased.invalid`,
-        name: "Verwijderde gebruiker",
-        image: null,
-        passwordHash: null,
-        passwordSetAt: null,
-        totpSecretEncrypted: null,
-        totpEnabled: false,
-        totpEnrolledAt: null,
-        calendarTokenSecret: null,
-        status: "disabled",
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, subject.userId));
-
-    await db.delete(notifications).where(eq(notifications.userId, subject.userId));
-  }
-
-  // ----- tombstone (proof) -----
   const retainedSummary = retained.map((h) => ({
     entityType: h.entityType,
     count: h.count,
     retainUntil: h.retainUntil ? h.retainUntil.toISOString() : null,
     reason: h.reason,
   }));
-  const [tomb] = await db
-    .insert(privacyErasureTombstones)
-    .values({
-      privacyRequestId: args.requestId,
-      originalUserId: subject.userId,
-      originalChefId: subject.chefId,
-      originalClientId: subject.clientId,
-      hashedEmail: tombstoneHash(subject.email),
-      requesterKind: req.requesterKind ?? null,
-      erasedBy: args.actorId,
-      reason,
-      retainedEntitiesSummary: retainedSummary,
-    })
-    .returning({ id: privacyErasureTombstones.id });
-
-  // ----- close the request -----
   const outcome: "fulfilled" | "partially_fulfilled" =
     retained.length > 0 || failedDocuments > 0 ? "partially_fulfilled" : "fulfilled";
-
   const decisionNotes = buildDecisionNotes(retained, failedDocuments);
-  await db
-    .update(privacyRequests)
-    .set({
-      status: outcome,
-      handledBy: args.actorId,
-      decisionNotes,
-      updatedAt: new Date(),
-    })
-    .where(eq(privacyRequests.id, args.requestId));
 
-  await recordAuditFromRequest({
-    userId: args.actorId,
-    action: outcome === "fulfilled" ? "privacy.erasure_executed" : "privacy.erasure_partial",
-    resource: "privacy_requests",
-    resourceId: args.requestId,
-    after: {
-      outcome,
-      failedDocuments,
-      retained: retained.map((h) => `${h.entityType}:${h.count}`),
-      tombstoneId: tomb.id,
-    },
+  // ----- atomic: anonymise (all paths) + tombstone + close + audit, one tx.
+  // All-or-nothing, so a mid-way failure can never leave half-erased PII without
+  // a tombstone/audit. R2 bytes were already purged above (external).
+  const tombstoneId = await withTx(async (tx) => {
+    // chef path
+    if (subject.chefId) {
+      await tx
+        .update(chefDocuments)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(chefDocuments.chefId, subject.chefId), isNull(chefDocuments.deletedAt)));
+
+      // Anonymise the chef record (soft-delete; keep the row for retained payroll FKs).
+      await tx
+        .update(chefs)
+        .set({
+          fullName: "Verwijderde chef",
+          email: null,
+          phone: null,
+          city: null,
+          specialties: null,
+          languages: null,
+          segments: null,
+          notes: null,
+          // PR-2: structured intake PII (address + home geo) — erase too.
+          street: null,
+          houseNumber: null,
+          postcode: null,
+          latitude: null,
+          longitude: null,
+          deletedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(chefs.id, subject.chefId));
+
+      await tx.delete(chefAvailability).where(eq(chefAvailability.chefId, subject.chefId));
+
+      // Ratings: strip the free-text comment, keep the numeric signal (anonymised).
+      await tx
+        .update(ratings)
+        .set({ comment: null })
+        .where(eq(ratings.chefId, subject.chefId));
+
+      // PR-2.1: missing-data requests hold the chef's contact (sent_to) — delete them.
+      await tx.delete(profileDataRequests).where(eq(profileDataRequests.chefId, subject.chefId));
+
+      // PR-2B: drop this chef from every klant's favorite/blocked list.
+      await tx
+        .update(clients)
+        .set({
+          favoriteChefIds: sql`array_remove(${clients.favoriteChefIds}, ${subject.chefId})`,
+          blockedChefIds: sql`array_remove(${clients.blockedChefIds}, ${subject.chefId})`,
+          updatedAt: new Date(),
+        })
+        .where(
+          sql`${subject.chefId} = ANY(${clients.favoriteChefIds}) OR ${subject.chefId} = ANY(${clients.blockedChefIds})`,
+        );
+    }
+
+    // klant path
+    if (subject.clientId) {
+      // Anonymise the contact person; KEEP company/kvk/btw/billing (administration).
+      await tx
+        .update(clients)
+        .set({
+          contactName: null,
+          email: null,
+          phone: null,
+          billingEmail: null,
+          notes: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(clients.id, subject.clientId));
+
+      if (subject.email) {
+        await tx
+          .delete(clientContacts)
+          .where(
+            and(
+              eq(clientContacts.clientId, subject.clientId),
+              eq(sql`lower(${clientContacts.email})`, subject.email),
+            ),
+          );
+      }
+    }
+
+    // account path
+    if (subject.userId) {
+      await tx
+        .update(users)
+        .set({
+          // email is NOT NULL + UNIQUE + must equal lower(email) — derive from id.
+          email: `deleted-${subject.userId}@erased.invalid`,
+          name: "Verwijderde gebruiker",
+          image: null,
+          passwordHash: null,
+          passwordSetAt: null,
+          totpSecretEncrypted: null,
+          totpEnabled: false,
+          totpEnrolledAt: null,
+          calendarTokenSecret: null,
+          status: "disabled",
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, subject.userId));
+
+      await tx.delete(notifications).where(eq(notifications.userId, subject.userId));
+    }
+
+    // tombstone (proof)
+    const [tomb] = await tx
+      .insert(privacyErasureTombstones)
+      .values({
+        privacyRequestId: args.requestId,
+        originalUserId: subject.userId,
+        originalChefId: subject.chefId,
+        originalClientId: subject.clientId,
+        hashedEmail: tombstoneHash(subject.email),
+        requesterKind: req.requesterKind ?? null,
+        erasedBy: args.actorId,
+        reason,
+        retainedEntitiesSummary: retainedSummary,
+      })
+      .returning({ id: privacyErasureTombstones.id });
+
+    // close the request
+    await tx
+      .update(privacyRequests)
+      .set({
+        status: outcome,
+        handledBy: args.actorId,
+        decisionNotes,
+        updatedAt: new Date(),
+      })
+      .where(eq(privacyRequests.id, args.requestId));
+
+    await recordAuditCore(
+      await stampFromRequest({
+        userId: args.actorId,
+        action:
+          outcome === "fulfilled" ? "privacy.erasure_executed" : "privacy.erasure_partial",
+        resource: "privacy_requests",
+        resourceId: args.requestId,
+        after: {
+          outcome,
+          failedDocuments,
+          retained: retained.map((h) => `${h.entityType}:${h.count}`),
+          tombstoneId: tomb.id,
+        },
+      }),
+      tx,
+    );
+
+    return tomb.id;
   });
 
   // R2 cleanup failure — alert admins (in-app + the dedicated event).
@@ -391,7 +409,7 @@ export async function eraseUserData(args: {
     outcome,
     retained,
     failedDocuments,
-    tombstoneId: tomb.id,
+    tombstoneId,
   };
 }
 

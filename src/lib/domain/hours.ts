@@ -17,7 +17,8 @@
 import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { recordAuditFromRequest } from "@/lib/audit";
+import { recordAuditCore, stampFromRequest } from "@/lib/audit";
+import { withTx } from "@/lib/db/tx";
 import {
   chefs,
   clients,
@@ -90,41 +91,46 @@ export async function approveHoursRow(args: {
   hoursId: string;
   approverUserId: string;
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
-  const updated = await db
-    .update(shiftHours)
-    .set({
-      status: "admin_approved",
-      adminApprovedAt: new Date(),
-      adminApprovedBy: args.approverUserId,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(shiftHours.id, args.hoursId),
-        eq(shiftHours.status, "client_signed"),
-      ),
-    )
-    .returning({
-      id: shiftHours.id,
-      chefId: shiftHours.chefId,
-      clientId: shiftHours.clientId,
-      shiftId: shiftHours.shiftId,
-      workedMinutes: shiftHours.workedMinutes,
-      chefRateCents: shiftHours.chefRateCents,
-      clientRateCents: shiftHours.clientRateCents,
-    });
+  // Atomic: the status transition + its audit row commit together (withTx).
+  // Side effects (outbox/notifications/emails) stay post-commit, below.
+  const auditBase = await stampFromRequest({
+    userId: args.approverUserId,
+    action: "shift_hours.admin_approved",
+    resource: "shift_hours",
+  });
+  const updated = await withTx(async (tx) => {
+    const u = await tx
+      .update(shiftHours)
+      .set({
+        status: "admin_approved",
+        adminApprovedAt: new Date(),
+        adminApprovedBy: args.approverUserId,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(shiftHours.id, args.hoursId),
+          eq(shiftHours.status, "client_signed"),
+        ),
+      )
+      .returning({
+        id: shiftHours.id,
+        chefId: shiftHours.chefId,
+        clientId: shiftHours.clientId,
+        shiftId: shiftHours.shiftId,
+        workedMinutes: shiftHours.workedMinutes,
+        chefRateCents: shiftHours.chefRateCents,
+        clientRateCents: shiftHours.clientRateCents,
+      });
+    if (u.length === 0) return u; // stale — no audit, commit a no-op tx
+    await recordAuditCore({ ...auditBase, resourceId: u[0].id }, tx);
+    return u;
+  });
 
   if (updated.length === 0) {
     return { ok: false, reason: "stale" };
   }
   const row = updated[0];
-
-  await recordAuditFromRequest({
-    userId: args.approverUserId,
-    action: "shift_hours.admin_approved",
-    resource: "shift_hours",
-    resourceId: row.id,
-  });
 
   await enqueueIntegrationEvent({
     provider: "payroll",
@@ -289,31 +295,35 @@ export async function rejectHoursRow(args: {
     return { ok: false, reason: "reason-too-short" };
   }
 
-  const updated = await db
-    .update(shiftHours)
-    .set({
-      status: "admin_rejected",
-      adminRejectedAt: new Date(),
-      adminNotes: args.adminNotes.trim(),
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(shiftHours.id, args.hoursId),
-        eq(shiftHours.status, "client_signed"),
-      ),
-    )
-    .returning({ id: shiftHours.id });
-
-  if (updated.length === 0) return { ok: false, reason: "stale" };
-
-  await recordAuditFromRequest({
+  const auditBase = await stampFromRequest({
     userId: args.rejecterUserId,
     action: "shift_hours.admin_rejected",
     resource: "shift_hours",
     resourceId: args.hoursId,
     after: { adminNotes: args.adminNotes.trim() },
   });
+  const updated = await withTx(async (tx) => {
+    const u = await tx
+      .update(shiftHours)
+      .set({
+        status: "admin_rejected",
+        adminRejectedAt: new Date(),
+        adminNotes: args.adminNotes.trim(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(shiftHours.id, args.hoursId),
+          eq(shiftHours.status, "client_signed"),
+        ),
+      )
+      .returning({ id: shiftHours.id });
+    if (u.length === 0) return u; // stale — no audit
+    await recordAuditCore(auditBase, tx);
+    return u;
+  });
+
+  if (updated.length === 0) return { ok: false, reason: "stale" };
 
   const [ctx] = await db
     .select({

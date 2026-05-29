@@ -25,7 +25,12 @@ import { and, eq, isNull, or, sql, type SQL } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { assertImpersonationAllowed } from "@/lib/domain/impersonation";
-import { recordAuditFromRequest } from "@/lib/audit";
+import {
+  recordAuditCore,
+  recordAuditFromRequest,
+  stampFromRequest,
+} from "@/lib/audit";
+import { withTx } from "@/lib/db/tx";
 import {
   chefAvailability,
   chefDocuments,
@@ -705,12 +710,9 @@ export async function buildUserDataExport(args: {
   const key = exportR2Key(args.requestId);
   await putObject(key, buffer, "application/zip");
 
-  await db
-    .update(privacyRequests)
-    .set({ responseFileKey: key, updatedAt: new Date() })
-    .where(eq(privacyRequests.id, args.requestId));
-
-  await recordAuditFromRequest({
+  // Atomic: record the export key + its audit row together (the R2 upload above
+  // is external + already done, so it stays outside the tx).
+  const auditBase = await stampFromRequest({
     userId: args.actorId,
     action: "privacy.export_generated",
     resource: "privacy_requests",
@@ -721,6 +723,13 @@ export async function buildUserDataExport(args: {
       documentCount: data.documents.length,
       legalHolds: data.legalHolds.map((h) => `${h.entityType}:${h.count}`),
     },
+  });
+  await withTx(async (tx) => {
+    await tx
+      .update(privacyRequests)
+      .set({ responseFileKey: key, updatedAt: new Date() })
+      .where(eq(privacyRequests.id, args.requestId));
+    await recordAuditCore(auditBase, tx);
   });
 
   const preview = await previewUserDataExport(subject);

@@ -12,7 +12,8 @@
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { recordAuditFromRequest } from "@/lib/audit";
+import { recordAuditCore, stampFromRequest } from "@/lib/audit";
+import { withTx } from "@/lib/db/tx";
 import {
   chefSubmissions,
   chefs,
@@ -36,50 +37,54 @@ export async function convertChefSubmission(
 
   // Create chef row from submission fields. Conservative defaults: status=onboarding.
   const fullName = submission.fullName?.trim() || "(naam ontbreekt)";
-  const [chef] = await db
-    .insert(chefs)
-    .values({
-      sourceSubmissionId: submission.id,
-      fullName,
-      email: submission.email,
-      phone: submission.phone,
-      city: submission.locationPreference,
-      yearsExperience: submission.yearsExperience,
-      notes: submission.notes,
-      // PR-2: carry structured intake onto the master record.
-      street: submission.street,
-      houseNumber: submission.houseNumber,
-      postcode: submission.postcode,
-      transportMode: submission.transportMode,
-      preferences: submission.preferences,
-      employmentType: submission.employmentType,
-      applyingAs: submission.applyingAs,
-      status: "onboarding",
-      createdBy: actingUserId,
-    })
-    .returning({ id: chefs.id });
-
-  // Update submission to point at the new chef + flip status.
-  await db
-    .update(chefSubmissions)
-    .set({
-      status: "converted",
-      convertedToChefId: chef.id,
-      triagedAt: new Date(),
-      triagedBy: actingUserId,
-      updatedAt: new Date(),
-    })
-    .where(eq(chefSubmissions.id, submission.id));
-
-  await recordAuditFromRequest({
+  const auditBase = await stampFromRequest({
     userId: actingUserId,
     action: "chefs.create",
     resource: "chefs",
-    resourceId: chef.id,
     after: { sourceSubmissionId: submission.id, fullName },
   });
 
-  return { chefId: chef.id };
+  // Atomic: create chef + link the submission + audit commit together (withTx).
+  const chefId = await withTx(async (tx) => {
+    const [chef] = await tx
+      .insert(chefs)
+      .values({
+        sourceSubmissionId: submission.id,
+        fullName,
+        email: submission.email,
+        phone: submission.phone,
+        city: submission.locationPreference,
+        yearsExperience: submission.yearsExperience,
+        notes: submission.notes,
+        // PR-2: carry structured intake onto the master record.
+        street: submission.street,
+        houseNumber: submission.houseNumber,
+        postcode: submission.postcode,
+        transportMode: submission.transportMode,
+        preferences: submission.preferences,
+        employmentType: submission.employmentType,
+        applyingAs: submission.applyingAs,
+        status: "onboarding",
+        createdBy: actingUserId,
+      })
+      .returning({ id: chefs.id });
+
+    await tx
+      .update(chefSubmissions)
+      .set({
+        status: "converted",
+        convertedToChefId: chef.id,
+        triagedAt: new Date(),
+        triagedBy: actingUserId,
+        updatedAt: new Date(),
+      })
+      .where(eq(chefSubmissions.id, submission.id));
+
+    await recordAuditCore({ ...auditBase, resourceId: chef.id }, tx);
+    return chef.id;
+  });
+
+  return { chefId };
 }
 
 export async function convertClientSubmission(
@@ -99,40 +104,43 @@ export async function convertClientSubmission(
     submission.companyName?.trim() ||
     submission.contactName?.trim() ||
     "(naam ontbreekt)";
-
-  const [client] = await db
-    .insert(clients)
-    .values({
-      sourceSubmissionId: submission.id,
-      companyName,
-      contactName: submission.contactName,
-      email: submission.email,
-      phone: submission.phone,
-      address: submission.location,
-      notes: submission.notes,
-      status: "prospect",
-      createdBy: actingUserId,
-    })
-    .returning({ id: clients.id });
-
-  await db
-    .update(clientSubmissions)
-    .set({
-      status: "converted",
-      convertedToClientId: client.id,
-      triagedAt: new Date(),
-      triagedBy: actingUserId,
-      updatedAt: new Date(),
-    })
-    .where(eq(clientSubmissions.id, submission.id));
-
-  await recordAuditFromRequest({
+  const auditBase = await stampFromRequest({
     userId: actingUserId,
     action: "clients.create",
     resource: "clients",
-    resourceId: client.id,
     after: { sourceSubmissionId: submission.id, companyName },
   });
 
-  return { clientId: client.id };
+  const clientId = await withTx(async (tx) => {
+    const [client] = await tx
+      .insert(clients)
+      .values({
+        sourceSubmissionId: submission.id,
+        companyName,
+        contactName: submission.contactName,
+        email: submission.email,
+        phone: submission.phone,
+        address: submission.location,
+        notes: submission.notes,
+        status: "prospect",
+        createdBy: actingUserId,
+      })
+      .returning({ id: clients.id });
+
+    await tx
+      .update(clientSubmissions)
+      .set({
+        status: "converted",
+        convertedToClientId: client.id,
+        triagedAt: new Date(),
+        triagedBy: actingUserId,
+        updatedAt: new Date(),
+      })
+      .where(eq(clientSubmissions.id, submission.id));
+
+    await recordAuditCore({ ...auditBase, resourceId: client.id }, tx);
+    return client.id;
+  });
+
+  return { clientId };
 }

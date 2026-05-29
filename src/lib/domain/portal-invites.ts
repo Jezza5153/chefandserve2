@@ -26,7 +26,12 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { assertImpersonationAllowed } from "@/lib/domain/impersonation";
-import { recordAuditFromRequest } from "@/lib/audit";
+import {
+  recordAuditCore,
+  recordAuditFromRequest,
+  stampFromRequest,
+} from "@/lib/audit";
+import { withTx } from "@/lib/db/tx";
 import {
   chefs,
   clients,
@@ -270,33 +275,37 @@ export async function inviteInternalStaff(args: {
     return { ok: false, error: `Rol '${args.role}' bestaat niet` };
   }
 
-  // Create the user (active immediately — wizard middleware gates access)
-  const [newUser] = await db
-    .insert(users)
-    .values({
-      email,
-      name: args.name.trim(),
-      kind: "internal",
-      status: "active",
-    })
-    .returning({ id: users.id });
-
-  // Link role
-  await db.insert(userRoles).values({
-    userId: newUser.id,
-    roleId: roleRow.id,
-    grantedBy: args.actingUserId,
-  });
-
-  await recordAuditFromRequest({
+  const auditBase = await stampFromRequest({
     userId: args.actingUserId,
     action: "users.invite_internal",
     resource: "users",
-    resourceId: newUser.id,
     after: { email, name: args.name.trim(), role: args.role },
   });
 
-  // Best-effort invite email
+  // Atomic: create the user (active immediately — wizard middleware gates
+  // access) + link the role + audit, all in one transaction.
+  const newUserId = await withTx(async (tx) => {
+    const [newUser] = await tx
+      .insert(users)
+      .values({
+        email,
+        name: args.name.trim(),
+        kind: "internal",
+        status: "active",
+      })
+      .returning({ id: users.id });
+
+    await tx.insert(userRoles).values({
+      userId: newUser.id,
+      roleId: roleRow.id,
+      grantedBy: args.actingUserId,
+    });
+
+    await recordAuditCore({ ...auditBase, resourceId: newUser.id }, tx);
+    return newUser.id;
+  });
+
+  // Best-effort invite email (post-commit).
   try {
     await sendEmail({
       to: email,
@@ -311,7 +320,7 @@ export async function inviteInternalStaff(args: {
     console.error("[invite-internal] email failed:", e);
   }
 
-  return { ok: true, userId: newUser.id, alreadyExisted: false };
+  return { ok: true, userId: newUserId, alreadyExisted: false };
 }
 
 /** Disable a portal user (keeps the row, blocks login). */
@@ -323,20 +332,23 @@ export async function disablePortalUser(
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
   if (!user) return { ok: true };
 
-  await db
-    .update(users)
-    .set({
-      status: "disabled",
-      permissionsVersion: user.permissionsVersion + 1, // kills active sessions
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, userId));
-
-  await recordAuditFromRequest({
+  const auditBase = await stampFromRequest({
     userId: actingUserId,
     action: "users.disable",
     resource: "users",
     resourceId: userId,
+  });
+  // Atomic: disable + bump permissionsVersion (kills sessions) + audit together.
+  await withTx(async (tx) => {
+    await tx
+      .update(users)
+      .set({
+        status: "disabled",
+        permissionsVersion: user.permissionsVersion + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+    await recordAuditCore(auditBase, tx);
   });
 
   return { ok: true };
