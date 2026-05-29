@@ -20,7 +20,8 @@ import { HumanStatusBadge } from "@/components/hours/HumanStatusBadge";
 import { TrustTimeline } from "@/components/hours/TrustTimeline";
 import { AdminRejectForm } from "./AdminRejectForm";
 import { db } from "@/lib/db/client";
-import { recordAuditFromRequest } from "@/lib/audit";
+import { recordAuditCore, stampFromRequest } from "@/lib/audit";
+import { withTx } from "@/lib/db/tx";
 import {
   chefs,
   clients,
@@ -91,36 +92,42 @@ async function approve(formData: FormData) {
   const id = String(formData.get("hoursId") ?? "");
   if (!id) return;
 
-  const updated = await db
-    .update(shiftHours)
-    .set({
-      status: "admin_approved",
-      adminApprovedAt: new Date(),
-      adminApprovedBy: session.user.id,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(eq(shiftHours.id, id), eq(shiftHours.status, "client_signed")),
-    )
-    .returning({
-      id: shiftHours.id,
-      chefId: shiftHours.chefId,
-      clientId: shiftHours.clientId,
-      workedMinutes: shiftHours.workedMinutes,
-      chefRateCents: shiftHours.chefRateCents,
-      clientRateCents: shiftHours.clientRateCents,
-    });
-
-  if (updated.length === 0) {
-    redirect(`/admin/business/hours/${id}?error=stale`);
-  }
-
-  await recordAuditFromRequest({
+  const auditBase = await stampFromRequest({
     userId: session.user.id,
     action: "shift_hours.admin_approved",
     resource: "shift_hours",
     resourceId: id,
   });
+  // Atomic: status transition + audit. Redirects + side effects stay OUTSIDE
+  // the callback (a redirect() throws and would roll the tx back).
+  const updated = await withTx(async (tx) => {
+    const u = await tx
+      .update(shiftHours)
+      .set({
+        status: "admin_approved",
+        adminApprovedAt: new Date(),
+        adminApprovedBy: session.user.id,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(shiftHours.id, id), eq(shiftHours.status, "client_signed")),
+      )
+      .returning({
+        id: shiftHours.id,
+        chefId: shiftHours.chefId,
+        clientId: shiftHours.clientId,
+        workedMinutes: shiftHours.workedMinutes,
+        chefRateCents: shiftHours.chefRateCents,
+        clientRateCents: shiftHours.clientRateCents,
+      });
+    if (u.length === 0) return u;
+    await recordAuditCore(auditBase, tx);
+    return u;
+  });
+
+  if (updated.length === 0) {
+    redirect(`/admin/business/hours/${id}?error=stale`);
+  }
 
   await enqueueIntegrationEvent({
     provider: "payroll",
@@ -213,30 +220,34 @@ async function reject(formData: FormData) {
 
   // Reject → row goes back to 'draft' so chef can re-submit. We use a
   // distinct status 'admin_rejected' so the chef UI shows the warning.
-  const updated = await db
-    .update(shiftHours)
-    .set({
-      status: "admin_rejected",
-      adminRejectedAt: new Date(),
-      adminNotes,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(eq(shiftHours.id, id), eq(shiftHours.status, "client_signed")),
-    )
-    .returning({ id: shiftHours.id });
-
-  if (updated.length === 0) {
-    redirect(`/admin/business/hours/${id}?error=stale`);
-  }
-
-  await recordAuditFromRequest({
+  const auditBase = await stampFromRequest({
     userId: session.user.id,
     action: "shift_hours.admin_rejected",
     resource: "shift_hours",
     resourceId: id,
     after: { adminNotes },
   });
+  const updated = await withTx(async (tx) => {
+    const u = await tx
+      .update(shiftHours)
+      .set({
+        status: "admin_rejected",
+        adminRejectedAt: new Date(),
+        adminNotes,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(shiftHours.id, id), eq(shiftHours.status, "client_signed")),
+      )
+      .returning({ id: shiftHours.id });
+    if (u.length === 0) return u;
+    await recordAuditCore(auditBase, tx);
+    return u;
+  });
+
+  if (updated.length === 0) {
+    redirect(`/admin/business/hours/${id}?error=stale`);
+  }
 
   const ctx = await loadFull(id);
   if (!ctx) redirect("/admin/business/hours");

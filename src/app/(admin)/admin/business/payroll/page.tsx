@@ -18,7 +18,8 @@ import { revalidatePath } from "next/cache";
 
 import { db } from "@/lib/db/client";
 import { assertImpersonationAllowed } from "@/lib/domain/impersonation";
-import { recordAuditFromRequest } from "@/lib/audit";
+import { recordAuditCore, stampFromRequest } from "@/lib/audit";
+import { withTx } from "@/lib/db/tx";
 import {
   payrollBatches,
   payrollBatchLines,
@@ -74,38 +75,42 @@ async function createBatch(formData: FormData) {
     clientRev += computeChefAmountCents(r.h.workedMinutes, r.h.clientRateCents);
   }
 
-  const [batch] = await db
-    .insert(payrollBatches)
-    .values({
-      periodStart: startDate,
-      periodEnd: endDate,
-      provider: "csv",
-      status: "draft",
-      rowCount: candidates.length,
-      totalChefCostCents: chefCost,
-      totalClientRevenueCents: clientRev,
-      totalMarginCents: clientRev - chefCost,
-    })
-    .returning({ id: payrollBatches.id });
-
-  await db.insert(payrollBatchLines).values(
-    candidates.map((r) => ({
-      batchId: batch.id,
-      shiftHoursId: r.h.id,
-      amountCents: computeChefAmountCents(r.h.workedMinutes, r.h.chefRateCents),
-      clientAmountCents: computeChefAmountCents(r.h.workedMinutes, r.h.clientRateCents),
-    })),
-  );
-
-  await recordAuditFromRequest({
+  const auditBase = await stampFromRequest({
     userId: session.user.id,
     action: "payroll_batches.created",
     resource: "payroll_batches",
-    resourceId: batch.id,
     after: { rowCount: candidates.length, totalChefCostCents: chefCost },
   });
+  // Atomic: the batch header + its lines + audit commit together.
+  const batchId = await withTx(async (tx) => {
+    const [batch] = await tx
+      .insert(payrollBatches)
+      .values({
+        periodStart: startDate,
+        periodEnd: endDate,
+        provider: "csv",
+        status: "draft",
+        rowCount: candidates.length,
+        totalChefCostCents: chefCost,
+        totalClientRevenueCents: clientRev,
+        totalMarginCents: clientRev - chefCost,
+      })
+      .returning({ id: payrollBatches.id });
 
-  redirect(`/admin/business/payroll?ok=created&id=${batch.id}`);
+    await tx.insert(payrollBatchLines).values(
+      candidates.map((r) => ({
+        batchId: batch.id,
+        shiftHoursId: r.h.id,
+        amountCents: computeChefAmountCents(r.h.workedMinutes, r.h.chefRateCents),
+        clientAmountCents: computeChefAmountCents(r.h.workedMinutes, r.h.clientRateCents),
+      })),
+    );
+
+    await recordAuditCore({ ...auditBase, resourceId: batch.id }, tx);
+    return batch.id;
+  });
+
+  redirect(`/admin/business/payroll?ok=created&id=${batchId}`);
 }
 
 /* -------- server action: mark exported -------- */
@@ -117,47 +122,52 @@ async function markExported(formData: FormData) {
   const batchId = String(formData.get("batchId") ?? "");
   if (!batchId) return;
 
-  // Update batch
-  const updated = await db
-    .update(payrollBatches)
-    .set({ status: "exported", exportedAt: new Date(), exportedBy: session.user.id })
-    .where(and(eq(payrollBatches.id, batchId), eq(payrollBatches.status, "draft")))
-    .returning({ id: payrollBatches.id });
-
-  if (updated.length === 0) {
-    redirect(`/admin/business/payroll?error=stale&id=${batchId}`);
-  }
-
-  // Flip every shift_hours row in the batch to 'exported'
-  const lines = await db
-    .select({ shiftHoursId: payrollBatchLines.shiftHoursId })
-    .from(payrollBatchLines)
-    .where(eq(payrollBatchLines.batchId, batchId));
-
-  for (const l of lines) {
-    await db
-      .update(shiftHours)
-      .set({
-        status: "exported",
-        payingitExportedAt: new Date(),
-        payingitExportRef: batchId,
-      })
-      .where(and(eq(shiftHours.id, l.shiftHoursId), eq(shiftHours.status, "admin_approved")));
-  }
-
-  await recordAuditFromRequest({
+  const auditBase = await stampFromRequest({
     userId: session.user.id,
     action: "payroll_batches.exported",
     resource: "payroll_batches",
     resourceId: batchId,
   });
+  // Atomic: mark the batch exported + flip every line's shift_hours to
+  // 'exported' + audit, all-or-nothing. Outbox/revalidate/redirect post-commit.
+  const result = await withTx(async (tx) => {
+    const u = await tx
+      .update(payrollBatches)
+      .set({ status: "exported", exportedAt: new Date(), exportedBy: session.user.id })
+      .where(and(eq(payrollBatches.id, batchId), eq(payrollBatches.status, "draft")))
+      .returning({ id: payrollBatches.id });
+    if (u.length === 0) return { ok: false as const, lineCount: 0 };
+
+    const lines = await tx
+      .select({ shiftHoursId: payrollBatchLines.shiftHoursId })
+      .from(payrollBatchLines)
+      .where(eq(payrollBatchLines.batchId, batchId));
+
+    for (const l of lines) {
+      await tx
+        .update(shiftHours)
+        .set({
+          status: "exported",
+          payingitExportedAt: new Date(),
+          payingitExportRef: batchId,
+        })
+        .where(and(eq(shiftHours.id, l.shiftHoursId), eq(shiftHours.status, "admin_approved")));
+    }
+
+    await recordAuditCore(auditBase, tx);
+    return { ok: true as const, lineCount: lines.length };
+  });
+
+  if (!result.ok) {
+    redirect(`/admin/business/payroll?error=stale&id=${batchId}`);
+  }
 
   await enqueueIntegrationEvent({
     provider: "payroll",
     eventType: "payroll_batch.exported",
     entityType: "payroll_batch",
     entityId: batchId,
-    payload: { rowCount: lines.length },
+    payload: { rowCount: result.lineCount },
     idempotencyKey: `payroll_batch.exported:${batchId}`,
   });
 

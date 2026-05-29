@@ -4,7 +4,12 @@ import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
 import { assertImpersonationAllowed } from "@/lib/domain/impersonation";
-import { recordAuditFromRequest } from "@/lib/audit";
+import {
+  recordAuditCore,
+  recordAuditFromRequest,
+  stampFromRequest,
+} from "@/lib/audit";
+import { withTx } from "@/lib/db/tx";
 import {
   chefAvailability,
   chefs,
@@ -292,24 +297,27 @@ export default async function ShiftDetailPage({
       cancelled: new Date(),
     };
 
-    await db
-      .update(placements)
-      .set({
-        status: newStatus,
-        respondedAt: ["accepted", "rejected"].includes(newStatus)
-          ? setMap[newStatus]
-          : undefined,
-        confirmedAt: newStatus === "confirmed" ? setMap[newStatus] : undefined,
-        cancelledAt: newStatus === "cancelled" ? setMap[newStatus] : undefined,
-        updatedAt: new Date(),
-      })
-      .where(eq(placements.id, placementId));
-
-    await recordAuditFromRequest({
+    const auditBase = await stampFromRequest({
       userId: session.user.id,
       action: `placements.${newStatus}`,
       resource: "placements",
       resourceId: placementId,
+    });
+    // Atomic: status transition + audit (email + redirect stay post-commit).
+    await withTx(async (tx) => {
+      await tx
+        .update(placements)
+        .set({
+          status: newStatus,
+          respondedAt: ["accepted", "rejected"].includes(newStatus)
+            ? setMap[newStatus]
+            : undefined,
+          confirmedAt: newStatus === "confirmed" ? setMap[newStatus] : undefined,
+          cancelledAt: newStatus === "cancelled" ? setMap[newStatus] : undefined,
+          updatedAt: new Date(),
+        })
+        .where(eq(placements.id, placementId));
+      await recordAuditCore(auditBase, tx);
     });
 
     // Send client-confirmation email when a placement reaches "confirmed"
