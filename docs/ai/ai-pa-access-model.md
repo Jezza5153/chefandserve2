@@ -121,9 +121,10 @@ destructive = blocked.
    sets `cs_impersonate_*`. Its writes carry `user_id = pa_service_account`.
 2. **RBAC ceiling = requesting human.** The PA cannot do for a human what the
    human cannot do themselves. Cross-tenant boundaries hold server-side.
-3. **Fail-closed audit.** The delegation record is `await`ed before/with the
-   mutation; a failed audit aborts the action (same posture as impersonated
-   writes — see the neon-http single-tx caveat in `ai-audit-and-logging.md`).
+3. **Fail-closed audit.** The delegation record is `await`ed with the mutation; a
+   failed audit aborts the action. High-risk PA writes use `withTx` for true
+   same-transaction atomicity (both or neither); the rest are awaited fail-closed.
+   See the "withTx forward rule" in `ai-audit-and-logging.md`.
 4. **No destructive autonomy.** The denylist + action guard apply to the PA
    exactly as to a human impersonator. New destructive capability requires the
    approval workflow, documented here first.

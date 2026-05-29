@@ -87,13 +87,38 @@ reason + tool in `after._pa`. See `ai-pa-access-model.md`. Forensic query:
 | `impersonation.stop` | super_admin ends it | `after = { _imp }` |
 | _(any business event during the session)_ | impersonated write | `impersonator_user_id` set + `after._imp` |
 
-### Fail-closed caveat (neon-http)
+### Atomicity: `withTx` for the high-risk set, awaited fail-closed elsewhere
 
-The DB driver is neon-http (no interactive transactions), so a mutation and its
-audit row are **not** in one transaction. We implement fail-closed by
-`await`-ing the audit (a failure throws and aborts the action). True same-tx
-atomicity is a flagged follow-up needing a websocket connection — not claimed
-done.
+The default `db` is neon-http (no interactive transactions), so for MOST audited
+writes the mutation and its audit are not in one transaction — we `await` the
+audit (a failure throws + aborts), which is fail-closed but not strictly atomic.
+
+For the HIGH-RISK set, `withTx` (`src/lib/db/tx.ts` — Neon WebSocket /
+`drizzle-orm/neon-serverless` on `DATABASE_URL_UNPOOLED`) commits the mutation +
+its audit in ONE interactive transaction — both or neither:
+
+```ts
+const base = await stampFromRequest({ userId, action, resource, /* … */ });
+await withTx(async (tx) => {
+  const [row] = await tx.update(table).set({ … }).where(…).returning({ id: table.id });
+  await recordAuditCore({ ...base, resourceId: row.id }, tx);   // SAME tx
+});
+// redirect / revalidatePath / email / outbox / notifications stay OUTSIDE — a
+// throw inside the callback (e.g. Next's redirect()) rolls the transaction back.
+```
+
+**`withTx` forward rule — use it when ANY holds:** (a) reachable while
+impersonating AND state-changing, (b) financial / state-machine transition
+(shift · placement · hours · payroll), (c) irreversible (erase · disable ·
+privilege grant), or (d) the audit `resourceId` comes from a `.returning()` on
+the same mutation. Otherwise `await recordAuditFromRequest(...)` after the write
+suffices.
+
+Migrated (high-risk set): hours approve/reject, payroll create/export,
+shift/placement status, lead conversions, user disable + internal invite, AVG
+erasure + export. (`impersonation.start`/`.stop` are single-statement audits —
+already atomic, no tx needed.) Proven by `scripts/smoke-tx-atomicity.mts` (a
+forced audit failure rolls the mutation back).
 
 ---
 
