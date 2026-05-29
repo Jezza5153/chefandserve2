@@ -192,10 +192,27 @@ export type RosterKpi = {
   value: number;
   /** sublines, e.g. role breakdown "4 ontbijt · 2 diner". */
   detail?: string;
+  /** optional share-of-total badge (e.g. 75 → "75%"). */
+  pct?: number;
   tone: "ok" | "amber" | "red";
   /** the ?filter= this KPI links to (clickable filter — read-only narrowing). */
   filter?: string;
 };
+
+/**
+ * Day-board fill tone (confirmed-driven, the operator's colour language):
+ *   vol (green)   = confirmed ≥ headcount
+ *   leeg (red)    = confirmed 0 (nobody locked in — the real risk)
+ *   deels (amber) = partially confirmed
+ * Note: this is intentionally SOFTER than `getShiftHealth` — a partially-filled
+ * shift today reads amber "onderbezet", not red, so the board isn't a wall of red.
+ */
+export type DayTone = "vol" | "deels" | "leeg";
+export function dayToneOf(confirmed: number, headcount: number): DayTone {
+  if (confirmed >= headcount) return "vol";
+  if (confirmed <= 0) return "leeg";
+  return "deels";
+}
 
 /** Count open slots by dagdeel + vakniveau (role pressure). */
 function openByRole(active: { row: RosterShiftRow; fill: ShiftFill }[]) {
@@ -474,13 +491,21 @@ export function buildRosterView(input: RosterInput): RosterViewModel {
   const hotelsMetAandacht = { count: attHotels.size, names: [...attHotels.values()].slice(0, 3) };
 
   const kpis: RosterKpi[] = [];
-  const todayKey = input.dateKey;
   if (input.view === "day") {
-    const todayCount = enriched.filter((e) => amsterdamDayKey(e.row.startsAt) === todayKey).length;
-    kpis.push({ key: "diensten", label: "Diensten vandaag", value: todayCount, tone: "ok" });
-    kpis.push({ key: "open", label: "Open plekken", value: openPlekken, detail: roleDetail || undefined, tone: openPlekken > 0 ? "amber" : "ok", filter: "open" });
-    kpis.push({ key: "kritiek", label: "Kritiek", value: kritiek, tone: kritiek > 0 ? "red" : "ok", filter: "kritiek" });
-    kpis.push({ key: "beschikbaar", label: "Beschikbaar, niet ingepland", value: input.availableChefs?.length ?? 0, tone: "ok", filter: "beschikbaar" });
+    // Partition active shifts by confirmed-fill (vol + open + kritiek = totaal).
+    const totaal = active.length;
+    const vol = active.filter((e) => dayToneOf(e.fill.confirmed, e.fill.headcount) === "vol").length;
+    const leeg = active.filter((e) => dayToneOf(e.fill.confirmed, e.fill.headcount) === "leeg").length;
+    const deels = totaal - vol - leeg;
+    const chefsIngepland = active.reduce((s, e) => s + Math.min(e.fill.confirmed, e.fill.headcount), 0);
+    const beschikbaar = input.availableChefs?.length ?? 0;
+    const pct = (n: number) => (totaal > 0 ? Math.round((n / totaal) * 100) : 0);
+    kpis.push({ key: "totaal", label: "Totaal diensten", value: totaal, tone: "ok" });
+    kpis.push({ key: "ingevuld", label: "Ingevuld", value: vol, pct: pct(vol), tone: "ok", filter: "ingevuld" });
+    kpis.push({ key: "open", label: "Open", value: deels, pct: pct(deels), tone: deels > 0 ? "amber" : "ok", filter: "open" });
+    kpis.push({ key: "kritiek", label: "Kritiek", value: leeg, pct: pct(leeg), tone: leeg > 0 ? "red" : "ok", filter: "kritiek" });
+    kpis.push({ key: "chefs", label: "Chefs ingepland", value: chefsIngepland, tone: "ok" });
+    kpis.push({ key: "beschikbaar", label: "Beschikbare chefs", value: beschikbaar, tone: "ok", filter: "beschikbaar" });
   } else if (input.view === "week") {
     kpis.push({ key: "diensten", label: "Diensten deze week", value: active.length, tone: "ok" });
     kpis.push({ key: "open", label: "Open plekken", value: openPlekken, detail: roleDetail || undefined, tone: openPlekken > 0 ? "amber" : "ok", filter: "open" });

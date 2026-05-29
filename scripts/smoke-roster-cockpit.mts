@@ -65,16 +65,26 @@ const u = mk({ id: "u", startsAt: "2026-05-29T17:00:00Z", endsAt: "2026-05-29T22
 const k = mk({ id: "k", startsAt: "2026-05-29T11:00:00Z", endsAt: "2026-05-29T15:00:00Z", headcount: 1, confirmedCount: 0 }); // kritiek lunch (1 open)
 const p = mk({ id: "p", startsAt: "2026-05-31T06:00:00Z", endsAt: "2026-05-31T10:00:00Z", headcount: 1, confirmedCount: 0, proposedCount: 1, earliestProposedAt: "2026-05-27T07:00:00Z" }); // future ontbijt, proposed
 
-console.log("\n── Day view KPIs ──");
+console.log("\n── day fill tone (confirmed-driven, softer than health) ──");
+assert("2/2 → vol", m.dayToneOf(2, 2) === "vol");
+assert("1/2 → deels (amber, not red)", m.dayToneOf(1, 2) === "deels");
+assert("0/1 → leeg (red)", m.dayToneOf(0, 1) === "leeg");
+
+console.log("\n── Day view KPIs (Totaal · Ingevuld · Open · Kritiek · Chefs · Beschikbaar) ──");
 const day = m.buildRosterView({
   view: "day", dateKey: today, rows: [g, u, k], now: NOW,
   availableChefs: [{ id: "a", fullName: "Sara", skills: ["ontbijt"] }, { id: "b", fullName: "Marco", skills: ["diner"] }],
 });
-assert("open plekken = Σ openSlots (u1+k1)", day.kpis.find((x) => x.key === "open")?.value === 2);
-assert("open KPI has role breakdown", Boolean(day.kpis.find((x) => x.key === "open")?.detail));
-assert("open KPI is a clickable filter", day.kpis.find((x) => x.key === "open")?.filter === "open");
-assert("kritiek KPI = 2 (u + k both <24u & under headcount)", day.kpis.find((x) => x.key === "kritiek")?.value === 2);
-assert("beschikbaar-niet-ingepland = 2", day.kpis.find((x) => x.key === "beschikbaar")?.value === 2);
+const kpi = (key: string) => day.kpis.find((x) => x.key === key);
+assert("totaal diensten = 3", kpi("totaal")?.value === 3);
+assert("ingevuld (vol g) = 1", kpi("ingevuld")?.value === 1);
+assert("open (deels u) = 1", kpi("open")?.value === 1);
+assert("kritiek (leeg k) = 1", kpi("kritiek")?.value === 1);
+assert("ingevuld+open+kritiek partition totaal", (kpi("ingevuld")!.value + kpi("open")!.value + kpi("kritiek")!.value) === kpi("totaal")!.value);
+assert("open KPI carries a pct badge", typeof kpi("open")?.pct === "number");
+assert("open KPI is a clickable filter", kpi("open")?.filter === "open");
+assert("chefs ingepland = 3 (g2 + u1 + k0)", kpi("chefs")?.value === 3);
+assert("beschikbare chefs = 2", kpi("beschikbaar")?.value === 2);
 assert("open-binnen-48u = 2 (u,k today)", day.openBinnen48u === 2, String(day.openBinnen48u));
 assert("day groups 1 hotel, 3 shifts", (day.dayHotels?.length ?? 0) === 1 && day.dayHotels![0].shifts.length === 3);
 assert("beschikbaar skill split", day.beschikbaarNietIngepland?.bySkill["ontbijt"] === 1 && day.beschikbaarNietIngepland?.bySkill["diner"] === 1);
