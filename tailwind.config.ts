@@ -22,10 +22,21 @@ const config: Config = {
           900: "#6b1a28",
         },
         ink: {
+          // Neutral premium grey ramp. PR-2: 50/100/200/300/400/600/800 were
+          // undefined, so border-ink-200 / divide-ink-100 / text-ink-400 fell
+          // back to Tailwind's gray-200 / inherited colour — the main "flat"
+          // cause. 500/700/900 keep their original values.
           DEFAULT: "#29292A", // near-black for text + dark sections
           900: "#29292A",
+          800: "#313132",
           700: "#3a3a3b",
+          600: "#5c5c5e",
           500: "#848484",
+          400: "#9a9a9d",
+          300: "#c8c8cc",
+          200: "#e3e3e6",
+          100: "#eeeeef",
+          50: "#f6f6f7",
         },
         cream: "#FAB89F", // soft cream accent
         bg: {

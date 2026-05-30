@@ -49,6 +49,22 @@ assert("13:00 → lunch", m.dagdeelOf("2026-05-29T11:00:00Z") === "lunch");
 assert("19:00 → diner", m.dagdeelOf("2026-05-29T17:00:00Z") === "diner");
 assert("23:00 → late", m.dagdeelOf("2026-05-29T21:00:00Z") === "late");
 
+console.log("\n── computeRosterDayAxis (timeline bounds) ──");
+{
+  const amsISO = (h: number, mn = 0) => `2026-05-29T${String(h - 2).padStart(2, "0")}:${String(mn).padStart(2, "0")}:00Z`; // Amsterdam = UTC+2 (CEST)
+  const shf = (sh: number, sm: number, eh: number, em: number) => ({ startsAt: amsISO(sh, sm), endsAt: amsISO(eh, em) });
+  const empty = m.computeRosterDayAxis([]);
+  assert("empty day → 06–22", empty.startHour === 6 && empty.endHour === 22, JSON.stringify(empty));
+  const a2 = m.computeRosterDayAxis([shf(10, 0, 15, 0)]);
+  assert("10:00–15:00 expands to ≥8h (start 10)", a2.startHour === 10 && a2.endHour - a2.startHour >= 8, JSON.stringify(a2));
+  assert("07:30 start floors to 07", m.computeRosterDayAxis([shf(7, 30, 16, 0)]).startHour === 7);
+  assert("21:15 end ceils to 22", m.computeRosterDayAxis([shf(12, 0, 21, 15)]).endHour === 22);
+  assert("05:30 start clamps to 06", m.computeRosterDayAxis([shf(5, 30, 14, 0)]).startHour === 6);
+  assert("23:30 end clamps to 23", m.computeRosterDayAxis([shf(15, 0, 23, 30)]).endHour === 23);
+  const a7 = m.computeRosterDayAxis([shf(7, 0, 11, 0), shf(18, 0, 23, 0)]);
+  assert("multiple shifts → one shared axis 07–23", a7.startHour === 7 && a7.endHour === 23, JSON.stringify(a7));
+}
+
 console.log("\n── active-fill rule ──");
 const gevuld = m.shiftFill(mk({ id: "s1", startsAt: "2026-05-29T16:00:00Z", endsAt: "2026-05-29T21:00:00Z", confirmedCount: 2 }), undefined, NOW);
 assert("confirmed≥headcount → gevuld, 0 open", gevuld.gevuld && gevuld.openSlots === 0);

@@ -134,6 +134,58 @@ export function dienstLabel(startsAt: Date | string): string {
   return "Avond kok";
 }
 
+/** Amsterdam hour-of-day as a float (13.5 = 13:30). */
+function amsHourFloat(d: Date | string): number {
+  const p = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Amsterdam",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(toDate(d));
+  const h = Number(p.find((x) => x.type === "hour")?.value ?? 0);
+  const m = Number(p.find((x) => x.type === "minute")?.value ?? 0);
+  return h + m / 60;
+}
+
+export type RosterDayAxisOpts = {
+  minHour?: number; // hard floor (default 6)
+  maxHour?: number; // hard ceil (default 23)
+  minSpanHours?: number; // minimum visible window (default 8)
+  emptyStartHour?: number; // axis start when no shifts (default 6)
+  emptyEndHour?: number; // axis end when no shifts (default 22)
+};
+
+/**
+ * The Day board's hour axis — ONE shared range for all hotels that day.
+ * Empty day → [emptyStart, emptyEnd] (06–22). Otherwise floor(earliest start)
+ * → ceil(latest end), clamped to [minHour, maxHour], widened to ≥ minSpanHours
+ * (forward first, then backward). Pure + deterministic → unit-tested in the smoke.
+ */
+export function computeRosterDayAxis(
+  shifts: { startsAt: Date | string; endsAt: Date | string }[],
+  opts: RosterDayAxisOpts = {},
+): { startHour: number; endHour: number } {
+  const minHour = opts.minHour ?? 6;
+  const maxHour = opts.maxHour ?? 23;
+  const minSpan = opts.minSpanHours ?? 8;
+  if (shifts.length === 0) {
+    return { startHour: opts.emptyStartHour ?? 6, endHour: opts.emptyEndHour ?? 22 };
+  }
+  let earliest = Infinity;
+  let latest = -Infinity;
+  for (const s of shifts) {
+    earliest = Math.min(earliest, amsHourFloat(s.startsAt));
+    latest = Math.max(latest, amsHourFloat(s.endsAt));
+  }
+  let startHour = Math.max(minHour, Math.floor(earliest));
+  let endHour = Math.min(maxHour, Math.ceil(latest));
+  if (endHour - startHour < minSpan) {
+    endHour = Math.min(maxHour, startHour + minSpan);
+    if (endHour - startHour < minSpan) startHour = Math.max(minHour, endHour - minSpan);
+  }
+  return { startHour, endHour };
+}
+
 function intelInput(row: RosterShiftRow, settings?: Partial<RosterSettings>, now?: Date): ShiftIntelInput {
   return {
     startsAt: row.startsAt,

@@ -248,7 +248,6 @@ export default async function RosterPage({
         city: chefs.city,
         segments: chefs.segments,
         vakniveau: chefs.vakniveau,
-        preferences: chefs.preferences,
       })
       .from(chefs)
       .where(and(isNull(chefs.deletedAt), eq(chefs.status, "active")));
@@ -258,9 +257,9 @@ export default async function RosterPage({
     chefTableRows = free.map((c) => ({
       id: c.id,
       fullName: c.fullName,
-      skills: [c.vakniveau ? humanize(c.vakniveau) : null, ...(c.segments ?? [])].filter(Boolean) as string[],
+      niveau: c.vakniveau ? humanize(c.vakniveau) : null,
+      skills: c.segments ?? [],
       locatie: c.city,
-      voorkeur: c.preferences?.length ? humanize(c.preferences[0]) : null,
     }));
   }
 
@@ -341,7 +340,7 @@ export default async function RosterPage({
 
   return (
     <div className="mx-auto max-w-6xl">
-      <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">Operations</p>
+      <p className="font-ui text-[11px] uppercase tracking-[0.2em] text-burgundy">Operations</p>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-serif text-3xl text-ink-900 md:text-4xl">Rooster</h1>
