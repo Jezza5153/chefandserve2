@@ -24,11 +24,13 @@ import {
 } from "@/lib/domain/dashboard-intel";
 import {
   buildRosterView,
+  chefSlotStatus,
   dagdeelLabel,
   dagdeelOf,
   dayToneOf,
   dienstLabel,
   detectOverlaps,
+  type SlotStatus,
   monthCellFor,
   rosterAiSummary,
   shiftFill,
@@ -191,7 +193,7 @@ export default async function RosterPage({
   }));
 
   /* ── Day extras: chef names per shift · overlaps · free-not-placed supply ── */
-  let chefNamesByShift: Record<string, string[]> = {};
+  let chefSlotsByShift: Record<string, Array<{ name: string; status: SlotStatus }>> = {};
   let availableChefs: AvailableChefRow[] = [];
   let chefTableRows: ChefRow[] = [];
   let overlaps: ReturnType<typeof detectOverlaps> = [];
@@ -206,6 +208,7 @@ export default async function RosterPage({
             shiftId: placements.shiftId,
             chefId: placements.chefId,
             chefName: chefs.fullName,
+            status: placements.status,
             startsAt: shifts.startsAt,
             endsAt: shifts.endsAt,
           })
@@ -215,8 +218,12 @@ export default async function RosterPage({
           .where(and(inArray(placements.shiftId, dayShiftIds), inArray(placements.status, ["accepted", "confirmed"])))
       : [];
 
-    chefNamesByShift = {};
-    for (const p of placementRows) (chefNamesByShift[p.shiftId] ??= []).push(p.chefName);
+    chefSlotsByShift = {};
+    for (const p of placementRows)
+      (chefSlotsByShift[p.shiftId] ??= []).push({
+        name: p.chefName,
+        status: chefSlotStatus(p.status, p.startsAt, p.endsAt, now),
+      });
 
     overlaps = detectOverlaps(
       placementRows.map((p) => ({ chefId: p.chefId, chefName: p.chefName, shiftId: p.shiftId, startsAt: p.startsAt, endsAt: p.endsAt })),
@@ -384,7 +391,7 @@ export default async function RosterPage({
 
       {view === "day" ? (
         <div className="mt-6 space-y-6">
-          <RosterDayTimeline hotels={vmBody.dayHotels ?? []} nowHour={showMarker ? amsHourFloat(now) : null} chefNamesByShift={chefNamesByShift} />
+          <RosterDayTimeline hotels={vmBody.dayHotels ?? []} nowHour={showMarker ? amsHourFloat(now) : null} chefSlotsByShift={chefSlotsByShift} />
           <div className="grid gap-6 lg:grid-cols-2">
             <OpenDienstenTable rows={openRows} total={openTotal} />
             <BeschikbareChefsTable rows={chefTableRows.slice(0, 6)} total={chefTableRows.length} />
