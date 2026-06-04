@@ -469,7 +469,7 @@ export default async function ShiftDetailPage({
 
   async function updateShiftNotes(formData: FormData) {
     "use server";
-    const s = await requireRole("owner");
+    const s = await requireAnyRole(["owner", "planner"]);
     const sid = String(formData.get("shiftId") ?? "").trim();
     if (!sid) return;
     const notes = String(formData.get("notes") ?? "").trim() || null;

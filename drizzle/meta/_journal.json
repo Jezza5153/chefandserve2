@@ -239,6 +239,13 @@
       "when": 1780571283609,
       "tag": "0033_long_vision",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1780605494668,
+      "tag": "0034_chef_notes_and_events",
+      "breakpoints": true
     }
   ]
 }
