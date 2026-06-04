@@ -739,3 +739,26 @@ export function rosterAiSummary(vm: RosterViewModel): {
     },
   };
 }
+
+/* ---------- Day timeline: per-chef lifecycle slot status -----------------
+ * For the Day board's per-chef lane-packed bars. Derived from placement status
+ * + the shift window vs now — NO extra schema. accepted = gepland (said yes,
+ * not locked); confirmed splits by time: bevestigd (future) / gestart (live,
+ * now inside the shift) / uitgeklokt (shift ended).
+ */
+export type SlotStatus = "gepland" | "bevestigd" | "gestart" | "uitgeklokt" | "open";
+
+export function chefSlotStatus(
+  placementStatus: string,
+  startsAt: Date | string,
+  endsAt: Date | string,
+  now: Date,
+): Exclude<SlotStatus, "open"> {
+  if (placementStatus !== "confirmed") return "gepland";
+  const start = new Date(startsAt).getTime();
+  const end = new Date(endsAt).getTime();
+  const t = now.getTime();
+  if (t < start) return "bevestigd";
+  if (t <= end) return "gestart";
+  return "uitgeklokt";
+}
