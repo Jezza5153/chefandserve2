@@ -11,7 +11,7 @@
  * so it ships inert until a human flips the flag.
  *
  * Triggers: chef_birthday (annual; Feb-29 → Feb-28 in common years), id_document_expiry,
- * certificate_expiry, chef_inactivity (availability staleness). custom_date is reserved.
+ * certificate_expiry, chef_inactivity (no recent chef_events activity). custom_date is reserved.
  *
  * Run manually: `npx tsx workers/reminders.ts` (or via supervisor --run-now=reminders).
  */
@@ -134,22 +134,22 @@ async function findCandidates(rule: Rule, today: string): Promise<Candidate[]> {
     }
 
     case "chef_inactivity": {
-      // "Inactive" = active chef with no real booking whose SHIFT falls within the
-      // last `thresholdDays` (or upcoming). We key on shifts.starts_at via a
-      // confirmed/completed placement — the actual work date — NOT placements.created_at
-      // (proposal time, which both misses a chef still working an old recurring
-      // placement and counts a chef who only ever rejected offers).
+      // "Inactive" = active chef (joined > thresholdDays ago, so not brand-new) who has
+      // generated NO activity event in the last thresholdDays. chef_events captures the
+      // chef's OWN actions — accept/reject proposals, submit hours, update availability,
+      // cancel — so "no events" is a direct disengagement signal. This replaces the older
+      // placements-booking proxy, which measured what WE did (booked them), not what the
+      // chef did; a quiet-but-still-on-an-old-recurring-placement chef is now caught.
       const threshold = Number(params.thresholdDays) || 60;
       const rows = (await sql`
         SELECT c.id AS chef_id, c.user_id, c.email, c.full_name
         FROM chefs c
         WHERE c.deleted_at IS NULL AND c.status = 'active'
+          AND c.joined_at < now() - (${threshold} || ' days')::interval
           AND NOT EXISTS (
-            SELECT 1 FROM placements p
-            JOIN shifts s ON s.id = p.shift_id
-            WHERE p.chef_id = c.id
-              AND p.status IN ('confirmed', 'completed')
-              AND s.starts_at > now() - (${threshold} || ' days')::interval
+            SELECT 1 FROM chef_events e
+            WHERE e.chef_id = c.id
+              AND e.occurred_at > now() - (${threshold} || ' days')::interval
           )
       `) as ChefRow[];
       // One inactivity ping per chef per month at most.
@@ -195,7 +195,7 @@ function emailContent(rule: Rule, c: Candidate): { subject: string; body: string
     case "certificate_expiry":
       return { subject: `📄 Certificaat van ${name} verloopt`, body: `Een certificaat van ${name} verloopt op ${when}.` };
     case "chef_inactivity":
-      return { subject: `💤 ${name} is al een tijd inactief`, body: `${name} is al een tijd niet ingepland voor een dienst.` };
+      return { subject: `💤 ${name} is al een tijd inactief`, body: `${name} heeft al een tijd geen activiteit getoond (geen reacties, uren of beschikbaarheid).` };
     default:
       return { subject: `Herinnering: ${rule.name}`, body: `Herinnering voor ${name} (${when}).` };
   }

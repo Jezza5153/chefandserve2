@@ -28,6 +28,7 @@ import {
 } from "@/lib/domain/chef-history";
 import { clientTypeLabel } from "@/lib/domain/client-taxonomy";
 import { getOnboardingReadiness, getProfileCompleteness } from "@/lib/domain/profile-completeness";
+import { getChefReliability } from "@/lib/chef-events";
 import {
   createProfileDataRequest,
   listProfileDataRequests,
@@ -129,10 +130,11 @@ export default async function ChefDetailPage({
 
   // PR-1.6: Chef 360 read model (hours from FINAL hours only · feedback from
   // real ratings · reliability = raw counts).
-  const [workSummary, feedback, recentShifts] = await Promise.all([
+  const [workSummary, feedback, recentShifts, reliability] = await Promise.all([
     getChefWorkSummary(id),
     getChefFeedbackSummary(id),
     getChefRecentShifts(id, 8),
+    getChefReliability(id),
   ]);
 
   // PR-2: profile completeness over the structured intake fields.
@@ -1078,6 +1080,48 @@ export default async function ChefDetailPage({
         <p className="mt-1 text-[10px] text-ink-500">
           Uren uit goedgekeurde urenstaten · betrouwbaarheid uit plaatsingen · beoordelingen uit klantfeedback.
         </p>
+
+        {reliability.totalEvents > 0 ? (
+          <div className="mt-3">
+            <p className="mb-1 font-ui text-[10px] font-medium uppercase tracking-wider text-ink-500">
+              Gedrag · uit activiteitslog ({reliability.totalEvents})
+            </p>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="rounded-full bg-bg-gray px-2.5 py-1 text-ink-700">
+                Acceptatie:{" "}
+                <b className="text-ink-900">
+                  {reliability.acceptanceRate != null
+                    ? `${Math.round(reliability.acceptanceRate * 100)}%`
+                    : "—"}
+                </b>
+                {reliability.proposalsAccepted + reliability.proposalsRejected > 0 ? (
+                  <span className="text-ink-400">
+                    {" "}
+                    ({reliability.proposalsAccepted}/
+                    {reliability.proposalsAccepted + reliability.proposalsRejected})
+                  </span>
+                ) : null}
+              </span>
+              <span className="rounded-full bg-bg-gray px-2.5 py-1 text-ink-700">
+                Reactietijd:{" "}
+                <b className="text-ink-900">
+                  {reliability.avgResponseMinutes != null ? `${reliability.avgResponseMinutes} min` : "—"}
+                </b>
+              </span>
+              <span
+                className={`rounded-full px-2.5 py-1 ${reliability.cancellations > 0 ? "bg-red-50 text-red-700" : "bg-bg-gray text-ink-700"}`}
+              >
+                Zelf geannuleerd: <b>{reliability.cancellations}</b>
+              </span>
+              <span className="rounded-full bg-bg-gray px-2.5 py-1 text-ink-700">
+                Laatste activiteit:{" "}
+                <b className="text-ink-900">
+                  {reliability.lastActivityAt ? fmtNlDate(reliability.lastActivityAt) : "—"}
+                </b>
+              </span>
+            </div>
+          </div>
+        ) : null}
 
         {(workSummary.topClients.length > 0 ||
           workSummary.topSegments.length > 0 ||
