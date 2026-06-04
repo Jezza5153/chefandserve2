@@ -51,6 +51,7 @@ export type FieldDTO = {
   helpText: string | null;
   placeholder: string | null;
   required: boolean;
+  isVisible: boolean;
   isSensitive: boolean;
   options: FieldOption[] | null;
   validation: FieldValidation | null;

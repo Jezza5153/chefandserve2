@@ -27,6 +27,7 @@ export function toFieldDTO(row: DbFormField): FieldDTO {
     helpText: row.helpText,
     placeholder: row.placeholder,
     required: row.required,
+    isVisible: row.isVisible,
     isSensitive: row.isSensitive,
     options: (row.options as FieldOption[] | null) ?? null,
     validation: (row.validation as FieldValidation | null) ?? null,
