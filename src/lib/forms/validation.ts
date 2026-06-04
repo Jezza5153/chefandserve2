@@ -132,23 +132,40 @@ export function validateField(field: FieldDTO, value: FormSubmitValue): string |
   }
 }
 
+function isEmptyValue(value: FormSubmitValue): boolean {
+  return (
+    value === null ||
+    value === undefined ||
+    value === "" ||
+    (Array.isArray(value) && value.length === 0)
+  );
+}
+
 /**
  * Validate a whole form's submitted values. `documentIds` lists the field keys
  * that have an uploaded file (so required file fields can be enforced).
+ * `prefilled` lists field keys whose value is ALREADY stored (e.g. an encrypted
+ * BSN saved earlier shows as an empty input on resume) — an empty value for such
+ * a field is treated as satisfied, not a "required" error.
  * Returns a map of fieldKey → error for every invalid field.
  */
 export function validateForm(
   fields: FieldDTO[],
   values: Record<string, FormSubmitValue>,
   documentIds: Record<string, string | null> = {},
+  prefilled: Set<string> = new Set(),
 ): Record<string, string> {
   const errors: Record<string, string> = {};
   for (const f of fields) {
     if (f.type === "file") {
-      if (f.required && !documentIds[f.key]) errors[f.key] = "Upload een bestand.";
+      if (f.required && !documentIds[f.key] && !prefilled.has(f.key)) {
+        errors[f.key] = "Upload een bestand.";
+      }
       continue;
     }
-    const err = validateField(f, values[f.key] ?? null);
+    const value = values[f.key] ?? null;
+    if (isEmptyValue(value) && prefilled.has(f.key)) continue; // already saved
+    const err = validateField(f, value);
     if (err) errors[f.key] = err;
   }
   return errors;

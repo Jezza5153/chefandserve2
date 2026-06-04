@@ -182,6 +182,28 @@ export default async function ChefHomePage() {
         Hallo {chef.fullName.split(" ")[0]}
       </h1>
 
+      {/* ONBOARDING — finish your data so we can plan + pay you */}
+      {chef.onboardingStatus !== "submitted" ? (
+        <Link
+          href="/chef/onboarding"
+          className="mt-6 flex items-center justify-between gap-3 rounded-lg border-2 border-burgundy/40 bg-burgundy/5 p-5 hover:bg-burgundy/10"
+        >
+          <div>
+            <p className="font-serif text-lg text-ink-900">
+              {chef.onboardingStatus === "in_progress"
+                ? "Maak je onboarding af"
+                : "Rond je onboarding af"}
+            </p>
+            <p className="mt-0.5 text-sm text-ink-700">
+              Vul je gegevens in (ID, IBAN, BSN) zodat we je kunnen inplannen en uitbetalen.
+            </p>
+          </div>
+          <span className="shrink-0 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy">
+            Starten →
+          </span>
+        </Link>
+      ) : null}
+
       {/* VANDAAG */}
       {todayShifts.length > 0 && (
         <section className="mt-8">
