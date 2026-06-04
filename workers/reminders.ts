@@ -134,14 +134,18 @@ async function findCandidates(rule: Rule, today: string): Promise<Candidate[]> {
     }
 
     case "chef_inactivity": {
+      // "Inactive" = active chef we haven't BOOKED in `thresholdDays`. We use the
+      // placements table (a real activity signal) rather than chef_availability —
+      // availability is block-only (absence of a row = available), so its rows are
+      // not a reliable freshness signal.
       const threshold = Number(params.thresholdDays) || 60;
       const rows = (await sql`
         SELECT c.id AS chef_id, c.user_id, c.email, c.full_name
         FROM chefs c
         WHERE c.deleted_at IS NULL AND c.status = 'active'
           AND NOT EXISTS (
-            SELECT 1 FROM chef_availability a
-            WHERE a.chef_id = c.id AND a.created_at > now() - (${threshold} || ' days')::interval
+            SELECT 1 FROM placements p
+            WHERE p.chef_id = c.id AND p.created_at > now() - (${threshold} || ' days')::interval
           )
       `) as ChefRow[];
       // One inactivity ping per chef per month at most.
@@ -160,7 +164,7 @@ async function expandRoleEmails(roleKeys: string[]): Promise<string[]> {
     SELECT DISTINCT u.email FROM users u
     JOIN user_roles ur ON ur.user_id = u.id
     JOIN roles r ON r.id = ur.role_id
-    WHERE r.key = ANY(${roleKeys}) AND u.status = 'active' AND u.email IS NOT NULL
+    WHERE r.key = ANY(${roleKeys}::text[]) AND u.status = 'active' AND u.email IS NOT NULL
   `) as Array<{ email: string }>;
   return rows.map((r) => r.email);
 }
@@ -171,7 +175,7 @@ async function expandRoleUserIds(roleKeys: string[]): Promise<string[]> {
     SELECT DISTINCT u.id FROM users u
     JOIN user_roles ur ON ur.user_id = u.id
     JOIN roles r ON r.id = ur.role_id
-    WHERE r.key = ANY(${roleKeys}) AND u.status = 'active'
+    WHERE r.key = ANY(${roleKeys}::text[]) AND u.status = 'active'
   `) as Array<{ id: string }>;
   return rows.map((r) => r.id);
 }

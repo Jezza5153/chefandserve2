@@ -98,12 +98,13 @@ export function validateField(field: FieldDTO, value: FormSubmitValue): string |
       return null;
     }
     case "date": {
-      const d = new Date(String(value));
-      if (Number.isNaN(d.getTime())) return "Ongeldige datum.";
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (v?.notFuture && d.getTime() > today.getTime()) return "Datum mag niet in de toekomst liggen.";
-      if (v?.notPast && d.getTime() < today.getTime()) return "Datum mag niet in het verleden liggen.";
+      const s = String(value).slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(new Date(s).getTime())) return "Ongeldige datum.";
+      // Compare YYYY-MM-DD strings against UTC "today" — timezone-stable so the
+      // client and the (UTC) server never disagree on the boundary day.
+      const todayStr = new Date().toISOString().slice(0, 10);
+      if (v?.notFuture && s > todayStr) return "Datum mag niet in de toekomst liggen.";
+      if (v?.notPast && s < todayStr) return "Datum mag niet in het verleden liggen.";
       return null;
     }
     case "select":

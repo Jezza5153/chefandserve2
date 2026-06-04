@@ -220,6 +220,10 @@ export async function saveOnboardingDraft(args: {
   if (!chef) return { ok: false, error: "no-chef" };
   const form = await getPublishedForm(ONBOARDING_FORM_SLUG);
   if (!form) return { ok: false, error: "no-form" };
+  // Once submitted, the form is read-only for the chef; corrections go through the
+  // office (preserving the consent + audit trail). Block silent post-submit re-writes
+  // of payroll PII via the draft endpoint.
+  if (chef.onboardingStatus === "submitted") return { ok: false, error: "already-submitted" };
 
   // Validate only the provided fields (so a half-filled draft can still save).
   const fields = flattenFields(form);
@@ -231,8 +235,9 @@ export async function saveOnboardingDraft(args: {
   if (Object.keys(fieldErrors).length > 0) return { ok: false, error: "validation", fieldErrors };
 
   const { chefsUpdate, eavRows } = await buildWriteback(form, chef, args.values);
-  const extra =
-    chef.onboardingStatus === "submitted" ? {} : { onboardingStatus: "in_progress" as const };
+  // The post-submit guard above guarantees we're pre-submit here, so a saved
+  // draft always advances the record to 'in_progress'.
+  const extra = { onboardingStatus: "in_progress" as const };
   await persist(chef, chefsUpdate, eavRows, extra, args.userId, "chef.onboarding_draft_saved");
   return { ok: true, saved: Object.keys(chefsUpdate).length + eavRows.length };
 }

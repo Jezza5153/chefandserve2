@@ -18,10 +18,12 @@ import { validateForm } from "@/lib/forms/validation";
 
 export const APPLY_FORM_SLUG = "chef-apply";
 
+const MAX_FIELD_LEN = 2000;
+
 function str(v: FormSubmitValue): string | null {
   if (v === null || v === undefined) return null;
   const s = String(v).trim();
-  return s || null;
+  return s ? s.slice(0, MAX_FIELD_LEN) : null;
 }
 
 export async function submitApplication(args: {
@@ -37,6 +39,21 @@ export async function submitApplication(args: {
   const fieldErrors = validateForm(fields, args.values);
   if (Object.keys(fieldErrors).length > 0) return { ok: false, error: "validation", fieldErrors };
 
+  // Harden this PUBLIC endpoint: keep only known form-field keys in raw_payload
+  // and clamp string length — defends against direct POSTs with junk / oversized
+  // / unexpected keys (storage abuse + accidental over-collection).
+  const allowedKeys = new Set(fields.map((f) => f.key));
+  const sanitized: Record<string, FormSubmitValue> = {};
+  for (const [k, val] of Object.entries(args.values)) {
+    if (!allowedKeys.has(k)) continue;
+    sanitized[k] =
+      typeof val === "string"
+        ? val.slice(0, MAX_FIELD_LEN)
+        : Array.isArray(val)
+          ? val.slice(0, 50).map((x) => String(x).slice(0, MAX_FIELD_LEN))
+          : val;
+  }
+
   const applyingRaw = str(args.values.applying_as);
   const employmentRaw = str(args.values.employment_type);
   const applyingAs = applyingRaw === "chef" || applyingRaw === "front_of_house" ? applyingRaw : null;
@@ -48,7 +65,7 @@ export async function submitApplication(args: {
     .values({
       externalId: `native_${crypto.randomUUID()}`,
       source: "native_apply",
-      rawPayload: args.values,
+      rawPayload: sanitized,
       fullName: str(args.values.full_name),
       email: str(args.values.email)?.toLowerCase() ?? null,
       phone: str(args.values.phone),

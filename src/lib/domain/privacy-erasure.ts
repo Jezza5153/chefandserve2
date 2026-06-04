@@ -266,6 +266,9 @@ export async function eraseUserData(args: {
           postcode: null,
           latitude: null,
           longitude: null,
+          // PR-2 low-sensitivity intake PII.
+          transportMode: null,
+          preferences: null,
           // PR-FB: native onboarding PII (incl. encrypted BSN/IBAN/ID) — erase all.
           firstName: null,
           infix: null,
