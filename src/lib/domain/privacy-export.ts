@@ -34,6 +34,7 @@ import { withTx } from "@/lib/db/tx";
 import {
   chefAvailability,
   chefDocuments,
+  chefFieldValues,
   chefSubmissions,
   chefs,
   clientContacts,
@@ -59,6 +60,7 @@ import {
   putObject,
   r2IsConfigured,
 } from "@/lib/r2";
+import { decryptPii } from "@/lib/crypto";
 
 import {
   getLegalHoldsForUser,
@@ -101,6 +103,16 @@ export type CollectedExport = {
 
 /* ----- collect (allow-listed projection) ----------------------------------- */
 
+/** Decrypt a stored PII ciphertext for the subject's OWN export. Never throws. */
+async function safeDecrypt(ct: string | null): Promise<string | null> {
+  if (!ct) return null;
+  try {
+    return await decryptPii(ct);
+  } catch {
+    return "(versleuteld — neem contact op met kantoor)";
+  }
+}
+
 export async function collectUserData(
   subject: DataSubject,
 ): Promise<CollectedExport> {
@@ -125,9 +137,13 @@ export async function collectUserData(
   if (subject.kind === "chef" && subject.chefId) {
     const chefId = subject.chefId;
 
-    const [profile] = await db
+    const [profileRow] = await db
       .select({
         fullName: chefs.fullName,
+        firstName: chefs.firstName,
+        infix: chefs.infix,
+        surname: chefs.surname,
+        initials: chefs.initials,
         email: chefs.email,
         phone: chefs.phone,
         city: chefs.city,
@@ -148,6 +164,27 @@ export async function collectUserData(
         preferences: chefs.preferences,
         employmentType: chefs.employmentType,
         applyingAs: chefs.applyingAs,
+        // PR-FB: native onboarding data — the subject's own data (art. 20).
+        dateOfBirth: chefs.dateOfBirth,
+        gender: chefs.gender,
+        nationality: chefs.nationality,
+        placeOfResidence: chefs.placeOfResidence,
+        country: chefs.country,
+        idType: chefs.idType,
+        idExpiresAt: chefs.idExpiresAt,
+        bankAccountHolderName: chefs.bankAccountHolderName,
+        loonheffingskorting: chefs.loonheffingskorting,
+        stippParticipated: chefs.stippParticipated,
+        stippMonths: chefs.stippMonths,
+        workedForClientLast6mo: chefs.workedForClientLast6mo,
+        ownTransport: chefs.ownTransport,
+        bio: chefs.bio,
+        likesMost: chefs.likesMost,
+        recentVenues: chefs.recentVenues,
+        // encrypted at rest — decrypted below for the subject's OWN export.
+        bsnEncrypted: chefs.bsnEncrypted,
+        ibanEncrypted: chefs.ibanEncrypted,
+        idNumberEncrypted: chefs.idNumberEncrypted,
         // ratings aggregate ONLY (never individual klant comments/authors).
         averageRating: chefs.averageRating,
         ratingCount: chefs.ratingCount,
@@ -155,9 +192,22 @@ export async function collectUserData(
       .from(chefs)
       .where(eq(chefs.id, chefId))
       .limit(1);
-    if (profile) sections.profile = profile;
+    let profile: Record<string, unknown> | undefined;
+    if (profileRow) {
+      const { bsnEncrypted, ibanEncrypted, idNumberEncrypted, ...rest } = profileRow;
+      profile = {
+        ...rest,
+        bsn: await safeDecrypt(bsnEncrypted),
+        iban: await safeDecrypt(ibanEncrypted),
+        idNumber: await safeDecrypt(idNumberEncrypted),
+      };
+      sections.profile = profile;
+    }
     redactionsApplied.push(
       "Interne notities over jou (chefs.notes) en je Payingit-id zijn niet opgenomen (interne beoordeling/administratie).",
+    );
+    redactionsApplied.push(
+      "Je gevoelige onboardinggegevens (BSN, IBAN, ID-nummer) zijn ONTSLEUTELD in dit pakket opgenomen — dit is jouw eigen data (art. 20). Bewaar het pakket veilig.",
     );
 
     sections.availability = await db
@@ -256,6 +306,29 @@ export async function collectUserData(
       );
     redactionsApplied.push(
       "Interne opmerkingen (visibility=internal) bij plaatsingen zijn nooit opgenomen.",
+    );
+
+    // PR-FB: the subject's own custom onboarding answers (EAV). Decrypt sensitive ones.
+    const cfvRows = await db
+      .select({
+        field: chefFieldValues.fieldKey,
+        valueText: chefFieldValues.valueText,
+        valueNumber: chefFieldValues.valueNumber,
+        valueBoolean: chefFieldValues.valueBoolean,
+        valueDate: chefFieldValues.valueDate,
+        valueJson: chefFieldValues.valueJson,
+        isEncrypted: chefFieldValues.isEncrypted,
+      })
+      .from(chefFieldValues)
+      .where(eq(chefFieldValues.chefId, chefId));
+    sections.onboardingExtra = await Promise.all(
+      cfvRows.map(async (r) => ({
+        field: r.field,
+        value:
+          r.isEncrypted && r.valueText
+            ? await safeDecrypt(r.valueText)
+            : (r.valueText ?? r.valueNumber ?? r.valueBoolean ?? r.valueDate ?? r.valueJson ?? null),
+      })),
     );
   }
 

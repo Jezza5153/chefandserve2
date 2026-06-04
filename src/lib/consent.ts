@@ -16,6 +16,9 @@ import { consentLog } from "@/lib/db/schema";
 export const CURRENT_VERSIONS = {
   chef: "gegevensgebruik_chef_v1",
   client: "gegevensgebruik_klant_v1",
+  // PR-FB: consent for processing special-category onboarding PII (BSN/IBAN/ID).
+  // Recorded at Stage-2 onboarding submit; not gated by the ConsentGate.
+  chef_onboarding: "verwerking_bijzondere_gegevens_chef_v1",
 } as const;
 
 export type ConsentKind = keyof typeof CURRENT_VERSIONS;

@@ -309,8 +309,9 @@ export async function submitOnboarding(args: {
     "chef.onboarding_submitted",
   );
 
-  // Consent for processing special-category onboarding PII (outside the tx).
+  // Consent (outside the tx): general chef consent + special-category PII (BSN/IBAN/ID).
   await recordConsent({ userId: args.userId, kind: "chef", ip: args.ip, userAgent: args.userAgent });
+  await recordConsent({ userId: args.userId, kind: "chef_onboarding", ip: args.ip, userAgent: args.userAgent });
 
   return { ok: true };
 }
