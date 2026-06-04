@@ -108,3 +108,81 @@ export async function getPlannerCockpit(now: Date = new Date()): Promise<Planner
     topMatch,
   };
 }
+
+/* ----- PLANNER-2: mini-reporting (deterministic, noise-guarded) ----------- */
+
+function execRows<T>(r: unknown): T[] {
+  return Array.isArray(r) ? (r as T[]) : ((r as { rows?: T[] }).rows ?? []);
+}
+
+/** Self-contained noise guard (baseline 5) — no cross-module dep, so PLANNER-2 lands on main independent of the KPI branch. */
+export type IntakeDelta = {
+  mode: "arrow" | "plain" | "hidden";
+  dir: "up" | "down" | "flat";
+  diff: number;
+  previous: number;
+};
+function intakeGuard(current: number, previous: number): IntakeDelta {
+  const diff = current - previous;
+  const dir = diff > 0 ? "up" : diff < 0 ? "down" : "flat";
+  const mode = previous >= 5 ? "arrow" : previous > 0 ? "plain" : "hidden";
+  return { mode, dir, diff, previous };
+}
+
+export type PlannerReport = {
+  intakeThis7d: number;
+  intakePrev7d: number;
+  intakeDelta: IntakeDelta; // this 7d vs prior 7d, noise-guarded (baseline 5)
+  fillRate30d: number | null; // realized fill over the last 30 days
+  fillFilled: number;
+  fillSlots: number;
+  medianResponseMin: number | null; // median chef response (proposal events) last 30d
+};
+
+export async function getPlannerReport(): Promise<PlannerReport> {
+  const [intakeRes, fillRes, medRes] = await Promise.all([
+    db.execute(sql`
+      SELECT
+        count(*) FILTER (WHERE created_at >= now() - interval '7 days')::int AS this,
+        count(*) FILTER (WHERE created_at >= now() - interval '14 days' AND created_at < now() - interval '7 days')::int AS prev
+      FROM (
+        SELECT created_at FROM chef_submissions
+        UNION ALL SELECT created_at FROM client_submissions
+      ) s
+      WHERE created_at >= now() - interval '14 days'
+    `),
+    db.execute(sql`
+      SELECT coalesce(sum(headcount), 0)::int AS slots, coalesce(sum(filled), 0)::int AS filled FROM (
+        SELECT s.headcount,
+          least((SELECT count(*) FROM placements p WHERE p.shift_id = s.id AND p.status IN ('confirmed','completed')), s.headcount)::int AS filled
+        FROM shifts s
+        WHERE s.starts_at >= now() - interval '30 days' AND s.starts_at <= now()
+      ) t
+    `),
+    db.execute(sql`
+      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY response_seconds) AS med
+      FROM chef_events
+      WHERE occurred_at >= now() - interval '30 days'
+        AND event_type IN ('proposal_accepted','proposal_rejected')
+        AND response_seconds IS NOT NULL
+    `),
+  ]);
+
+  const intake = execRows<{ this: number; prev: number }>(intakeRes)[0] ?? { this: 0, prev: 0 };
+  const fill = execRows<{ slots: number; filled: number }>(fillRes)[0] ?? { slots: 0, filled: 0 };
+  const med = execRows<{ med: number | null }>(medRes)[0]?.med ?? null;
+  const slots = Number(fill.slots);
+  const filled = Number(fill.filled);
+  const intakeThis7d = Number(intake.this);
+  const intakePrev7d = Number(intake.prev);
+
+  return {
+    intakeThis7d,
+    intakePrev7d,
+    intakeDelta: intakeGuard(intakeThis7d, intakePrev7d),
+    fillRate30d: slots > 0 ? filled / slots : null,
+    fillFilled: filled,
+    fillSlots: slots,
+    medianResponseMin: med != null ? Math.round(Number(med) / 60) : null,
+  };
+}

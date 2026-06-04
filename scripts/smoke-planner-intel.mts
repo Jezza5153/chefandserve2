@@ -31,7 +31,7 @@ const U1 = uuid(); const U2 = uuid(); const F7 = uuid();
 console.log("=== PLANNER-1 planner-intel smoke ===\n");
 
 console.log("── isolate + seed ──");
-await sql`TRUNCATE TABLE shifts CASCADE`;
+await sql`TRUNCATE TABLE shifts, chef_events CASCADE`;
 await sql`INSERT INTO chefs (id, full_name, status) VALUES (${A}, ${`SMOKE PL A ${ts}`}, 'active'), (${B}, ${`SMOKE PL B ${ts}`}, 'active')`;
 await sql`INSERT INTO clients (id, company_name, status) VALUES (${K}, ${`SMOKE PL Hotel ${ts}`}, 'active')`;
 await sql`INSERT INTO shifts (id, client_id, starts_at, ends_at, role_needed, segment, status, headcount) VALUES
@@ -42,6 +42,14 @@ await sql`INSERT INTO shifts (id, client_id, starts_at, ends_at, role_needed, se
 await sql`INSERT INTO placements (id, shift_id, chef_id, status) VALUES
   (${uuid()}, ${U1}, ${A}, 'confirmed'),
   (${uuid()}, ${U2}, ${B}, 'accepted')`;
+// PLANNER-2 fixtures: a PAST shift (5d ago, hc2, 1 confirmed → 30d fill 1/2) + 2 response events (median 120s).
+const pastShift = uuid();
+await sql`INSERT INTO shifts (id, client_id, starts_at, ends_at, role_needed, segment, status, headcount) VALUES
+  (${pastShift}, ${K}, now()-interval '5 days', now()-interval '5 days'+interval '5h', 'chef_de_partie', 'hotel', 'completed', 2)`;
+await sql`INSERT INTO placements (id, shift_id, chef_id, status) VALUES (${uuid()}, ${pastShift}, ${A}, 'confirmed')`;
+await sql`INSERT INTO chef_events (chef_id, event_type, response_seconds, occurred_at) VALUES
+  (${A}, 'proposal_accepted', 60,  now()-interval '3 days'),
+  (${A}, 'proposal_accepted', 180, now()-interval '2 days')`;
 assert("seed complete", true);
 
 console.log("\n── getPlannerCockpit ──");
@@ -56,6 +64,13 @@ assert("open7dCount = 3 (U1+U2+F7)", c.open7dCount === 3, String(c.open7dCount))
 assert("topMatch targets U1", c.topMatch?.shift.id === U1, c.topMatch?.shift.id);
 assert("topMatch.matches is an array", Array.isArray(c.topMatch?.matches));
 assert("intake fields are numbers", typeof c.intake.total === "number" && typeof c.intake.chefs === "number");
+
+console.log("\n── getPlannerReport ──");
+const r = await h.getPlannerReport();
+assert("fillRate30d = 0.5 (1/2)", r.fillRate30d === 0.5, `${r.fillFilled}/${r.fillSlots}`);
+assert("medianResponseMin = 2 (median of 60,180s)", r.medianResponseMin === 2, String(r.medianResponseMin));
+assert("intake fields are numbers", typeof r.intakeThis7d === "number" && typeof r.intakePrev7d === "number");
+assert("intakeDelta has a valid mode", ["arrow", "plain", "hidden"].includes(r.intakeDelta.mode));
 
 console.log(`\n─────────────────────────────\n  ✓ pass: ${pass}\n  ✗ fail: ${fail}`);
 if (fail > 0) process.exit(1);

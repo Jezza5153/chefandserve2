@@ -9,7 +9,7 @@ import Link from "next/link";
 
 import { Icon } from "@/components/admin/icons";
 import { OpsCard } from "@/components/dashboard/OpsCard";
-import { getPlannerCockpit } from "@/lib/domain/planner-intel";
+import { getPlannerCockpit, getPlannerReport } from "@/lib/domain/planner-intel";
 import { formatChefRole } from "@/lib/labels";
 import { requireAnyRole } from "@/lib/permissions";
 
@@ -28,7 +28,16 @@ const fmtWhen = (d: Date) =>
 
 export default async function PlanningPage() {
   await requireAnyRole(["owner", "planner"]);
-  const c = await getPlannerCockpit();
+  const [c, report] = await Promise.all([getPlannerCockpit(), getPlannerReport()]);
+  const d = report.intakeDelta;
+  const intakeLine =
+    d.mode === "arrow"
+      ? d.dir === "flat"
+        ? "gelijk aan vorige week"
+        : `${d.dir === "up" ? "▲" : "▼"} ${Math.abs(d.diff)} vs vorige week`
+      : d.mode === "plain"
+        ? `vorige week: ${d.previous}`
+        : "nieuw deze week";
 
   return (
     <div className="max-w-5xl">
@@ -81,6 +90,34 @@ export default async function PlanningPage() {
           href="/admin/business/shifts"
           cta="Diensten"
           lines={[{ text: "onderbezette diensten deze week", tone: "muted" }]}
+        />
+      </div>
+
+      {/* PLANNER-2: mini-reporting — deterministic, noise-guarded */}
+      <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        <OpsCard
+          icon="inbox"
+          label="Intake · deze week"
+          value={report.intakeThis7d}
+          href="/admin/business/inbox"
+          cta="Inbox"
+          lines={[{ text: intakeLine, tone: "muted" }]}
+        />
+        <OpsCard
+          icon="check-circle"
+          label="Bezetting · 30 dagen"
+          value={report.fillRate30d != null ? `${Math.round(report.fillRate30d * 100)}%` : "—"}
+          href="/admin/business/roster?view=week"
+          cta="Rooster"
+          lines={[{ text: `${report.fillFilled}/${report.fillSlots} plekken bevestigd`, tone: "muted" }]}
+        />
+        <OpsCard
+          icon="clock"
+          label="Mediane reactietijd"
+          value={report.medianResponseMin != null ? `${report.medianResponseMin} min` : "—"}
+          href="/admin/business/chefs"
+          cta="Chefs"
+          lines={[{ text: "chef-reactie op voorstellen (30d)", tone: "muted" }]}
         />
       </div>
 
