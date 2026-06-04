@@ -22,11 +22,13 @@ export function RosterMonthHeatmap({
   todayKey,
   topHotels = [],
   roleShortage = [],
+  hotelsMetAandacht,
 }: {
   cells: MonthDayCell[];
   todayKey: string;
   topHotels?: { companyName: string; shiftCount: number; openSlots: number }[];
   roleShortage?: { dagdeel: Dagdeel; open: number }[];
+  hotelsMetAandacht?: { count: number; names: string[] };
 }) {
   return (
     <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
@@ -102,6 +104,18 @@ export function RosterMonthHeatmap({
             </ul>
           )}
         </section>
+
+        {hotelsMetAandacht && hotelsMetAandacht.count > 0 ? (
+          <section className="rounded-lg border border-ink-200 bg-white p-4">
+            <h2 className="font-ui text-[10px] uppercase tracking-[0.16em] text-burgundy">Hotels met aandacht</h2>
+            <p className="mt-2 text-sm text-ink-900">
+              <b>{hotelsMetAandacht.count}</b> {hotelsMetAandacht.count === 1 ? "hotel" : "hotels"} met open of kritieke diensten
+            </p>
+            {hotelsMetAandacht.names.length > 0 ? (
+              <p className="mt-1 text-[11px] text-ink-500">{hotelsMetAandacht.names.join(" · ")}</p>
+            ) : null}
+          </section>
+        ) : null}
       </div>
     </div>
   );
