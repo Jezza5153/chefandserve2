@@ -13,10 +13,11 @@
  *   - Force password reset
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { recordAuditFromRequest } from "@/lib/audit";
 import { db } from "@/lib/db/client";
 import { roles, userRoles, users } from "@/lib/db/schema";
 import { resetInternalUser2FA } from "@/lib/domain/auth-admin";
@@ -58,12 +59,82 @@ async function reset2FA(formData: FormData) {
   redirect(`/admin/system/users/${targetUserId}?reset=1`);
 }
 
+async function manageRoles(formData: FormData) {
+  "use server";
+  const session = await requireRole("super_admin", "/admin/system/users", {
+    strict: true,
+  });
+
+  const targetUserId = String(formData.get("targetUserId") ?? "");
+  const selected = formData.getAll("roleKey").map(String);
+
+  const target = await db.query.users.findFirst({ where: eq(users.id, targetUserId) });
+  if (!target) redirect(`/admin/system/users/${targetUserId}?error=not-found`);
+
+  const allRoles = await db.select().from(roles);
+  const allowed = new Set(allRoles.map((r) => r.key));
+  const selectedSet = new Set(selected.filter((k) => allowed.has(k)));
+
+  const currentRows = await db
+    .select({ key: roles.key, roleId: userRoles.roleId })
+    .from(userRoles)
+    .innerJoin(roles, eq(roles.id, userRoles.roleId))
+    .where(eq(userRoles.userId, targetUserId));
+  const currentKeys = new Set(currentRows.map((r) => r.key));
+
+  // Guard: never remove the last super_admin.
+  if (currentKeys.has("super_admin") && !selectedSet.has("super_admin")) {
+    const supers = await db
+      .select({ userId: userRoles.userId })
+      .from(userRoles)
+      .innerJoin(roles, eq(roles.id, userRoles.roleId))
+      .where(eq(roles.key, "super_admin"));
+    if (supers.length <= 1) {
+      redirect(
+        `/admin/system/users/${targetUserId}?error=${encodeURIComponent("Kan de laatste super_admin niet verwijderen.")}`,
+      );
+    }
+  }
+
+  const roleIdByKey = new Map(allRoles.map((r) => [r.key, r.id] as const));
+  for (const key of selectedSet) {
+    if (!currentKeys.has(key)) {
+      const rid = roleIdByKey.get(key);
+      if (rid) {
+        await db.insert(userRoles).values({ userId: targetUserId, roleId: rid }).onConflictDoNothing();
+      }
+    }
+  }
+  for (const row of currentRows) {
+    if (!selectedSet.has(row.key)) {
+      await db
+        .delete(userRoles)
+        .where(and(eq(userRoles.userId, targetUserId), eq(userRoles.roleId, row.roleId)));
+    }
+  }
+
+  // Bump permissionsVersion so the target's JWT invalidates on their next request.
+  await db
+    .update(users)
+    .set({ permissionsVersion: target.permissionsVersion + 1, updatedAt: new Date() })
+    .where(eq(users.id, targetUserId));
+
+  await recordAuditFromRequest({
+    userId: session.user.id,
+    action: "user.roles_updated",
+    resource: "users",
+    resourceId: targetUserId,
+    after: { roles: [...selectedSet] },
+  });
+  redirect(`/admin/system/users/${targetUserId}?roles=1`);
+}
+
 export default async function UserDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ reset?: string; error?: string }>;
+  searchParams: Promise<{ reset?: string; error?: string; roles?: string }>;
 }) {
   const session = await requireRole("super_admin", undefined, { strict: true });
   const { id } = await params;
@@ -80,6 +151,9 @@ export default async function UserDetailPage({
     .innerJoin(roles, eq(roles.id, userRoles.roleId))
     .where(eq(userRoles.userId, user.id));
 
+  const allRoles = await db.select({ key: roles.key, label: roles.label }).from(roles);
+  const currentRoleKeys = new Set(userRoleRows.map((r) => r.key));
+
   // Count active super_admins so we can warn if the target is the only one
   const allSuperAdmins = await db
     .select({ userId: userRoles.userId })
@@ -94,7 +168,9 @@ export default async function UserDetailPage({
 
   const flashMsg = sp.reset === "1"
     ? `✓ 2FA gereset voor ${user.email}. Bij hun volgende request worden ze uitgelogd en moeten ze opnieuw een wachtwoord + 2FA instellen.`
-    : null;
+    : sp.roles === "1"
+      ? `✓ Rollen bijgewerkt voor ${user.email}. De sessie wordt bij hun volgende request vernieuwd.`
+      : null;
 
   const errorMsg =
     sp.error === "confirmation-mismatch"
@@ -206,6 +282,39 @@ export default async function UserDetailPage({
               className="rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
             >
               Reset 2FA
+            </button>
+          </form>
+        </section>
+      ) : null}
+
+      {/* Rollen beheren — PR-PLAN. super_admin only (page is super_admin-gated). */}
+      {user.kind === "internal" ? (
+        <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
+          <h2 className="font-serif text-xl text-ink-900">Rollen beheren</h2>
+          <p className="mt-2 text-sm leading-relaxed text-ink-700">
+            Bepaal wat deze medewerker mag. <strong>Planner</strong> = chefs, rooster/shifts, formulieren
+            &amp; herinneringen. <strong>Owner</strong> = volledige business. <strong>Super admin</strong> =
+            alles incl. systeembeheer.
+          </p>
+          <form action={manageRoles} className="mt-4 space-y-2">
+            <input type="hidden" name="targetUserId" value={user.id} />
+            {allRoles.map((r) => (
+              <label key={r.key} className="flex items-center gap-2 text-sm text-ink-800">
+                <input
+                  type="checkbox"
+                  name="roleKey"
+                  value={r.key}
+                  defaultChecked={currentRoleKeys.has(r.key)}
+                  className="h-4 w-4 rounded border-ink-300 text-burgundy focus:ring-burgundy"
+                />
+                {r.label} <span className="text-ink-400">({r.key})</span>
+              </label>
+            ))}
+            <button
+              type="submit"
+              className="mt-2 rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
+            >
+              Rollen opslaan
             </button>
           </form>
         </section>

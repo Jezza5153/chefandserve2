@@ -140,3 +140,32 @@
 - Erasure + export are implemented in `src/lib/domain/privacy-{export,erasure,subject}.ts`. The redaction
   allow-list above is enforced there and covered by `scripts/smoke-avg-erasure.mts` (30 assertions:
   own-data present + 5 third-party fixtures excluded + legal-hold preservation + tombstone).
+
+## PR-FB: native onboarding PII (chefs + form-builder)
+
+The native onboarding (replacing Jotform) adds these to `chefs` and feeds the EAV table `chef_field_values`:
+
+- **Encrypted at rest (AES-256-GCM, `PII_ENCRYPTION_KEY`, `src/lib/crypto.ts`):** `bsn_encrypted`,
+  `iban_encrypted`, `id_number_encrypted`. Never plaintext in the DB, never logged, never sent to the client
+  (masked `•••• 1234` echo only). Decrypted ONLY for (a) the subject's own DSAR export and (b) payroll use.
+- **Plaintext PII columns:** name parts (`first_name`/`infix`/`surname`/`initials`), `date_of_birth`, `gender`,
+  `nationality`, `place_of_residence`, `country`, `id_type`, `id_expires_at`, `bank_account_holder_name`,
+  `loonheffingskorting`, `stipp_participated`, `stipp_months`, `worked_for_client_last_6mo`, `own_transport`,
+  `bio`, `likes_most`, `recent_venues`.
+- **`chef_field_values`** — planner-added custom questions. Per-field `is_sensitive` ⇒ `value_text` is encrypted.
+- **New `chef_documents` types:** `bsn_registration`, `id_copy_front`, `id_copy_back`, `bank_card` (+ existing
+  `photo`/`cv`). Internal by default (`client_visible=false`); access only via short-lived presigned URLs.
+
+**Erasure** (`privacy-erasure.ts`): all the above `chefs` columns are nulled in the chef `.set({...})` and the
+chef's `chef_field_values` rows are deleted; the existing `chef_documents` soft-delete + R2 purge already covers
+the new document types.
+
+**Export** (`privacy-export.ts`): the subject's own onboarding fields are included in `personal-data.json` —
+the three encrypted fields are **decrypted** for the subject (art. 20), custom EAV answers included (sensitive
+ones decrypted), documents as a presigned manifest only. BSN/IBAN/ID numbers are NEVER exported to a third party.
+
+**Consent** (`src/lib/consent.ts`): Stage-2 submit records both `gegevensgebruik_chef_v1` and
+`verwerking_bijzondere_gegevens_chef_v1` (special-category processing).
+
+**Retention:** onboarding PII tied to payroll (BSN/IBAN + anything feeding `shift_hours`/`payroll_batches`)
+inherits the ~7-year fiscale bewaarplicht legal hold; the rest is erasable with the chef record.

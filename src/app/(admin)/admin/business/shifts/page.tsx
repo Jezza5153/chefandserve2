@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { clients, shifts } from "@/lib/db/schema";
-import { requireRole } from "@/lib/permissions";
+import { requireAnyRole } from "@/lib/permissions";
 
 export const metadata = { title: "Shifts" };
 
@@ -14,7 +14,7 @@ export default async function ShiftsListPage({
 }: {
   searchParams: Promise<{ tab?: Tab }>;
 }) {
-  await requireRole("owner");
+  await requireAnyRole(["owner", "planner"]);
   const params = await searchParams;
   const tab: Tab = params.tab ?? "upcoming";
   const now = new Date();

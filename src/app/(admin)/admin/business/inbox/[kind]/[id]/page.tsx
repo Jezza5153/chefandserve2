@@ -12,7 +12,7 @@ import {
   convertChefSubmission,
   convertClientSubmission,
 } from "@/lib/domain/conversions";
-import { requireRole } from "@/lib/permissions";
+import { requireAnyRole } from "@/lib/permissions";
 
 export const metadata = { title: "Aanmelding" };
 
@@ -23,7 +23,7 @@ export default async function InboxDetailPage({
 }: {
   params: Promise<Params>;
 }) {
-  await requireRole("owner");
+  await requireAnyRole(["owner", "planner"]);
   const { kind, id } = await params;
 
   if (kind !== "chef" && kind !== "client") notFound();
@@ -108,7 +108,7 @@ export default async function InboxDetailPage({
   /* ----- server actions ----------------------------------- */
   async function markTriaged() {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const table = kind === "chef" ? chefSubmissions : clientSubmissions;
     await db
       .update(table)
@@ -125,7 +125,7 @@ export default async function InboxDetailPage({
 
   async function markRejected(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const reason = (formData.get("reason") as string | null)?.trim() || null;
     const table = kind === "chef" ? chefSubmissions : clientSubmissions;
     await db
@@ -150,7 +150,7 @@ export default async function InboxDetailPage({
 
   async function markConverted() {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     if (kind === "chef") {
       const { chefId } = await convertChefSubmission(id, session.user.id);
       redirect(`/admin/business/chefs/${chefId}`);

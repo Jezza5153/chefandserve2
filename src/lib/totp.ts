@@ -18,38 +18,17 @@
 import * as OTPAuth from "otpauth";
 import { toDataURL } from "qrcode";
 
-const ALG: AesGcmParams["name"] = "AES-GCM";
-const IV_LEN = 12;
+import { makeCipher } from "@/lib/crypto";
+
 const ISSUER = "Chef & Serve";
 
-function getRawKey(): string {
-  const k = process.env.TOTP_ENCRYPTION_KEY;
-  if (!k) {
-    throw new Error(
-      "TOTP_ENCRYPTION_KEY is not set. Generate one via " +
-        "`openssl rand -base64 32` and add to Vercel env.",
-    );
-  }
-  return k;
-}
-
-let cachedKey: Promise<CryptoKey> | null = null;
-function getAesKey(): Promise<CryptoKey> {
-  if (cachedKey) return cachedKey;
-  cachedKey = (async () => {
-    // Derive 32-byte key via SHA-256 of the env var
-    const raw = new TextEncoder().encode(getRawKey());
-    const digest = await crypto.subtle.digest("SHA-256", raw);
-    return crypto.subtle.importKey(
-      "raw",
-      digest,
-      { name: ALG, length: 256 },
-      false,
-      ["encrypt", "decrypt"],
-    );
-  })();
-  return cachedKey;
-}
+/**
+ * The TOTP-secret cipher. Bound to TOTP_ENCRYPTION_KEY via a static getter so
+ * Next inlines the env reference for the middleware/edge bundle. Same algorithm,
+ * format, and key as before the src/lib/crypto.ts extraction (PR-FB-0) — existing
+ * stored `users.totp_secret_encrypted` values keep decrypting unchanged.
+ */
+const totpCipher = makeCipher(() => process.env.TOTP_ENCRYPTION_KEY, "TOTP_ENCRYPTION_KEY");
 
 /* ---------- secret generation ---------------------------------------- */
 
@@ -61,54 +40,17 @@ export function generateSecret(): string {
 }
 
 /* ---------- AES-256-GCM symmetric encryption ------------------------- */
+// Delegated to the shared cipher in src/lib/crypto.ts (extracted PR-FB-0).
+// Format/algorithm/key unchanged, so previously-stored secrets still decrypt.
 
-function bufToBase64(buf: ArrayBuffer | Uint8Array): string {
-  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-  let s = "";
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-  // btoa is available in Edge + Node 18+
-  return btoa(s);
+/** Encrypt a base32 TOTP secret for storage in users.totp_secret_encrypted. */
+export function encryptSecret(plaintextBase32: string): Promise<string> {
+  return totpCipher.encrypt(plaintextBase32);
 }
 
-function base64ToBuf(b64: string): Uint8Array {
-  const s = atob(b64);
-  const out = new Uint8Array(s.length);
-  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
-  return out;
-}
-
-export async function encryptSecret(plaintextBase32: string): Promise<string> {
-  const key = await getAesKey();
-  const iv = new Uint8Array(IV_LEN);
-  crypto.getRandomValues(iv);
-  const cipherBuf = await crypto.subtle.encrypt(
-    { name: ALG, iv },
-    key,
-    new TextEncoder().encode(plaintextBase32),
-  );
-  const cipherBytes = new Uint8Array(cipherBuf);
-  const combined = new Uint8Array(iv.length + cipherBytes.length);
-  combined.set(iv, 0);
-  combined.set(cipherBytes, iv.length);
-  return bufToBase64(combined);
-}
-
-export async function decryptSecret(encrypted: string): Promise<string> {
-  const all = base64ToBuf(encrypted);
-  if (all.length < IV_LEN + 16 + 1) {
-    throw new Error("encrypted TOTP secret too short — likely corrupted");
-  }
-  const iv = all.slice(0, IV_LEN);
-  const ciphertext = all.slice(IV_LEN);
-  const key = await getAesKey();
-  // Copy ciphertext to a fresh ArrayBuffer so TS doesn't complain about
-  // possibly-shared ArrayBufferLike.
-  const buf = await crypto.subtle.decrypt(
-    { name: ALG, iv },
-    key,
-    ciphertext.slice().buffer,
-  );
-  return new TextDecoder().decode(buf);
+/** Decrypt a stored TOTP secret back to base32. */
+export function decryptSecret(encrypted: string): Promise<string> {
+  return totpCipher.decrypt(encrypted);
 }
 
 /* ---------- TOTP code verify ----------------------------------------- */

@@ -23,12 +23,13 @@ import type { Session } from "next-auth";
 
 /* ------------------------------------------------------------------------- */
 
-export type RoleKey = "super_admin" | "owner" | (string & {}); // open for future roles
+export type RoleKey = "super_admin" | "owner" | "planner" | (string & {}); // open for future roles
 
 /** Default landing path per role. Used after login. */
 export function defaultLandingFor(roleKeys: string[]): string {
   if (roleKeys.includes("super_admin")) return "/admin/system";
   if (roleKeys.includes("owner")) return "/admin/business";
+  if (roleKeys.includes("planner")) return "/admin/business";
   if (roleKeys.includes("chef")) return "/chef";
   if (roleKeys.includes("client")) return "/client";
   return "/admin";
@@ -84,6 +85,26 @@ export async function requireRole(
   const session = await requireAuth(nextPath);
   const allowed =
     hasRole(session, required) ||
+    (!options.strict && hasRole(session, "super_admin"));
+  if (!allowed) {
+    redirect(defaultLandingFor(session.user.roles));
+  }
+  return session;
+}
+
+/**
+ * Like requireRole, but allows ANY of several roles. super_admin still bypasses
+ * unless { strict: true }. Used where multiple roles share a surface — e.g. chef
+ * editing, the form-builder, and reminders are open to owner AND planner.
+ */
+export async function requireAnyRole(
+  required: RoleKey[],
+  nextPath = "/admin",
+  options: { strict?: boolean } = {},
+): Promise<Session> {
+  const session = await requireAuth(nextPath);
+  const allowed =
+    hasRole(session, ...required) ||
     (!options.strict && hasRole(session, "super_admin"));
   if (!allowed) {
     redirect(defaultLandingFor(session.user.roles));
