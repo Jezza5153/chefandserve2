@@ -36,7 +36,7 @@ import { getChefAverageForAdmin } from "@/lib/domain/ratings";
 import { RATING_TAG_LABELS, type RatingTag } from "@/lib/rating-tags";
 import { sendEmail } from "@/lib/email";
 import { recordEmailMessage } from "@/lib/integrations";
-import { requireRole } from "@/lib/permissions";
+import { requireAnyRole } from "@/lib/permissions";
 import { r2IsConfigured } from "@/lib/r2";
 
 import { DocumentUploader } from "./_components/DocumentUploader";
@@ -96,7 +96,7 @@ export default async function ChefDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireRole("owner");
+  await requireAnyRole(["owner", "planner"]);
   const { id } = await params;
 
   const chef = await db.query.chefs.findFirst({ where: eq(chefs.id, id) });
@@ -157,7 +157,7 @@ export default async function ChefDetailPage({
 
   async function doRequestData(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const fields = String(formData.get("fields") ?? "")
       .split(",")
       .map((s) => s.trim())
@@ -180,7 +180,7 @@ export default async function ChefDetailPage({
     sizeBytes: number;
   }) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     return requestChefDocumentUpload({
       ...args,
       uploadedBy: session.user.id,
@@ -189,7 +189,7 @@ export default async function ChefDetailPage({
 
   async function deleteDocument(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const documentId = String(formData.get("documentId") ?? "");
     if (!documentId) return;
     await softDeleteChefDocument(documentId, session.user.id);
@@ -199,7 +199,7 @@ export default async function ChefDetailPage({
   /* ---------- server actions ----------------------------------- */
   async function doInviteToPortal() {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const result = await inviteChefToPortal(id, session.user.id);
     if (!result.ok) {
       throw new Error(result.error);
@@ -209,7 +209,7 @@ export default async function ChefDetailPage({
 
   async function doActivatePortal() {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     if (!chef!.userId) throw new Error("Chef has no portal user yet");
     await activatePortalUser(chef!.userId, session.user.id);
     redirect(`/admin/business/chefs/${id}`);
@@ -217,7 +217,7 @@ export default async function ChefDetailPage({
 
   async function doDisablePortal() {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     if (!chef!.userId) return;
     await disablePortalUser(chef!.userId, session.user.id);
     redirect(`/admin/business/chefs/${id}`);
@@ -226,7 +226,7 @@ export default async function ChefDetailPage({
   /* ---------- server actions ----------------------------------- */
   async function updateBasics(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const fullName = String(formData.get("fullName") ?? "").trim();
     const email = String(formData.get("email") ?? "").trim().toLowerCase() || null;
     const phone = String(formData.get("phone") ?? "").trim() || null;
@@ -301,7 +301,7 @@ export default async function ChefDetailPage({
     decision: "approved" | "rejected",
   ) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const requestId = String(formData.get("requestId") ?? "");
     const decisionNotes =
       String(formData.get("decisionNotes") ?? "").trim() || null;

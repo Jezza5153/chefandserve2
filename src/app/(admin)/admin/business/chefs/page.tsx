@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { chefs } from "@/lib/db/schema";
-import { requireRole } from "@/lib/permissions";
+import { requireAnyRole } from "@/lib/permissions";
 
 export const metadata = { title: "Chefs" };
 
@@ -27,7 +27,7 @@ export default async function ChefsListPage({
     data?: string;
   }>;
 }) {
-  await requireRole("owner");
+  await requireAnyRole(["owner", "planner"]);
   const params = await searchParams;
   const status: FilterStatus = params.status ?? "active";
   const q = params.q?.trim() ?? "";

@@ -33,7 +33,9 @@ export default async function AdminLayout({
     ? "Eigenaar"
     : session.user.roles.includes("super_admin")
       ? "Beheerder"
-      : session.user.roles.join(", ");
+      : session.user.roles.includes("planner")
+        ? "Planner"
+        : session.user.roles.join(", ");
 
   return (
     <div className="flex min-h-screen bg-bg-gray">
