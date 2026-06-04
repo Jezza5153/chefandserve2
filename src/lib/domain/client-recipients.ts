@@ -14,6 +14,7 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { clientContacts, clients } from "@/lib/db/schema";
+import { shouldSendToUser } from "@/lib/integrations/prefs";
 
 /** Event keys that map to klant contact roles. */
 export type ClientEmailEvent =
@@ -35,6 +36,42 @@ const EVENT_ROLE_MAP: Record<ClientEmailEvent, Array<typeof clientContacts.$infe
 };
 
 /**
+ * Klant-mutable email categories (PR-K2-7). These appear as toggles in
+ * /client/notifications and the klant can opt out. Everything NOT listed here
+ * (billing_email_changed = anti-takeover/security, generic) always sends.
+ */
+export const CLIENT_NOTIFICATION_PREFS: ReadonlyArray<{
+  event: ClientEmailEvent;
+  label: string;
+  description: string;
+}> = [
+  {
+    event: "chef_proposed",
+    label: "Voorgestelde chef",
+    description: "Mail wanneer we een chef voor je shift voorstellen.",
+  },
+  {
+    event: "hours_ready_to_sign",
+    label: "Uren te tekenen",
+    description: "Mail wanneer een chef uren indient die jij moet aftekenen.",
+  },
+  {
+    event: "client_shift_change_requested",
+    label: "Wijzigingsverzoeken",
+    description: "Mail-updates over je wijzigings- of annuleringsverzoeken.",
+  },
+  {
+    event: "rating_pending",
+    label: "Feedback-herinnering",
+    description: "Mail-herinnering om feedback te geven na een shift.",
+  },
+];
+
+const MUTABLE_EVENTS: ReadonlySet<ClientEmailEvent> = new Set(
+  CLIENT_NOTIFICATION_PREFS.map((p) => p.event),
+);
+
+/**
  * Resolve recipient email(s) for a client + event.
  *
  * Resolution order:
@@ -54,11 +91,18 @@ export async function recipientsForClient(
     .select({
       email: clients.email,
       billingEmail: clients.billingEmail,
+      userId: clients.userId,
     })
     .from(clients)
     .where(eq(clients.id, clientId))
     .limit(1);
   if (!client) return [];
+
+  // Respect the klant's opt-out for mutable categories (PR-K2-7). Critical mail
+  // (billing/security, generic) is never mutable and always sends.
+  if (MUTABLE_EVENTS.has(event) && client.userId) {
+    if (!(await shouldSendToUser(client.userId, event))) return [];
+  }
 
   const roles = EVENT_ROLE_MAP[event];
   const collected: string[] = [];

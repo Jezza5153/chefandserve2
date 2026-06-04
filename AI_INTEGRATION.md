@@ -422,6 +422,16 @@ chef `respond()` (ownership-scoped atomic transition). No new tools; existing
 `saveClientProfile` / `submitClientRequest` write ops are future AI tool-surface
 candidates (AI could pre-fill venue prefs from the intake submission).
 
+**Klant-2 build-out (PR-K2-6/7/8):** `/client` "Jouw cijfers" KPI card (read-only
+aggregates — a future klant-copilot read surface); klant mail-voorkeuren gate
+`recipientsForClient` via `shouldSendToUser` (any future AI/worker send path
+inherits the opt-out); admin per-form recipients via `recipientsForForm`. **AI
+§9 steps A+B confirmed LIVE:** `/admin/business/shifts/[id]` already surfaces the
+heuristic match — `findMatchesForShift` → ranked candidates with reasons/warnings
++ one-click `proposePlacement`. So step A (heuristic scoring) and step B (admin
+"Suggest chefs" UI) are shipped; the Phase-9 LLM copilot (step D) bolts onto this
+exact tool surface (`findMatchesForShift` / `proposePlacement`), no rework.
+
 ### Data inventory status (vs. plan)
 
 | Table | Plan phase | Status |

@@ -157,6 +157,10 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | PR-K2-2 | Retire public JotForm CTAs + native /contact-us + webhook hardening | ✅ live (NO migration · `site.intake.{chef,client}` · /aanmelden + /contact-us CTAs → /sollicitatie + /horeca-personeel-aanvragen · contact `mailto` form → `ContactForm` → client_submissions source `native_contact` · fail-open `intake_webhook_ip` rate-limit on /api/intake/{chef,client}) |
 | PR-K2-4 | Ownership/IDOR sweep of (client)+(chef) — fix chef `respond()` | ✅ live (NO migration · `respond()` resolves chef via chefs.userId + atomic `UPDATE … WHERE id=? AND chef_id=? AND status='proposed'` · audit confirmed 1 HIGH hole; all other reads/mutations correctly scoped) |
 | PR-K2-5 | Klant venue profile & preferences (`/client/profile` "Voorkeuren") | ✅ live (NO migration · klant self-edits `client_type` + `client_tags[]` from the shared `client-taxonomy` — descriptive, non-binding match signal, NOT chef selection (respects no-veto) · already feeds `domain/matching.ts`; favorites/blocks stay admin-only · smoke `scripts/smoke-klant-preferences.mjs` 4/4) |
+| PR-K2-6 | Klant KPI/insights card (`/client` "Jouw cijfers") | ✅ live (NO migration · read-only aggregates scoped to clients.userId: komende/afgeronde shifts, uren te tekenen, 30d besteed = Σ worked_minutes×client_rate_cents/6000 (approved/exported), meest-ingezette chef) |
+| PR-K2-7 | Klant mail-voorkeuren (`/client/notifications`) | ✅ live (NO migration · toggles 4 mutable categories → notification_prefs via `setPref` · gated centrally in `recipientsForClient` via `shouldSendToUser` — billing/security mail always sends) |
+| PR-K2-8 | Admin per-form notification recipients | ✅ live (NO migration · `recipientsForForm(slug,fallback)` reads a `form:<slug>` notification_routes row else the generic event · `/admin/system/notifications` "Per formulier" section · chef-apply/client-request/contact wired) |
+| PR-K2-D | AI "Stel chefs voor" heuristic match | ✅ ALREADY SHIPPED (found during build-out) — `/admin/business/shifts/[id]` calls `findMatchesForShift` + renders ranked candidates (score/reasons/warnings/travel/margin) + one-click `proposePlacement`. Phase-9A heuristic + admin surface are LIVE; no work needed. |
 
 > NO migration anywhere: `client_submissions.source` + `rate_limits.scope` are plain `text`; reused existing tables/enums/notification events. Smoke: `scripts/smoke-klant-native-intake.mjs` (10/10). Verified: build + browser render + real `submitClientRequest` row landed + IDOR cross-chef blocked. **Dropped:** PR-K2-3 (klant approve/decline of a proposed chef) — conflicts with the deliberate "no veto" design (`ChefFeedbackForm`: "NEVER Akkoord/Goedkeuren") + the "Maarten matches, geen algoritme" positioning; replaced by PR-K2-5 (descriptive venue prefs that steer the match without picking the chef). **Dev gap:** `RATE_LIMIT_HASH_SECRET` is missing from dev `.env.local` → blocks ALL public-form submits in dev (chef + klant); set in prod.
 
@@ -343,6 +347,7 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 - `scripts/smoke-integration-spine.mjs` — PR-CHEF-0 (to be added)
 - `scripts/smoke-klant-native-intake.mjs` — PR-K2 (client-request form seeded · native_request/native_contact land · chef respond() IDOR predicate) — 10/10
 - `scripts/smoke-klant-preferences.mjs` — PR-K2-5 (clients.client_type + client_tags round-trip the shared taxonomy) — 4/4
+- `scripts/smoke-klant-notifications.mjs` — PR-K2-7/8 (notification_prefs schema + per-form notification_routes round-trip) — 4/4
 
 ---
 

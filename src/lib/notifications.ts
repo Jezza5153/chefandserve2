@@ -110,6 +110,61 @@ export async function recipientsFor(event: NotificationEvent): Promise<string[]>
   return r.enabled ? r.recipients : [];
 }
 
+/**
+ * Per-form notification routes (PR-K2-8). Lets admin override recipients for a
+ * SINGLE form; falls back to the generic submission event when no route row
+ * exists. Stored in the same notification_routes table under key `form:<slug>`.
+ */
+export const FORM_ROUTES: ReadonlyArray<{
+  key: string;
+  slug: string;
+  label: string;
+  fallback: NotificationEvent;
+}> = [
+  {
+    key: "form:client-request",
+    slug: "client-request",
+    label: "Formulier: Horecapersoneel aanvragen",
+    fallback: "client_submission_received",
+  },
+  {
+    key: "form:contact",
+    slug: "contact",
+    label: "Formulier: Contact",
+    fallback: "client_submission_received",
+  },
+  {
+    key: "form:chef-apply",
+    slug: "chef-apply",
+    label: "Formulier: Chef-aanmelding (/sollicitatie)",
+    fallback: "chef_submission_received",
+  },
+];
+
+/**
+ * Recipients for a specific form's submissions. A `form:<slug>` route row wins
+ * (respecting its enabled flag); otherwise fall back to the generic event.
+ */
+export async function recipientsForForm(
+  slug: string,
+  fallbackEvent: NotificationEvent,
+): Promise<string[]> {
+  const [row] = await db
+    .select({
+      recipients: notificationRoutes.recipients,
+      enabled: notificationRoutes.enabled,
+    })
+    .from(notificationRoutes)
+    .where(eq(notificationRoutes.event, `form:${slug}`))
+    .limit(1);
+  if (row) {
+    if (!row.enabled) return []; // explicitly muted for this form
+    if (row.recipients.length > 0) return row.recipients; // per-form override
+    // enabled but empty → no real override; use the generic route below.
+  }
+  return recipientsFor(fallbackEvent);
+}
+
 export const ALL_EVENTS: NotificationEvent[] = [
   "chef_submission_received",
   "client_submission_received",

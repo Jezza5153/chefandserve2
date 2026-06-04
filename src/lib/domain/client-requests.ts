@@ -86,8 +86,8 @@ export async function submitClientRequest(args: {
 
   // Best-effort office notification (mirrors the Jotform webhook notify).
   try {
-    const { recipientsFor } = await import("@/lib/notifications");
-    const to = await recipientsFor("client_submission_received");
+    const { recipientsForForm } = await import("@/lib/notifications");
+    const to = await recipientsForForm("client-request", "client_submission_received");
     if (to.length > 0) {
       const { sendEmail } = await import("@/lib/email");
       const { createElement } = await import("react");

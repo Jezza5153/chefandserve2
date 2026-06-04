@@ -15,6 +15,7 @@ import { notificationRoutes, users } from "@/lib/db/schema";
 import {
   ALL_EVENTS,
   EVENT_LABELS,
+  FORM_ROUTES,
   invalidateCache,
   routeFor,
   type NotificationEvent,
@@ -27,11 +28,13 @@ export const dynamic = "force-dynamic";
 async function saveRoute(formData: FormData) {
   "use server";
   const session = await requireRole("super_admin");
-  const event = String(formData.get("event") ?? "") as NotificationEvent;
+  const event = String(formData.get("event") ?? "");
   const recipientsRaw = String(formData.get("recipients") ?? "");
   const enabled = formData.get("enabled") === "on";
 
-  if (!ALL_EVENTS.includes(event)) {
+  const isTypedEvent = (ALL_EVENTS as readonly string[]).includes(event);
+  const isFormRoute = FORM_ROUTES.some((f) => f.key === event);
+  if (!isTypedEvent && !isFormRoute) {
     redirect("/admin/system/notifications?error=bad-event");
   }
 
@@ -87,7 +90,7 @@ async function saveRoute(formData: FormData) {
     after: { recipients, enabled },
   });
 
-  invalidateCache(event);
+  if (isTypedEvent) invalidateCache(event as NotificationEvent);
   redirect(`/admin/system/notifications?saved=${event}`);
 }
 
@@ -120,6 +123,26 @@ export default async function NotificationsPage({
       r.event,
       { updatedAt: r.updatedAt, email: r.updatedByEmail },
     ]),
+  );
+
+  // Per-form override routes (PR-K2-8) — look up notification_routes by form key.
+  const formRouteRows = await Promise.all(
+    FORM_ROUTES.map(async (f) => {
+      const [row] = await db
+        .select({
+          recipients: notificationRoutes.recipients,
+          enabled: notificationRoutes.enabled,
+        })
+        .from(notificationRoutes)
+        .where(eq(notificationRoutes.event, f.key))
+        .limit(1);
+      return {
+        ...f,
+        recipients: row?.recipients ?? [],
+        enabled: row?.enabled ?? true,
+        hasRow: Boolean(row),
+      };
+    }),
   );
 
   return (
@@ -219,6 +242,67 @@ export default async function NotificationsPage({
             </form>
           );
         })}
+      </div>
+
+      <h2 className="mt-12 font-serif text-2xl text-ink-900">Per formulier</h2>
+      <p className="mt-2 max-w-2xl text-sm text-ink-700">
+        Stel afwijkende ontvangers in per formulier. Aan + leeg = gebruikt de
+        standaardroute van het event. Uit = stuurt niets voor dit formulier.
+      </p>
+      <div className="mt-4 space-y-4">
+        {formRouteRows.map((f) => (
+          <form
+            key={f.key}
+            action={saveRoute}
+            className="rounded-lg border border-ink-200 bg-white p-5"
+          >
+            <input type="hidden" name="event" value={f.key} />
+            <div className="flex items-baseline justify-between gap-4">
+              <div>
+                <h3 className="font-serif text-lg text-ink-900">{f.label}</h3>
+                <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-ink-500">
+                  {f.key}
+                </p>
+              </div>
+              {!f.hasRow ? (
+                <span className="rounded-full bg-bg-gray px-2 py-0.5 text-[9px] font-medium uppercase tracking-wider text-ink-500">
+                  Valt terug op {f.fallback}
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <label>
+                <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
+                  Ontvangers
+                </span>
+                <input
+                  type="text"
+                  name="recipients"
+                  defaultValue={f.recipients.join(", ")}
+                  placeholder="leeg = standaardroute"
+                  className="w-full rounded border border-ink-200 bg-white px-3 py-2 font-mono text-xs text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-xs text-ink-700">
+                <input
+                  type="checkbox"
+                  name="enabled"
+                  defaultChecked={f.enabled}
+                  className="size-4 rounded border-ink-200 text-burgundy focus:ring-burgundy"
+                />
+                Aan
+              </label>
+            </div>
+            <div className="mt-4 flex items-center justify-end">
+              <button
+                type="submit"
+                className="rounded-full bg-burgundy px-5 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white transition-colors hover:bg-burgundy-900"
+              >
+                Opslaan
+              </button>
+            </div>
+          </form>
+        ))}
       </div>
     </div>
   );

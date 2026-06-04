@@ -10,7 +10,7 @@
  *   - CTA: nieuwe aanvraag + agenda link (PR-CHEF-11 ICS-feed)
  */
 
-import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import Link from "next/link";
 
 import { ActionCard, ActionRow } from "@/components/dashboard/ActionCard";
@@ -161,6 +161,61 @@ export default async function ClientDashboardPage() {
     .orderBy(desc(shifts.startsAt))
     .limit(5);
 
+  // --- Jouw cijfers (read-only insights, PR-K2-6) — all scoped to client.id ---
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const [upcoming] = await db
+    .select({ n: count() })
+    .from(placements)
+    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .where(
+      and(
+        eq(shifts.clientId, client.id),
+        eq(placements.status, "confirmed"),
+        gte(shifts.startsAt, now),
+      ),
+    );
+
+  const [completed] = await db
+    .select({ n: count() })
+    .from(placements)
+    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .where(
+      and(eq(shifts.clientId, client.id), eq(placements.status, "completed")),
+    );
+
+  // Spend last 30 days = Σ(worked_minutes × client_rate_cents) / 6000 → euros.
+  // Rates are snapshotted on the hours row at submit; only approved/exported count.
+  const [spendRow] = await db
+    .select({
+      raw: sql<string>`coalesce(sum(${shiftHours.workedMinutes}::bigint * ${shiftHours.clientRateCents}), 0)`,
+    })
+    .from(shiftHours)
+    .where(
+      and(
+        eq(shiftHours.clientId, client.id),
+        inArray(shiftHours.status, ["admin_approved", "exported"]),
+        gte(shiftHours.adminApprovedAt, thirtyDaysAgo),
+      ),
+    );
+  const spendEur = Number(spendRow?.raw ?? 0) / 6000;
+
+  const [topChef] = await db
+    .select({ name: chefs.fullName, n: count() })
+    .from(placements)
+    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .innerJoin(chefs, eq(chefs.id, placements.chefId))
+    .where(
+      and(
+        eq(shifts.clientId, client.id),
+        inArray(placements.status, ["confirmed", "completed"]),
+      ),
+    )
+    .groupBy(chefs.id, chefs.fullName)
+    .orderBy(desc(count()))
+    .limit(1);
+
   const hasActions =
     hoursToSign.length +
       recentConfirms.length +
@@ -176,6 +231,36 @@ export default async function ClientDashboardPage() {
       <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
         {client.companyName}
       </h1>
+
+      {/* JOUW CIJFERS — read-only insights */}
+      <section className="mt-8">
+        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          Jouw cijfers
+        </h2>
+        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Stat label="Komende shifts" value={String(upcoming?.n ?? 0)} />
+          <Stat label="Afgeronde shifts" value={String(completed?.n ?? 0)} />
+          <Stat
+            label="Uren te tekenen"
+            value={String(hoursToSign.length)}
+            tone={hoursToSign.length > 0 ? "urgent" : "default"}
+          />
+          <Stat
+            label="Besteed (30 dagen)"
+            value={
+              spendEur > 0
+                ? `€ ${spendEur.toLocaleString("nl-NL", { maximumFractionDigits: 0 })}`
+                : "—"
+            }
+          />
+        </div>
+        {topChef ? (
+          <p className="mt-2 text-xs text-ink-500">
+            Meest ingezet:{" "}
+            <span className="text-ink-800">{topChef.name}</span> ({topChef.n}×)
+          </p>
+        ) : null}
+      </section>
 
       {/* ACTIE NODIG */}
       <section className="mt-8">
@@ -345,6 +430,31 @@ function formatTime(d: Date | string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function Stat({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "urgent";
+}) {
+  return (
+    <div
+      className={`rounded-lg border p-4 ${
+        tone === "urgent"
+          ? "border-burgundy/30 bg-burgundy/5"
+          : "border-ink-200 bg-white"
+      }`}
+    >
+      <p className="font-serif text-2xl text-ink-900">{value}</p>
+      <p className="mt-1 font-ui text-[10px] uppercase tracking-[0.15em] text-ink-500">
+        {label}
+      </p>
+    </div>
+  );
 }
 
 function StatusPill({ status }: { status: string }) {

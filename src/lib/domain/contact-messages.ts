@@ -66,8 +66,8 @@ export async function submitContactMessage(
 
   // Best-effort office notification (mirrors the native-request notify).
   try {
-    const { recipientsFor } = await import("@/lib/notifications");
-    const to = await recipientsFor("client_submission_received");
+    const { recipientsForForm } = await import("@/lib/notifications");
+    const to = await recipientsForForm("contact", "client_submission_received");
     if (to.length > 0) {
       const { sendEmail } = await import("@/lib/email");
       const { createElement } = await import("react");

@@ -494,6 +494,18 @@ The klant self-describes their venue so the match is better — **without pickin
 
 Vocab source of truth: `src/lib/domain/client-taxonomy.ts` (shared by the admin client editor, chef filters, matching reasons). Smoke: `scripts/smoke-klant-preferences.mjs`.
 
+## 1.19 — Klant KPI card (PR-K2-6, no migration)
+
+`/client` "Jouw cijfers" — read-only aggregates scoped to `clients.userId`: komende (confirmed, future) + afgeronde shifts, uren te tekenen (`shiftHours.status='submitted'`), 30-dagen besteed (`Σ worked_minutes × client_rate_cents / 6000`, approved/exported only — rates are snapshotted on the hours row, there is no client "master rate"), meest-ingezette chef. All inline in the dashboard page.
+
+## 1.20 — Klant mail-voorkeuren (PR-K2-7, no migration)
+
+`/client/notifications` adds toggles for 4 MUTABLE categories (`chef_proposed`, `hours_ready_to_sign`, `client_shift_change_requested`, `rating_pending`) → `setPref` → `notification_prefs`. Gating is central: `recipientsForClient` checks `shouldSendToUser(client.userId, event)` for mutable events and returns `[]` if muted. Critical mail (`billing_email_changed` = anti-takeover, `generic`) is never mutable. Vocab: `CLIENT_NOTIFICATION_PREFS` in `domain/client-recipients.ts`.
+
+## 1.21 — Admin per-form recipients (PR-K2-8, no migration)
+
+`recipientsForForm(slug, fallbackEvent)` reads a `form:<slug>` row in `notification_routes` (enabled+recipients = override · enabled+empty = fallback · disabled = mute), else the generic event. The chef-apply / client-request / contact handlers call it. Admin edits these in `/admin/system/notifications` "Per formulier" (the `saveRoute` action accepts `form:*` keys; cache-invalidation only for typed events). Registry: `FORM_ROUTES` in `notifications.ts`. The AI "Stel chefs voor" heuristic match (Phase 9A) is already live on `/admin/business/shifts/[id]` (`findMatchesForShift` → ranked candidates + `proposePlacement`).
+
 ---
 
 # Part 2 — Planned workflows (per active plan)
