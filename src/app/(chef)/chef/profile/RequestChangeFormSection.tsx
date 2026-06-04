@@ -14,6 +14,8 @@
 
 import { useState } from "react";
 
+import { formatChefRole } from "@/lib/labels";
+
 const VAKNIVEAU_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "keukenhulp", label: "Keukenhulp" },
   { value: "commis", label: "Commis chef" },
@@ -62,7 +64,7 @@ export function RequestChangeFormSection({ chef, requestAction }: Props) {
         />
         <Row
           label="Vakniveau"
-          current={chef.vakniveau ?? "—"}
+          current={formatChefRole(chef.vakniveau)}
           onOpen={() => setOpen("vakniveau")}
         />
         <Row

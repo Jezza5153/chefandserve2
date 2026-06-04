@@ -27,6 +27,7 @@ import {
 } from "@/lib/db/schema";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { getChefSummaryForChef } from "@/lib/domain/ratings";
+import { formatChefRole } from "@/lib/labels";
 import { sendEmail } from "@/lib/email";
 import {
   createNotificationsFanOut,
@@ -313,8 +314,12 @@ export default async function ChefProfilePage({
         </p>
       ) : null}
 
-      {/* Photo + read-only header */}
-      <div className="mt-8 grid gap-6 sm:grid-cols-[120px_1fr]">
+      {/* Mijn gegevens & werkprofiel — read-only snapshot */}
+      <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
+        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          Mijn gegevens &amp; werkprofiel
+        </h2>
+        <div className="mt-4 grid gap-6 sm:grid-cols-[120px_1fr]">
         <div className="aspect-square overflow-hidden rounded-lg border border-ink-200 bg-bg-gray">
           {photo ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -344,7 +349,7 @@ export default async function ChefProfilePage({
             Vakniveau · jaren ervaring
           </p>
           <p className="text-ink-900">
-            {chef.vakniveau ?? "—"} · {chef.yearsExperience ?? "—"} jaar
+            {formatChefRole(chef.vakniveau)} · {chef.yearsExperience ?? "—"} jaar
           </p>
           <p className="mt-3 font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
             Huidig tarief
@@ -383,6 +388,7 @@ export default async function ChefProfilePage({
           ) : null}
         </div>
       </div>
+      </section>
 
       {pending.length > 0 ? (
         <section className="mt-10 rounded-lg border border-burgundy/30 bg-burgundy/5 p-5">
@@ -432,19 +438,8 @@ export default async function ChefProfilePage({
       {/* Documents — PR-CHEF-12 */}
       <DocumentsSection chefId={chef.id} />
 
-      {chef.notes ? (
-        <div className="mt-10">
-          <h2 className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-            Notities van het kantoor
-          </h2>
-          <p className="mt-2 rounded border border-ink-200 bg-white p-4 text-sm leading-relaxed text-ink-700 whitespace-pre-wrap">
-            {chef.notes}
-          </p>
-          <p className="mt-2 text-xs text-ink-500">
-            Deze notities zijn intern — niet zichtbaar voor klanten.
-          </p>
-        </div>
-      ) : null}
+      {/* PR-CHEF-2a: chefs.notes is INTERNAL admin-only — never shown to the chef
+          (staff write candid remarks there). A chef-visible message channel is 2b. */}
     </div>
   );
 }

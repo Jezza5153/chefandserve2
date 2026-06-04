@@ -28,6 +28,7 @@ import {
   computeChefAmountCents,
   formatEuro,
 } from "@/lib/hours-labels";
+import { formatShiftRole } from "@/lib/labels";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata = { title: "Dashboard" };
@@ -59,7 +60,6 @@ export default async function ChefHomePage() {
   startOfToday.setHours(0, 0, 0, 0);
   const startOfTomorrow = new Date(startOfToday);
   startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const horizon = new Date(now);
   horizon.setDate(horizon.getDate() + 14);
 
@@ -111,43 +111,47 @@ export default async function ChefHomePage() {
     )
     .orderBy(shifts.startsAt);
 
-  // Money this month
-  const moneyThisMonth = await db
-    .select()
+  // GELD — money buckets (PR-CHEF-3). Human framing: te ontvangen / in controle / afgekeurd.
+  // "Te ontvangen" is all-time on purpose — a month filter made this read €0 / "0 shifts"
+  // even for an active chef.
+  const approved = await db
+    .select({
+      workedMinutes: shiftHours.workedMinutes,
+      chefRateCents: shiftHours.chefRateCents,
+    })
     .from(shiftHours)
-    .innerJoin(shifts, eq(shifts.id, shiftHours.shiftId))
     .where(
       and(
         eq(shiftHours.chefId, chef.id),
         inArray(shiftHours.status, ["admin_approved", "exported"]),
-        gte(shifts.startsAt, startOfMonth),
       ),
     );
-
-  const approvedCents = moneyThisMonth.reduce(
-    (sum, r) =>
-      sum +
-      computeChefAmountCents(r.shift_hours.workedMinutes, r.shift_hours.chefRateCents),
-    0,
-  );
-
-  // Waiting on klant
-  const pendingKlant = await db
-    .select()
-    .from(shiftHours)
-    .where(and(eq(shiftHours.chefId, chef.id), eq(shiftHours.status, "submitted")));
-  const pendingKlantCents = pendingKlant.reduce(
+  const approvedCents = approved.reduce(
     (sum, r) => sum + computeChefAmountCents(r.workedMinutes, r.chefRateCents),
     0,
   );
 
-  // Waiting on admin
-  const pendingAdmin = await db
-    .select()
+  // "In controle" — submitted (wacht op klant) + client_signed (wacht op Chef & Serve).
+  const inControle = await db
+    .select({
+      workedMinutes: shiftHours.workedMinutes,
+      chefRateCents: shiftHours.chefRateCents,
+    })
     .from(shiftHours)
-    .where(and(eq(shiftHours.chefId, chef.id), eq(shiftHours.status, "client_signed")));
-  const pendingAdminCents = pendingAdmin.reduce(
+    .where(
+      and(
+        eq(shiftHours.chefId, chef.id),
+        inArray(shiftHours.status, ["submitted", "client_signed"]),
+      ),
+    );
+  const inControleCents = inControle.reduce(
     (sum, r) => sum + computeChefAmountCents(r.workedMinutes, r.chefRateCents),
+    0,
+  );
+
+  // "Afgekeurd" — reuse hoursRejected (client_rejected + admin_rejected).
+  const rejectedCents = hoursRejected.reduce(
+    (sum, { h }) => sum + computeChefAmountCents(h.workedMinutes, h.chefRateCents),
     0,
   );
 
@@ -221,7 +225,7 @@ export default async function ChefHomePage() {
                 </h3>
                 <p className="mt-1 text-sm text-ink-700">
                   {formatTime(s.startsAt)} – {formatTime(s.endsAt)} ·{" "}
-                  {s.roleNeeded}
+                  {formatShiftRole(s.roleNeeded)}
                 </p>
                 {s.location ? (
                   <p className="mt-1 text-xs text-ink-500">{s.location}</p>
@@ -267,7 +271,7 @@ export default async function ChefHomePage() {
               {pendingProposals.slice(0, 3).map(({ p, s, clientName }) => (
                 <ActionRow
                   key={p.id}
-                  label={`${clientName} · ${s.roleNeeded}`}
+                  label={`${clientName} · ${formatShiftRole(s.roleNeeded)}`}
                   meta={formatShiftDateShort(s.startsAt)}
                   href={`/chef/shifts/${p.id}`}
                   cta="Bekijk →"
@@ -285,7 +289,7 @@ export default async function ChefHomePage() {
               {hoursToLog.slice(0, 3).map(({ h, s, clientName }) => (
                 <ActionRow
                   key={h.id}
-                  label={`${clientName} · ${s.roleNeeded}`}
+                  label={`${clientName} · ${formatShiftRole(s.roleNeeded)}`}
                   meta={formatShiftDateShort(s.startsAt)}
                   href={`/chef/hours/${h.placementId}`}
                   cta="Vul in →"
@@ -308,7 +312,7 @@ export default async function ChefHomePage() {
               {hoursRejected.slice(0, 3).map(({ h, s, clientName }) => (
                 <ActionRow
                   key={h.id}
-                  label={`${clientName} · ${s.roleNeeded}`}
+                  label={`${clientName} · ${formatShiftRole(s.roleNeeded)}`}
                   meta={formatShiftDateShort(s.startsAt)}
                   href={`/chef/hours/${h.placementId}`}
                   cta="Pas aan →"
@@ -334,21 +338,26 @@ export default async function ChefHomePage() {
         </h2>
         <div className="mt-3 grid gap-3 md:grid-cols-3">
           <MoneyStat
-            label="Deze maand goedgekeurd"
+            tone="primary"
+            label="Te ontvangen"
             value={formatEuro(approvedCents)}
-            note={`${moneyThisMonth.length} ${moneyThisMonth.length === 1 ? "shift" : "shifts"} afgerond`}
+            note="Goedgekeurd, klaar voor betaling"
           />
           <MoneyStat
-            label="Wacht op klant-akkoord"
-            value={formatEuro(pendingKlantCents)}
-            note={`${pendingKlant.length} ${pendingKlant.length === 1 ? "uurbriefje" : "uurbriefjes"}`}
+            label="In controle"
+            value={formatEuro(inControleCents)}
+            note="Wacht op klant of Chef & Serve"
           />
           <MoneyStat
-            label="Wacht op Chef & Serve"
-            value={formatEuro(pendingAdminCents)}
-            note={`${pendingAdmin.length} ${pendingAdmin.length === 1 ? "uurbriefje" : "uurbriefjes"}`}
+            tone={rejectedCents > 0 ? "danger" : "neutral"}
+            label="Afgekeurd"
+            value={formatEuro(rejectedCents)}
+            note={rejectedCents > 0 ? "Actie nodig — pas je uren aan" : "Niets afgekeurd"}
           />
         </div>
+        <p className="mt-2 text-xs text-ink-500">
+          Uren worden pas uitbetaald nadat klant én Chef &amp; Serve akkoord zijn.
+        </p>
       </section>
 
       {/* Next shift countdown (if applicable) */}
@@ -359,7 +368,7 @@ export default async function ChefHomePage() {
               Volgende shift
             </p>
             <p className="mt-2 font-serif text-xl text-ink-900">
-              {nextShift.clientName} · {nextShift.s.roleNeeded}
+              {nextShift.clientName} · {formatShiftRole(nextShift.s.roleNeeded)}
             </p>
             <p className="mt-1 text-sm text-ink-700">
               {countdownLabel(nextShift.s.startsAt)} ·{" "}
@@ -399,7 +408,7 @@ export default async function ChefHomePage() {
               >
                 <Link href={`/chef/shifts/${p.id}`} className="block">
                   <p className="font-serif text-base text-ink-900 hover:text-burgundy">
-                    {clientName} · {s.roleNeeded}
+                    {clientName} · {formatShiftRole(s.roleNeeded)}
                   </p>
                   <p className="mt-0.5 text-xs text-ink-500">
                     {formatShiftDateShort(s.startsAt)} · {formatTime(s.startsAt)} – {formatTime(s.endsAt)}
@@ -452,17 +461,31 @@ function MoneyStat({
   label,
   value,
   note,
+  tone = "neutral",
 }: {
   label: string;
   value: string;
   note: string;
+  tone?: "primary" | "neutral" | "danger";
 }) {
+  const box =
+    tone === "primary"
+      ? "border-burgundy/30 bg-burgundy/5"
+      : tone === "danger"
+        ? "border-red-200 bg-red-50/50"
+        : "border-ink-200 bg-white";
+  const num =
+    tone === "primary"
+      ? "text-burgundy"
+      : tone === "danger"
+        ? "text-red-700"
+        : "text-ink-900";
   return (
-    <div className="rounded-lg border border-ink-200 bg-white p-4">
+    <div className={`rounded-lg border p-4 ${box}`}>
       <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
         {label}
       </p>
-      <p className="mt-1 font-serif text-2xl text-ink-900">{value}</p>
+      <p className={`mt-1 font-serif text-2xl tabular-nums ${num}`}>{value}</p>
       <p className="mt-1 text-xs text-ink-500">{note}</p>
     </div>
   );

@@ -76,7 +76,7 @@ export function HoursForm({
       {/* Start / End */}
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          <span className="mb-1 block font-ui text-[13px] font-medium text-ink-800">
             Hoe laat ben je echt begonnen?
           </span>
           <input
@@ -90,7 +90,7 @@ export function HoursForm({
         </label>
 
         <label className="block">
-          <span className="mb-1 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          <span className="mb-1 block font-ui text-[13px] font-medium text-ink-800">
             Hoe laat was je klaar?
           </span>
           <input
@@ -106,7 +106,7 @@ export function HoursForm({
 
       {/* Break — quick picks + custom */}
       <div>
-        <span className="mb-2 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+        <span className="mb-2 block font-ui text-[13px] font-medium text-ink-800">
           Pauze gehad?
         </span>
         <div className="flex flex-wrap gap-2">
@@ -165,14 +165,18 @@ export function HoursForm({
 
       {/* Notes */}
       <label className="block">
-        <span className="mb-1 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-          Opmerking (optioneel)
+        <span className="mb-1 block font-ui text-[13px] font-medium text-ink-800">
+          Iets bijzonders gebeurd? (optioneel)
+        </span>
+        <span className="mb-2 block text-xs leading-relaxed text-ink-500">
+          Alleen invullen als er iets afweek — later gestart, langer gebleven,
+          pauze anders, probleem op locatie of extra taken gedaan.
         </span>
         <textarea
           name="chefNotes"
           rows={3}
           defaultValue={defaultNotes}
-          placeholder="Bijv. ‘Eerder begonnen voor opbouw’ of ‘extra uur banket’"
+          placeholder="Bijv. ‘15 min later begonnen, klant te laat met de sleutel’"
           className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
         />
       </label>

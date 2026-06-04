@@ -23,6 +23,7 @@ import {
   shiftHours,
   shifts,
 } from "@/lib/db/schema";
+import { formatShiftRole } from "@/lib/labels";
 import {
   formatEuro,
   formatWorkedMinutes,
@@ -141,7 +142,7 @@ export default async function ChefHoursPage() {
                   <div className="min-w-0">
                     <h3 className="font-serif text-lg text-ink-900">
                       {clientName} ·{" "}
-                      <span className="text-ink-500">{shift.roleNeeded}</span>
+                      <span className="text-ink-500">{formatShiftRole(shift.roleNeeded)}</span>
                     </h3>
                     <p className="mt-1 text-sm text-ink-700">
                       {formatShiftDate(shift.startsAt)}
@@ -182,7 +183,7 @@ export default async function ChefHoursPage() {
                   <div>
                     <h3 className="font-serif text-base text-ink-900">
                       {clientName} ·{" "}
-                      <span className="text-ink-500">{shift.roleNeeded}</span>
+                      <span className="text-ink-500">{formatShiftRole(shift.roleNeeded)}</span>
                     </h3>
                     <p className="mt-0.5 text-xs text-ink-500">
                       {formatShiftDate(shift.startsAt)} ·{" "}
@@ -216,7 +217,7 @@ export default async function ChefHoursPage() {
                 <div>
                   <p className="font-serif text-sm text-ink-900">
                     {clientName} ·{" "}
-                    <span className="text-ink-500">{shift.roleNeeded}</span>
+                    <span className="text-ink-500">{formatShiftRole(shift.roleNeeded)}</span>
                   </p>
                   <p className="text-xs text-ink-500">
                     {formatShiftDate(shift.startsAt)} ·{" "}
