@@ -111,6 +111,10 @@ const serverSchema = z.object({
   /** Hours before a 2FA verification expires and the user must re-verify. */
   TOTP_REVERIFY_HOURS: z.coerce.number().int().positive().default(12),
 
+  // PR-REM-1 — reminders worker dark-launch flag (the Railway worker reads this).
+  // Default off; flip to 'true' once Maarten's first rule is verified.
+  REMINDERS_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
