@@ -28,7 +28,8 @@ import { env } from "@/lib/env";
 export type RateLimitScope =
   | "magic_link_email"
   | "magic_link_ip"
-  | "totp_verify";
+  | "totp_verify"
+  | "chef_apply_ip";
 
 export type RateLimitResult =
   | { ok: true; remaining: number }
@@ -141,6 +142,8 @@ export const THRESHOLDS = {
   magic_link_email: { max: 3, windowSeconds: 10 * 60 },
   magic_link_ip: { max: 10, windowSeconds: 60 * 60 },
   totp_verify: { max: 5, windowSeconds: 5 * 60 },
+  // Public chef-application form: 5 submissions per IP per hour.
+  chef_apply_ip: { max: 5, windowSeconds: 60 * 60 },
 } as const satisfies Record<RateLimitScope, { max: number; windowSeconds: number }>;
 
 /** Convenience wrapper using the standard thresholds. */

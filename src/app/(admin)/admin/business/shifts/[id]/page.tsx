@@ -40,7 +40,7 @@ import {
   type CandidateSignals,
 } from "@/lib/domain/staffing-intelligence";
 import { amsterdamDayKey } from "@/lib/roster-format";
-import { requireRole } from "@/lib/permissions";
+import { requireAnyRole } from "@/lib/permissions";
 
 export const metadata = { title: "Shift" };
 
@@ -49,7 +49,7 @@ export default async function ShiftDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireRole("owner");
+  await requireAnyRole(["owner", "planner"]);
   const { id } = await params;
 
   const shift = await db.query.shifts.findFirst({
@@ -194,7 +194,7 @@ export default async function ShiftDetailPage({
 
   async function toggleClientChef(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const chefId = String(formData.get("chefId") ?? "");
     const kind = String(formData.get("kind") ?? "");
     const clientId = String(formData.get("clientId") ?? "");
@@ -226,7 +226,7 @@ export default async function ShiftDetailPage({
 
   async function logContact(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const chefId = String(formData.get("chefId") ?? "").trim();
     if (!chefId) return;
     const outcome = String(formData.get("outcome") ?? "note_only");
@@ -253,7 +253,7 @@ export default async function ShiftDetailPage({
 
   async function propose(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const chefId = String(formData.get("chefId") ?? "").trim();
     const matchScore = formData.get("matchScore")
       ? Number(formData.get("matchScore"))
@@ -278,7 +278,7 @@ export default async function ShiftDetailPage({
 
   async function setPlacementStatus(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const placementId = String(formData.get("placementId") ?? "").trim();
     const newStatus = String(formData.get("newStatus") ?? "") as
       | "accepted"
@@ -434,7 +434,7 @@ export default async function ShiftDetailPage({
   // PR-KLANT-3: admin replies to / posts placement comments.
   async function replyComment(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const placementId = String(formData.get("placementId") ?? "");
     const body = String(formData.get("body") ?? "");
     const visibility =
@@ -469,7 +469,7 @@ export default async function ShiftDetailPage({
 
   async function updateShiftNotes(formData: FormData) {
     "use server";
-    const s = await requireRole("owner");
+    const s = await requireAnyRole(["owner", "planner"]);
     const sid = String(formData.get("shiftId") ?? "").trim();
     if (!sid) return;
     const notes = String(formData.get("notes") ?? "").trim() || null;

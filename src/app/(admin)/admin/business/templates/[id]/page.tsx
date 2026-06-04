@@ -26,7 +26,7 @@ import {
   formatTimeRange,
   previewDates,
 } from "@/lib/shift-template-format";
-import { requireRole } from "@/lib/permissions";
+import { requireAnyRole } from "@/lib/permissions";
 
 export const metadata = { title: "Template" };
 export const dynamic = "force-dynamic";
@@ -38,7 +38,7 @@ export default async function TemplateDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ ok?: string }>;
 }) {
-  await requireRole("owner");
+  await requireAnyRole(["owner", "planner"]);
   const { id } = await params;
   const sp = await searchParams;
 
@@ -66,7 +66,7 @@ export default async function TemplateDetailPage({
   /* ----- server actions ----- */
   async function addException(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const date = String(formData.get("date") ?? "");
     const reason = String(formData.get("reason") ?? "").trim() || null;
     if (!date) redirect(`/admin/business/templates/${id}`);
@@ -86,7 +86,7 @@ export default async function TemplateDetailPage({
 
   async function removeException(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const exceptionId = String(formData.get("exceptionId") ?? "");
     if (!exceptionId) redirect(`/admin/business/templates/${id}`);
     await db
@@ -104,7 +104,7 @@ export default async function TemplateDetailPage({
 
   async function toggleActive() {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requireAnyRole(["owner", "planner"]);
     const [cur] = await db
       .select({ active: shiftTemplates.active })
       .from(shiftTemplates)
