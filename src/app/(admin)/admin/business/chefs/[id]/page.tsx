@@ -27,7 +27,7 @@ import {
   getChefWorkSummary,
 } from "@/lib/domain/chef-history";
 import { clientTypeLabel } from "@/lib/domain/client-taxonomy";
-import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
+import { getOnboardingReadiness, getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import {
   createProfileDataRequest,
   listProfileDataRequests,
@@ -169,6 +169,28 @@ export default async function ChefDetailPage({
 
   // Documents (with fresh presigned download URLs)
   const documents = await listChefDocuments(chef.id);
+
+  // PR-KPI: onboarding readiness (payroll/identity data + ID expiry).
+  const hasIdFront = documents.some((d) => d.type === "id_copy_front");
+  const hasIdBack = documents.some((d) => d.type === "id_copy_back");
+  const onboarding = getOnboardingReadiness({
+    firstName: chef.firstName,
+    surname: chef.surname,
+    dateOfBirth: chef.dateOfBirth,
+    bsnFilled: !!chef.bsnEncrypted,
+    ibanFilled: !!chef.ibanEncrypted,
+    bankAccountHolderName: chef.bankAccountHolderName,
+    idType: chef.idType,
+    idNumberFilled: !!chef.idNumberEncrypted,
+    idExpiresAt: chef.idExpiresAt,
+    street: chef.street,
+    houseNumber: chef.houseNumber,
+    postcode: chef.postcode,
+    applyingAs: chef.applyingAs,
+    employmentType: chef.employmentType,
+    hasIdFront,
+    hasIdBack,
+  });
   const r2Ready = r2IsConfigured();
 
   /* ---------- document server actions ----------------------- */
@@ -883,6 +905,64 @@ export default async function ChefDetailPage({
         <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
           Chef 360 — staat van dienst
         </h2>
+
+        {/* PR-KPI: onboarding readiness (payroll/identity data) */}
+        <div className="mt-3 rounded-lg border border-ink-200 bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
+              Onboarding &amp; uitbetaalgegevens
+            </p>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                onboarding.ready
+                  ? "bg-emerald-100 text-emerald-700"
+                  : onboarding.score >= 60
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-red-100 text-red-700"
+              }`}
+            >
+              {chef.onboardingStatus === "submitted"
+                ? "Ingediend"
+                : chef.onboardingStatus === "in_progress"
+                  ? "Bezig"
+                  : "Niet gestart"}{" "}
+              · {onboarding.score}%
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+            {[
+              { label: "Naam", ok: !!(chef.firstName && chef.surname) },
+              { label: "Geb.datum", ok: !!chef.dateOfBirth },
+              { label: "Adres", ok: !!(chef.street && chef.postcode) },
+              { label: "BSN", ok: !!chef.bsnEncrypted },
+              { label: "IBAN", ok: !!chef.ibanEncrypted },
+              { label: "Rekeninghouder", ok: !!chef.bankAccountHolderName },
+              { label: "ID-nr", ok: !!chef.idNumberEncrypted },
+              { label: "ID-kopie", ok: hasIdFront && hasIdBack },
+              { label: "Dienstverband", ok: !!chef.employmentType },
+            ].map((c) => (
+              <span
+                key={c.label}
+                className={`rounded-full px-2 py-0.5 ${c.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
+              >
+                {c.ok ? "✓" : "✗"} {c.label}
+              </span>
+            ))}
+          </div>
+          {onboarding.missingCritical.length > 0 ? (
+            <p className="mt-1.5 text-[11px] text-amber-700">Mist: {onboarding.missingCritical.join(", ")}</p>
+          ) : (
+            <p className="mt-1.5 text-[11px] text-emerald-700">✓ Klaar voor inplannen en uitbetaling.</p>
+          )}
+          {onboarding.idExpired ? (
+            <p className="mt-1 text-[11px] text-red-700">⚠ ID-bewijs is verlopen.</p>
+          ) : onboarding.idExpiringSoon ? (
+            <p className="mt-1 text-[11px] text-amber-700">
+              ID-bewijs verloopt binnenkort
+              {chef.idExpiresAt ? ` (${new Date(chef.idExpiresAt).toLocaleDateString("nl-NL")})` : ""}.
+            </p>
+          ) : null}
+        </div>
 
         {/* PR-2: profiel & voorkeuren (uit Jotform) */}
         <div className="mt-3 rounded-lg border border-ink-200 bg-white p-4">
