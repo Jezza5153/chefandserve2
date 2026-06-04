@@ -24,7 +24,7 @@ import type { FieldOption, FieldType, FieldValidation } from "@/lib/forms/types"
 
 type SeedField = {
   key: string;
-  systemKey: string;
+  systemKey?: string;
   type: FieldType;
   label: string;
   required?: boolean;
@@ -40,6 +40,7 @@ type SeedSection = { id: string; title: string; description?: string; fields: Se
 
 const FORM = {
   id: "form_chef_onboarding",
+  idPrefix: "co",
   slug: "chef-onboarding",
   title: "Onboarding — jouw gegevens",
   description:
@@ -232,27 +233,97 @@ const SECTIONS: SeedSection[] = [
 
 type DbClient = ReturnType<typeof drizzle>;
 
-export async function seedForms(dbClient: DbClient): Promise<void> {
+type FormDef = {
+  id: string;
+  idPrefix: string;
+  slug: string;
+  title: string;
+  description: string;
+  audience: string;
+  status: "draft" | "published" | "archived";
+  version: number;
+};
+
+/** Stage-1: the SHORT public apply form. Fully admin-editable (custom fields).
+ *  Lands in chef_submissions; after a human chat, the office sends the full
+ *  onboarding form (Stage 2). */
+const APPLY_FORM: FormDef = {
+  id: "form_chef_apply",
+  idPrefix: "ca",
+  slug: "chef-apply",
+  title: "Werken bij Chef & Serve",
+  description:
+    "Laat je gegevens achter — we nemen binnen één werkdag contact op. Daarna sturen we (bij een match) het volledige onboardingformulier.",
+  audience: "chef",
+  status: "published",
+  version: 1,
+};
+
+const APPLY_SECTIONS: SeedSection[] = [
+  {
+    id: "sec_ca_1",
+    title: "Aanmelden",
+    fields: [
+      { key: "full_name", type: "text", label: "Naam", required: true },
+      { key: "email", type: "email", label: "E-mailadres", required: true },
+      { key: "phone", type: "phone", label: "Telefoonnummer", required: true },
+      { key: "city", type: "text", label: "Woonplaats" },
+      {
+        key: "applying_as",
+        type: "select",
+        label: "Ik werk als",
+        required: true,
+        options: [
+          { value: "chef", label: "Chef / keuken" },
+          { value: "front_of_house", label: "Bediening / front of house" },
+        ],
+      },
+      {
+        key: "employment_type",
+        type: "select",
+        label: "Payroll, ZZP of allebei?",
+        options: [
+          { value: "payroll", label: "Payroll" },
+          { value: "zzp", label: "ZZP" },
+          { value: "both", label: "Allebei" },
+        ],
+      },
+      {
+        key: "message",
+        type: "textarea",
+        label: "Vertel kort over je ervaring",
+        placeholder: "Waar heb je gewerkt, wat zoek je?",
+      },
+    ],
+  },
+];
+
+async function seedFormDef(
+  dbClient: DbClient,
+  def: FormDef,
+  sections: SeedSection[],
+  kind: "system" | "custom",
+): Promise<void> {
   await dbClient
     .insert(forms)
     .values({
-      id: FORM.id,
-      slug: FORM.slug,
-      title: FORM.title,
-      description: FORM.description,
-      audience: FORM.audience,
-      status: FORM.status,
-      version: FORM.version,
+      id: def.id,
+      slug: def.slug,
+      title: def.title,
+      description: def.description,
+      audience: def.audience,
+      status: def.status,
+      version: def.version,
     })
     .onConflictDoNothing({ target: forms.id });
 
   let sectionOrder = 0;
-  for (const section of SECTIONS) {
+  for (const section of sections) {
     await dbClient
       .insert(formSections)
       .values({
         id: section.id,
-        formId: FORM.id,
+        formId: def.id,
         title: section.title,
         description: section.description ?? null,
         sortOrder: sectionOrder++,
@@ -264,11 +335,11 @@ export async function seedForms(dbClient: DbClient): Promise<void> {
       await dbClient
         .insert(formFields)
         .values({
-          id: `fld_co_${f.key}`,
-          formId: FORM.id,
+          id: `fld_${def.idPrefix}_${f.key}`,
+          formId: def.id,
           sectionId: section.id,
-          kind: "system",
-          systemKey: f.systemKey,
+          kind,
+          systemKey: kind === "system" ? (f.systemKey ?? null) : null,
           type: f.type,
           key: f.key,
           label: f.label,
@@ -287,14 +358,21 @@ export async function seedForms(dbClient: DbClient): Promise<void> {
   }
 }
 
+export async function seedForms(dbClient: DbClient): Promise<void> {
+  await seedFormDef(dbClient, FORM, SECTIONS, "system");
+  await seedFormDef(dbClient, APPLY_FORM, APPLY_SECTIONS, "custom");
+}
+
 async function main() {
   const url = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL_UNPOOLED or DATABASE_URL must be set");
   const dbClient = drizzle(neon(url));
-  console.log("🌱 Seeding forms (chef-onboarding)…");
+  console.log("🌱 Seeding forms…");
   await seedForms(dbClient);
-  const fieldCount = SECTIONS.reduce((n, s) => n + s.fields.length, 0);
-  console.log(`✓ chef-onboarding: ${SECTIONS.length} sections, ${fieldCount} system fields.`);
+  const onb = SECTIONS.reduce((n, s) => n + s.fields.length, 0);
+  const app = APPLY_SECTIONS.reduce((n, s) => n + s.fields.length, 0);
+  console.log(`✓ chef-onboarding: ${SECTIONS.length} sections, ${onb} system fields.`);
+  console.log(`✓ chef-apply: ${APPLY_SECTIONS.length} section(s), ${app} fields.`);
 }
 
 // Run when invoked directly (tsx src/lib/db/seed-forms.ts), not when imported.
