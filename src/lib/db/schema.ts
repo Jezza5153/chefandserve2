@@ -145,6 +145,11 @@ export const chefDocumentTypeEnum = pgEnum("chef_document_type", [
   "certificate",
   "id_document",
   "other",
+  // PR-FB-1: native onboarding upload types (appended — order matters for ALTER TYPE)
+  "bsn_registration",
+  "id_copy_front",
+  "id_copy_back",
+  "bank_card",
 ]);
 
 /** Placement lifecycle — the (chef, shift) record. */
@@ -157,6 +162,53 @@ export const placementStatusEnum = pgEnum("placement_status", [
   "no_show", // chef didn't turn up
   "completed", // shift happened, hours logged
 ]);
+
+/* ----- PR-FB-1: native onboarding form-builder + reminders enums ----------- */
+
+/** Chef onboarding-form (Stage 2) progress. */
+export const chefOnboardingStatusEnum = pgEnum("chef_onboarding_status", [
+  "not_started",
+  "in_progress",
+  "submitted",
+]);
+
+/** Form lifecycle for the form-builder. */
+export const formStatusEnum = pgEnum("form_status", ["draft", "published", "archived"]);
+
+/** System-bound (typed column) vs custom (EAV) form field. */
+export const formFieldKindEnum = pgEnum("form_field_kind", ["system", "custom"]);
+
+/** Renderable input types for the form-builder. */
+export const formFieldTypeEnum = pgEnum("form_field_type", [
+  "text",
+  "textarea",
+  "email",
+  "phone",
+  "number",
+  "date",
+  "select",
+  "multiselect",
+  "checkbox",
+  "boolean",
+  "file",
+  "iban",
+  "bsn",
+  "postcode",
+  "country",
+  "heading",
+]);
+
+/** Reminder-rule trigger (extensible). */
+export const reminderTriggerEnum = pgEnum("reminder_trigger", [
+  "chef_birthday",
+  "id_document_expiry",
+  "certificate_expiry",
+  "chef_inactivity",
+  "custom_date",
+]);
+
+/** Reminder delivery channel. */
+export const reminderChannelEnum = pgEnum("reminder_channel", ["email", "in_app", "both"]);
 
 /* =============================================================================
  * Users + Auth.js adapter tables
@@ -710,9 +762,52 @@ export const chefs = pgTable("chefs", {
   averageRating: numeric("average_rating", { precision: 3, scale: 2 }),
   ratingCount: integer("rating_count").notNull().default(0),
 
+  /* ----- PR-FB-1: native onboarding personal data ------------------------
+   * Replaces the Jotform "Personal data onboarding" form. System-bound form
+   * fields write straight to these typed columns; BSN / IBAN / ID number are
+   * AES-256-GCM ciphertext (src/lib/crypto.ts piiCipher) — never plaintext.
+   */
+  // name parts (fullName stays canonical; writeback recomputes it from these)
+  firstName: text("first_name"),
+  infix: text("infix"), // tussenvoegsel (van / de / der)
+  surname: text("surname"),
+  initials: text("initials"),
+  // demographics
+  dateOfBirth: date("date_of_birth"),
+  gender: text("gender"),
+  nationality: text("nationality"),
+  // address completion (street / houseNumber / postcode already above)
+  placeOfResidence: text("place_of_residence"), // woonplaats
+  country: text("country"),
+  // identity document (the scans go to chef_documents)
+  idType: text("id_type"), // passport | id_card | residence_permit
+  idNumberEncrypted: text("id_number_encrypted"),
+  idExpiresAt: date("id_expires_at"),
+  // payroll-critical PII (encrypted at rest)
+  bsnEncrypted: text("bsn_encrypted"),
+  ibanEncrypted: text("iban_encrypted"),
+  bankAccountHolderName: text("bank_account_holder_name"),
+  // payroll flags / typed KPI signals
+  loonheffingskorting: boolean("loonheffingskorting"),
+  stippParticipated: boolean("stipp_participated"),
+  stippMonths: integer("stipp_months"),
+  workedForClientLast6mo: boolean("worked_for_client_last_6mo"),
+  ownTransport: boolean("own_transport"), // complements transport_mode above
+  // narrative (free text)
+  bio: text("bio"), // "tell us about yourself"
+  likesMost: text("likes_most"), // "what you like to do most"
+  recentVenues: text("recent_venues"), // recent restaurants / hotels
+
   /* ----- lifecycle ----- */
   status: chefStatusEnum("status").notNull().default("onboarding"),
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Native onboarding-form (Stage 2) progress. */
+  onboardingStatus: chefOnboardingStatusEnum("onboarding_status")
+    .notNull()
+    .default("not_started"),
+  onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
+  /** The forms.version the chef last answered against (re-base on republish). */
+  onboardingFormVersion: integer("onboarding_form_version"),
 
   /** Maarten's tribal-knowledge notes. RAG-indexable in Phase 9. */
   notes: text("notes"),
@@ -990,6 +1085,208 @@ export const chefDocuments = pgTable("chef_documents", {
   /** Soft-delete — preserve audit trail. R2 object purge happens via cleanup worker. */
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
+
+/* =============================================================================
+ * PR-FB-1: Form-builder (native onboarding) — forms / sections / fields / EAV
+ *
+ * One engine serves BOTH the public Stage-1 apply form and the authenticated
+ * Stage-2 onboarding form (forms.slug + audience). System-bound fields write to
+ * typed chefs/chef_documents columns via a code-owned binding registry
+ * (src/lib/forms/system-bindings.ts); custom fields store answers in the EAV
+ * table chef_field_values so they still feed typed KPIs.
+ * =========================================================================== */
+
+export const forms = pgTable(
+  "forms",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    /** Stable slug, e.g. 'chef-apply' | 'chef-onboarding'. */
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    /** Who fills it — 'chef' for both v1 forms; room for 'client' later. */
+    audience: text("audience").notNull().default("chef"),
+    status: formStatusEnum("status").notNull().default("draft"),
+    /** Bumped on publish; chefs record which version they answered against. */
+    version: integer("version").notNull().default(1),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    slugUnique: uniqueIndex("forms_slug_unique").on(t.slug),
+  }),
+);
+export type Form = typeof forms.$inferSelect;
+export type NewForm = typeof forms.$inferInsert;
+
+export const formSections = pgTable(
+  "form_sections",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    formId: text("form_id")
+      .notNull()
+      .references(() => forms.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    formIdx: index("form_sections_form_idx").on(t.formId, t.sortOrder),
+  }),
+);
+export type FormSection = typeof formSections.$inferSelect;
+export type NewFormSection = typeof formSections.$inferInsert;
+
+export const formFields = pgTable(
+  "form_fields",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    formId: text("form_id")
+      .notNull()
+      .references(() => forms.id, { onDelete: "cascade" }),
+    sectionId: text("section_id")
+      .notNull()
+      .references(() => formSections.id, { onDelete: "cascade" }),
+    kind: formFieldKindEnum("kind").notNull().default("custom"),
+    /** Non-null + unique-per-form for system fields; null for custom. Maps to the binding registry. */
+    systemKey: text("system_key"),
+    type: formFieldTypeEnum("type").notNull(),
+    /** Machine name — stable join key for EAV + KPIs. Unique per form. */
+    key: text("key").notNull(),
+    label: text("label").notNull(),
+    helpText: text("help_text"),
+    placeholder: text("placeholder"),
+    required: boolean("required").notNull().default(false),
+    isVisible: boolean("is_visible").notNull().default(true),
+    /** PII flag → encrypt custom values at rest. */
+    isSensitive: boolean("is_sensitive").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    /** select/multiselect options: [{value,label}]. */
+    options: jsonb("options"),
+    /** {minLen,maxLen,min,max,pattern,maxFileMb,accept,notFuture}. */
+    validation: jsonb("validation"),
+    /** file fields: which chef_documents.type to write. */
+    documentType: chefDocumentTypeEnum("document_type"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    sectionIdx: index("form_fields_section_idx").on(t.sectionId, t.sortOrder),
+    formKeyUnique: uniqueIndex("form_fields_form_key_unique").on(t.formId, t.key),
+    formSystemKeyUnique: uniqueIndex("form_fields_form_system_key_unique")
+      .on(t.formId, t.systemKey)
+      .where(sql`${t.systemKey} is not null`),
+  }),
+);
+export type FormField = typeof formFields.$inferSelect;
+export type NewFormField = typeof formFields.$inferInsert;
+
+export const chefFieldValues = pgTable(
+  "chef_field_values",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    fieldId: text("field_id")
+      .notNull()
+      .references(() => formFields.id, { onDelete: "cascade" }),
+    /** Denormalised for KPI queries that don't want to join form_fields. */
+    fieldKey: text("field_key").notNull(),
+    valueText: text("value_text"),
+    valueNumber: numeric("value_number", { precision: 14, scale: 4 }),
+    valueBoolean: boolean("value_boolean"),
+    valueDate: date("value_date"),
+    valueJson: jsonb("value_json"),
+    documentId: text("document_id").references(() => chefDocuments.id, { onDelete: "set null" }),
+    /** value_text holds AES-256-GCM ciphertext (sensitive custom field). */
+    isEncrypted: boolean("is_encrypted").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    chefFieldUnique: uniqueIndex("chef_field_values_chef_field_unique").on(t.chefId, t.fieldId),
+    fieldKeyIdx: index("chef_field_values_field_key_idx").on(t.fieldKey),
+  }),
+);
+export type ChefFieldValue = typeof chefFieldValues.$inferSelect;
+export type NewChefFieldValue = typeof chefFieldValues.$inferInsert;
+
+/* =============================================================================
+ * PR-FB-1: Configurable reminder-rules engine (+ idempotency ledger)
+ * =========================================================================== */
+
+export const reminderRules = pgTable(
+  "reminder_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    triggerType: reminderTriggerEnum("trigger_type").notNull(),
+    /** Fire this many days BEFORE the trigger date (0 = on the day). */
+    leadDays: integer("lead_days").notNull().default(0),
+    channel: reminderChannelEnum("channel").notNull().default("email"),
+    /** Explicit recipient emails. */
+    recipients: text("recipients").array().notNull().default(sql`'{}'::text[]`),
+    /** Role keys whose active users also receive it (e.g. {owner,planner}). */
+    recipientRoles: text("recipient_roles").array().notNull().default(sql`'{}'::text[]`),
+    /** Also notify the subject chef (e.g. their own ID expiring). */
+    notifySubjectChef: boolean("notify_subject_chef").notNull().default(false),
+    /** Trigger-specific knobs (inactivity thresholdDays, custom_date source, …). */
+    params: jsonb("params").notNull().default(sql`'{}'::jsonb`),
+    enabled: boolean("enabled").notNull().default(true),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    enabledIdx: index("reminder_rules_enabled_idx").on(t.enabled, t.triggerType),
+  }),
+);
+export type ReminderRule = typeof reminderRules.$inferSelect;
+export type NewReminderRule = typeof reminderRules.$inferInsert;
+
+export const reminderSends = pgTable(
+  "reminder_sends",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ruleId: uuid("rule_id")
+      .notNull()
+      .references(() => reminderRules.id, { onDelete: "cascade" }),
+    /** Nullable: custom_date / global rules may be chef-less. */
+    chefId: text("chef_id").references(() => chefs.id, { onDelete: "cascade" }),
+    /** Annual birthdays: "<year>". One-shot expiries: "YYYY-MM-DD" of the target date. */
+    occurrenceKey: text("occurrence_key").notNull(),
+    /** The calendar date this send was FOR (the trigger date, not send time). */
+    targetDate: date("target_date"),
+    channel: reminderChannelEnum("channel").notNull(),
+    recipientCount: integer("recipient_count").notNull().default(0),
+    /** sent | skipped_empty | error */
+    status: text("status").notNull().default("sent"),
+    detail: jsonb("detail").notNull().default(sql`'{}'::jsonb`),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    dedupe: uniqueIndex("reminder_sends_dedupe").on(t.ruleId, t.chefId, t.occurrenceKey),
+    dedupeNullChef: uniqueIndex("reminder_sends_dedupe_null_chef")
+      .on(t.ruleId, t.occurrenceKey)
+      .where(sql`${t.chefId} is null`),
+    ruleIdx: index("reminder_sends_rule_idx").on(t.ruleId, t.sentAt),
+  }),
+);
+export type ReminderSend = typeof reminderSends.$inferSelect;
+export type NewReminderSend = typeof reminderSends.$inferInsert;
 
 export const placements = pgTable(
   "placements",

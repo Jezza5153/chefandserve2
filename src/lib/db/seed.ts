@@ -4,8 +4,8 @@
  * Run with: npm run db:seed
  *
  * Seeds:
- *   - 12 permissions (resource × action)
- *   - 2 roles: super_admin (all perms), owner (operations subset)
+ *   - 18 permissions (resource × action)
+ *   - 3 roles: super_admin (all), owner (operations), planner (chefs/shifts/forms/reminders)
  *   - 3 users: Jezza (super_admin, active), Maarten/Gina (owner, invited)
  *
  * Idempotency strategy:
@@ -60,6 +60,13 @@ const PERMISSIONS: { resource: string; action: string }[] = [
   { resource: "shifts", action: "read" },
   { resource: "hours", action: "read" },
   { resource: "invoices", action: "read" },
+  // PR-FB-1: planner/owner write surfaces
+  { resource: "chefs", action: "write" },
+  { resource: "shifts", action: "write" },
+  { resource: "forms", action: "read" },
+  { resource: "forms", action: "write" },
+  { resource: "reminders", action: "read" },
+  { resource: "reminders", action: "write" },
 ];
 
 const ROLES = [
@@ -73,6 +80,12 @@ const ROLES = [
     label: "Owner",
     description: "Full business operations. No system/error/audit views.",
   },
+  {
+    key: "planner",
+    label: "Planner",
+    description:
+      "Plant shifts/rooster, bewerkt chefs, bouwt formulieren, beheert herinneringen. Geen klant-/uren-/payroll-/systeembeheer.",
+  },
 ] as const;
 
 // Which permissions each role gets. super_admin = all; owner = business only.
@@ -81,10 +94,31 @@ const ROLE_PERMS: Record<string, string[]> = {
   owner: [
     "dashboard.read",
     "chefs.read",
+    "chefs.write",
     "clients.read",
     "shifts.read",
+    "shifts.write",
     "hours.read",
     "invoices.read",
+    "forms.read",
+    "forms.write",
+    "reminders.read",
+    "reminders.write",
+  ],
+  // PR-FB-1: planner = chefs + shift/roster planning + forms + reminders.
+  // Deliberately NO clients-write / hours-approval / invoices / system.
+  planner: [
+    "dashboard.read",
+    "chefs.read",
+    "chefs.write",
+    "clients.read",
+    "shifts.read",
+    "shifts.write",
+    "hours.read",
+    "forms.read",
+    "forms.write",
+    "reminders.read",
+    "reminders.write",
   ],
 };
 
