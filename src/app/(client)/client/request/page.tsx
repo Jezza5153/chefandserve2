@@ -289,7 +289,7 @@ export default async function ClientRequestPage({
       <form action={submitPortalRequest} className="mt-8 space-y-6">
         <div className="grid gap-4 md:grid-cols-2">
           <label>
-            <span className="mb-1 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+            <span className="mb-1 block font-ui text-[13px] font-medium text-ink-800">
               Welke rol *
             </span>
             <select
@@ -310,7 +310,7 @@ export default async function ClientRequestPage({
           </label>
 
           <label>
-            <span className="mb-1 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+            <span className="mb-1 block font-ui text-[13px] font-medium text-ink-800">
               Segment / sfeer
             </span>
             <select
@@ -330,7 +330,7 @@ export default async function ClientRequestPage({
 
         <div className="grid gap-4 md:grid-cols-3">
           <label>
-            <span className="mb-1 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+            <span className="mb-1 block font-ui text-[13px] font-medium text-ink-800">
               Startdatum *
             </span>
             <input
@@ -343,7 +343,7 @@ export default async function ClientRequestPage({
           </label>
 
           <label>
-            <span className="mb-1 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+            <span className="mb-1 block font-ui text-[13px] font-medium text-ink-800">
               Einddatum
             </span>
             <input
@@ -355,7 +355,7 @@ export default async function ClientRequestPage({
           </label>
 
           <label>
-            <span className="mb-1 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+            <span className="mb-1 block font-ui text-[13px] font-medium text-ink-800">
               Aantal personen
             </span>
             <input
@@ -370,7 +370,7 @@ export default async function ClientRequestPage({
         </div>
 
         <label className="block">
-          <span className="mb-1 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          <span className="mb-1 block font-ui text-[13px] font-medium text-ink-800">
             Tarief-indicatie (optioneel)
           </span>
           <input
@@ -382,7 +382,7 @@ export default async function ClientRequestPage({
         </label>
 
         <label className="block">
-          <span className="mb-1 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          <span className="mb-1 block font-ui text-[13px] font-medium text-ink-800">
             Opmerking — waar gaat het om?
           </span>
           <textarea

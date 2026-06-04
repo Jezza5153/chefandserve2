@@ -26,6 +26,8 @@ import { ChefAvatar } from "./ChefAvatar";
 import { ChefFeedbackForm } from "./ChefFeedbackForm";
 import { WhatHappensNext } from "@/components/client/WhatHappensNext";
 import { db } from "@/lib/db/client";
+import { formatChefRole, formatShiftRole, formatSegment } from "@/lib/labels";
+import { placementStatusLabel, placementStatusTone } from "@/lib/status-labels";
 import {
   chefDocuments,
   chefs,
@@ -278,12 +280,24 @@ export default async function ClientShiftHubPage({
         Shift
       </p>
       <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
-        {shift.roleNeeded}
-        {shift.segment ? <span className="text-ink-500"> · {shift.segment}</span> : null}
+        {formatShiftRole(shift.roleNeeded)}
+        {shift.segment ? <span className="text-ink-500"> · {formatSegment(shift.segment)}</span> : null}
       </h1>
       <p className="mt-2 text-sm text-ink-700">{formatRange(shift.startsAt, shift.endsAt)}</p>
       {shift.location ? (
         <p className="mt-1 text-sm text-ink-500">{shift.location}</p>
+      ) : null}
+
+      {/* PR-KLANT-2: chef→client channel (shifts.client_visible_notes), never internal notes */}
+      {shift.clientVisibleNotes ? (
+        <div className="mt-4 rounded-lg border-l-4 border-burgundy bg-burgundy/5 p-4">
+          <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
+            Toelichting van Chef &amp; Serve
+          </p>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink-900">
+            {shift.clientVisibleNotes}
+          </p>
+        </div>
       ) : null}
 
       {sp.ok === "change" || sp.ok === "cancel" ? (
@@ -355,7 +369,7 @@ export default async function ClientShiftHubPage({
                     <div>
                       <h3 className="font-serif text-lg text-ink-900">{chefName}</h3>
                       <p className="mt-0.5 text-sm text-ink-500">
-                        {chefVakniveau ?? "—"}
+                        {formatChefRole(chefVakniveau)}
                         {chefYears ? ` · ${chefYears} jaar ervaring` : ""}
                       </p>
                     </div>
@@ -515,30 +529,11 @@ function formatRange(start: Date | string, end: Date | string): string {
 }
 
 function PlacementPill({ status }: { status: string }) {
-  const labels: Record<string, string> = {
-    proposed: "Voorgesteld",
-    accepted: "Toegezegd",
-    confirmed: "Bevestigd",
-    cancelled: "Geannuleerd",
-    rejected: "Niet beschikbaar",
-    no_show: "No-show",
-    completed: "Afgerond",
-  };
-  const tone =
-    status === "confirmed"
-      ? "bg-emerald-100 text-emerald-700"
-      : status === "accepted"
-        ? "bg-blue-100 text-blue-700"
-        : status === "proposed"
-          ? "bg-amber-100 text-amber-800"
-          : status === "completed"
-            ? "bg-bg-gray text-ink-700"
-            : "bg-bg-gray text-ink-500";
   return (
     <span
-      className={`shrink-0 rounded-full px-2.5 py-1 font-ui text-[9px] font-medium uppercase tracking-wider ${tone}`}
+      className={`shrink-0 rounded-full px-2.5 py-1 font-ui text-[9px] font-medium uppercase tracking-wider ${placementStatusTone(status)}`}
     >
-      {labels[status] ?? status}
+      {placementStatusLabel(status)}
     </span>
   );
 }
