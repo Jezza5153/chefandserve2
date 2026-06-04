@@ -134,10 +134,11 @@ async function findCandidates(rule: Rule, today: string): Promise<Candidate[]> {
     }
 
     case "chef_inactivity": {
-      // "Inactive" = active chef we haven't BOOKED in `thresholdDays`. We use the
-      // placements table (a real activity signal) rather than chef_availability —
-      // availability is block-only (absence of a row = available), so its rows are
-      // not a reliable freshness signal.
+      // "Inactive" = active chef with no real booking whose SHIFT falls within the
+      // last `thresholdDays` (or upcoming). We key on shifts.starts_at via a
+      // confirmed/completed placement — the actual work date — NOT placements.created_at
+      // (proposal time, which both misses a chef still working an old recurring
+      // placement and counts a chef who only ever rejected offers).
       const threshold = Number(params.thresholdDays) || 60;
       const rows = (await sql`
         SELECT c.id AS chef_id, c.user_id, c.email, c.full_name
@@ -145,7 +146,10 @@ async function findCandidates(rule: Rule, today: string): Promise<Candidate[]> {
         WHERE c.deleted_at IS NULL AND c.status = 'active'
           AND NOT EXISTS (
             SELECT 1 FROM placements p
-            WHERE p.chef_id = c.id AND p.created_at > now() - (${threshold} || ' days')::interval
+            JOIN shifts s ON s.id = p.shift_id
+            WHERE p.chef_id = c.id
+              AND p.status IN ('confirmed', 'completed')
+              AND s.starts_at > now() - (${threshold} || ' days')::interval
           )
       `) as ChefRow[];
       // One inactivity ping per chef per month at most.
@@ -191,7 +195,7 @@ function emailContent(rule: Rule, c: Candidate): { subject: string; body: string
     case "certificate_expiry":
       return { subject: `📄 Certificaat van ${name} verloopt`, body: `Een certificaat van ${name} verloopt op ${when}.` };
     case "chef_inactivity":
-      return { subject: `💤 ${name} is al een tijd inactief`, body: `${name} heeft de beschikbaarheid al een tijd niet bijgewerkt.` };
+      return { subject: `💤 ${name} is al een tijd inactief`, body: `${name} is al een tijd niet ingepland voor een dienst.` };
     default:
       return { subject: `Herinnering: ${rule.name}`, body: `Herinnering voor ${name} (${when}).` };
   }
@@ -249,25 +253,48 @@ async function main() {
 
         const { subject, body } = emailContent(rule, c);
 
+        // sendPlainEmail never throws — it returns { ok, error }. Count failures so
+        // we don't record a green 'sent' when nothing was actually delivered.
+        let emailFailures = 0;
         if (wantsEmail) {
           const html = `<div><p>${body}</p><p style="color:#888;font-size:12px">Herinnering: ${rule.name} · ${Number(rule.lead_days) || 0} dag(en) vooraf</p></div>`;
-          for (const to of emails) await sendPlainEmail(to, subject, html);
+          for (const to of emails) {
+            const res = await sendPlainEmail(to, subject, html);
+            if (!res.ok) {
+              emailFailures++;
+              log(`reminders: email to ${to} failed for rule '${rule.name}': ${res.error ?? "unknown"}`);
+            }
+          }
         }
+        let inAppDelivered = 0;
         if (wantsInApp) {
           for (const uid of userIds) {
             await sql`
               INSERT INTO notifications (user_id, type, title, body, action_url, entity_type, entity_id)
               VALUES (${uid}, 'reminder', ${subject}, ${body}, ${c.chefId ? `/admin/business/chefs/${c.chefId}` : "/admin/business"}, 'reminder_rules', ${rule.id})
             `;
+            inAppDelivered++;
           }
         }
 
-        await sql`UPDATE reminder_sends SET status = 'sent', recipient_count = ${totalRecipients} WHERE id = ${sendId}`;
-        await audit("reminder.fired", "reminder_rules", rule.id, {
+        // If every email failed AND no in-app notification went out, nothing was
+        // delivered — record 'error' (+ detail) rather than 'sent'. NOTE: the
+        // idempotency slot is already consumed, so a hard email outage is NOT
+        // auto-retried next run; status='error' + detail surface it for a human.
+        const emailDelivered = wantsEmail ? emails.length - emailFailures : 0;
+        const delivered = emailDelivered + inAppDelivered;
+        const status = delivered > 0 ? "sent" : "error";
+        await sql`UPDATE reminder_sends
+          SET status = ${status}, recipient_count = ${delivered},
+              detail = ${JSON.stringify({ emailDelivered, emailFailures, inAppDelivered })}::jsonb
+          WHERE id = ${sendId}`;
+        await audit(delivered > 0 ? "reminder.fired" : "reminder.delivery_failed", "reminder_rules", rule.id, {
           chefId: c.chefId,
           occurrenceKey: c.occurrenceKey,
           channel: rule.channel,
-          recipients: totalRecipients,
+          emailDelivered,
+          emailFailures,
+          inAppDelivered,
         });
       }
       await sql`UPDATE reminder_rules SET last_run_at = now() WHERE id = ${rule.id}`;

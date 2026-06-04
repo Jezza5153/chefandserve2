@@ -269,6 +269,15 @@ export async function eraseUserData(args: {
           // PR-2 low-sensitivity intake PII.
           transportMode: null,
           preferences: null,
+          // Self-declared intake + professional attributes that the DSAR export
+          // returns to the subject as their personal data — null them too, so the
+          // erasure set stays in parity with privacy-export's personal-data set.
+          employmentType: null,
+          applyingAs: null,
+          vakniveau: null,
+          yearsExperience: null,
+          hourlyRateMinCents: null,
+          hourlyRateMaxCents: null,
           // PR-FB: native onboarding PII (incl. encrypted BSN/IBAN/ID) — erase all.
           firstName: null,
           infix: null,
