@@ -22,6 +22,7 @@ import {
   requestStatusNextStep,
 } from "../_components/RequestStatusBadge";
 import { db } from "@/lib/db/client";
+import { formatShiftRole } from "@/lib/labels";
 import {
   clientShiftChangeRequests,
   clientSubmissions,
@@ -232,7 +233,7 @@ export default async function ClientRequestsPage({
                   <div>
                     <p className="font-serif text-base text-ink-900">
                       {r.kind === "cancel" ? "Annulering" : "Wijziging"} ·{" "}
-                      {shiftRole}
+                      {formatShiftRole(shiftRole)}
                     </p>
                     <p className="mt-0.5 text-xs text-ink-500">
                       {new Date(shiftStart).toLocaleDateString("nl-NL", {

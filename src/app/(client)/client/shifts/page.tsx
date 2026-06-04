@@ -2,6 +2,8 @@ import { desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { chefs, clients, placements, shifts } from "@/lib/db/schema";
+import { formatShiftRole } from "@/lib/labels";
+import { placementStatusLabel, shiftStatusLabel } from "@/lib/status-labels";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata = { title: "Alle shifts" };
@@ -47,12 +49,14 @@ export default async function ClientShiftsPage() {
               className="rounded-lg border border-ink-200 bg-white p-4"
             >
               <h3 className="font-serif text-base text-ink-900">
-                {row.shift.roleNeeded}
+                {formatShiftRole(row.shift.roleNeeded)}
                 {row.chef && ` · ${row.chef.fullName}`}
               </h3>
               <p className="mt-0.5 text-xs text-ink-500">
                 {formatRange(row.shift.startsAt, row.shift.endsAt)} ·{" "}
-                {row.placement?.status ?? row.shift.status}
+                {row.placement
+                  ? placementStatusLabel(row.placement.status)
+                  : shiftStatusLabel(row.shift.status)}
               </p>
             </li>
           ))}

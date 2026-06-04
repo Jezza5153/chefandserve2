@@ -15,6 +15,7 @@ import Link from "next/link";
 
 import { ActionCard, ActionRow } from "@/components/dashboard/ActionCard";
 import { db } from "@/lib/db/client";
+import { formatShiftRole } from "@/lib/labels";
 import {
   chefs,
   clients,
@@ -214,7 +215,7 @@ export default async function ClientDashboardPage() {
               {recentConfirms.slice(0, 4).map(({ p, s, chef }) => (
                 <ActionRow
                   key={p.id}
-                  label={`${chef.fullName} · ${s.roleNeeded}`}
+                  label={`${chef.fullName} · ${formatShiftRole(s.roleNeeded)}`}
                   meta={formatShiftDateShort(s.startsAt)}
                   href={`/client/shifts/${s.id}`}
                   cta="Bekijk →"
@@ -295,7 +296,7 @@ export default async function ClientDashboardPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-serif text-base text-ink-900">
-                        {chef.fullName} · {s.roleNeeded}
+                        {chef.fullName} · {formatShiftRole(s.roleNeeded)}
                       </p>
                       <p className="mt-0.5 text-xs text-ink-500">
                         {formatShiftDateShort(s.startsAt)} ·{" "}
