@@ -31,7 +31,12 @@ export type DocumentType =
   | "photo"
   | "certificate"
   | "id_document"
-  | "other";
+  | "other"
+  // PR-FB-1/2: native onboarding upload types
+  | "bsn_registration"
+  | "id_copy_front"
+  | "id_copy_back"
+  | "bank_card";
 
 export type UploadRequestResult =
   | {
