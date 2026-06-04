@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { reminderRules } from "@/lib/db/schema";
 import type { ReminderRule } from "@/lib/db/schema";
 import { requireAnyRole } from "@/lib/permissions";
+import { fieldClass as INPUT, btnClass as BTN } from "@/components/forms/Fields";
 
 import { createRule, deleteRule, toggleRule, updateRule } from "./actions";
 
@@ -29,10 +30,6 @@ const FLASH: Record<string, string> = {
   "bad-email": "Eén of meer e-mailadressen kloppen niet.",
 };
 
-const INPUT =
-  "w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy";
-const BTN =
-  "rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900";
 
 export default async function RemindersPage({
   searchParams,
