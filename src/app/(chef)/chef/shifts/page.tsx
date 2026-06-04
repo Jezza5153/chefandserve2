@@ -8,6 +8,7 @@ import {
   placements,
   shifts,
 } from "@/lib/db/schema";
+import { formatShiftRole } from "@/lib/labels";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata = { title: "Mijn shifts" };
@@ -55,7 +56,7 @@ export default async function ChefShiftsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="font-serif text-base text-ink-900">
-                      {shift.roleNeeded} · {clientName}
+                      {formatShiftRole(shift.roleNeeded)} · {clientName}
                     </h3>
                     <p className="mt-0.5 text-xs text-ink-500">
                       {formatRange(shift.startsAt, shift.endsAt)}

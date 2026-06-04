@@ -232,6 +232,13 @@
       "when": 1780006821855,
       "tag": "0032_audit_impersonator",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780563544793,
+      "tag": "0033_chef_notes_and_events",
+      "breakpoints": true
     }
   ]
 }

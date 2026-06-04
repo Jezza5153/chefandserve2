@@ -899,7 +899,12 @@ export const shifts = pgTable("shifts", {
 
   /* ----- lifecycle ----- */
   status: shiftStatusEnum("status").notNull().default("request"),
+  /** INTERNAL admin-only — never shown to chef or client (PR-CHEF-2b). */
   notes: text("notes"),
+  /** Chef-facing work instructions — safe to show on the chef proposal/shift. */
+  chefVisibleNotes: text("chef_visible_notes"),
+  /** Client-facing info — optional, shown in the klant portal (wired later). */
+  clientVisibleNotes: text("client_visible_notes"),
 
   /* ----- PR-KLANT-4: recurring-template provenance -------------------
    * Set when a shift was auto-generated from a shift_template. The
@@ -2439,3 +2444,50 @@ export type PlacementComment = typeof placementComments.$inferSelect;
 export type NewPlacementComment = typeof placementComments.$inferInsert;
 export type ClientContact = typeof clientContacts.$inferSelect;
 export type NewClientContact = typeof clientContacts.$inferInsert;
+
+/* ============================================================================
+ * chef_events — PR-CHEF-5. Structured activity signals for Maarten + AI.
+ * Written behind the scenes from normal chef actions (NO chef-facing UI).
+ * Surfaced later as gentle nudges + admin/AI analytics.
+ * ==========================================================================*/
+export const chefEventTypeEnum = pgEnum("chef_event_type", [
+  "proposal_accepted",
+  "proposal_rejected",
+  "hours_submitted",
+  "hours_rejected",
+  "availability_updated",
+  "shift_cancelled_by_chef",
+]);
+
+export const chefEvents = pgTable(
+  "chef_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    eventType: chefEventTypeEnum("event_type").notNull(),
+    /** What the event is about (placement / shift_hours / shift / availability). */
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    /** Derived signals (nullable — only set when meaningful for that event). */
+    responseSeconds: integer("response_seconds"),
+    delayFromShiftEndMin: integer("delay_from_shift_end_min"),
+    workedVsScheduledMin: integer("worked_vs_scheduled_min"),
+    /** Free-form structured context for analytics / AI. */
+    payload: jsonb("payload"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    chefIdx: index("chef_events_chef_idx").on(t.chefId, t.occurredAt),
+    typeIdx: index("chef_events_type_idx").on(t.eventType, t.occurredAt),
+  }),
+);
+
+export type ChefEvent = typeof chefEvents.$inferSelect;
+export type NewChefEvent = typeof chefEvents.$inferInsert;

@@ -22,6 +22,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db/client";
 import { chefAvailability, chefs } from "@/lib/db/schema";
 import { recordAuditFromRequest } from "@/lib/audit";
+import { recordChefEvent } from "@/lib/chef-events";
 import { requireAuth } from "@/lib/permissions";
 
 import { AvailabilityCalendar } from "./_components/AvailabilityCalendar";
@@ -89,6 +90,14 @@ async function toggleDate(isoDate: string, blocked: boolean): Promise<void> {
     resourceId: chefId,
     after: { date: isoDate, blocked },
   });
+
+  await recordChefEvent({
+    chefId,
+    eventType: "availability_updated",
+    entityType: "chef_availability",
+    entityId: chefId,
+    payload: { mode: "day", date: isoDate, blocked },
+  });
 }
 
 async function setRange(
@@ -151,6 +160,14 @@ async function setRange(
       affectedDates: dates.length,
     },
   });
+
+  await recordChefEvent({
+    chefId,
+    eventType: "availability_updated",
+    entityType: "chef_availability",
+    entityId: chefId,
+    payload: { mode: "range", startIso, endIso, blocked, affectedDates: dates.length },
+  });
 }
 
 export default async function ChefAvailabilityPage() {
@@ -194,6 +211,7 @@ export default async function ChefAvailabilityPage() {
       <p className="mt-4 text-sm leading-relaxed text-ink-700">
         Standaard ben je elke dag beschikbaar. Blokkeer dagen voor vakantie of
         andere afspraken — wij stellen je dan niet voor op shifts op die dagen.
+        Hoe beter je beschikbaarheid klopt, hoe beter Maarten je kan voorstellen.
         Veranderingen zijn meteen actief.
       </p>
 

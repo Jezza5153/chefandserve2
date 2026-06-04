@@ -216,7 +216,7 @@ export function AvailabilityCalendar({
                         : isToday
                           ? "Vandaag"
                           : isBlocked
-                            ? "Geblokkeerd"
+                            ? "Niet beschikbaar"
                             : "Beschikbaar"
                     }
                   >
@@ -236,7 +236,7 @@ export function AvailabilityCalendar({
         </span>
         <span className="flex items-center gap-2">
           <span className="inline-block size-3 rounded bg-burgundy" />
-          Geblokkeerd
+          Niet beschikbaar
         </span>
         <span className="flex items-center gap-2">
           <span className="inline-block size-3 rounded bg-bg-gray" />

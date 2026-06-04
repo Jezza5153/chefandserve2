@@ -30,6 +30,8 @@ import {
   recordEmailMessage,
 } from "@/lib/integrations";
 import { tierForShift } from "@/lib/cancellation-severity";
+import { formatShiftRole, formatSegment } from "@/lib/labels";
+import { recordChefEvent, diffSeconds } from "@/lib/chef-events";
 import { recipientsFor } from "@/lib/notifications";
 import { requireAuth } from "@/lib/permissions";
 
@@ -50,15 +52,21 @@ async function respond(formData: FormData) {
   if (decision !== "accepted" && decision !== "rejected") return;
   if (!placementId) return;
 
-  // Append rejection reason to placement.notes if present (we don't overwrite Maarten's notes)
+  // Placement context — for the rejection-note append + the chef-event signal.
+  const [pl] = await db
+    .select({
+      notes: placements.notes,
+      chefId: placements.chefId,
+      proposedAt: placements.proposedAt,
+      shiftId: placements.shiftId,
+    })
+    .from(placements)
+    .where(eq(placements.id, placementId))
+    .limit(1);
+
   let appendedNotes: string | null = null;
   if (decision === "rejected" && rejectionReason.length > 0) {
-    const [existing] = await db
-      .select({ notes: placements.notes })
-      .from(placements)
-      .where(eq(placements.id, placementId))
-      .limit(1);
-    const prefix = existing?.notes ? `${existing.notes}\n\n` : "";
+    const prefix = pl?.notes ? `${pl.notes}\n\n` : "";
     appendedNotes = `${prefix}[Chef-afwijzing reden] ${rejectionReason}`;
   }
 
@@ -79,6 +87,24 @@ async function respond(formData: FormData) {
     resourceId: placementId,
     after: rejectionReason ? { rejectionReason } : null,
   });
+
+  // PR-CHEF-5 — structured signal for Maarten/AI (best-effort, never blocks).
+  if (pl?.chefId) {
+    await recordChefEvent({
+      chefId: pl.chefId,
+      eventType: decision === "accepted" ? "proposal_accepted" : "proposal_rejected",
+      entityType: "placement",
+      entityId: placementId,
+      responseSeconds: pl.proposedAt
+        ? diffSeconds(new Date(pl.proposedAt), new Date())
+        : null,
+      payload: {
+        decision,
+        shiftId: pl.shiftId,
+        ...(rejectionReason ? { rejectionReason } : {}),
+      },
+    });
+  }
 
   redirect("/chef");
 }
@@ -141,6 +167,15 @@ async function cancel(formData: FormData) {
     entityId: placementId,
     payload: { reason, chefId: chef.id, shiftId: updated[0].shiftId },
     idempotencyKey: `placement.cancelled_by_chef:${placementId}`,
+  });
+
+  // PR-CHEF-5 — structured signal (best-effort).
+  await recordChefEvent({
+    chefId: chef.id,
+    eventType: "shift_cancelled_by_chef",
+    entityType: "placement",
+    entityId: placementId,
+    payload: { reason, fromStatus: placement.status, shiftId: updated[0].shiftId },
   });
 
   // Load context for emails
@@ -317,9 +352,9 @@ export default async function ChefShiftDetailPage({
         {placement.status === "proposed" ? "Shift-voorstel" : "Shift"}
       </p>
       <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
-        {shift.roleNeeded}
+        {formatShiftRole(shift.roleNeeded)}
         {shift.segment && (
-          <span className="ml-2 text-ink-500">· {shift.segment}</span>
+          <span className="ml-2 text-ink-500">· {formatSegment(shift.segment)}</span>
         )}
       </h1>
       <p className="mt-2 text-sm text-ink-700">{client?.companyName ?? "—"}</p>
@@ -335,14 +370,17 @@ export default async function ChefShiftDetailPage({
         <Row label="Wanneer" value={formatRange(shift.startsAt, shift.endsAt)} />
         <Row label="Locatie" value={shift.location ?? shift.city ?? "—"} />
         <Row
-          label="Tarief"
+          label="Vergoeding"
           value={
             shift.chefRateCents
               ? `€${(shift.chefRateCents / 100).toFixed(2)} per uur`
-              : "Nog niet vastgesteld"
+              : "Nog te bevestigen door Chef & Serve"
           }
         />
-        {shift.notes && <Row label="Notities" value={shift.notes} />}
+        {/* PR-CHEF-2b: only the chef-visible channel is shown — never shift.notes. */}
+        {shift.chefVisibleNotes ? (
+          <Row label="Info van Chef & Serve" value={shift.chefVisibleNotes} />
+        ) : null}
       </div>
 
       {/* Contact card — only when accepted/confirmed (chef has earned the contact) */}
@@ -374,6 +412,10 @@ export default async function ChefShiftDetailPage({
             </form>
             <RejectWithReason placementId={placement.id} respondAction={respond} />
           </div>
+          <p className="mt-3 text-xs leading-relaxed text-ink-500">
+            Als je accepteert, rekent Maarten op je. Kun je toch niet? Laat het
+            direct weten.
+          </p>
         </section>
       ) : (
         <section className="mt-8 rounded-lg border border-ink-200 bg-white p-4 text-sm text-ink-700">

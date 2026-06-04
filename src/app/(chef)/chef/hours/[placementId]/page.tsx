@@ -41,6 +41,7 @@ import {
   humanNextAction,
   humanStatus,
 } from "@/lib/hours-labels";
+import { recordChefEvent, diffMinutes } from "@/lib/chef-events";
 import { requireAuth } from "@/lib/permissions";
 
 import { HoursSubmittedKlantEmail } from "@/emails/HoursSubmittedKlantEmail";
@@ -218,6 +219,24 @@ async function submitHours(formData: FormData) {
         userId: klant.clientUserId ?? undefined,
       });
     }
+  }
+
+  // PR-CHEF-5 — structured signal for Maarten/AI (best-effort, never blocks).
+  if (klant) {
+    const submittedNow = new Date();
+    const scheduledMin = Math.round(
+      (new Date(klant.shiftEnd).getTime() - new Date(klant.shiftStart).getTime()) /
+        60000,
+    );
+    await recordChefEvent({
+      chefId: chef.id,
+      eventType: "hours_submitted",
+      entityType: "shift_hours",
+      entityId: existing.id,
+      delayFromShiftEndMin: diffMinutes(new Date(klant.shiftEnd), submittedNow),
+      workedVsScheduledMin: workedMinutes - scheduledMin,
+      payload: { workedMinutes, breakMinutes, chefRateCents: existing.chefRateCents },
+    });
   }
 
   redirect("/chef/hours?ok=submitted");

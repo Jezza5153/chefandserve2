@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 import { db } from "@/lib/db/client";
 import { assertImpersonationAllowed } from "@/lib/domain/impersonation";
@@ -466,6 +467,36 @@ export default async function ShiftDetailPage({
     ),
   );
 
+  async function updateShiftNotes(formData: FormData) {
+    "use server";
+    const s = await requireRole("owner");
+    const sid = String(formData.get("shiftId") ?? "").trim();
+    if (!sid) return;
+    const notes = String(formData.get("notes") ?? "").trim() || null;
+    const chefVisibleNotes =
+      String(formData.get("chefVisibleNotes") ?? "").trim() || null;
+    const clientVisibleNotes =
+      String(formData.get("clientVisibleNotes") ?? "").trim() || null;
+    const auditBase = await stampFromRequest({
+      userId: s.user.id,
+      action: "shifts.update_notes",
+      resource: "shifts",
+      resourceId: sid,
+      after: {
+        hasChefNote: Boolean(chefVisibleNotes),
+        hasClientNote: Boolean(clientVisibleNotes),
+      },
+    });
+    await withTx(async (tx) => {
+      await tx
+        .update(shifts)
+        .set({ notes, chefVisibleNotes, clientVisibleNotes, updatedAt: new Date() })
+        .where(eq(shifts.id, sid));
+      await recordAuditCore(auditBase, tx);
+    });
+    revalidatePath(`/admin/business/shifts/${sid}`);
+  }
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6">
@@ -521,8 +552,65 @@ export default async function ShiftDetailPage({
           value={shift.chefRateCents ? `€${(shift.chefRateCents / 100).toFixed(2)}/u` : "—"}
         />
         <SummaryCell label="Locatie" value={shift.location ?? "—"} />
-        <SummaryCell label="Notities" value={shift.notes ?? "—"} />
       </div>
+
+      {/* PR-CHEF-2b — three note channels with explicit visibility. */}
+      <section className="mt-6 rounded-lg border border-ink-200 bg-white p-6">
+        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          Notities
+        </h2>
+        <form action={updateShiftNotes} className="mt-4 space-y-4">
+          <input type="hidden" name="shiftId" value={shift.id} />
+          <label className="block">
+            <span className="block text-[13px] font-medium text-ink-800">
+              Intern · alleen Chef &amp; Serve
+            </span>
+            <span className="mb-1 block text-xs text-ink-500">
+              Nooit zichtbaar voor chef of klant.
+            </span>
+            <textarea
+              name="notes"
+              rows={2}
+              defaultValue={shift.notes ?? ""}
+              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-[13px] font-medium text-ink-800">
+              Zichtbaar voor chef
+            </span>
+            <span className="mb-1 block text-xs text-ink-500">
+              Werkinstructies — getoond op het shift-voorstel.
+            </span>
+            <textarea
+              name="chefVisibleNotes"
+              rows={2}
+              defaultValue={shift.chefVisibleNotes ?? ""}
+              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-[13px] font-medium text-ink-800">
+              Zichtbaar voor klant
+            </span>
+            <span className="mb-1 block text-xs text-ink-500">
+              Optionele info voor de klant.
+            </span>
+            <textarea
+              name="clientVisibleNotes"
+              rows={2}
+              defaultValue={shift.clientVisibleNotes ?? ""}
+              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            />
+          </label>
+          <button
+            type="submit"
+            className="rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900"
+          >
+            Notities opslaan
+          </button>
+        </form>
+      </section>
 
       {/* Existing placements */}
       {existingPlacements.length > 0 && (
