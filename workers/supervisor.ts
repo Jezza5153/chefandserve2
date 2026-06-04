@@ -49,6 +49,9 @@ const JOBS: Job[] = [
   { name: "complete-placements", schedule: "*/30 * * * *", script: "complete-placements.ts" },
   // PR-CHEF-12: daily chef-document expiry warnings (06:00 Amsterdam).
   { name: "document-expiry", schedule: "0 6 * * *", script: "document-expiry.ts" },
+  // PR-REM-1: configurable reminder-rules engine (06:30 Amsterdam, after
+  // document-expiry). Dark-launched via REMINDERS_ENABLED (default off → no-op).
+  { name: "reminders", schedule: "30 6 * * *", script: "reminders.ts" },
   // PR-AVG-3: storage-limitation purge (Sun 02:00 Amsterdam). DOUBLE-GATED —
   // RETENTION_ENABLED + RETENTION_DRY_RUN both default safe, so this is a
   // no-op ("disabled") until a human deliberately flips both flags.

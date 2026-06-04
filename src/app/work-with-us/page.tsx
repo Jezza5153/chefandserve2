@@ -102,12 +102,10 @@ export default function Page() {
         imageAlt="Chef in actie"
       >
         <a
-          href={site.jotform.chef}
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/sollicitatie"
           className="rounded-full bg-white px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-900 transition-colors hover:bg-cream"
         >
-          Vul het aanmeldformulier in
+          Aanmelden
         </a>
         <a
           href={`mailto:${site.email}?subject=Sollicitatie%20Chef%20%26%20Serve`}
@@ -196,7 +194,7 @@ export default function Page() {
 
           <ol className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
             {[
-              { n: "01", t: "Aanmelden", b: <>Vul ons <a href={site.jotform.chef} target="_blank" rel="noopener noreferrer" className="text-burgundy underline-offset-4 hover:underline">online aanmeldformulier</a> in (5 min) — of mail naar <a href={`mailto:${site.email}`} className="text-burgundy underline-offset-4 hover:underline">{site.email}</a> met korte motivatie.</> },
+              { n: "01", t: "Aanmelden", b: <>Vul ons <a href="/sollicitatie" className="text-burgundy underline-offset-4 hover:underline">online aanmeldformulier</a> in (2 min) — of mail naar <a href={`mailto:${site.email}`} className="text-burgundy underline-offset-4 hover:underline">{site.email}</a> met korte motivatie.</> },
               { n: "02", t: "Kennismaking", b: "Telefonisch of op kantoor — kort gesprek over je vak en wensen." },
               { n: "03", t: "Contract op maat", b: "Bij een match: loondienst-contract binnen een week." },
               { n: "04", t: "Eerste plaatsing", b: "Eerste shift binnen 1-2 weken — met begeleiding van Maarten en het team." },

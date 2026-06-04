@@ -29,6 +29,7 @@ import { withTx } from "@/lib/db/tx";
 import {
   chefAvailability,
   chefDocuments,
+  chefFieldValues,
   chefs,
   clientContacts,
   clients,
@@ -97,6 +98,14 @@ export async function previewUserErasure(
       .where(eq(ratings.chefId, subject.chefId));
     if (rts.length > 0)
       willErase.push({ table: "ratings (vrije tekst)", count: rts.length, action: "anonymiseren" });
+
+    // PR-FB: custom onboarding field values (EAV).
+    const cfv = await db
+      .select({ id: chefFieldValues.id })
+      .from(chefFieldValues)
+      .where(eq(chefFieldValues.chefId, subject.chefId));
+    if (cfv.length > 0)
+      willErase.push({ table: "chef_field_values (onboarding)", count: cfv.length, action: "verwijderen" });
 
     // PR-2B: klant favorite/blocked lists that reference this chef.
     const favBlk = await db
@@ -257,12 +266,51 @@ export async function eraseUserData(args: {
           postcode: null,
           latitude: null,
           longitude: null,
+          // PR-2 low-sensitivity intake PII.
+          transportMode: null,
+          preferences: null,
+          // Self-declared intake + professional attributes that the DSAR export
+          // returns to the subject as their personal data — null them too, so the
+          // erasure set stays in parity with privacy-export's personal-data set.
+          employmentType: null,
+          applyingAs: null,
+          vakniveau: null,
+          yearsExperience: null,
+          hourlyRateMinCents: null,
+          hourlyRateMaxCents: null,
+          // PR-FB: native onboarding PII (incl. encrypted BSN/IBAN/ID) — erase all.
+          firstName: null,
+          infix: null,
+          surname: null,
+          initials: null,
+          dateOfBirth: null,
+          gender: null,
+          nationality: null,
+          placeOfResidence: null,
+          country: null,
+          idType: null,
+          idNumberEncrypted: null,
+          idExpiresAt: null,
+          bsnEncrypted: null,
+          ibanEncrypted: null,
+          bankAccountHolderName: null,
+          loonheffingskorting: null,
+          stippParticipated: null,
+          stippMonths: null,
+          workedForClientLast6mo: null,
+          ownTransport: null,
+          bio: null,
+          likesMost: null,
+          recentVenues: null,
           deletedAt: new Date(),
           updatedAt: new Date(),
         })
         .where(eq(chefs.id, subject.chefId));
 
       await tx.delete(chefAvailability).where(eq(chefAvailability.chefId, subject.chefId));
+
+      // PR-FB: custom onboarding field values (EAV) — delete with the chef.
+      await tx.delete(chefFieldValues).where(eq(chefFieldValues.chefId, subject.chefId));
 
       // Ratings: strip the free-text comment, keep the numeric signal (anonymised).
       await tx

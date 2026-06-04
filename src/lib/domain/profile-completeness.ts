@@ -79,3 +79,71 @@ export function getProfileCompleteness(c: CompletenessInput): Completeness {
 
   return { score, missingCritical, missingNiceToHave, canMatch, canEstimateTravel, label };
 }
+
+/* ============================================================================
+ * Onboarding readiness (PR-KPI) — "can we legally deploy + pay this chef?"
+ *
+ * Distinct from match-completeness above: this scores the payroll/identity data
+ * the native onboarding collects (BSN, IBAN, ID, DOB, address, bank holder,
+ * role/employment). It's the KPI Maarten/planner act on before a first shift.
+ * Sensitive values are passed as booleans (filled?) — never plaintext.
+ * ========================================================================== */
+
+export type OnboardingInput = {
+  firstName?: string | null;
+  surname?: string | null;
+  dateOfBirth?: unknown; // date or null — only presence matters
+  bsnFilled?: boolean; // chefs.bsn_encrypted present
+  ibanFilled?: boolean; // chefs.iban_encrypted present
+  bankAccountHolderName?: string | null;
+  idType?: string | null;
+  idNumberFilled?: boolean; // chefs.id_number_encrypted present
+  idExpiresAt?: Date | string | null;
+  street?: string | null;
+  houseNumber?: string | null;
+  postcode?: string | null;
+  applyingAs?: string | null;
+  employmentType?: string | null;
+  /** chef_documents present, keyed by type. */
+  hasIdFront?: boolean;
+  hasIdBack?: boolean;
+};
+
+export type OnboardingReadiness = {
+  score: number; // 0–100
+  missingCritical: string[];
+  ready: boolean; // all payroll-critical fields present
+  idExpired: boolean;
+  idExpiringSoon: boolean; // within 60 days
+};
+
+export function getOnboardingReadiness(c: OnboardingInput): OnboardingReadiness {
+  // Critical = legally required to deploy + pay.
+  const critical: { key: string; ok: boolean }[] = [
+    { key: "naam", ok: has(c.firstName) && has(c.surname) },
+    { key: "geboortedatum", ok: has(c.dateOfBirth) },
+    { key: "adres", ok: has(c.street) && has(c.houseNumber) && has(c.postcode) },
+    { key: "BSN", ok: !!c.bsnFilled },
+    { key: "IBAN", ok: !!c.ibanFilled },
+    { key: "rekeninghouder", ok: has(c.bankAccountHolderName) },
+    { key: "ID-type", ok: has(c.idType) },
+    { key: "ID-nummer", ok: !!c.idNumberFilled },
+    { key: "ID-vervaldatum", ok: has(c.idExpiresAt) },
+    { key: "ID-kopie", ok: !!c.hasIdFront && !!c.hasIdBack },
+    { key: "rol", ok: has(c.applyingAs) },
+    { key: "dienstverband", ok: has(c.employmentType) },
+  ];
+  const missingCritical = critical.filter((f) => !f.ok).map((f) => f.key);
+  const score = Math.round((critical.filter((f) => f.ok).length / critical.length) * 100);
+
+  let idExpired = false;
+  let idExpiringSoon = false;
+  if (c.idExpiresAt) {
+    const exp = new Date(c.idExpiresAt).getTime();
+    const now = Date.now();
+    idExpired = exp < now;
+    idExpiringSoon = !idExpired && exp < now + 60 * 24 * 60 * 60 * 1000;
+  }
+
+  return { score, missingCritical, ready: missingCritical.length === 0, idExpired, idExpiringSoon };
+}

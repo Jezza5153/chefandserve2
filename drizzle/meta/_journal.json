@@ -232,6 +232,13 @@
       "when": 1780006821855,
       "tag": "0032_audit_impersonator",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780571283609,
+      "tag": "0033_long_vision",
+      "breakpoints": true
     }
   ]
 }
