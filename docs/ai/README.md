@@ -16,6 +16,7 @@
 
 | File | What it is |
 |---|---|
+| [`ai-build-roadmap.md`](./ai-build-roadmap.md) | **Start here for build order.** The sequence, the hard preconditions (model key + go + history + budget), and a "done" bar per stage (smart-match → read tools → admin copilot → chef/klant PAs). Matching stays rule-based until Stage 1 ships. |
 | [`ai-product-vision.md`](./ai-product-vision.md) | What the personal assistant looks like per role (chef, klant, admin) once it exists. Concrete example prompts and answers. |
 | [`source-of-truth-map.md`](./source-of-truth-map.md) | For every fact the AI might surface — *which table holds it, who can change it, how stale can it be*. The AI's grounding contract. |
 | [`role-permission-matrix.md`](./role-permission-matrix.md) | RBAC table mapped to AI tool access. Which tools each role can call, which it can draft, which is forbidden. |
