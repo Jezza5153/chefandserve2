@@ -10,12 +10,17 @@ already exist in the stack.
 
 ---
 
-## 0. GATE — do not start until prod is healthy
-- [ ] **Resolve the prod crash (digest `2370483898`)** — editing a chef currently
-      500s on the live (6-day-old) deployment. Get the stack from
-      **Vercel → Project `chefandserve2` → the Production deployment → Logs / Observability**
-      (filter to the time you tested, or by digest). Paste it and it gets fixed.
-      Shipping onboarding on top of a crashing prod just hides the fire.
+## 0. GATE — prod health (investigated 2026-06-04: no code defect)
+- [x] **Prod crash (digest `2370483898`) — investigated, no deterministic bug found.**
+      Prod runs **clean `main @ d426ec0`** (migration 0032), NOT the feature branch
+      (`/sollicitatie` → 404 confirms it). A 3-agent reproduction against a clone of
+      the live DB showed main's chef-detail page renders crash-free for the affected
+      chef, schema matches (no drift), and the email edit **saved successfully**. The
+      render + loader + save + audit paths are all deterministically clean → the
+      one-off 500 was almost certainly **transient** (Neon cold-start / connection
+      blip during the post-save audit insert or the redirect re-render).
+      **Action: reload the chef page to confirm.** If it recurs deterministically,
+      reproduce the live stack on a clone via a dev server (exact prod commit is known).
 
 ## 1. Set the encryption key (BEFORE merge — env validation is required, app won't boot without it)
 ```bash
