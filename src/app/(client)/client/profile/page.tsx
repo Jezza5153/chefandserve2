@@ -32,6 +32,7 @@ import {
   clients,
   users,
 } from "@/lib/db/schema";
+import { CLIENT_TAG_OPTIONS, CLIENT_TYPE_OPTIONS } from "@/lib/domain/client-taxonomy";
 import { BillingEmailChangedKlantEmail } from "@/emails/BillingEmailChangedKlantEmail";
 import { sendEmail } from "@/lib/email";
 import { enqueueIntegrationEvent, recordEmailMessage } from "@/lib/integrations";
@@ -76,6 +77,17 @@ async function saveClientProfile(formData: FormData) {
   const shiftArrivalNotes = get("shiftArrivalNotes");
   const billingEmail = get("billingEmail")?.toLowerCase() ?? null;
 
+  // Descriptive venue preferences (non-binding match signal — NOT chef selection).
+  // Validated against the shared taxonomy so the stored signal stays structured.
+  const validTypes = new Set(CLIENT_TYPE_OPTIONS.map((o) => o.value as string));
+  const validTags = new Set(CLIENT_TAG_OPTIONS.map((o) => o.value as string));
+  const clientTypeRaw = get("clientType");
+  const clientType = clientTypeRaw && validTypes.has(clientTypeRaw) ? clientTypeRaw : null;
+  const clientTags = formData
+    .getAll("clientTags")
+    .map(String)
+    .filter((t) => validTags.has(t));
+
   const before = {
     contactName: c.contactName,
     phone: c.phone,
@@ -84,6 +96,8 @@ async function saveClientProfile(formData: FormData) {
     city: c.city,
     shiftArrivalNotes: c.shiftArrivalNotes,
     billingEmail: c.billingEmail,
+    clientType: c.clientType,
+    clientTags: c.clientTags,
   };
   const after = {
     contactName,
@@ -93,6 +107,8 @@ async function saveClientProfile(formData: FormData) {
     city,
     shiftArrivalNotes,
     billingEmail,
+    clientType,
+    clientTags,
   };
 
   await db
@@ -366,6 +382,8 @@ export default async function ClientProfilePage({
           city: c.city,
           shiftArrivalNotes: c.shiftArrivalNotes,
           billingEmail: c.billingEmail,
+          clientType: c.clientType,
+          clientTags: c.clientTags,
         }}
         saveAction={saveClientProfile}
       />

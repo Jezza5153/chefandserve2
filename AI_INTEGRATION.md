@@ -105,7 +105,7 @@ Catalog of every entity. Each row says: *which table*, *which fields the AI care
 | Table | AI-relevant fields | Why AI cares |
 |---|---|---|
 | `chef_submissions` | `raw_payload`, structured fields (name, phone, role wishes, segments, availability hints, years of experience, languages) | Initial signal pool. Pre-AI heuristics for "looks promising" flagging. |
-| `client_submissions` | `company`, `role_requested`, `segment`, `date_needed`, `headcount`, `urgency`, `notes` | The natural-language ask → AI parses + structures + matches. |
+| `client_submissions` | `company_name`, `contact_name`, `role_requested`, `segment`, `date_needed`, `headcount`, `location`, `notes`, `source` | The natural-language ask → AI parses + structures + matches. `source` now `native_request` (own /horeca-personeel-aanvragen form) or `native_contact` (own /contact-us form) alongside legacy `jotform` — PR-K2-1/K2-2 brought intake in-house, so the AI sees clean first-party fields, not just raw Jotform payloads. |
 
 ### Phase 2 — Chef + client master records
 
@@ -114,7 +114,7 @@ Catalog of every entity. Each row says: *which table*, *which fields the AI care
 | `chefs` | `vakniveau`, `segments[]`, `specialties[]`, `locatie` (point), `hourly_rate_min/max`, `years_experience`, `languages`, `payingit_employee_id`, `status`, `joined_at` | The candidate pool. Embeddings live here. |
 | `chef_availability` | `chef_id`, `date`, `available`, `notes` | Hard filter — AI never proposes someone unavailable. |
 | `chef_documents` (R2 metadata) | `chef_id`, `type` (cv/cert/photo), `r2_key`, `uploaded_at` | RAG fodder — chef CVs go into the vector index. |
-| `clients` | `company_name`, `segment`, `kvk`, `payment_terms_days`, `payingit_client_id`, `notes`, `address`, `joined_at` | Match destination. Embeddings live here too. |
+| `clients` | `company_name`, `segment`, `client_type`, `client_tags[]`, `favorite_chef_ids[]`, `blocked_chef_ids[]`, `shift_arrival_notes`, `kvk`, `payment_terms_days`, `payingit_client_id`, `notes`, `address`, `joined_at` | Match destination. `client_type`/`client_tags` are **klant- + admin-editable** (PR-K2-5, vocab in `domain/client-taxonomy.ts`) and steer match reasons; `favorite_chef_ids` soft-boost, `blocked_chef_ids` HARD-exclude (admin-only) — all read by `domain/matching.ts`. Embeddings live here too. |
 | `client_locations` | `client_id`, `address`, `geo` (point), `kitchen_notes` | Multi-location clients (hotel groups). Distance-based ranking. |
 
 ### Phase 3 — Shifts + placements + matching
@@ -411,6 +411,16 @@ Goal: when we land in Phase 9 and start wiring AI, this doc is the brief. Zero a
 ("Bekijk als") live + audited (migr 0032); high-risk mutation+audit now same-tx
 atomic (`withTx`). AI-PA access model specced (`docs/ai/ai-pa-access-model.md`).
 Phase 5 (Payingit) blocked on integration spec. AI copilot layer = Phase 9+.
+
+**Klant-2 slice (PR-K2-1/2/4/5):** intake moved in-house — `client_submissions.source`
+now `native_request`/`native_contact` (own forms, admin-editable via the form
+builder) alongside legacy `jotform`; the AI gets clean first-party fields, not raw
+Jotform payloads. `clients.client_type` + `client_tags` are now **klant-editable**
+descriptive venue prefs (non-binding match signal — chef selection stays Maarten's,
+"no veto"), feeding `domain/matching.ts`. A `(client)`+`(chef)` IDOR sweep hardened
+chef `respond()` (ownership-scoped atomic transition). No new tools; existing
+`saveClientProfile` / `submitClientRequest` write ops are future AI tool-surface
+candidates (AI could pre-fill venue prefs from the intake submission).
 
 ### Data inventory status (vs. plan)
 

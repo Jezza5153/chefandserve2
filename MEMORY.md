@@ -13,7 +13,7 @@ ledger** below; anything planned-but-not-built is flagged ⏳ or noted under
 each PR shipped with a migration, a `scripts/smoke-*.mjs`, and WORKFLOW.md
 linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 
-**Last updated:** Klant phase complete — PR-KLANT-0…5 + PR-KLANT-DOCS (see "PR ledger")
+**Last updated:** Klant-2 slice — PR-K2-1/K2-2/K2-4 (native klant intake form, JotForm retired from public CTAs, chef `respond()` IDOR fix). Prior: Klant phase PR-KLANT-0…5 + DOCS (see "PR ledger")
 **Live URL:** https://chefandserve2.vercel.app
 **Repo:** github.com/Jezza5153/chefandserve2
 
@@ -148,6 +148,17 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | PR-KLANT-4 | Recurring templates + exceptions + overnight + preview | ✅ live (migration 0023 · shift_templates + shift_template_exceptions · shifts.source_template_id/date + idempotency index · generate-recurring-shifts worker (Europe/Amsterdam, overnight ends_next_day, ON CONFLICT partial-index) · admin templates list/new/[id] + live preview-before-save + ExceptionsManager + activate toggle · /client/templates friendly view + change-request) |
 | PR-KLANT-5 | Rating loop + tags + N≥5 rule + email | ✅ live (migration 0024 · ratings table + chefs.average_rating/rating_count rollup · rating-tags.ts vocab · domain/ratings.ts (submit + recompute + 3 visibility-scoped readers: admin-all / chef-N≥5 / klant-none) · /client/shifts/[shiftId]/rate stars+tags form · RatingPendingKlantEmail + bell + dashboard card on approveHoursRow · admin chef-detail feedback section · chef-profile N≥5 summary) |
 | PR-KLANT-DOCS | CLAUDE.md + WORKFLOW link-complete + MEMORY resume-header | ✅ shipped |
+
+### Klant-2 — native klant intake + JotForm retirement + IDOR fix (no migration)
+
+| PR | Description | Status |
+|---|---|---|
+| PR-K2-1 | Native public klant intake form (`/horeca-personeel-aanvragen` + `/aanvragen` alias) | ✅ live (NO migration · seeds `client-request` form: audience=client, 10 fields, admin-editable at /admin/business/forms · `submitClientRequest` → client_submissions source `native_request`, status `new` · honeypot + `client_request_ip` rate-limit · mirrors /sollicitatie) |
+| PR-K2-2 | Retire public JotForm CTAs + native /contact-us + webhook hardening | ✅ live (NO migration · `site.intake.{chef,client}` · /aanmelden + /contact-us CTAs → /sollicitatie + /horeca-personeel-aanvragen · contact `mailto` form → `ContactForm` → client_submissions source `native_contact` · fail-open `intake_webhook_ip` rate-limit on /api/intake/{chef,client}) |
+| PR-K2-4 | Ownership/IDOR sweep of (client)+(chef) — fix chef `respond()` | ✅ live (NO migration · `respond()` resolves chef via chefs.userId + atomic `UPDATE … WHERE id=? AND chef_id=? AND status='proposed'` · audit confirmed 1 HIGH hole; all other reads/mutations correctly scoped) |
+| PR-K2-5 | Klant venue profile & preferences (`/client/profile` "Voorkeuren") | ✅ live (NO migration · klant self-edits `client_type` + `client_tags[]` from the shared `client-taxonomy` — descriptive, non-binding match signal, NOT chef selection (respects no-veto) · already feeds `domain/matching.ts`; favorites/blocks stay admin-only · smoke `scripts/smoke-klant-preferences.mjs` 4/4) |
+
+> NO migration anywhere: `client_submissions.source` + `rate_limits.scope` are plain `text`; reused existing tables/enums/notification events. Smoke: `scripts/smoke-klant-native-intake.mjs` (10/10). Verified: build + browser render + real `submitClientRequest` row landed + IDOR cross-chef blocked. **Dropped:** PR-K2-3 (klant approve/decline of a proposed chef) — conflicts with the deliberate "no veto" design (`ChefFeedbackForm`: "NEVER Akkoord/Goedkeuren") + the "Maarten matches, geen algoritme" positioning; replaced by PR-K2-5 (descriptive venue prefs that steer the match without picking the chef). **Dev gap:** `RATE_LIMIT_HASH_SECRET` is missing from dev `.env.local` → blocks ALL public-form submits in dev (chef + klant); set in prod.
 
 ### AVG/GDPR compliance phase — active (plan: privacy-operations workflow)
 
@@ -330,6 +341,8 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 - `scripts/smoke-recovery-intents.mjs` — Fence 5 invariant tests (atomicity, intent-bound, expiry)
 - `scripts/reset-internal-2fa.ts` — emergency 2FA reset CLI
 - `scripts/smoke-integration-spine.mjs` — PR-CHEF-0 (to be added)
+- `scripts/smoke-klant-native-intake.mjs` — PR-K2 (client-request form seeded · native_request/native_contact land · chef respond() IDOR predicate) — 10/10
+- `scripts/smoke-klant-preferences.mjs` — PR-K2-5 (clients.client_type + client_tags round-trip the shared taxonomy) — 4/4
 
 ---
 
@@ -348,6 +361,11 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 8. ~~**Worker scheduling gap**~~ ✅ RESOLVED — `complete-placements` (every 30 min) + `document-expiry` (daily 06:00) are now registered in `workers/supervisor.ts` JOBS. Worker tsc passes; `complete-placements` sanity-run clean (0 flipped, idempotent). `hours-reminders.ts` does not exist yet (left as PLAN).
 9. ~~**Chef profile-change admin review (PR-CHEF-4 gap)**~~ ✅ RESOLVED — `/admin/business/chefs/[id]` now has a "Wijzigingsverzoeken" section with `approveProfileChange`/`rejectProfileChange` (hourlyRate writes both min/max cents), atomic flip, audit, chef outcome email. Smoke: `scripts/smoke-chef-profile-change.mjs`.
 10. ~~**Chef photo for klanten**~~ ✅ RESOLVED — `/api/chef-photo/[id]` authz extended: a klant can load a clientVisible+verified photo of a chef placed on one of THEIR shifts (no enumeration; chef-self + super_admin paths intact). Hub renders `ChefAvatar` (photo + initials fallback) with the same gate in the query.
+
+### Known follow-ups discovered during the K2-4 IDOR sweep
+
+11. **`/client/templates` over-fetch (low)** — `templates/page.tsx` selects `shift_template_exceptions` with no where-clause (all clients) to build a lookup Map; only the caller's own templates render (no cross-client exposure), but add `inArray(shift_template_exceptions.template_id, ownTemplateIds)` for data-minimization.
+12. **`client_submissions` keyed on `companyName` (low)** — no `clientId` FK yet, so klant requests/dashboard scope portal submissions by the caller's own `companyName` string. Not a cross-tenant IDOR, but two client records with an identical company name would see each other's portal submissions. Data-model follow-up: add `clientId` FK + backfill.
 
 ## How to update this file
 

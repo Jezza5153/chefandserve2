@@ -52,7 +52,7 @@ export default function AanmeldenPage() {
             "Persoonlijk contact, geen app-bureaucratie",
           ]}
           cta={{
-            href: site.jotform.chef,
+            href: site.intake.chef,
             label: "Aanmelden als chef",
           }}
         />
@@ -69,7 +69,7 @@ export default function AanmeldenPage() {
             "Volledig payroll-conform (geen wet-DBA-risico)",
           ]}
           cta={{
-            href: site.jotform.client,
+            href: site.intake.client,
             label: "Personeel aanvragen",
           }}
         />
@@ -136,18 +136,12 @@ function Card({ eyebrow, title, body, bullets, cta }: CardProps) {
 
       <div className="mt-8 grow" />
 
-      <a
+      <Link
         href={cta.href}
-        target="_blank"
-        rel="noopener noreferrer"
         className="inline-block rounded-full bg-burgundy px-6 py-3 text-center font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
       >
         {cta.label} →
-      </a>
-
-      <p className="mt-3 text-center text-[11px] text-ink-500">
-        Opent het aanmeldformulier in een nieuw tabblad
-      </p>
+      </Link>
     </article>
   );
 }

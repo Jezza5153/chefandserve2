@@ -29,7 +29,9 @@ export type RateLimitScope =
   | "magic_link_email"
   | "magic_link_ip"
   | "totp_verify"
-  | "chef_apply_ip";
+  | "chef_apply_ip"
+  | "client_request_ip"
+  | "intake_webhook_ip";
 
 export type RateLimitResult =
   | { ok: true; remaining: number }
@@ -144,6 +146,10 @@ export const THRESHOLDS = {
   totp_verify: { max: 5, windowSeconds: 5 * 60 },
   // Public chef-application form: 5 submissions per IP per hour.
   chef_apply_ip: { max: 5, windowSeconds: 60 * 60 },
+  // Public klant staff-request form: 5 submissions per IP per hour.
+  client_request_ip: { max: 5, windowSeconds: 60 * 60 },
+  // Public Jotform intake webhooks (legacy, being retired): cap injection abuse.
+  intake_webhook_ip: { max: 60, windowSeconds: 60 * 60 },
 } as const satisfies Record<RateLimitScope, { max: number; windowSeconds: number }>;
 
 /** Convenience wrapper using the standard thresholds. */

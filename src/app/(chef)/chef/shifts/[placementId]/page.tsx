@@ -9,7 +9,7 @@
  *   - When cancel fires: outbox event + emails to Maarten (routable) + klant
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -52,7 +52,16 @@ async function respond(formData: FormData) {
   if (decision !== "accepted" && decision !== "rejected") return;
   if (!placementId) return;
 
+  // Auth IS the lookup — resolve the caller's chef and scope every read/write to
+  // it. Without this, any authenticated user could accept/reject another chef's
+  // placement by POSTing an arbitrary placementId (IDOR). Mirrors `cancel` below.
+  const chef = await db.query.chefs.findFirst({
+    where: eq(chefs.userId, session.user.id),
+  });
+  if (!chef) redirect("/chef");
+
   // Placement context — for the rejection-note append + the chef-event signal.
+  // Scoped to THIS chef's own placement.
   const [pl] = await db
     .select({
       notes: placements.notes,
@@ -61,7 +70,7 @@ async function respond(formData: FormData) {
       shiftId: placements.shiftId,
     })
     .from(placements)
-    .where(eq(placements.id, placementId))
+    .where(and(eq(placements.id, placementId), eq(placements.chefId, chef.id)))
     .limit(1);
 
   let appendedNotes: string | null = null;
@@ -70,7 +79,9 @@ async function respond(formData: FormData) {
     appendedNotes = `${prefix}[Chef-afwijzing reden] ${rejectionReason}`;
   }
 
-  await db
+  // Atomic, ownership-scoped transition: only the owning chef may respond, and
+  // only while the placement is still 'proposed'. 0 rows → not yours/already decided.
+  const updated = await db
     .update(placements)
     .set({
       status: decision,
@@ -78,7 +89,17 @@ async function respond(formData: FormData) {
       updatedAt: new Date(),
       ...(appendedNotes ? { notes: appendedNotes } : {}),
     })
-    .where(eq(placements.id, placementId));
+    .where(
+      and(
+        eq(placements.id, placementId),
+        eq(placements.chefId, chef.id),
+        eq(placements.status, "proposed"),
+      ),
+    )
+    .returning({ id: placements.id });
+  if (updated.length === 0) {
+    redirect(`/chef/shifts/${placementId}?error=stale`);
+  }
 
   await recordAuditFromRequest({
     userId: session.user.id,

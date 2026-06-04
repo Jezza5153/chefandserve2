@@ -454,6 +454,48 @@ log: `privacy_request_messages`. AI playbook (extend): `docs/ai/workflow-playboo
 
 ---
 
+## 1.16 — Native public intake + Jotform retirement (PR-K2-1/K2-2, no migration)
+
+Public CTAs no longer link out to Jotform — they hit native forms that land in our own DB.
+
+```
+Klant "Personeel aanvragen"   /horeca-personeel-aanvragen (+ /aanvragen alias)
+  page → getPublishedForm('client-request') → <ClientRequestForm>
+  submit → submitClientRequestAction (honeypot + client_request_ip rate-limit)
+         → submitClientRequest() → client_submissions (source 'native_request', status 'new')
+         → recipientsFor('client_submission_received') office email
+  admin edits the form live at /admin/business/forms/client-request
+
+Chef "Aanmelden als chef"     /sollicitatie  (already native — PR-FB-5)
+Contact "Stuur een bericht"   /contact-us <ContactForm>  (was a mailto: form)
+  submit → submitContactAction → submitContactMessage()
+         → client_submissions (source 'native_contact') + office email
+```
+
+CTAs read `site.intake.{chef,client}` (`src/lib/site.ts`); `/aanmelden` + `/contact-us` updated. `site.jotform.*` kept only for legacy webhook/inbox reference. The legacy Jotform webhooks `/api/intake/{chef,client}` are being retired — a fail-open per-IP rate limit (`intake_webhook_ip`) caps injection abuse until the Jotform forms are disabled and the endpoints removed. Files: `src/lib/domain/{client-requests,contact-messages}.ts`, `src/app/horeca-personeel-aanvragen/*`, `src/app/contact-us/{ContactForm.tsx,actions.ts}`. Smoke: `scripts/smoke-klant-native-intake.mjs`.
+
+## 1.17 — Chef respond() ownership scoping (PR-K2-4 IDOR fix)
+
+`respond()` in `/chef/shifts/[placementId]` (accept/reject a proposed placement) previously did `UPDATE placements … WHERE id=?` with no ownership predicate — any authenticated user could accept/reject another chef's placement (IDOR). It now resolves the caller via `chefs.userId` and runs an atomic, ownership-scoped transition: `UPDATE … WHERE id=? AND chef_id=? AND status='proposed'` (0 rows → `?error=stale`); the notes-append read is scoped the same way. Restores the "Auth IS the lookup" hard rule. A full sweep of every `(client)`+`(chef)` loader and action confirmed no other holes (two low-severity data-minimization follow-ups logged in MEMORY.md).
+
+## 1.18 — Klant venue preferences (PR-K2-5, no migration)
+
+The klant self-describes their venue so the match is better — **without picking the chef** (the "no veto" rule stands; K2-3 chef approve/decline was dropped for this).
+
+```
+/client/profile  "Jouw zaak & voorkeuren" (DIRECT-edit, like shiftArrivalNotes)
+  → clientType  (select, CLIENT_TYPE_OPTIONS)   → clients.client_type
+  → clientTags[] (chips,  CLIENT_TAG_OPTIONS)    → clients.client_tags
+  saveClientProfile validates against the shared client-taxonomy (no free text),
+  audit + outbox 'client.updated'. New shifts snapshot these → domain/matching.ts
+  already reads clientType/clientTags for match reasons. favoriteChefIds /
+  blockedChefIds stay ADMIN-only (matching controls, not klant-editable).
+```
+
+Vocab source of truth: `src/lib/domain/client-taxonomy.ts` (shared by the admin client editor, chef filters, matching reasons). Smoke: `scripts/smoke-klant-preferences.mjs`.
+
+---
+
 # Part 2 — Planned workflows (per active plan)
 
 These are documented HERE before the code lands so we don't forget the linkage when we build.

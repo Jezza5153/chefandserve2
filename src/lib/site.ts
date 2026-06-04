@@ -73,7 +73,13 @@ export const site = {
     facebook: "https://www.facebook.com/chefandserve/",
     x: "https://x.com/chefandserve",
   },
-  // Public intake forms (Jotform). Phase 0: link out; Phase 1: webhook intake to own DB
+  // Native in-house intake forms — the public CTAs link here (replaces Jotform).
+  intake: {
+    chef: "/sollicitatie",
+    client: "/horeca-personeel-aanvragen",
+  },
+  // Legacy Jotform forms — kept only for webhook/inbox reference during the
+  // transition; public CTAs now use `intake` above. Remove once webhooks retire.
   jotform: {
     chef: "https://form.jotform.com/252442173847359",
     client: "https://form.jotform.com/252448184762060",

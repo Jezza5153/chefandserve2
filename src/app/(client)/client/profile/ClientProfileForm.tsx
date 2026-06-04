@@ -15,6 +15,8 @@
  * kept as a component so the page stays readable and the file is reusable.
  */
 
+import { CLIENT_TAG_OPTIONS, CLIENT_TYPE_OPTIONS } from "@/lib/domain/client-taxonomy";
+
 type Props = {
   client: {
     contactName: string | null;
@@ -24,6 +26,8 @@ type Props = {
     city: string | null;
     shiftArrivalNotes: string | null;
     billingEmail: string | null;
+    clientType: string | null;
+    clientTags: string[] | null;
   };
   saveAction: (formData: FormData) => Promise<void> | void;
 };
@@ -141,6 +145,56 @@ export function ClientProfileForm({ client, saveAction }: Props) {
               facturatie-adres.
             </span>
           </label>
+        </div>
+      </fieldset>
+
+      {/* Locatie & voorkeuren — descriptief; stuurt onze match, is GEEN chef-keuze */}
+      <fieldset className="rounded-lg border border-ink-200 bg-white p-5">
+        <legend className="px-1 font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          Jouw zaak &amp; voorkeuren
+        </legend>
+        <p className="mt-2 text-xs text-ink-500">
+          Vertel ons wat voor zaak je hebt en waar je vaak personeel voor zoekt.
+          We gebruiken dit om sneller de juiste chef of bediening voor te
+          stellen. Je kiest niet zelf de chef — Maarten of Gina matcht — maar
+          dit stuurt waar we op letten.
+        </p>
+        <div className="mt-3 space-y-4">
+          <label className="block">
+            <span className={labelCls}>Type zaak</span>
+            <select
+              name="clientType"
+              defaultValue={client.clientType ?? ""}
+              className={inputCls}
+            >
+              <option value="">— Kies —</option>
+              {CLIENT_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div>
+            <span className={labelCls}>Waar zoek je meestal personeel voor?</span>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {CLIENT_TAG_OPTIONS.map((o) => (
+                <label
+                  key={o.value}
+                  className="inline-flex items-center gap-2 rounded-full border border-ink-200 bg-white px-3 py-1.5 text-sm text-ink-800 hover:border-burgundy/40"
+                >
+                  <input
+                    type="checkbox"
+                    name="clientTags"
+                    value={o.value}
+                    defaultChecked={(client.clientTags ?? []).includes(o.value)}
+                    className="accent-burgundy"
+                  />
+                  {o.label}
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       </fieldset>
 

@@ -298,6 +298,78 @@ const APPLY_SECTIONS: SeedSection[] = [
   },
 ];
 
+/** Stage-1: the public klant staff-request form (PR-K2-1). The native replacement
+ *  for the Jotform "Horecapersoneel aanvragen". Fully admin-editable (custom
+ *  fields). Lands in client_submissions (source 'native_request'); the office
+ *  triages it in the inbox and converts it to a client + shift. */
+const CLIENT_REQUEST_FORM: FormDef = {
+  id: "form_client_request",
+  idPrefix: "cr",
+  slug: "client-request",
+  title: "Horecapersoneel aanvragen",
+  description:
+    "Laat weten wat je zoekt — we koppelen je binnen 4 werkuren aan de juiste chefs, koks of bediening.",
+  audience: "client",
+  status: "published",
+  version: 1,
+};
+
+const CLIENT_REQUEST_SECTIONS: SeedSection[] = [
+  {
+    id: "sec_cr_1",
+    title: "Jouw aanvraag",
+    fields: [
+      { key: "full_name", type: "text", label: "Naam", required: true },
+      { key: "company", type: "text", label: "Bedrijf / locatie", required: true },
+      { key: "email", type: "email", label: "E-mailadres", required: true },
+      { key: "phone", type: "phone", label: "Telefoonnummer", required: true },
+      { key: "city", type: "text", label: "Plaats", placeholder: "Bijv. Amsterdam" },
+      {
+        key: "role_sought",
+        type: "select",
+        label: "Wat zoek je?",
+        required: true,
+        options: [
+          { value: "chef", label: "Chef / kok" },
+          { value: "sous_chef", label: "Sous-chef" },
+          { value: "chef_de_partie", label: "Chef de partie" },
+          { value: "commis", label: "Commis" },
+          { value: "bediening", label: "Bediening / service" },
+          { value: "runner", label: "Runner" },
+          { value: "recruitment", label: "Werving & selectie" },
+          { value: "anders", label: "Anders / weet ik nog niet" },
+        ],
+      },
+      {
+        key: "segment",
+        type: "select",
+        label: "Type horeca",
+        options: [
+          { value: "casual", label: "Casual / brasserie" },
+          { value: "fine_dining", label: "Fine dining" },
+          { value: "hotel", label: "Hotel" },
+          { value: "catering", label: "Catering" },
+          { value: "event", label: "Evenement" },
+          { value: "corporate", label: "Corporate / bedrijfsrestaurant" },
+        ],
+      },
+      { key: "date_needed", type: "date", label: "Wanneer heb je iemand nodig?" },
+      {
+        key: "headcount",
+        type: "number",
+        label: "Hoeveel personen?",
+        validation: { min: 1, max: 999 },
+      },
+      {
+        key: "message",
+        type: "textarea",
+        label: "Toelichting",
+        placeholder: "Vertel kort wat je zoekt, voor welke dagen/uren, en eventuele wensen.",
+      },
+    ],
+  },
+];
+
 async function seedFormDef(
   dbClient: DbClient,
   def: FormDef,
@@ -361,6 +433,7 @@ async function seedFormDef(
 export async function seedForms(dbClient: DbClient): Promise<void> {
   await seedFormDef(dbClient, FORM, SECTIONS, "system");
   await seedFormDef(dbClient, APPLY_FORM, APPLY_SECTIONS, "custom");
+  await seedFormDef(dbClient, CLIENT_REQUEST_FORM, CLIENT_REQUEST_SECTIONS, "custom");
 }
 
 async function main() {
@@ -371,8 +444,10 @@ async function main() {
   await seedForms(dbClient);
   const onb = SECTIONS.reduce((n, s) => n + s.fields.length, 0);
   const app = APPLY_SECTIONS.reduce((n, s) => n + s.fields.length, 0);
+  const req = CLIENT_REQUEST_SECTIONS.reduce((n, s) => n + s.fields.length, 0);
   console.log(`✓ chef-onboarding: ${SECTIONS.length} sections, ${onb} system fields.`);
   console.log(`✓ chef-apply: ${APPLY_SECTIONS.length} section(s), ${app} fields.`);
+  console.log(`✓ client-request: ${CLIENT_REQUEST_SECTIONS.length} section(s), ${req} fields.`);
 }
 
 // Run when invoked directly (tsx src/lib/db/seed-forms.ts), not when imported.
