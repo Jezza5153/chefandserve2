@@ -90,6 +90,17 @@ const serverSchema = z.object({
     .min(32, "TOTP_ENCRYPTION_KEY must be ≥32 chars (openssl rand -base64 32)")
     .optional(),
 
+  // PR-FB-0 — onboarding/payroll PII secret-encryption key.
+  // 32-byte base64. Encrypts special-category PII at rest (chefs.bsn_encrypted /
+  // iban_encrypted / id_number_encrypted) via AES-256-GCM (src/lib/crypto.ts).
+  // Separate from TOTP_ENCRYPTION_KEY so the two keys rotate independently.
+  // Optional during the deploy window; src/lib/crypto.ts throws at call time if a
+  // PII field is encrypted/decrypted without it being set.
+  PII_ENCRYPTION_KEY: z
+    .string()
+    .min(32, "PII_ENCRYPTION_KEY must be ≥32 chars (openssl rand -base64 32)")
+    .optional(),
+
   // Phase 1 PR-S2B — challenge gate switch.
   //   false (default) → challenge code ships but is INACTIVE.
   //   true            → internal users with totp_enabled=true MUST clear
