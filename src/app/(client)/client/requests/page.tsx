@@ -90,7 +90,8 @@ export default async function ClientRequestsPage({
     .where(
       and(
         eq(clientSubmissions.source, "client_portal"),
-        eq(clientSubmissions.companyName, c.companyName),
+        // PR-AUDIT-1: scope by owner FK, not the non-unique companyName.
+        eq(clientSubmissions.clientId, c.id),
       ),
     )
     .orderBy(desc(clientSubmissions.createdAt))

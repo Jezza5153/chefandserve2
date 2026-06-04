@@ -1,11 +1,11 @@
 /**
  * Impersonation — super_admin can act as any other user.
  *
- * STATUS: foundation only. The cookies + audit logging are wired, but the
- * Auth.js JWT callback needs an additional integration to actually swap
- * sessions mid-request. UI is deferred to a future session. Until then,
- * super_admin can still preview any portal because /chef and /client
- * routes allow super_admin role through middleware.
+ * STATUS: live. "Bekijk als" is wired end-to-end — cookie-based target/actor,
+ * effectiveSession() swaps the session per request, every impersonated write is
+ * audited with the actor behind it, a middleware denylist blocks sensitive
+ * paths, and assertImpersonationAllowed() is a second-layer block on
+ * destructive actions (erasure, payroll, user disable, irreversible cancel).
  *
  *
  * Use cases:
@@ -186,18 +186,6 @@ export async function applyImpersonation(real: Session | null): Promise<Session 
     };
   } catch {
     return real; // safe fallback — impersonation never breaks a real session
-  }
-}
-
-/**
- * Phase B1 view-only guard. Mutating server actions reachable while
- * impersonating (chef/client portal actions) call this so writes are blocked
- * until B2 wires `recordAudit` (which records the impersonator on every write).
- * Throws `IMPERSONATION_VIEW_ONLY`; callers surface a "stop bekijk-als" message.
- */
-export function assertNotImpersonating(session: Session): void {
-  if (session.user.impersonator) {
-    throw new Error("IMPERSONATION_VIEW_ONLY");
   }
 }
 

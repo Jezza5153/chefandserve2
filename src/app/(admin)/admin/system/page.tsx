@@ -69,9 +69,12 @@ export default async function SystemDashboardPage() {
     getIntegrationHealth(),
     db.select({ usersTotal: sql<number>`count(*)::int` }).from(users),
     db.select({ usersActive: sql<number>`count(*)::int` }).from(users).where(sql`${users.status} = 'active'`),
-    db.select({ openErrors: sql<number>`count(*)::int` }).from(errorLog).where(isNull(errorLog.resolvedAt)),
+    // PR-AUDIT-6b: CSP report-only beacons land in error_log at severity 'info'
+    // (context.csp=true). They're telemetry, not faults — exclude from the
+    // "open errors" KPI so it reflects real, actionable failures.
+    db.select({ openErrors: sql<number>`count(*)::int` }).from(errorLog).where(and(isNull(errorLog.resolvedAt), sql`${errorLog.context}->>'csp' IS DISTINCT FROM 'true'`)),
     db.select({ criticalOpen: sql<number>`count(*)::int` }).from(errorLog).where(and(isNull(errorLog.resolvedAt), sql`${errorLog.severity} = 'critical'`)),
-    db.select({ id: errorLog.id, message: errorLog.message, severity: errorLog.severity, createdAt: errorLog.createdAt, resolvedAt: errorLog.resolvedAt }).from(errorLog).orderBy(desc(errorLog.createdAt)).limit(6),
+    db.select({ id: errorLog.id, message: errorLog.message, severity: errorLog.severity, createdAt: errorLog.createdAt, resolvedAt: errorLog.resolvedAt }).from(errorLog).where(sql`${errorLog.context}->>'csp' IS DISTINCT FROM 'true'`).orderBy(desc(errorLog.createdAt)).limit(6),
     db.select({ status: emailMessages.status, n: sql<number>`count(*)::int` }).from(emailMessages).where(gte(emailMessages.createdAt, since30d)).groupBy(emailMessages.status),
     db.select({ whatsapp30d: sql<number>`count(*)::int` }).from(contactLogs).where(and(sql`${contactLogs.channel} = 'whatsapp'`, gte(contactLogs.createdAt, since30d))),
     db.select({ dueDate: privacyRequests.dueDate }).from(privacyRequests).where(inArray(privacyRequests.status, ["pending", "in_progress"])),
@@ -102,7 +105,9 @@ export default async function SystemDashboardPage() {
   const emailFailed = emailBy.get("failed") ?? 0;
   const emailTotal30 = ["sent", "delivered", "bounced", "failed", "complained"].reduce((s, k) => s + (emailBy.get(k) ?? 0), 0);
   const emailDeliveredPct = emailTotal30 > 0 ? Math.round((emailDelivered / emailTotal30) * 100) : null;
-  const delivered7Total = health.emailDeliveredLast7d + health.emailBouncesLast7d;
+  // PR-AUDIT-9: denominator must include sent/failed/complained (match the 30d
+  // calc), not just delivered+bounced — else the 7d delivery-rate reads high.
+  const delivered7Total = health.emailTotalLast7d;
   const deliveredPct7 = delivered7Total > 0 ? Math.round((health.emailDeliveredLast7d / delivered7Total) * 100) : null;
 
   /* ---- privacy SLA ---- */

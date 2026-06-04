@@ -172,7 +172,8 @@ export async function cancelClientSubmission(args: {
     .where(eq(clientSubmissions.id, args.submissionId))
     .limit(1);
   if (!sub) return { ok: false, error: "not_found" };
-  if (sub.source !== "client_portal" || sub.companyName !== args.client.companyName) {
+  // PR-AUDIT-1: own by client_id FK, not the non-unique companyName string.
+  if (sub.source !== "client_portal" || sub.clientId !== args.client.id) {
     return { ok: false, error: "not_owner" };
   }
 

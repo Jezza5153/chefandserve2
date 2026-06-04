@@ -468,7 +468,7 @@ export async function proposePlacement(
     // 1. Chef email
     if (chef?.email) {
       const placementUrl = `${env.NEXT_PUBLIC_APP_URL}/chef/shifts/${placement.id}`;
-      await sendEmail({
+      const send = await sendEmail({
         to: chef.email,
         subject: `Nieuwe shift bij ${client?.companyName ?? "een klant"} — ${shift.roleNeeded}`,
         react: ShiftProposedEmail({
@@ -482,6 +482,18 @@ export async function proposePlacement(
           placementUrl,
         }),
       });
+      // PR-AUDIT-4: track the chef-proposal send (parity with the klant email).
+      if (send.ok) {
+        await recordEmailMessage({
+          providerMessageId: send.id,
+          toEmail: chef.email,
+          template: "ShiftProposedEmail",
+          eventKey: "shift_proposed",
+          entityType: "placements",
+          entityId: placement.id,
+          userId: chef.userId ?? undefined,
+        });
+      }
     }
 
     // 2. Klant email + notification (PR-KLANT-3) — they see the proposed chef

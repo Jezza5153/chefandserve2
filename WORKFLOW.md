@@ -832,7 +832,8 @@ CRON workers/document-expiry.ts (daily):
 | `workers/generate-recurring-shifts.ts` | daily 04:00 Amsterdam (in supervisor JOBS) | Materialize recurring-template shifts (overnight-aware, idempotent) | shift_templates, shift_template_exceptions, clients | shifts |
 | `workers/complete-placements.ts` ✅ (supervisor JOBS, every 30 min) | 30 min | Flip placement.confirmed → completed when endsAt+1h past, create draft shift_hours | placements, shifts | placements, shift_hours |
 | `workers/document-expiry.ts` ✅ (supervisor JOBS, daily 06:00) | daily | 30d-out expiry warnings | chef_documents | notifications + sendEmail |
-| `workers/hours-reminders.ts` (PLANNED — file not yet created) | daily | Chef nudges + klant timeouts + admin alerts | shift_hours | createNotification + sendEmail |
+| `workers/deliver-outbox.ts` ✅ (supervisor JOBS, every 5 min — PR-AUDIT-5) | 5 min | Drain integration_outbox: atomically ack `internal` breadcrumbs (pending→sent) + write an integration_runs row; external providers (payroll/csv) left pending until their handler lands | integration_outbox, integration_runs | UPDATE + audit |
+| `workers/hours-reminders.ts` ✅ (supervisor JOBS, daily 09:00 Amsterdam — PR-AUDIT-6) | daily | Chef 24/72h nudge (draft hours), klant 5d sign-reminder, admin 10d force-approve alert. **GATED**: HOURS_REMINDERS_ENABLED!=="true" → disabled/exit (no sends on demo data). Idempotent via audit_log stage markers | shift_hours, chefs, clients, shifts | notifications + sendPlainEmail |
 | `workers/payroll-export.ts` (PLANNED) | manual | CSV batch generation | payroll_batches | R2 + payroll_batches |
 | `scripts/backup-neon.sh` (PLANNED) | Monday 03:00 local launchd | pg_dump + age encrypt | (DB) | local .age file + backup_runs |
 | `scripts/restore-drill.sh` (PLANNED) | first Monday monthly | Restore last backup to Neon dev branch | local backup | restore_drills |
@@ -866,8 +867,9 @@ The point of this map: **when wiring a new server action, check this table to se
 | **(planned)** HoursApprovedChefEmail | admin approveHours | chef.email | no | shift_hours.admin_approved |
 | **(planned)** HoursApprovedKlantEmail | admin approveHours | klant.email | no | shift_hours.admin_approved |
 | **(planned)** HoursRejectedByAdminEmail | admin rejectHours | chef + klant | no (2 sends) | shift_hours.admin_rejected |
-| **(planned)** HoursReminderChefEmail | cron 24/72h after completed | chef.email | no | shift_hours.reminder_chef |
-| **(planned)** HoursReminderKlantEmail | cron 5d after submit | klant + admin cc | YES (admin cc) | shift_hours.reminder_klant |
+| HoursReminderChef (worker HTML) ✅ | hours-reminders 24/72h on draft | chef.email | no | shift_hours.reminder_chef (stage 24h/72h) |
+| HoursReminderKlant (worker HTML) ✅ | hours-reminders 5d on submitted | klant.email | no | shift_hours.reminder_klant (stage klant_5d) |
+| HoursForceApproveAdmin (worker HTML) ✅ | hours-reminders 10d on submitted | recipientsFor('hours_admin_force_approve_needed') | YES | shift_hours.reminder_klant (stage admin_10d) |
 | **(planned)** ProfileChangeRequestAdminEmail | requestChange | recipientsFor('profile_change_request') | YES | chef.profile_change_requested |
 | **(planned)** ProfileChangeApprovedChefEmail | approveChangeRequest | chef.email | no | chef.profile_change_approved |
 | **(planned)** DocumentExpiryWarningChefEmail | cron document-expiry | chef.email | no | chef_documents.expiry_warned |

@@ -22,6 +22,7 @@ import { AdminRejectForm } from "./AdminRejectForm";
 import { db } from "@/lib/db/client";
 import { recordAuditCore, stampFromRequest } from "@/lib/audit";
 import { withTx } from "@/lib/db/tx";
+import { recipientsForClient } from "@/lib/domain/client-recipients";
 import {
   chefs,
   clients,
@@ -62,6 +63,7 @@ async function loadFull(id: string) {
       clientName: clients.companyName,
       clientEmail: clients.email,
       clientUserId: clients.userId,
+      clientId: clients.id,
       shiftStart: shifts.startsAt,
       shiftEnd: shifts.endsAt,
       shiftRole: shifts.roleNeeded,
@@ -179,9 +181,15 @@ async function approve(formData: FormData) {
       });
     }
   }
-  if (ctx?.clientEmail && ctx?.shiftStart) {
+  // PR-AUDIT-2: route via recipientsForClient (single seam + billing/contact
+  // routing). Operational invoice notice → "generic" (always sends).
+  const klantApprovedTo =
+    ctx?.shiftStart && ctx.clientId
+      ? await recipientsForClient(ctx.clientId, "generic")
+      : [];
+  if (klantApprovedTo.length > 0 && ctx?.shiftStart) {
     const send = await sendEmail({
-      to: ctx.clientEmail,
+      to: klantApprovedTo,
       subject: `Uren afgerond voor ${shiftDateLabel(ctx.shiftStart)} — factuur volgt`,
       react: HoursApprovedKlantEmail({
         recipientName: ctx.clientName,
@@ -193,15 +201,17 @@ async function approve(formData: FormData) {
       }),
     });
     if (send.ok) {
-      await recordEmailMessage({
-        providerMessageId: send.id,
-        toEmail: ctx.clientEmail,
-        template: "HoursApprovedKlantEmail",
-        eventKey: "hours_approved",
-        entityType: "shift_hours",
-        entityId: id,
-        userId: ctx.clientUserId ?? undefined,
-      });
+      for (const to of klantApprovedTo) {
+        await recordEmailMessage({
+          providerMessageId: send.id,
+          toEmail: to,
+          template: "HoursApprovedKlantEmail",
+          eventKey: "hours_approved",
+          entityType: "shift_hours",
+          entityId: id,
+          userId: ctx.clientUserId ?? undefined,
+        });
+      }
     }
   }
 
@@ -308,9 +318,15 @@ async function reject(formData: FormData) {
       });
     }
   }
-  if (ctx.clientEmail && ctx.shiftStart) {
+  // PR-AUDIT-2: route via recipientsForClient. Operational correction notice
+  // → "generic" (always sends; not opt-out-able).
+  const klantRejectedTo =
+    ctx.shiftStart && ctx.clientId
+      ? await recipientsForClient(ctx.clientId, "generic")
+      : [];
+  if (klantRejectedTo.length > 0 && ctx.shiftStart) {
     const send = await sendEmail({
-      to: ctx.clientEmail,
+      to: klantRejectedTo,
       subject: `Uren-correctie voor ${ctx.chefName} op ${shiftDateLabel(ctx.shiftStart)}`,
       react: HoursRejectedByAdminEmail({
         recipientName: ctx.clientName,
@@ -322,15 +338,17 @@ async function reject(formData: FormData) {
       }),
     });
     if (send.ok) {
-      await recordEmailMessage({
-        providerMessageId: send.id,
-        toEmail: ctx.clientEmail,
-        template: "HoursRejectedByAdminEmail",
-        eventKey: "hours_admin_rejected",
-        entityType: "shift_hours",
-        entityId: id,
-        userId: ctx.clientUserId ?? undefined,
-      });
+      for (const to of klantRejectedTo) {
+        await recordEmailMessage({
+          providerMessageId: send.id,
+          toEmail: to,
+          template: "HoursRejectedByAdminEmail",
+          eventKey: "hours_admin_rejected",
+          entityType: "shift_hours",
+          entityId: id,
+          userId: ctx.clientUserId ?? undefined,
+        });
+      }
     }
   }
 

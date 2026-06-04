@@ -305,8 +305,12 @@ export default async function ShiftDetailPage({
       resourceId: placementId,
     });
     // Atomic: status transition + audit (email + redirect stay post-commit).
+    // PR-AUDIT-8: guard the transition — never resurrect a terminal placement
+    // (completed/cancelled). 0 rows updated → stale form or double-submit; bail
+    // before the audit + confirmation email fire.
+    let changed = false;
     await withTx(async (tx) => {
-      await tx
+      const updated = await tx
         .update(placements)
         .set({
           status: newStatus,
@@ -317,9 +321,20 @@ export default async function ShiftDetailPage({
           cancelledAt: newStatus === "cancelled" ? setMap[newStatus] : undefined,
           updatedAt: new Date(),
         })
-        .where(eq(placements.id, placementId));
+        .where(
+          and(
+            eq(placements.id, placementId),
+            sql`${placements.status} NOT IN ('completed', 'cancelled')`,
+          ),
+        )
+        .returning({ id: placements.id });
+      if (updated.length === 0) return; // terminal/stale — no-op
+      changed = true;
       await recordAuditCore(auditBase, tx);
     });
+    if (!changed) {
+      redirect(`/admin/business/shifts/${id}?err=placement-terminal`);
+    }
 
     // Send client-confirmation email when a placement reaches "confirmed"
     if (newStatus === "confirmed") {
@@ -352,32 +367,42 @@ export default async function ShiftDetailPage({
             );
             const shiftWhen = formatShiftWhen(shift.startsAt, shift.endsAt);
 
-            // KLANT email (existing behavior)
-            if (clientRow?.email) {
-              const send = await sendEmail({
-                to: clientRow.email,
-                subject: `Chef bevestigd voor ${clientRow.companyName} — ${shift.roleNeeded}`,
-                react: ShiftConfirmedClientEmail({
-                  clientContactName: clientRow.contactName,
-                  companyName: clientRow.companyName,
-                  chefName: chef.fullName,
-                  chefVakniveau: chef.vakniveau,
-                  chefYears: chef.yearsExperience,
-                  shiftWhen,
-                  shiftLocation: shift.location ?? shift.city,
-                  shiftRole: shift.roleNeeded,
-                }),
-              });
-              if (send.ok) {
-                await recordEmailMessage({
-                  providerMessageId: send.id,
-                  toEmail: clientRow.email,
-                  template: "ShiftConfirmedClientEmail",
-                  eventKey: "shift_confirmed",
-                  entityType: "placement",
-                  entityId: placementId,
-                  userId: clientRow.userId ?? undefined,
+            // KLANT email — PR-AUDIT-2: route via recipientsForClient (single
+            // seam + billing/contact routing). Operational confirmation that
+            // the klant can't opt out of → "generic" (always sends).
+            if (clientRow) {
+              const { recipientsForClient } = await import(
+                "@/lib/domain/client-recipients"
+              );
+              const klantTo = await recipientsForClient(clientRow.id, "generic");
+              if (klantTo.length > 0) {
+                const send = await sendEmail({
+                  to: klantTo,
+                  subject: `Chef bevestigd voor ${clientRow.companyName} — ${shift.roleNeeded}`,
+                  react: ShiftConfirmedClientEmail({
+                    clientContactName: clientRow.contactName,
+                    companyName: clientRow.companyName,
+                    chefName: chef.fullName,
+                    chefVakniveau: chef.vakniveau,
+                    chefYears: chef.yearsExperience,
+                    shiftWhen,
+                    shiftLocation: shift.location ?? shift.city,
+                    shiftRole: shift.roleNeeded,
+                  }),
                 });
+                if (send.ok) {
+                  for (const to of klantTo) {
+                    await recordEmailMessage({
+                      providerMessageId: send.id,
+                      toEmail: to,
+                      template: "ShiftConfirmedClientEmail",
+                      eventKey: "shift_confirmed",
+                      entityType: "placement",
+                      entityId: placementId,
+                      userId: clientRow.userId ?? undefined,
+                    });
+                  }
+                }
               }
             }
 

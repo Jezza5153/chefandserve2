@@ -125,6 +125,8 @@ async function submitPortalRequest(formData: FormData) {
   const submission = {
     externalId,
     source: "client_portal",
+    // PR-AUDIT-1: authoritative owner FK (scopes retract + klant reads).
+    clientId: me.clientId,
     rawPayload: {
       via: "client_portal",
       submittedByClientId: me.clientId,

@@ -642,6 +642,16 @@ export const clientSubmissions = pgTable(
     externalId: text("external_id").notNull(),
     source: text("source").notNull().default("jotform"),
 
+    /**
+     * PR-AUDIT-1: owner FK for portal submissions. Set on portal submit from
+     * the session-resolved client; scopes retract + klant reads by id instead
+     * of the non-unique `companyName` string (cross-tenant hole). Null for
+     * jotform / native_* public intake (no session at submit time).
+     */
+    clientId: text("client_id").references(() => clients.id, {
+      onDelete: "set null",
+    }),
+
     rawPayload: jsonb("raw_payload").notNull(),
 
     /* ----- structured fields ----- */

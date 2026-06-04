@@ -160,6 +160,38 @@ async function main() {
     }
   }
 
+  // ===== strategy 4: integration_outbox housekeeping (delivered breadcrumbs) =====
+  // NOT PII — operational breadcrumbs. Prune rows already delivered by the
+  // deliver-outbox worker (status 'sent') once past their window, so the outbox
+  // doesn't grow unbounded. Raw-SQL mirror of pruneSent() in
+  // src/lib/integrations/outbox.ts. Default 90d; override via a retention_policy.
+  {
+    const period = getPeriod(policies, "integration_outbox") ?? "90 days";
+    const sentExpired = (await sql`
+      SELECT id FROM integration_outbox
+      WHERE status = 'sent'
+        AND sent_at IS NOT NULL
+        AND (sent_at + ${period}::interval) < now()
+    `) as Array<{ id: string }>;
+    totalCandidates += sentExpired.length;
+    log(`retention: integration_outbox — ${sentExpired.length} delivered row(s) past ${period}`);
+
+    if (!DRY_RUN && sentExpired.length > 0) {
+      const deleted = (await sql`
+        DELETE FROM integration_outbox
+        WHERE status = 'sent'
+          AND sent_at IS NOT NULL
+          AND (sent_at + ${period}::interval) < now()
+        RETURNING id
+      `) as Array<{ id: string }>;
+      await audit("retention.outbox_pruned", "integration_outbox", null, {
+        deleted: deleted.length,
+        period,
+      });
+      totalPurged += deleted.length;
+    }
+  }
+
   log(
     `retention: done — ${totalCandidates} candidate(s); ${DRY_RUN ? "0 purged (dry-run)" : `${totalPurged} purged`}`,
   );

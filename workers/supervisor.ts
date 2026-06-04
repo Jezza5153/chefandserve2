@@ -22,6 +22,9 @@
  *
  * Times in Europe/Amsterdam.
  *
+ *   - deliver-outbox           every 5 min   (drain integration_outbox: ack internal breadcrumbs, defer external)
+ *   - hours-reminders          0 9 * * *     (09:00 — chef 24/72h nudge, klant 5d timeout, admin 10d force-approve)
+ *
  * Manual run for testing:
  *   npx tsx supervisor.ts --run-now=weekly-digest
  */
@@ -56,6 +59,14 @@ const JOBS: Job[] = [
   // RETENTION_ENABLED + RETENTION_DRY_RUN both default safe, so this is a
   // no-op ("disabled") until a human deliberately flips both flags.
   { name: "retention", schedule: "0 2 * * 0", script: "retention.ts" },
+  // PR-AUDIT-5: drain the integration_outbox every 5 min. Acks `internal`
+  // breadcrumbs (status pending→sent); leaves external providers pending until
+  // their delivery handler exists. Writes an integration_runs row on real work.
+  { name: "deliver-outbox", schedule: "*/5 * * * *", script: "deliver-outbox.ts" },
+  // PR-AUDIT-6: hours-chain reminders (09:00 Amsterdam). Chef 24/72h unanswered
+  // proposals, klant 5-day unsigned timeout, admin 10-day force-approve. Each
+  // tier is idempotent (last_*_reminder_at markers) so it never double-sends.
+  { name: "hours-reminders", schedule: "0 9 * * *", script: "hours-reminders.ts" },
 ];
 
 function ts(): string {

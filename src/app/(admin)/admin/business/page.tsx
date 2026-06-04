@@ -161,8 +161,10 @@ export default async function BusinessDashboardPage() {
     db.select({ newClientSubs: sql<number>`count(*)::int` }).from(clientSubmissions).where(and(eq(clientSubmissions.status, "new"), gte(clientSubmissions.createdAt, weekAgo))),
     db.select({ shiftsThisWeek: sql<number>`count(*)::int` }).from(shifts).where(and(gte(shifts.startsAt, now), lt(shifts.startsAt, weekFromNow))),
     db.select({ shiftsPrevWeek: sql<number>`count(*)::int` }).from(shifts).where(and(gte(shifts.startsAt, weekAgo), lt(shifts.startsAt, now))),
-    db.select({ confirmedThisWeek: sql<number>`count(*)::int` }).from(placements).where(and(eq(placements.status, "confirmed"), gte(placements.createdAt, weekAgo))),
-    db.select({ confirmedPrevWeek: sql<number>`count(*)::int` }).from(placements).where(and(eq(placements.status, "confirmed"), gte(placements.createdAt, twoWeeksAgo), lt(placements.createdAt, weekAgo))),
+    // PR-AUDIT-3: bucket by confirmedAt (when it was confirmed), not createdAt
+    // (when the placement row was first created) — else count + WoW arrow skew.
+    db.select({ confirmedThisWeek: sql<number>`count(*)::int` }).from(placements).where(and(eq(placements.status, "confirmed"), gte(placements.confirmedAt, weekAgo))),
+    db.select({ confirmedPrevWeek: sql<number>`count(*)::int` }).from(placements).where(and(eq(placements.status, "confirmed"), gte(placements.confirmedAt, twoWeeksAgo), lt(placements.confirmedAt, weekAgo))),
     db.select({ pendingProfileChanges: sql<number>`count(*)::int` }).from(profileChangeRequests).where(eq(profileChangeRequests.status, "pending")),
     db.select({ pendingClientChanges: sql<number>`count(*)::int` }).from(clientChangeRequests).where(eq(clientChangeRequests.status, "pending")),
     getIntegrationHealth(),
@@ -204,6 +206,7 @@ export default async function BusinessDashboardPage() {
     let slots = 0;
     let filled = 0;
     let loonCents = 0;
+    let rateMissing = 0;
     const clientSet = new Set<string>();
     for (const s of dayShifts) {
       const cnt = Math.min(countByShift.get(s.id) ?? 0, s.headcount);
@@ -213,6 +216,9 @@ export default async function BusinessDashboardPage() {
       if (s.chefRateCents) {
         const hours = (new Date(s.endsAt).getTime() - new Date(s.startsAt).getTime()) / 3_600_000;
         loonCents += cnt * s.chefRateCents * hours;
+      } else if (cnt > 0) {
+        // PR-AUDIT-9: a filled slot with no chefRateCents → loonkost undercounts.
+        rateMissing += 1;
       }
     }
     return {
@@ -222,6 +228,7 @@ export default async function BusinessDashboardPage() {
       chefs: chefsByDay.get(dayKey)?.size ?? 0,
       clients: clientSet.size,
       loonEur: Math.round(loonCents / 100),
+      rateMissing,
     };
   }
   const todayMetrics = dayMetrics(todayShifts, todayKey);
@@ -491,7 +498,7 @@ function ToolbarLink({ href, icon, label, primary }: { href: string; icon: IconN
   );
 }
 
-type DayMetrics = { slots: number; filled: number; pct: number; chefs: number; clients: number; loonEur: number };
+type DayMetrics = { slots: number; filled: number; pct: number; chefs: number; clients: number; loonEur: number; rateMissing: number };
 
 function BezettingCard({ label, date, metrics, href, cta, accent }: { label: string; date: string; metrics: DayMetrics; href: string; cta: string; accent?: boolean }) {
   const barTone = metrics.pct >= 80 ? "bg-emerald-500" : metrics.pct >= 50 ? "bg-amber-500" : "bg-red-500";
@@ -520,7 +527,7 @@ function BezettingCard({ label, date, metrics, href, cta, accent }: { label: str
       <div className="mt-4 flex items-center justify-between border-t border-ink-100 pt-3 text-sm">
         <span className="text-ink-700"><b className="font-semibold text-ink-900">{metrics.chefs}</b> Chefs</span>
         <span className="text-ink-700"><b className="font-semibold text-ink-900">{metrics.clients}</b> Klanten</span>
-        <span className="text-ink-700"><b className="font-semibold text-ink-900">€{metrics.loonEur.toLocaleString("nl-NL")}</b> Loonkost</span>
+        <span className="text-ink-700" title={metrics.rateMissing > 0 ? `${metrics.rateMissing} shift(s) zonder tarief — niet meegerekend in loonkost` : undefined}><b className="font-semibold text-ink-900">€{metrics.loonEur.toLocaleString("nl-NL")}{metrics.rateMissing > 0 ? "*" : ""}</b> Loonkost</span>
       </div>
       <Link href={href} className="mt-4 flex items-center justify-center gap-1 rounded-lg border border-burgundy/40 py-2.5 font-ui text-[12px] font-medium text-burgundy hover:bg-burgundy/5">
         {cta} <Icon name="arrow-right" className="h-3.5 w-3.5" />

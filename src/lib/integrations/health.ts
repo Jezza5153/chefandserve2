@@ -20,6 +20,8 @@ export type HealthSummary = {
   outboxFailed: number;
   emailBouncesLast7d: number;
   emailDeliveredLast7d: number;
+  /** All email_messages in the last 7d (any status) — the delivery-% denominator. */
+  emailTotalLast7d: number;
   lastBackupAt: Date | null; // null until PR-CHEF-13 lands
   lastRunPerProvider: Array<{
     provider: string;
@@ -66,7 +68,9 @@ export async function getIntegrationHealth(): Promise<HealthSummary> {
     : ((emailCountsResult as unknown as { rows?: unknown[] }).rows ?? []);
   let emailBouncesLast7d = 0;
   let emailDeliveredLast7d = 0;
+  let emailTotalLast7d = 0;
   for (const r of emailRows as Array<{ status: string; n: number }>) {
+    emailTotalLast7d += r.n;
     if (r.status === "bounced") emailBouncesLast7d += r.n;
     if (r.status === "delivered") emailDeliveredLast7d += r.n;
   }
@@ -89,6 +93,7 @@ export async function getIntegrationHealth(): Promise<HealthSummary> {
     outboxFailed,
     emailBouncesLast7d,
     emailDeliveredLast7d,
+    emailTotalLast7d,
     lastBackupAt: null, // PR-CHEF-13 will populate from backup_runs
     lastRunPerProvider: lastRuns.map((r) => ({
       provider: r.provider,

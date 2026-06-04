@@ -40,6 +40,7 @@ import {
   users,
 } from "@/lib/db/schema";
 import { sendEmail } from "@/lib/email";
+import { recordEmailMessage } from "@/lib/integrations";
 import { env } from "@/lib/env";
 import { PortalInviteEmail } from "@/emails/PortalInviteEmail";
 
@@ -203,7 +204,7 @@ export async function activatePortalUser(
   // Send the welcome email — best-effort, doesn't block activation if it fails
   try {
     if (user.email && user.kind !== "internal") {
-      await sendEmail({
+      const send = await sendEmail({
         to: user.email,
         subject:
           user.kind === "chef"
@@ -215,6 +216,18 @@ export async function activatePortalUser(
           loginUrl: `${env.NEXT_PUBLIC_APP_URL}/login`,
         }),
       });
+      // PR-AUDIT-4: track the welcome/invite send.
+      if (send.ok) {
+        await recordEmailMessage({
+          providerMessageId: send.id,
+          toEmail: user.email,
+          template: "PortalInviteEmail",
+          eventKey: "portal_invite",
+          entityType: "users",
+          entityId: userId,
+          userId,
+        });
+      }
     }
   } catch (e) {
     console.error("[activate] invite email failed:", e);
@@ -307,7 +320,7 @@ export async function inviteInternalStaff(args: {
 
   // Best-effort invite email (post-commit).
   try {
-    await sendEmail({
+    const send = await sendEmail({
       to: email,
       subject: "Welkom bij Chef & Serve — toegang tot het medewerker-portaal",
       react: PortalInviteEmail({
@@ -316,6 +329,18 @@ export async function inviteInternalStaff(args: {
         loginUrl: `${env.NEXT_PUBLIC_APP_URL}/login`,
       }),
     });
+    // PR-AUDIT-4: track the internal-staff invite send.
+    if (send.ok) {
+      await recordEmailMessage({
+        providerMessageId: send.id,
+        toEmail: email,
+        template: "PortalInviteEmail",
+        eventKey: "portal_invite",
+        entityType: "users",
+        entityId: newUserId,
+        userId: newUserId,
+      });
+    }
   } catch (e) {
     console.error("[invite-internal] email failed:", e);
   }

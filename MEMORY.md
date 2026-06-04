@@ -13,7 +13,7 @@ ledger** below; anything planned-but-not-built is flagged ⏳ or noted under
 each PR shipped with a migration, a `scripts/smoke-*.mjs`, and WORKFLOW.md
 linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 
-**Last updated:** Klant-2 slice — PR-K2-1/K2-2/K2-4 (native klant intake form, JotForm retired from public CTAs, chef `respond()` IDOR fix). Prior: Klant phase PR-KLANT-0…5 + DOCS (see "PR ledger")
+**Last updated:** Backend-audit remediation (PR-AUDIT, 2026-06) — `client_submissions.client_id` ownership FK (closes a cross-tenant scoping hole; migration 0035), klant emails routed through `recipientsForClient`, "Bevestigd deze week" KPI bucketed by `confirmedAt`, chef-proposal + portal-invite emails now `recordEmailMessage`-tracked, **deliver-outbox** + **hours-reminders** workers built & registered, CSP beacons excluded from the error KPI, dead `assertNotImpersonating` removed + stale docs fixed. All green (type-check · lint · build · 14/14 audit smoke · klant + integration smokes). Prior: Klant-2 slice (PR-K2-1/K2-2/K2-4). See "PR ledger".
 **Live URL:** https://chefandserve2.vercel.app
 **Repo:** github.com/Jezza5153/chefandserve2
 
@@ -112,6 +112,7 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | PR-B | TOTP_ENFORCE=true + TOTP_REVERIFY_HOURS=12 | ✅ live |
 | PR-C | Recovery flows (forgot password + lost 2FA, Fence 5 purpose-bound tokens) | ✅ live (migration 0010 applied) |
 | PR-D | UX polish (users-list 2FA/last-login columns, calendar today ring, client request success card) | ✅ live |
+| PR-AUDIT | Backend-audit remediation: `client_submissions.client_id` FK (cross-tenant scoping) · klant emails via `recipientsForClient` · KPI bucketed by `confirmedAt` · chef-proposal + portal-invite email tracking · `deliver-outbox` + `hours-reminders` workers · CSP excluded from error KPI · dead-code/doc cleanup | ✅ on `backend-audit-fixes` branch (migration 0035 · type-check/lint/build green · 14/14 audit smoke + klant/integration smokes) — awaiting merge→deploy |
 
 ### In-progress / next
 
@@ -326,13 +327,14 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | Payroll export | `workers/payroll-export.ts` | manual | PLAN: PR-CHEF-7 |
 | Generate recurring shifts | `workers/generate-recurring-shifts.ts` | daily 04:00 Amsterdam | ✅ live (registered in supervisor JOBS, PR-KLANT-4) |
 | Retention purge | `workers/retention.ts` | weekly Sun 02:00 Amsterdam | ✅ live (supervisor JOBS, PR-AVG-3 — DOUBLE-GATED RETENTION_ENABLED+RETENTION_DRY_RUN, both default safe → no-op until deliberately flipped) |
-| Hours reminders | `workers/hours-reminders.ts` | daily | PLAN: PR-CHEF-1 — file not yet created |
+| Deliver outbox | `workers/deliver-outbox.ts` | every 5 min | ✅ live (supervisor JOBS, PR-AUDIT-5 — acks `internal` breadcrumbs pending→sent + writes integration_runs; defers payroll/csv until a handler lands) |
+| Hours reminders | `workers/hours-reminders.ts` | daily 09:00 Amsterdam | ✅ live (supervisor JOBS, PR-AUDIT-6 — chef 24/72h, klant 5d, admin 10d; idempotent via audit markers; **GATED off** by default via HOURS_REMINDERS_ENABLED) |
 
 > All scheduled workers run via `workers/supervisor.ts` JOBS (node-cron,
 > Europe/Amsterdam): weekly-digest · error-digest · embedding-refresh ·
 > payingit-sync · generate-recurring-shifts · complete-placements ·
-> document-expiry · retention (double-gated). `hours-reminders` is referenced in
-> the plan but the file doesn't exist yet; `payroll-export` is manual.
+> document-expiry · retention (double-gated) · deliver-outbox (every 5 min) ·
+> hours-reminders (daily, gated off by default). `payroll-export` is manual.
 > RETENTION env: `RETENTION_ENABLED` (default false) + `RETENTION_DRY_RUN`
 > (default true) must BOTH be set deliberately on Railway for a live purge.
 
@@ -363,7 +365,7 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 
 ### Known follow-ups discovered during the klant phase (spawned as side tasks)
 
-8. ~~**Worker scheduling gap**~~ ✅ RESOLVED — `complete-placements` (every 30 min) + `document-expiry` (daily 06:00) are now registered in `workers/supervisor.ts` JOBS. Worker tsc passes; `complete-placements` sanity-run clean (0 flipped, idempotent). `hours-reminders.ts` does not exist yet (left as PLAN).
+8. ~~**Worker scheduling gap**~~ ✅ RESOLVED — `complete-placements` (every 30 min) + `document-expiry` (daily 06:00) registered in `workers/supervisor.ts` JOBS; **PR-AUDIT** then added `deliver-outbox` (every 5 min) + `hours-reminders` (daily 09:00, gated off by default). Worker tsc passes; all idempotent. The `hours-reminders` PLAN is now built.
 9. ~~**Chef profile-change admin review (PR-CHEF-4 gap)**~~ ✅ RESOLVED — `/admin/business/chefs/[id]` now has a "Wijzigingsverzoeken" section with `approveProfileChange`/`rejectProfileChange` (hourlyRate writes both min/max cents), atomic flip, audit, chef outcome email. Smoke: `scripts/smoke-chef-profile-change.mjs`.
 10. ~~**Chef photo for klanten**~~ ✅ RESOLVED — `/api/chef-photo/[id]` authz extended: a klant can load a clientVisible+verified photo of a chef placed on one of THEIR shifts (no enumeration; chef-self + super_admin paths intact). Hub renders `ChefAvatar` (photo + initials fallback) with the same gate in the query.
 

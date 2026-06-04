@@ -33,6 +33,7 @@ import { tierForShift } from "@/lib/cancellation-severity";
 import { formatShiftRole, formatSegment } from "@/lib/labels";
 import { recordChefEvent, diffSeconds } from "@/lib/chef-events";
 import { recipientsFor } from "@/lib/notifications";
+import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { requireAuth } from "@/lib/permissions";
 
 import { ShiftCancelledByChefClientEmail } from "@/emails/ShiftCancelledByChefClientEmail";
@@ -208,6 +209,7 @@ async function cancel(formData: FormData) {
       clientEmail: clients.email,
       clientContact: clients.contactName,
       clientUserId: clients.userId,
+      clientId: clients.id,
     })
     .from(shifts)
     .innerJoin(clients, eq(clients.id, shifts.clientId))
@@ -223,10 +225,12 @@ async function cancel(formData: FormData) {
       month: "long",
     });
 
-    // Email klant
-    if (ctx.clientEmail) {
+    // Email klant — PR-AUDIT-2: route via recipientsForClient (single seam +
+    // contact routing). Urgent operational cancel → "generic" (always sends).
+    const klantTo = await recipientsForClient(ctx.clientId, "generic");
+    if (klantTo.length > 0) {
       const send = await sendEmail({
-        to: ctx.clientEmail,
+        to: klantTo,
         subject: `Chef heeft geannuleerd — ${shiftDate}`,
         react: ShiftCancelledByChefClientEmail({
           clientContactName: ctx.clientContact,
@@ -238,15 +242,17 @@ async function cancel(formData: FormData) {
         }),
       });
       if (send.ok) {
-        await recordEmailMessage({
-          providerMessageId: send.id,
-          toEmail: ctx.clientEmail,
-          template: "ShiftCancelledByChefClientEmail",
-          eventKey: "placement_chef_cancelled",
-          entityType: "placement",
-          entityId: placementId,
-          userId: ctx.clientUserId ?? undefined,
-        });
+        for (const to of klantTo) {
+          await recordEmailMessage({
+            providerMessageId: send.id,
+            toEmail: to,
+            template: "ShiftCancelledByChefClientEmail",
+            eventKey: "placement_chef_cancelled",
+            entityType: "placement",
+            entityId: placementId,
+            userId: ctx.clientUserId ?? undefined,
+          });
+        }
       }
     }
 

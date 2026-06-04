@@ -101,22 +101,19 @@ export default async function ClientDashboardPage() {
     .orderBy(desc(placements.confirmedAt))
     .limit(5);
 
-  // Pending portal submissions (klant submitted via portal, not yet acted on)
-  const pendingRequests = await db
+  // Pending portal submissions (klant submitted via portal, not yet acted on).
+  // PR-AUDIT-1: scoped by owner FK (client_id), not the non-unique companyName.
+  const myPending = await db
     .select()
     .from(clientSubmissions)
     .where(
       and(
-        eq(clientSubmissions.source, "client_portal"),
+        eq(clientSubmissions.clientId, client.id),
         eq(clientSubmissions.status, "triaged"),
       ),
     )
     .orderBy(desc(clientSubmissions.createdAt))
     .limit(10);
-  // Filter to "ours" by company name match (no clientId FK in submissions yet)
-  const myPending = pendingRequests.filter(
-    (r) => r.companyName === client.companyName,
-  );
 
   // This week's shifts (accepted/confirmed, next 7d)
   const thisWeek = await db
