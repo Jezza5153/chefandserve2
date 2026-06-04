@@ -32,6 +32,22 @@ const MAIN: Item[] = [
   { label: "Instellingen", href: "/admin/account/instellingen", icon: "settings" },
 ];
 
+/**
+ * Planner-only nav (planner AND NOT owner). Cockpit / Klanten / Uren & loon / Analyse
+ * are owner-only and intentionally hidden. "Planning" is the planner cockpit
+ * (/admin/planning); the owner's "Planning" (shifts) becomes "Diensten" here.
+ */
+const PLANNER_MAIN: Item[] = [
+  { label: "Planning", href: "/admin/planning", icon: "dashboard" },
+  { label: "Inbox", href: "/admin/business/inbox", icon: "inbox" },
+  { label: "Formulieren", href: "/admin/business/forms", icon: "message" },
+  { label: "Rooster", href: "/admin/business/roster", icon: "calendar-days" },
+  { label: "Diensten", href: "/admin/business/shifts", icon: "list" },
+  { label: "Chefs", href: "/admin/business/chefs", icon: "users" },
+  { label: "Herinneringen", href: "/admin/business/reminders", icon: "bell" },
+  { label: "Instellingen", href: "/admin/account/instellingen", icon: "settings" },
+];
+
 const SYSTEM: Item[] = [
   { label: "Systeem", href: "/admin/system", icon: "dashboard" },
   { label: "Errors", href: "/admin/system/errors", icon: "alert-triangle" },
@@ -56,11 +72,15 @@ function isActive(pathname: string, href: string): boolean {
 export function SidebarNav({ roles }: { roles: string[] }) {
   const pathname = usePathname() ?? "";
   const isSuperAdmin = roles.includes("super_admin");
+  // Planner-AND-NOT-owner gets the trimmed planner nav; owner / owner+planner /
+  // super_admin keep the full MAIN (owner cockpit stays byte-for-byte unchanged).
+  const isPlannerOnly = roles.includes("planner") && !roles.includes("owner") && !isSuperAdmin;
+  const main = isPlannerOnly ? PLANNER_MAIN : MAIN;
 
   return (
     <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4" aria-label="Admin navigatie">
       <ul className="space-y-0.5">
-        {MAIN.map((item) => (
+        {main.map((item) => (
           <NavRow key={item.label} item={item} active={!!item.href && isActive(pathname, item.href)} />
         ))}
       </ul>
