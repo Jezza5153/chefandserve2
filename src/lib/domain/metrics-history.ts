@@ -108,6 +108,9 @@ export function weightedAvg<T extends Dated>(
   return c > 0 ? s / c : null;
 }
 
+/** A weekly trend result: the shared guard + the raw this/prev period totals. */
+export type PeriodDelta = NoiseGuardedDelta & { thisPeriod: number; prevPeriod: number };
+
 /**
  * Canonical weekly trend: this last-7-days total vs the prior 7-days total, run
  * through the shared noise guard. `thisPeriod`/`prevPeriod` are returned raw so
@@ -117,7 +120,7 @@ export function periodDelta<T extends Dated>(
   rows: T[],
   value: (r: T) => number,
   today: Date = new Date(),
-): NoiseGuardedDelta & { thisPeriod: number; prevPeriod: number } {
+): PeriodDelta {
   const thisFrom = daysAgoISO(6, today); // today−6 … today (7 days)
   const prevFrom = daysAgoISO(13, today); // today−13 … today−7 (prior 7 days)
   let thisPeriod = 0;

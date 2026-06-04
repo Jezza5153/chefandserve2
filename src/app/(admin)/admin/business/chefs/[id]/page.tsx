@@ -27,8 +27,8 @@ import {
   getChefWorkSummary,
 } from "@/lib/domain/chef-history";
 import { getChefDailySeries } from "@/lib/domain/metrics-history";
-import { buildChefTrends, type ChurnRisk, type PeriodDelta } from "@/lib/domain/chef-trends";
-import { Sparkline } from "@/components/dashboard/Sparkline";
+import { buildChefTrends, type ChurnRisk } from "@/lib/domain/chef-trends";
+import { TrendTile } from "@/components/dashboard/TrendTile";
 import { clientTypeLabel } from "@/lib/domain/client-taxonomy";
 import { getOnboardingReadiness, getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { getChefReliability } from "@/lib/chef-events";
@@ -1270,43 +1270,6 @@ export default async function ChefDetailPage({
 
 function fmtNlDate(d: Date | string): string {
   return new Date(d).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" });
-}
-
-function fmtDelta(d: PeriodDelta): { text: string; tone: "up" | "down" | "flat" } | null {
-  if (d.mode === "arrow") {
-    if (d.dir === "flat") return { text: "gelijk", tone: "flat" };
-    return { text: `${d.dir === "up" ? "▲" : "▼"} ${Math.abs(d.diff)}`, tone: d.dir };
-  }
-  if (d.mode === "plain") return { text: `vorige: ${d.prevPeriod}`, tone: "flat" };
-  return null;
-}
-
-function TrendTile({
-  label,
-  spark,
-  value,
-  delta,
-}: {
-  label: string;
-  spark: number[];
-  value: string;
-  delta: PeriodDelta;
-}) {
-  const d = fmtDelta(delta);
-  const toneCls = d?.tone === "up" ? "text-emerald-700" : d?.tone === "down" ? "text-red-600" : "text-ink-500";
-  return (
-    <div className="rounded-lg border border-ink-200 bg-white p-3">
-      <div className="flex items-center justify-between">
-        <span className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">{label}</span>
-        {d ? <span className={`font-ui text-[11px] font-medium ${toneCls}`}>{d.text}</span> : null}
-      </div>
-      <div className="mt-1 flex items-end justify-between gap-2">
-        <span className="text-lg font-semibold leading-none text-ink-900">{value}</span>
-        <Sparkline values={spark} ariaLabel={`${label} trend over ${spark.length} weken`} />
-      </div>
-      <span className="mt-1 block text-[10px] text-ink-400">deze week</span>
-    </div>
-  );
 }
 
 const CHURN_STYLE: Record<Exclude<ChurnRisk["level"], "none">, { cls: string; label: string }> = {

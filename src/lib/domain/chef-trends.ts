@@ -9,16 +9,16 @@
  * result ALONGSIDE the existing point-in-time numbers (chef-history.ts). The sparkline
  * is suppressed when there isn't ≥2 weeks of history to avoid a misleading single bar.
  */
-import { type NoiseGuardedDelta } from "@/lib/domain/dashboard-intel";
 import {
   bucketByWeek,
   periodDelta,
   weightedAvg,
   windowSum,
   type ChefMetricsDaily,
+  type PeriodDelta,
 } from "@/lib/domain/metrics-history";
 
-export type PeriodDelta = NoiseGuardedDelta & { thisPeriod: number; prevPeriod: number };
+export type { PeriodDelta };
 
 export type ChurnRisk = {
   /** none = too little signal · low = recently active · watch / elevated = attention. */
