@@ -2798,3 +2798,81 @@ export const chefEvents = pgTable(
 
 export type ChefEvent = typeof chefEvents.$inferSelect;
 export type NewChefEvent = typeof chefEvents.$inferInsert;
+
+/**
+ * chef_metrics_daily / client_metrics_daily — KPI-1. Per-day ACTIVITY snapshots
+ * (one row per entity per day) written by workers/metrics-snapshot.ts. Every column
+ * is a composable additive measure keyed by the fact's OWN natural date — hours/money
+ * by shift_hours.admin_approved_at, completed shifts by shift end, ratings by
+ * created_at, reliability by chef_events.occurred_at — so any period = SUM over a
+ * date range and any average = Σsum/Σcount. No fabricated scores. Honesty rules
+ * mirror chef-history.ts: money + hours come from FINAL shift_hours only
+ * (admin_approved / exported). FK ON DELETE CASCADE so AVG erasure of a chef/client
+ * drops their derived metrics automatically.
+ */
+export const chefMetricsDaily = pgTable(
+  "chef_metrics_daily",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    snapshotDate: date("snapshot_date").notNull(),
+    // hours + money — FINAL shift_hours only, keyed by admin_approved_at date.
+    hoursWorkedMinutes: integer("hours_worked_minutes").notNull().default(0),
+    payCents: integer("pay_cents").notNull().default(0),
+    revenueCents: integer("revenue_cents").notNull().default(0),
+    marginCents: integer("margin_cents").notNull().default(0),
+    // shifts completed, keyed by shift end date.
+    completedShifts: integer("completed_shifts").notNull().default(0),
+    // ratings received that day (windowed avg = Σsum / Σcount).
+    ratingSum: integer("rating_sum").notNull().default(0),
+    ratingCount: integer("rating_count").notNull().default(0),
+    // reliability — chef_events that day.
+    proposalsAccepted: integer("proposals_accepted").notNull().default(0),
+    proposalsRejected: integer("proposals_rejected").notNull().default(0),
+    cancellations: integer("cancellations").notNull().default(0),
+    hoursSubmitted: integer("hours_submitted").notNull().default(0),
+    responseSecondsSum: integer("response_seconds_sum").notNull().default(0),
+    responseSecondsCount: integer("response_seconds_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    chefDateIdx: uniqueIndex("chef_metrics_daily_chef_date_idx").on(t.chefId, t.snapshotDate),
+    dateIdx: index("chef_metrics_daily_date_idx").on(t.snapshotDate),
+  }),
+);
+export type ChefMetricsDaily = typeof chefMetricsDaily.$inferSelect;
+export type NewChefMetricsDaily = typeof chefMetricsDaily.$inferInsert;
+
+export const clientMetricsDaily = pgTable(
+  "client_metrics_daily",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    snapshotDate: date("snapshot_date").notNull(),
+    // demand + fill — shifts STARTING that day.
+    shiftsCount: integer("shifts_count").notNull().default(0),
+    slotsCount: integer("slots_count").notNull().default(0),
+    filledSlots: integer("filled_slots").notNull().default(0),
+    // money — FINAL shift_hours for this client, keyed by admin_approved_at date.
+    spendCents: integer("spend_cents").notNull().default(0), // client billed (client_rate_cents)
+    chefPayCents: integer("chef_pay_cents").notNull().default(0), // agency cost (chef_rate_cents)
+    marginCents: integer("margin_cents").notNull().default(0),
+    // ratings the client GAVE that day.
+    ratingSum: integer("rating_sum").notNull().default(0),
+    ratingCount: integer("rating_count").notNull().default(0),
+    // hours-approval SLA — hours finalized that day (admin_approved_at − client_signed_at).
+    approvalSlaMinutesSum: integer("approval_sla_minutes_sum").notNull().default(0),
+    approvalSlaCount: integer("approval_sla_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    clientDateIdx: uniqueIndex("client_metrics_daily_client_date_idx").on(t.clientId, t.snapshotDate),
+    dateIdx: index("client_metrics_daily_date_idx").on(t.snapshotDate),
+  }),
+);
+export type ClientMetricsDaily = typeof clientMetricsDaily.$inferSelect;
+export type NewClientMetricsDaily = typeof clientMetricsDaily.$inferInsert;

@@ -53,29 +53,60 @@ export function rankAttentionItems(items: AttentionItem[]): AttentionItem[] {
 
 /* ----- KPI trend (▲/▼ only when meaningful) ------------------------------- */
 
-export type DeltaResult = {
-  /** arrow = show ▲/▼ vs last week · plain = "vorige week: X" · hidden = nothing. */
-  mode: "arrow" | "plain" | "hidden";
-  label: string;
-  dir: "up" | "down" | "flat";
+export type DeltaMode = "arrow" | "plain" | "hidden";
+export type DeltaDir = "up" | "down" | "flat";
+
+/**
+ * Structural (label-free) result of the shared noise guard. Callers format their
+ * own copy (period name, units) off this — see `weekDelta` here and `periodDelta`
+ * in metrics-history.ts.
+ */
+export type NoiseGuardedDelta = {
+  /** arrow = a meaningful ▲/▼ · plain = show the baseline only · hidden = nothing. */
+  mode: DeltaMode;
+  dir: DeltaDir;
+  /** signed current − previous. */
+  diff: number;
+  current: number;
+  previous: number;
+  baseline: number;
 };
 
 /**
- * Trend label with the noise guard: only show ▲/▼ when last week's baseline is
- * meaningful (≥ 5). Below that, a percentage/arrow is misleading ("1 → 2 = ▲100%"),
- * so fall back to a plain "vorige week: X", or hide entirely when there's nothing.
+ * THE shared trend guard (KPI layer routes every ▲/▼ through this). Only treat a
+ * change as a confident arrow when the previous baseline is large enough
+ * (≥ `baseline`, default 5) that the delta isn't dominated by small-number noise
+ * ("1 → 2 = ▲100%"). Below that but with some history → "plain" (show the baseline,
+ * no arrow). No history at all → "hidden". Pure + deterministic.
+ */
+export function noiseGuardedDelta(current: number, previous: number, baseline = 5): NoiseGuardedDelta {
+  const diff = current - previous;
+  const dir: DeltaDir = diff > 0 ? "up" : diff < 0 ? "down" : "flat";
+  const mode: DeltaMode = previous >= baseline ? "arrow" : previous > 0 ? "plain" : "hidden";
+  return { mode, dir, diff, current, previous, baseline };
+}
+
+export type DeltaResult = {
+  /** arrow = show ▲/▼ vs last week · plain = "vorige week: X" · hidden = nothing. */
+  mode: DeltaMode;
+  label: string;
+  dir: DeltaDir;
+};
+
+/**
+ * Dutch "vs vorige week" trend label, built on the shared `noiseGuardedDelta`
+ * guard. Output is unchanged from before the guard was extracted.
  */
 export function weekDelta(current: number, previous: number): DeltaResult {
-  if (previous >= 5) {
-    const diff = current - previous;
-    const dir = diff > 0 ? "up" : diff < 0 ? "down" : "flat";
-    const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "■";
+  const g = noiseGuardedDelta(current, previous);
+  if (g.mode === "arrow") {
+    const arrow = g.dir === "up" ? "▲" : g.dir === "down" ? "▼" : "■";
     return {
       mode: "arrow",
-      label: dir === "flat" ? "gelijk aan vorige week" : `${arrow} ${Math.abs(diff)} vs vorige week`,
-      dir,
+      label: g.dir === "flat" ? "gelijk aan vorige week" : `${arrow} ${Math.abs(g.diff)} vs vorige week`,
+      dir: g.dir,
     };
   }
-  if (previous > 0) return { mode: "plain", label: `vorige week: ${previous}`, dir: "flat" };
+  if (g.mode === "plain") return { mode: "plain", label: `vorige week: ${previous}`, dir: "flat" };
   return { mode: "hidden", label: "", dir: "flat" };
 }

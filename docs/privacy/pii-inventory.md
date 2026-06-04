@@ -90,6 +90,8 @@
 | **shift_hour_corrections** | `reason`, deltas (minutes/amounts), `createdBy`/`approvedBy` (internal), links a `shiftHours` row | Yes (financial) | **Redact** — chef gets corrections to their own hours; strip internal approver identity & client-side deltas | Exclude (financial admin) | **RETAIN — part of payroll administration** | **Yes (7y bewaarplicht)** | **7 years** | **High** — financial correction record; retain, redact counterparty/internal fields |
 | **placement_comments** | `body` (free-text), `authorUserId`, `authorKind`, `visibility`, links a placement (→ chef + klant) | Yes | **Redact by `visibility`** — export only rows the subject is allowed to see (`client_visible` to that klant, `chef_visible` to that chef); **never** export `internal` (admin/matching) comments | Exclude (operational) | Erase free-text on request unless dispute/administration-relevant | No | Operational window | **High** — explicitly designed for multi-actor scoping. A comment may *name another person*. Honour `visibility` strictly; never leak `internal` |
 | **client_contacts** | `name`, `email`, `phone`, `role` | Yes (contact person) | Full to that contact person (their own row). To a *different* contact at the same klant → **Redact** colleagues | Full (their contact details) | **Erase/anonymise** the contact on request unless tied to retained administration | No (contact directory) | While client active + window | Medium — a klant has *multiple* contacts; one contact's DSAR must not reveal colleagues |
+| **chef_metrics_daily** | `chefId` + per-day aggregate measures (hours/pay/revenue/margin cents, completed shifts, rating sum/count, reliability rollups) | Indirect (derived — no name/contact/account data) | **Exclude (derived)** — reproducible from `shift_hours`/`placements`/`ratings`/`chef_events`; not a primary record | Exclude (derived, not subject-provided) | **Cascades on hard-delete** (`ON DELETE CASCADE`); under standard soft-delete (anonymise-in-place) the row persists but carries **no direct PII** (id + aggregates only) | No (derived; mirrors the 7y-held hours it sums) | Tied to source / rolling analytics | Low — aggregates keyed by id, no direct PII |
+| **client_metrics_daily** | `clientId` + per-day aggregates (shifts/slots/filled, spend/loonkost/margin cents, rating sum/count, approval-SLA) | Indirect (derived business aggregate) | **Exclude (derived)** — reproducible from source tables | Exclude (derived) | **Cascades on hard-delete**; under soft-delete the id+aggregate row persists (no direct PII) | No (derived) | Tied to source / rolling analytics | Low — business aggregates, no direct PII |
 
 ---
 
@@ -131,6 +133,12 @@
 - Tables without `deletedAt` that are **not** under legal hold can be hard-deleted on cascade when the parent
   `users`/`chefs`/`clients` row is removed (most `onDelete: "cascade"` children: `notifications`,
   `chef_availability`, `consent_log` — note consent is retained for proof, so suppress rather than delete).
+- The **derived KPI snapshots** (`chef_metrics_daily`, `client_metrics_daily`, KPI-1) have an
+  `ON DELETE CASCADE` FK to `chefs`/`clients`, so a *hard* delete removes them. Because erasure of a
+  chef/client is normally an **anonymise-in-place** (the row keeps its id, PII nulled), the snapshot rows
+  persist — which is harmless: they hold **no direct PII** (an id plus additive counts/cents) and merely
+  mirror the FINAL `shift_hours` that are already retained 7 years under the payroll hold. They are fully
+  re-derivable by `workers/metrics-snapshot.ts --backfill`, so they are never a primary record.
 - The **`privacy_erasure_tombstones`** table (shipped PR-AVG-2, migration 0026) records a hashed,
   non-reversible marker (HMAC of the lower-cased email via `RATE_LIMIT_HASH_SECRET`) of each erased
   subject so a re-submission of the same source data is not silently re-imported (`findTombstoneByEmail`),

@@ -17,6 +17,7 @@
  *   - payingit-sync            0 17 * * FRI  (Fri 17:00 — DRY-RUN until Phase 5)
  *   - generate-recurring-shifts 0 4 * * *    (04:00 daily — materialize template shifts)
  *   - complete-placements      every 30 min  (hours trust chain — confirmed→completed + draft hours)
+ *   - metrics-snapshot         30 0 * * *     (00:30 daily — per-day KPI snapshot, idempotent)
  *   - document-expiry          0 6 * * *     (06:00 daily — chef-document expiry warnings)
  *   - retention                0 2 * * 0     (Sun 02:00 — storage-limitation purge; DOUBLE-GATED, no-op by default)
  *
@@ -50,6 +51,9 @@ const JOBS: Job[] = [
   // PR-CHEF-1: the hours trust chain. Flip confirmed→completed (endsAt+1h) +
   // create draft shift_hours. Idempotent — runs every 30 min.
   { name: "complete-placements", schedule: "*/30 * * * *", script: "complete-placements.ts" },
+  // KPI-1: per-day metrics snapshot (00:30 Amsterdam, after complete-placements has
+  // flipped the day's shifts → completed). Idempotent ON CONFLICT — safe to re-run.
+  { name: "metrics-snapshot", schedule: "30 0 * * *", script: "metrics-snapshot.ts" },
   // PR-CHEF-12: daily chef-document expiry warnings (06:00 Amsterdam).
   { name: "document-expiry", schedule: "0 6 * * *", script: "document-expiry.ts" },
   // PR-REM-1: configurable reminder-rules engine (06:30 Amsterdam, after
