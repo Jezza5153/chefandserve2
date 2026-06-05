@@ -412,7 +412,7 @@ export default async function RosterPage({
           {view === "week" ? (
             <RosterWeekGrid hotels={vmBody.weekHotels ?? []} weekDays={week!.days} todayKey={todayKey} />
           ) : (
-            <RosterMonthHeatmap cells={monthCells} todayKey={todayKey} topHotels={vmFull.monthTopHotels ?? []} roleShortage={vmFull.monthRoleShortage ?? []} />
+            <RosterMonthHeatmap cells={monthCells} todayKey={todayKey} topHotels={vmFull.monthTopHotels ?? []} roleShortage={vmFull.monthRoleShortage ?? []} hotelsMetAandacht={vmFull.hotelsMetAandacht} />
           )}
         </>
       )}
