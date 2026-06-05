@@ -29,7 +29,7 @@ export type RoleKey = "super_admin" | "owner" | "planner" | (string & {}); // op
 export function defaultLandingFor(roleKeys: string[]): string {
   if (roleKeys.includes("super_admin")) return "/admin/system";
   if (roleKeys.includes("owner")) return "/admin/business";
-  if (roleKeys.includes("planner")) return "/admin/business";
+  if (roleKeys.includes("planner")) return "/admin/planning";
   if (roleKeys.includes("chef")) return "/chef";
   if (roleKeys.includes("client")) return "/client";
   return "/admin";
