@@ -122,7 +122,7 @@ export default async function ClientsListPage({
           </p>
         </div>
       ) : (
-        <div className="mt-8 overflow-hidden rounded-lg border border-ink-200 bg-white">
+        <div className="mt-8 overflow-x-auto rounded-lg border border-ink-200 bg-white">
           <table className="w-full">
             <thead className="bg-bg-gray text-left">
               <tr>
