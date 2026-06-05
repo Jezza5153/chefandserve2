@@ -26,6 +26,9 @@ import {
   getChefRecentShifts,
   getChefWorkSummary,
 } from "@/lib/domain/chef-history";
+import { getChefDailySeries } from "@/lib/domain/metrics-history";
+import { buildChefTrends, type ChurnRisk } from "@/lib/domain/chef-trends";
+import { TrendTile } from "@/components/dashboard/TrendTile";
 import { clientTypeLabel } from "@/lib/domain/client-taxonomy";
 import { getOnboardingReadiness, getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { getChefReliability } from "@/lib/chef-events";
@@ -130,12 +133,16 @@ export default async function ChefDetailPage({
 
   // PR-1.6: Chef 360 read model (hours from FINAL hours only · feedback from
   // real ratings · reliability = raw counts).
-  const [workSummary, feedback, recentShifts, reliability] = await Promise.all([
+  const [workSummary, feedback, recentShifts, reliability, chefSeries] = await Promise.all([
     getChefWorkSummary(id),
     getChefFeedbackSummary(id),
     getChefRecentShifts(id, 8),
     getChefReliability(id),
+    getChefDailySeries(id, 90), // KPI-2: 90d of snapshot rows → 8-week trends
   ]);
+  // KPI-2: pure trend layer over the snapshot rows (sparklines + noise-guarded deltas
+  // + honest churn signal). Rendered alongside the point-in-time numbers below.
+  const trends = buildChefTrends(chefSeries);
 
   // PR-2: profile completeness over the structured intake fields.
   const completeness = getProfileCompleteness({
@@ -1123,6 +1130,30 @@ export default async function ChefDetailPage({
           </div>
         ) : null}
 
+        {/* KPI-2: 8-week trend — sparklines + noise-guarded deltas + honest churn signal */}
+        <div className="mt-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="font-ui text-[10px] font-medium uppercase tracking-wider text-ink-500">
+              Trend · laatste 8 weken
+            </p>
+            <ChurnChip churn={trends.churn} />
+          </div>
+          {trends.hasEnoughHistory ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <TrendTile label="Uren" spark={trends.hoursSparkline} value={`${trends.hoursDelta.thisPeriod} u`} delta={trends.hoursDelta} />
+              <TrendTile label="Marge" spark={trends.marginSparkline} value={`€ ${trends.marginDelta.thisPeriod}`} delta={trends.marginDelta} />
+              <TrendTile label="Diensten" spark={trends.shiftsSparkline} value={String(trends.shiftsDelta.thisPeriod)} delta={trends.shiftsDelta} />
+            </div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-ink-200 bg-bg-gray/40 px-3 py-2 text-xs text-ink-500">
+              Te weinig historie voor een trend — vanaf ±2 weken activiteit verschijnt hier de 8-weekse grafiek.
+            </p>
+          )}
+          <p className="mt-1 text-[10px] text-ink-500">
+            Per week opgeteld uit de dagelijkse snapshot · deze week vs. vorige · ▲▼ alleen bij een betekenisvolle basis (ruisfilter).
+          </p>
+        </div>
+
         {(workSummary.topClients.length > 0 ||
           workSummary.topSegments.length > 0 ||
           workSummary.topClientTypes.length > 0) && (
@@ -1239,6 +1270,25 @@ export default async function ChefDetailPage({
 
 function fmtNlDate(d: Date | string): string {
   return new Date(d).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" });
+}
+
+const CHURN_STYLE: Record<Exclude<ChurnRisk["level"], "none">, { cls: string; label: string }> = {
+  low: { cls: "bg-bg-gray text-ink-600", label: "Actief" },
+  watch: { cls: "bg-amber-100 text-amber-800", label: "Let op" },
+  elevated: { cls: "bg-red-100 text-red-700", label: "Risico" },
+};
+
+function ChurnChip({ churn }: { churn: ChurnRisk }) {
+  if (churn.level === "none") return null;
+  const s = CHURN_STYLE[churn.level];
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 font-ui text-[11px] ${s.cls}`}
+      title={churn.reasons.join(" · ")}
+    >
+      {s.label} · {churn.reasons[0]}
+    </span>
+  );
 }
 
 function Snap({ label, value, note }: { label: string; value: string; note?: string }) {

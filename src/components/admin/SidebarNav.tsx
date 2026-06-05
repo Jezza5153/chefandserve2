@@ -12,8 +12,8 @@ import { Icon, type IconName } from "@/components/admin/icons";
  * "Binnenkort" items render disabled — keeps the future shape visible, no dead
  * links. Ambiguous V3 labels map to the nearest real route:
  *   Planning → /shifts · Uren & loon → /hours (payroll via Exporteren/footer).
- * Analyse has no page yet → binnenkort. Templates/Payroll stay reachable from
- * the dashboard toolbar; super-admins keep the full Systeem group.
+ * Analyse → /admin/business/insights (KPI-4 ranglijsten). Templates/Payroll stay
+ * reachable from the dashboard toolbar; super-admins keep the full Systeem group.
  */
 
 type Item = { label: string; href?: string; icon: IconName; soon?: boolean };
@@ -28,7 +28,7 @@ const MAIN: Item[] = [
   { label: "Formulieren", href: "/admin/business/forms", icon: "message" },
   { label: "Herinneringen", href: "/admin/business/reminders", icon: "bell" },
   { label: "Uren & loon", href: "/admin/business/hours", icon: "wallet" },
-  { label: "Analyse", icon: "bar-chart", soon: true },
+  { label: "Analyse", href: "/admin/business/insights", icon: "bar-chart" },
   { label: "Instellingen", href: "/admin/account/instellingen", icon: "settings" },
 ];
 
