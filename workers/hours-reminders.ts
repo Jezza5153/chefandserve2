@@ -15,10 +15,11 @@
  *   TIER 3 — klant STILL hasn't signed
  *     +10d after submit → alert admin: force-approve needed (email)
  *
- * GATED: HOURS_REMINDERS_ENABLED !== "true" → logs "disabled", exits (no sends).
- * Default-off is deliberate — this is the ONLY worker that emails klanten/chefs
- * about their own rows, so it must not fire against demo / pre-launch data until
- * a human flips it on at launch. (Mirrors retention.ts / reminders.ts dark-launch.)
+ * GATED (PR-SET-1): OFF unless the DB flag business_settings['hours_reminders']
+ * .enabled is true — owners flip it in /admin/business/instellingen (no env edit).
+ * HOURS_REMINDERS_ENABLED="false" stays as an ops hard kill-switch. Default OFF is
+ * deliberate — this is the ONLY worker that emails klanten/chefs about their own
+ * rows, so it must not fire against demo / pre-launch data until deliberately on.
  *
  * Boundary vs reminders.ts (PR-REM-1): that is the GENERIC configurable rule
  * engine (reminder_rules); this is the FIXED hours ladder. Keep hours rules OUT
@@ -29,8 +30,20 @@
 
 import { audit, log, sendPlainEmail, sql } from "./_lib";
 
-const ENABLED = process.env.HOURS_REMINDERS_ENABLED === "true";
 const APP = process.env.NEXT_PUBLIC_APP_URL ?? "https://chefandserve2.vercel.app";
+
+/**
+ * Enable check (PR-SET-1). The DB flag is authoritative (owner-toggled in the UI
+ * at /admin/business/instellingen); HOURS_REMINDERS_ENABLED="false" is an ops
+ * hard kill-switch override. Default OFF (no flag row → disabled).
+ */
+async function isEnabled(): Promise<boolean> {
+  if (process.env.HOURS_REMINDERS_ENABLED === "false") return false; // hard kill-switch
+  const rows = (await sql`
+    SELECT value->>'enabled' AS enabled FROM business_settings WHERE key = 'hours_reminders'
+  `) as Array<{ enabled: string | null }>;
+  return rows[0]?.enabled === "true";
+}
 
 /* ---------- helpers ------------------------------------------------------- */
 
@@ -262,8 +275,8 @@ async function klantAndAdmin(): Promise<{ klant: number; admin: number }> {
 
 async function main() {
   log("hours-reminders: starting");
-  if (!ENABLED) {
-    log("hours-reminders: HOURS_REMINDERS_ENABLED != 'true' → disabled, exiting (no sends)");
+  if (!(await isEnabled())) {
+    log("hours-reminders: disabled (business_settings 'hours_reminders' off, or env kill-switch) → exiting (no sends)");
     return;
   }
   const chef = await chefNudges();

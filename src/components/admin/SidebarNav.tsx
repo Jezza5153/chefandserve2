@@ -46,6 +46,7 @@ const PLANNER_MAIN: Item[] = [
   { label: "Chefs", href: "/admin/business/chefs", icon: "users" },
   { label: "Herinneringen", href: "/admin/business/reminders", icon: "bell" },
   { label: "Instellingen", href: "/admin/account/instellingen", icon: "settings" },
+  { label: "Bedrijf", href: "/admin/business/instellingen", icon: "settings" },
 ];
 
 const SYSTEM: Item[] = [

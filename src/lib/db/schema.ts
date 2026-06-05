@@ -544,6 +544,28 @@ export const notificationRoutes = pgTable("notification_routes", {
     .defaultNow(),
 });
 
+/* =============================================================================
+ * BUSINESS SETTINGS (PR-SET-1) — company-wide operational config / feature flags
+ *
+ * KV table for settings the OWNER (not just super_admin) controls without a
+ * developer or env change. One row per key; `value` is jsonb so it holds a
+ * boolean flag ({"enabled":true}) today and richer settings (SLAs, rates) later.
+ * Read via src/lib/business-settings.ts (60s cache + safe default) by the app,
+ * and via raw SQL by Railway workers (e.g. hours-reminders honors the flag).
+ * =========================================================================== */
+export const businessSettings = pgTable("business_settings", {
+  /** stable setting key — primary key (e.g. 'hours_reminders') */
+  key: text("key").primaryKey(),
+  /** jsonb payload — boolean flags use {"enabled": true|false} */
+  value: jsonb("value").notNull().default(sql`'{}'::jsonb`),
+  updatedBy: text("updated_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const rateLimits = pgTable(
   "rate_limits",
   {

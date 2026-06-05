@@ -35,7 +35,6 @@ import {
 } from "@/lib/domain/dashboard-intel";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { getRosterSettings } from "@/lib/domain/user-settings";
-import { getIntegrationHealth } from "@/lib/integrations";
 import { requireRole } from "@/lib/permissions";
 import {
   addDaysToKey,
@@ -89,7 +88,6 @@ export default async function BusinessDashboardPage() {
     [{ confirmedPrevWeek }],
     [{ pendingProfileChanges }],
     [{ pendingClientChanges }],
-    integrationsHealth,
   ] = await Promise.all([
     db
       .select({
@@ -167,7 +165,6 @@ export default async function BusinessDashboardPage() {
     db.select({ confirmedPrevWeek: sql<number>`count(*)::int` }).from(placements).where(and(eq(placements.status, "confirmed"), gte(placements.confirmedAt, twoWeeksAgo), lt(placements.confirmedAt, weekAgo))),
     db.select({ pendingProfileChanges: sql<number>`count(*)::int` }).from(profileChangeRequests).where(eq(profileChangeRequests.status, "pending")),
     db.select({ pendingClientChanges: sql<number>`count(*)::int` }).from(clientChangeRequests).where(eq(clientChangeRequests.status, "pending")),
-    getIntegrationHealth(),
   ]);
 
   /* ---- derive per-shift intel + day metrics ---- */
@@ -326,8 +323,6 @@ export default async function BusinessDashboardPage() {
   const shiftsDelta = weekDelta(shiftsThisWeek, shiftsPrevWeek);
   const confirmedDelta = weekDelta(confirmedThisWeek, confirmedPrevWeek);
 
-  const hasUnhealthy = integrationsHealth.emailBouncesLast7d > 0 || integrationsHealth.outboxFailed > 0;
-
   return (
     <div className="-mx-6 -my-10 md:-mx-10 md:-my-12">
       <div className="px-6 py-7 md:px-10 md:py-8">
@@ -462,19 +457,14 @@ export default async function BusinessDashboardPage() {
             lines={[{ text: "ontbrekend" }, missingDataCount > 0 ? { text: "actie vereist", tone: "amber" } : { text: "compleet", tone: "emerald" }]} />
         </div>
 
-        {/* System footer */}
-        <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-ink-200 pt-4 font-ui text-[11px] text-ink-500">
-          <span className={`flex items-center gap-1.5 ${hasUnhealthy ? "text-amber-800" : "text-emerald-700"}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${hasUnhealthy ? "bg-amber-500" : "bg-emerald-500"}`} />
-            {hasUnhealthy ? "Systeemstatus: aandacht" : "Systeemstatus: alle systemen operationeel"}
-          </span>
-          <span>E-mail {integrationsHealth.emailBouncesLast7d > 0 ? `${integrationsHealth.emailBouncesLast7d} bounces` : "ok"}</span>
-          <span>Outbox {integrationsHealth.outboxFailed > 0 ? `${integrationsHealth.outboxFailed} mislukt` : integrationsHealth.outboxPending}</span>
-          {latestPayroll?.closedAt && (
-            <span>Payroll-export {new Date(latestPayroll.closedAt).toLocaleDateString("nl-NL", { day: "numeric", month: "short", timeZone: "Europe/Amsterdam" })}</span>
-          )}
-          <Link href="/admin/business/integrations" className="ml-auto text-burgundy hover:underline">Alle integraties →</Link>
-        </div>
+        {/* Operational footer — system/integration health lives on the
+            super_admin /admin/system + /admin/business/integrations surfaces
+            (owners don't manage error-handling). */}
+        {latestPayroll?.closedAt && (
+          <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-ink-200 pt-4 font-ui text-[11px] text-ink-500">
+            <span>Laatste payroll-export {new Date(latestPayroll.closedAt).toLocaleDateString("nl-NL", { day: "numeric", month: "short", timeZone: "Europe/Amsterdam" })}</span>
+          </div>
+        )}
       </div>
     </div>
   );
