@@ -5,6 +5,8 @@
  * Server component (presentational only).
  */
 
+import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
+
 type SubmissionStatus =
   | "new"
   | "triaged"
@@ -31,13 +33,13 @@ const NEXT_STEP: Record<SubmissionStatus, string> = {
   cancelled_by_client: "Je hebt deze aanvraag ingetrokken.",
 };
 
-const TONE: Record<SubmissionStatus, string> = {
-  new: "bg-amber-100 text-amber-800",
-  triaged: "bg-amber-100 text-amber-800",
-  converted: "bg-emerald-100 text-emerald-700",
-  rejected: "bg-bg-gray text-ink-500",
-  duplicate: "bg-bg-gray text-ink-500",
-  cancelled_by_client: "bg-bg-gray text-ink-500",
+const TONE: Record<SubmissionStatus, StatusTone> = {
+  new: "amber",
+  triaged: "amber",
+  converted: "green",
+  rejected: "gray",
+  duplicate: "gray",
+  cancelled_by_client: "gray",
 };
 
 export function requestStatusNextStep(status: string): string {
@@ -51,12 +53,10 @@ export function requestStatusLabel(status: string): string {
 export function RequestStatusBadge({ status }: { status: string }) {
   const s = status as SubmissionStatus;
   return (
-    <span
-      className={`shrink-0 rounded-full px-2.5 py-1 font-ui text-[9px] font-medium uppercase tracking-wider ${
-        TONE[s] ?? "bg-bg-gray text-ink-500"
-      }`}
-    >
-      {LABEL[s] ?? status}
-    </span>
+    <StatusBadge
+      tone={TONE[s] ?? "gray"}
+      label={LABEL[s] ?? status}
+      className="shrink-0"
+    />
   );
 }
