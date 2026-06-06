@@ -13,15 +13,16 @@
  *   - Force password reset
  */
 
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
-import { recordAuditFromRequest } from "@/lib/audit";
 import { db } from "@/lib/db/client";
-import { roles, userRoles, users } from "@/lib/db/schema";
+import { roles, userPermissions, userRoles, users } from "@/lib/db/schema";
 import { resetInternalUser2FA } from "@/lib/domain/auth-admin";
-import { requirePermission } from "@/lib/permissions";
+import { effectivePermissionKeys, requirePermission } from "@/lib/permissions";
+import { CATALOG } from "@/lib/rbac/catalog";
+import { assignRoles, setUserPermission } from "@/lib/rbac/manage";
 
 export const metadata = { title: "Gebruiker", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -60,69 +61,46 @@ async function reset2FA(formData: FormData) {
 async function manageRoles(formData: FormData) {
   "use server";
   const session = await requirePermission("users", "read", "/admin/system/users");
-
   const targetUserId = String(formData.get("targetUserId") ?? "");
-  const selected = formData.getAll("roleKey").map(String);
+  const roleKeys = formData.getAll("roleKey").map(String);
+  // Shared, guarded path (G3/G4/G5 + version bump + audit live in manage.ts).
+  const res = await assignRoles({ session, targetUserId, roleKeys });
+  redirect(
+    res.ok
+      ? `/admin/system/users/${targetUserId}?roles=1`
+      : `/admin/system/users/${targetUserId}?error=${encodeURIComponent(res.error)}`,
+  );
+}
 
-  const target = await db.query.users.findFirst({ where: eq(users.id, targetUserId) });
-  if (!target) redirect(`/admin/system/users/${targetUserId}?error=not-found`);
-
-  const allRoles = await db.select().from(roles);
-  const allowed = new Set(allRoles.map((r) => r.key));
-  const selectedSet = new Set(selected.filter((k) => allowed.has(k)));
-
-  const currentRows = await db
-    .select({ key: roles.key, roleId: userRoles.roleId })
-    .from(userRoles)
-    .innerJoin(roles, eq(roles.id, userRoles.roleId))
-    .where(eq(userRoles.userId, targetUserId));
-  const currentKeys = new Set(currentRows.map((r) => r.key));
-
-  // Guard: never remove the last super_admin.
-  if (currentKeys.has("super_admin") && !selectedSet.has("super_admin")) {
-    const supers = await db
-      .select({ userId: userRoles.userId })
-      .from(userRoles)
-      .innerJoin(roles, eq(roles.id, userRoles.roleId))
-      .where(eq(roles.key, "super_admin"));
-    if (supers.length <= 1) {
-      redirect(
-        `/admin/system/users/${targetUserId}?error=${encodeURIComponent("Kan de laatste super_admin niet verwijderen.")}`,
-      );
+async function setOverride(formData: FormData) {
+  "use server";
+  const session = await requirePermission("users", "read", "/admin/system/users");
+  const targetUserId = String(formData.get("targetUserId") ?? "");
+  const current = await db
+    .select({
+      resource: userPermissions.resource,
+      action: userPermissions.action,
+      effect: userPermissions.effect,
+    })
+    .from(userPermissions)
+    .where(eq(userPermissions.userId, targetUserId));
+  const curMap = new Map(current.map((c) => [`${c.resource}.${c.action}`, c.effect as string]));
+  // Only apply changed perms (one version bump per change; manage.ts guards each).
+  for (const p of CATALOG) {
+    const submitted = String(formData.get(`effect_${p.key}`) ?? "");
+    if (!submitted) continue; // perm not rendered in this form
+    const cur = curMap.get(p.key) ?? "inherit";
+    if (submitted !== cur) {
+      await setUserPermission({
+        session,
+        targetUserId,
+        resource: p.resource,
+        action: p.action,
+        effect: submitted as "grant" | "revoke" | "inherit",
+      });
     }
   }
-
-  const roleIdByKey = new Map(allRoles.map((r) => [r.key, r.id] as const));
-  for (const key of selectedSet) {
-    if (!currentKeys.has(key)) {
-      const rid = roleIdByKey.get(key);
-      if (rid) {
-        await db.insert(userRoles).values({ userId: targetUserId, roleId: rid }).onConflictDoNothing();
-      }
-    }
-  }
-  for (const row of currentRows) {
-    if (!selectedSet.has(row.key)) {
-      await db
-        .delete(userRoles)
-        .where(and(eq(userRoles.userId, targetUserId), eq(userRoles.roleId, row.roleId)));
-    }
-  }
-
-  // Bump permissionsVersion so the target's JWT invalidates on their next request.
-  await db
-    .update(users)
-    .set({ permissionsVersion: target.permissionsVersion + 1, updatedAt: new Date() })
-    .where(eq(users.id, targetUserId));
-
-  await recordAuditFromRequest({
-    userId: session.user.id,
-    action: "user.roles_updated",
-    resource: "users",
-    resourceId: targetUserId,
-    after: { roles: [...selectedSet] },
-  });
-  redirect(`/admin/system/users/${targetUserId}?roles=1`);
+  redirect(`/admin/system/users/${targetUserId}?ovr=1`);
 }
 
 export default async function UserDetailPage({
@@ -130,7 +108,7 @@ export default async function UserDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ reset?: string; error?: string; roles?: string }>;
+  searchParams: Promise<{ reset?: string; error?: string; roles?: string; ovr?: string }>;
 }) {
   const session = await requirePermission("users", "read");
   const { id } = await params;
@@ -160,13 +138,30 @@ export default async function UserDetailPage({
   const targetIsOnlySuperAdmin =
     userRoleRows.some((r) => r.key === "super_admin") && superAdminCount <= 1;
 
+  // C5 override editor: the target's effective perms + their current overrides.
+  const targetEffective = await effectivePermissionKeys({
+    user: { id: user.id, roles: userRoleRows.map((r) => r.key) },
+  } as never);
+  const overrideRows = await db
+    .select({
+      resource: userPermissions.resource,
+      action: userPermissions.action,
+      effect: userPermissions.effect,
+    })
+    .from(userPermissions)
+    .where(eq(userPermissions.userId, user.id));
+  const overrideMap = new Map(overrideRows.map((o) => [`${o.resource}.${o.action}`, o.effect as string]));
+  const businessPerms = CATALOG.filter((p) => p.class === "business");
+
   const isSelfReset = session.user.id === user.id;
 
   const flashMsg = sp.reset === "1"
     ? `✓ 2FA gereset voor ${user.email}. Bij hun volgende request worden ze uitgelogd en moeten ze opnieuw een wachtwoord + 2FA instellen.`
     : sp.roles === "1"
       ? `✓ Rollen bijgewerkt voor ${user.email}. De sessie wordt bij hun volgende request vernieuwd.`
-      : null;
+      : sp.ovr === "1"
+        ? `✓ Individuele rechten bijgewerkt voor ${user.email}.`
+        : null;
 
   const errorMsg =
     sp.error === "confirmation-mismatch"
@@ -315,6 +310,53 @@ export default async function UserDetailPage({
           </form>
         </section>
       ) : null}
+
+      {/* Individuele rechten (per-user overrides) — C5. */}
+      {user.kind === "internal" && (
+        <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
+          <h2 className="font-serif text-xl text-ink-900">Individuele rechten</h2>
+          <p className="mt-2 text-sm text-ink-700">
+            Verfijn per persoon bovenop de rol: <strong>toekennen</strong> geeft een extra recht,{" "}
+            <strong>intrekken</strong> ontneemt het (ook als de rol het wél geeft). Standaard = volg de rol.
+          </p>
+          <form action={setOverride} className="mt-4">
+            <input type="hidden" name="targetUserId" value={user.id} />
+            <div className="divide-y divide-ink-100">
+              {businessPerms.map((p) => {
+                const cur = overrideMap.get(p.key) ?? "inherit";
+                const active = targetEffective.has(p.key);
+                return (
+                  <div key={p.key} className="flex items-center justify-between gap-3 py-2">
+                    <span className="text-sm text-ink-800">
+                      {p.label} <span className="font-mono text-[10px] text-ink-400">{p.key}</span>
+                      {active && (
+                        <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-emerald-700">
+                          actief
+                        </span>
+                      )}
+                    </span>
+                    <select
+                      name={`effect_${p.key}`}
+                      defaultValue={cur}
+                      className="rounded border border-ink-200 px-2 py-1 text-xs text-ink-800"
+                    >
+                      <option value="inherit">Standaard (rol)</option>
+                      <option value="grant">Toekennen</option>
+                      <option value="revoke">Intrekken</option>
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              type="submit"
+              className="mt-4 rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
+            >
+              Rechten opslaan
+            </button>
+          </form>
+        </section>
+      )}
     </div>
   );
 }
