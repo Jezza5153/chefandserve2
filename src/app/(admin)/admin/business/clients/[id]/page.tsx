@@ -19,6 +19,7 @@ import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { buildClientTrends, getClientSummary } from "@/lib/domain/client-history";
 import { getClientDailySeries } from "@/lib/domain/metrics-history";
 import { TrendTile } from "@/components/dashboard/TrendTile";
+import { fieldClass } from "@/components/forms/Fields";
 import { formatEuro } from "@/lib/hours-labels";
 import {
   activatePortalUser,
@@ -546,7 +547,7 @@ export default async function ClientDetailPage({
             <select
               name="clientType"
               defaultValue={client.clientType ?? ""}
-              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              className={fieldClass}
             >
               <option value="">— kies —</option>
               {CLIENT_TYPE_OPTIONS.map((o) => (
@@ -715,7 +716,7 @@ export default async function ClientDetailPage({
                     name="decisionNotes"
                     rows={2}
                     placeholder="Optionele toelichting (gedeeld met de klant)"
-                    className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+                    className={`${fieldClass} placeholder-ink-500`}
                   />
                   <div className="mt-2 flex gap-2">
                     <button
@@ -863,8 +864,7 @@ function Field({
   as = "input",
   options,
 }: FieldProps) {
-  const baseClass =
-    "w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy";
+  const baseClass = `${fieldClass} placeholder-ink-500`;
   return (
     <label className="block">
       <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
