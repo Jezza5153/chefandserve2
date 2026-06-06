@@ -11,9 +11,10 @@
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
+import { env } from "@/lib/env";
 
 export function forecastEnabled(): boolean {
-  return process.env.KPI_FORECAST_ENABLED === "true";
+  return env.KPI_FORECAST_ENABLED === "true";
 }
 
 function rows<T>(r: unknown): T[] {
