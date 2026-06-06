@@ -3,7 +3,7 @@ import { desc } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { reminderRules } from "@/lib/db/schema";
 import type { ReminderRule } from "@/lib/db/schema";
-import { requireAnyRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 import { fieldClass as INPUT, btnClass as BTN } from "@/components/forms/Fields";
 
 import { createRule, deleteRule, toggleRule, updateRule } from "./actions";
@@ -36,7 +36,7 @@ export default async function RemindersPage({
 }: {
   searchParams: Promise<{ ok?: string; err?: string }>;
 }) {
-  await requireAnyRole(["owner", "planner"], "/admin/business");
+  await requirePermission("reminders", "write", "/admin/business");
   const sp = await searchParams;
   const rules = await db.select().from(reminderRules).orderBy(desc(reminderRules.createdAt));
   const flash = sp.ok ? FLASH[sp.ok] : sp.err ? FLASH[sp.err] : null;

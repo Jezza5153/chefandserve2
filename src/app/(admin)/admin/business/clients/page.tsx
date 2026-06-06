@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { clients } from "@/lib/db/schema";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Klanten" };
 
@@ -14,7 +14,7 @@ export default async function ClientsListPage({
 }: {
   searchParams: Promise<{ status?: FilterStatus; q?: string }>;
 }) {
-  await requireRole("owner");
+  await requirePermission("clients", "write");
   const params = await searchParams;
   const status: FilterStatus = params.status ?? "active";
   const q = params.q?.trim() ?? "";

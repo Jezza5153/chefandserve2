@@ -41,7 +41,7 @@ import {
   type RosterView,
 } from "@/lib/domain/roster-intel";
 import { getRosterSettings } from "@/lib/domain/user-settings";
-import { requireAnyRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 import {
   addDaysToKey,
   amsterdamDayKey,
@@ -132,7 +132,7 @@ export default async function RosterPage({
 }: {
   searchParams: Promise<{ view?: string; date?: string; week?: string; filter?: string }>;
 }) {
-  const session = await requireAnyRole(["owner", "planner"]);
+  const session = await requirePermission("roster", "read");
   const sp = await searchParams;
   const rosterSettings = await getRosterSettings(session.user.id);
   const now = new Date();

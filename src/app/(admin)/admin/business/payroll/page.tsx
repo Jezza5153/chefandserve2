@@ -31,7 +31,7 @@ import {
   computeChefAmountCents,
   formatEuro,
 } from "@/lib/hours-labels";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Payroll", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -40,7 +40,7 @@ export const dynamic = "force-dynamic";
 
 async function createBatch(formData: FormData) {
   "use server";
-  const session = await requireRole("owner");
+  const session = await requirePermission("payroll", "read");
   await assertImpersonationAllowed();
   const start = String(formData.get("periodStart") ?? "");
   const end = String(formData.get("periodEnd") ?? "");
@@ -117,7 +117,7 @@ async function createBatch(formData: FormData) {
 
 async function markExported(formData: FormData) {
   "use server";
-  const session = await requireRole("owner");
+  const session = await requirePermission("payroll", "read");
   await assertImpersonationAllowed();
   const batchId = String(formData.get("batchId") ?? "");
   if (!batchId) return;
@@ -182,7 +182,7 @@ export default async function PayrollPage({
 }: {
   searchParams: Promise<{ ok?: string; error?: string; id?: string }>;
 }) {
-  await requireRole("owner");
+  await requirePermission("payroll", "read");
   const sp = await searchParams;
 
   // Period default: last calendar month

@@ -8,7 +8,7 @@ import { recordAuditFromRequest } from "@/lib/audit";
 import { db } from "@/lib/db/client";
 import { formFields, formSections, forms } from "@/lib/db/schema";
 import type { FieldOption, FieldType } from "@/lib/forms/types";
-import { requireAnyRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 const CUSTOM_TYPES: FieldType[] = [
   "text",
@@ -29,7 +29,7 @@ function builderPath(slug: string): string {
 }
 
 async function gate() {
-  return requireAnyRole(["owner", "planner"], "/admin/business");
+  return requirePermission("forms", "write", "/admin/business");
 }
 
 function slugifyKey(s: string): string {

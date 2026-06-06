@@ -20,14 +20,14 @@ import {
   routeFor,
   type NotificationEvent,
 } from "@/lib/notifications";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Notifications", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 async function saveRoute(formData: FormData) {
   "use server";
-  const session = await requireRole("super_admin");
+  const session = await requirePermission("notifications", "routes");
   const event = String(formData.get("event") ?? "");
   const recipientsRaw = String(formData.get("recipients") ?? "");
   const enabled = formData.get("enabled") === "on";
@@ -99,7 +99,7 @@ export default async function NotificationsPage({
 }: {
   searchParams: Promise<{ saved?: string; error?: string; event?: string }>;
 }) {
-  await requireRole("super_admin");
+  await requirePermission("notifications", "routes");
   const params = await searchParams;
 
   const rows = await Promise.all(

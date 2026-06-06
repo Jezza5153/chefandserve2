@@ -6,7 +6,7 @@
  * worker on/off switch (business_settings 'hours_reminders'); the Railway worker
  * reads the same flag via raw SQL. Room for future toggles (SLAs, default rates).
  *
- * Gate is requireRole("owner") for now → becomes requirePermission("settings",
+ * Gate is requirePermission("settings", "write") for now → becomes requirePermission("settings",
  * "write") once the permission gates land (Workstream C, phase C3).
  */
 
@@ -14,7 +14,7 @@ import { redirect } from "next/navigation";
 
 import { recordAuditFromRequest } from "@/lib/audit";
 import { getFlag, setFlag, SETTING_KEYS } from "@/lib/business-settings";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Bedrijfsinstellingen" };
 export const dynamic = "force-dynamic";
@@ -24,13 +24,13 @@ export default async function BedrijfsinstellingenPage({
 }: {
   searchParams: Promise<{ ok?: string }>;
 }) {
-  await requireRole("owner");
+  await requirePermission("settings", "write");
   const sp = await searchParams;
   const hoursRemindersOn = await getFlag(SETTING_KEYS.hoursReminders);
 
   async function saveHoursReminders(formData: FormData) {
     "use server";
-    const s = await requireRole("owner");
+    const s = await requirePermission("settings", "write");
     const enabled = formData.get("enabled") === "on";
     await setFlag(SETTING_KEYS.hoursReminders, enabled, s.user.id);
     await recordAuditFromRequest({

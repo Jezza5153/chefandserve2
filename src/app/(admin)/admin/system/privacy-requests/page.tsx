@@ -9,7 +9,7 @@ import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { privacyRequests, users } from "@/lib/db/schema";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Privacyverzoeken" };
 export const dynamic = "force-dynamic";
@@ -22,7 +22,7 @@ export default async function PrivacyRequestsPage({
 }: {
   searchParams: Promise<{ filter?: Filter }>;
 }) {
-  await requireRole("super_admin", "/admin/system/privacy-requests", { strict: true });
+  await requirePermission("privacy", "read", "/admin/system/privacy-requests");
   const filter: Filter = (await searchParams).filter ?? "open";
 
   const rows = await db

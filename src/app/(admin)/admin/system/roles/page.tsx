@@ -2,7 +2,7 @@ import { asc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { permissions, rolePermissions, roles } from "@/lib/db/schema";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Roles" };
 
@@ -11,7 +11,7 @@ export const metadata = { title: "Roles" };
  * Read-only in Phase 0.
  */
 export default async function RolesPage() {
-  await requireRole("super_admin");
+  await requirePermission("roles", "read");
 
   const allRoles = await db.select().from(roles).orderBy(asc(roles.key));
 

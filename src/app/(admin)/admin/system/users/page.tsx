@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { auditLog, roles, userRoles, users } from "@/lib/db/schema";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Users" };
 
@@ -12,7 +12,7 @@ export const metadata = { title: "Users" };
  * Read-only in Phase 0. Edit + role assignment in a later phase.
  */
 export default async function UsersPage() {
-  await requireRole("super_admin");
+  await requirePermission("users", "read");
 
   const userRows = await db
     .select({

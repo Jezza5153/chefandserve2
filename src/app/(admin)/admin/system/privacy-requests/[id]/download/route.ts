@@ -10,7 +10,7 @@
 import { NextResponse } from "next/server";
 
 import { createExportDownloadLink } from "@/lib/domain/privacy-export";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +18,7 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await requireRole("super_admin", "/admin/system/privacy-requests", {
-    strict: true,
-  });
+  const session = await requirePermission("privacy", "read", "/admin/system/privacy-requests");
   const { id } = await params;
 
   const res = await createExportDownloadLink({ requestId: id, actorId: session.user.id });

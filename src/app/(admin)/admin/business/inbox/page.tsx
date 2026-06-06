@@ -11,7 +11,7 @@ import {
   shifts,
 } from "@/lib/db/schema";
 import { decideShiftChangeRequest } from "@/lib/domain/shift-change-requests";
-import { requireAnyRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Inbox" };
 
@@ -28,7 +28,7 @@ type FilterKind = "all" | "chef" | "client";
 
 async function decideShiftRequest(formData: FormData) {
   "use server";
-  const session = await requireAnyRole(["owner", "planner"]);
+  const session = await requirePermission("inbox", "triage");
   const requestId = String(formData.get("requestId") ?? "");
   const decision =
     String(formData.get("decision") ?? "") === "approved" ? "approved" : "rejected";
@@ -48,7 +48,7 @@ export default async function InboxPage({
 }: {
   searchParams: Promise<{ status?: FilterStatus; kind?: FilterKind }>;
 }) {
-  await requireAnyRole(["owner", "planner"]);
+  await requirePermission("inbox", "triage");
   const params = await searchParams;
   const status: FilterStatus = params.status ?? "new";
   const kind: FilterKind = params.kind ?? "all";

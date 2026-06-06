@@ -17,7 +17,7 @@ import { getRosterSettings, saveRosterSettings, type StoredRosterSettings } from
 import { setPref } from "@/lib/integrations/prefs";
 import { DEFAULT_ROSTER_SETTINGS } from "@/lib/roster-format";
 import { ALL_EVENTS, EVENT_LABELS } from "@/lib/notifications";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Instellingen" };
 export const dynamic = "force-dynamic";
@@ -43,7 +43,7 @@ export default async function InstellingenPage({
 }: {
   searchParams: Promise<{ ok?: string }>;
 }) {
-  const session = await requireRole("owner");
+  const session = await requirePermission("account", "settings");
   const sp = await searchParams;
   const roster = await getRosterSettings(session.user.id);
 
@@ -56,7 +56,7 @@ export default async function InstellingenPage({
 
   async function saveRoster(formData: FormData) {
     "use server";
-    const s = await requireRole("owner");
+    const s = await requirePermission("account", "settings");
     const criticalHours = Math.max(1, Math.min(336, Number(formData.get("criticalHours")) || 24));
     const defaultView = formData.get("defaultView") === "month" ? "month" : "week";
     // Only store labels that differ from the default (so "reset" = clear the field).
@@ -72,7 +72,7 @@ export default async function InstellingenPage({
 
   async function saveMeldingen(formData: FormData) {
     "use server";
-    const s = await requireRole("owner");
+    const s = await requirePermission("account", "settings");
     for (const ev of ALL_EVENTS) {
       await setPref({ userId: s.user.id, eventKey: ev, enabled: formData.has(`ev_${ev}`) });
     }

@@ -16,7 +16,7 @@ import Link from "next/link";
 import { recordAuditFromRequest } from "@/lib/audit";
 
 import { inviteInternalStaff } from "@/lib/domain/portal-invites";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = {
   title: "Nieuwe medewerker uitnodigen",
@@ -27,9 +27,7 @@ export const dynamic = "force-dynamic";
 async function inviteStaff(formData: FormData) {
   "use server";
   // Server-side authority check (NOT just dropdown hiding).
-  const session = await requireRole("super_admin", "/admin/system/users/new", {
-    strict: true,
-  });
+  const session = await requirePermission("users", "read", "/admin/system/users/new");
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const name = String(formData.get("name") ?? "").trim();
@@ -71,7 +69,7 @@ export default async function NewUserPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  await requireRole("super_admin", "/admin/system/users/new", { strict: true });
+  await requirePermission("users", "read", "/admin/system/users/new");
   const params = await searchParams;
 
   const errorMsg = params.error

@@ -27,7 +27,7 @@ import {
 } from "@/lib/domain/portal-invites";
 import { sendEmail } from "@/lib/email";
 import { enqueueIntegrationEvent, recordEmailMessage } from "@/lib/integrations";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Klant" };
 
@@ -36,7 +36,7 @@ export default async function ClientDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireRole("owner");
+  await requirePermission("clients", "write");
   const { id } = await params;
 
   const client = await db.query.clients.findFirst({ where: eq(clients.id, id) });
@@ -85,7 +85,7 @@ export default async function ClientDetailPage({
   // PR-2B: set client_type + client_tags (the "wat voor klant" signal).
   async function updateClientType(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requirePermission("clients", "write");
     const clientType = String(formData.get("clientType") ?? "").trim() || null;
     const clientTags = formData.getAll("clientTags").map(String).filter(Boolean);
     await db
@@ -109,7 +109,7 @@ export default async function ClientDetailPage({
   // PR-2B: remove a chef from the favorite/blocked list (set it on a shift).
   async function removeClientChef(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requirePermission("clients", "write");
     const chefId = String(formData.get("chefId") ?? "");
     const kind = String(formData.get("kind") ?? "");
     if (!chefId) return;
@@ -132,21 +132,21 @@ export default async function ClientDetailPage({
 
   async function doInviteToPortal() {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requirePermission("clients", "write");
     const result = await inviteClientToPortal(id, session.user.id);
     if (!result.ok) throw new Error(result.error);
     redirect(`/admin/business/clients/${id}`);
   }
   async function doActivatePortal() {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requirePermission("clients", "write");
     if (!client!.userId) throw new Error("Client has no portal user yet");
     await activatePortalUser(client!.userId, session.user.id);
     redirect(`/admin/business/clients/${id}`);
   }
   async function doDisablePortal() {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requirePermission("clients", "write");
     if (!client!.userId) return;
     await disablePortalUser(client!.userId, session.user.id);
     redirect(`/admin/business/clients/${id}`);
@@ -154,7 +154,7 @@ export default async function ClientDetailPage({
 
   async function updateBasics(formData: FormData) {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requirePermission("clients", "write");
     const companyName = String(formData.get("companyName") ?? "").trim();
     const contactName = String(formData.get("contactName") ?? "").trim() || null;
     const email =
@@ -216,7 +216,7 @@ export default async function ClientDetailPage({
 
   async function decideClientChange(formData: FormData, decision: "approved" | "rejected") {
     "use server";
-    const session = await requireRole("owner");
+    const session = await requirePermission("clients", "write");
     const requestId = String(formData.get("requestId") ?? "");
     const decisionNotes = String(formData.get("decisionNotes") ?? "").trim() || null;
     if (!requestId) return;

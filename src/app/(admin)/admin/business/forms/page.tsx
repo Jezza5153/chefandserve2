@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { forms } from "@/lib/db/schema";
-import { requireAnyRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Formulieren", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default async function FormsListPage() {
-  await requireAnyRole(["owner", "planner"], "/admin/business");
+  await requirePermission("forms", "write", "/admin/business");
   const rows = await db.select().from(forms).orderBy(asc(forms.slug));
 
   return (

@@ -2,7 +2,7 @@ import { desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { auditLog, users } from "@/lib/db/schema";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Audit log" };
 
@@ -11,7 +11,7 @@ export const metadata = { title: "Audit log" };
  * Phase 0: simple list (last 200 entries). Search + filtering later.
  */
 export default async function AuditPage() {
-  await requireRole("super_admin");
+  await requirePermission("audit", "read");
 
   const rows = await db
     .select({

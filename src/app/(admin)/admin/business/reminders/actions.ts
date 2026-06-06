@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { db } from "@/lib/db/client";
 import { reminderRules } from "@/lib/db/schema";
-import { requireAnyRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 const PATH = "/admin/business/reminders";
 
@@ -26,7 +26,7 @@ type Channel = (typeof CHANNELS)[number];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function gate() {
-  return requireAnyRole(["owner", "planner"], "/admin/business");
+  return requirePermission("reminders", "write", "/admin/business");
 }
 
 function parseRecipients(raw: string): { ok: true; emails: string[] } | { ok: false } {

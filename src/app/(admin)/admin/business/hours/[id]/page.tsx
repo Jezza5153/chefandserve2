@@ -42,7 +42,7 @@ import {
   humanStatus,
   timelineDots,
 } from "@/lib/hours-labels";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 import { HoursApprovedChefEmail } from "@/emails/HoursApprovedChefEmail";
 import { HoursApprovedKlantEmail } from "@/emails/HoursApprovedKlantEmail";
@@ -90,7 +90,7 @@ function shiftDateLabel(d: Date | string): string {
 
 async function approve(formData: FormData) {
   "use server";
-  const session = await requireRole("owner");
+  const session = await requirePermission("hours", "approve");
   const id = String(formData.get("hoursId") ?? "");
   if (!id) return;
 
@@ -220,7 +220,7 @@ async function approve(formData: FormData) {
 
 async function reject(formData: FormData) {
   "use server";
-  const session = await requireRole("owner");
+  const session = await requirePermission("hours", "approve");
   const id = String(formData.get("hoursId") ?? "");
   const adminNotes = String(formData.get("adminNotes") ?? "").trim();
   if (!id) return;
@@ -364,7 +364,7 @@ export default async function AdminHoursDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
-  await requireRole("owner");
+  await requirePermission("hours", "approve");
   const { id } = await params;
   const sp = await searchParams;
   const ctx = await loadFull(id);

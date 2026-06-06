@@ -28,7 +28,7 @@ import {
   formatEuro,
   formatWorkedMinutes,
 } from "@/lib/hours-labels";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Uren keuren", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -48,7 +48,7 @@ const FILTER_OPTIONS: Array<{
 
 async function bulkApprove(formData: FormData) {
   "use server";
-  const session = await requireRole("owner");
+  const session = await requirePermission("hours", "read");
 
   // Collected from checkbox inputs
   const ids = formData.getAll("hoursId").map((v) => String(v));
@@ -77,7 +77,7 @@ async function bulkApprove(formData: FormData) {
 
 async function approveOne(formData: FormData) {
   "use server";
-  const session = await requireRole("owner");
+  const session = await requirePermission("hours", "read");
   const id = String(formData.get("hoursId") ?? "");
   if (!id) return;
 
@@ -99,7 +99,7 @@ export default async function AdminHoursQueuePage({
 }: {
   searchParams: Promise<{ filter?: string; ok?: string; n?: string; stale?: string; error?: string }>;
 }) {
-  await requireRole("owner");
+  await requirePermission("hours", "read");
   const sp = await searchParams;
   const filterKey = sp.filter ?? "wacht_op_mij";
   const active = FILTER_OPTIONS.find((f) => f.key === filterKey) ?? FILTER_OPTIONS[0];

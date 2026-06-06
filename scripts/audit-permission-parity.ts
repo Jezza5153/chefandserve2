@@ -26,6 +26,7 @@ import {
   ROLE_GRANTS,
   SYSTEM_ROLE_KEYS,
   isSystemPermission,
+  permForRoute,
   permKeyExists,
   rolesSatisfyingOldGate,
   rolesWithPermission,
@@ -84,10 +85,9 @@ for (const [role, perms] of Object.entries(ROLE_GRANTS)) {
 }
 console.log("  walls + grant-existence checked");
 
-/* 5. code coverage — every gated admin file maps to a GATE_MAP route -------- */
-console.log("\n── code coverage (every gated file is mapped) ──");
+/* 5. flip coverage + correctness ------------------------------------------- */
+console.log("\n── flip coverage + correctness ──");
 const ADMIN_ROOT = "src/app/(admin)";
-const GATE_RE = /require(Role|AnyRole)\s*\(/;
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -105,28 +105,37 @@ function fileToRoute(file: string): string {
   return r || "/";
 }
 
-const allGateRoutes = GATE_MAP.flatMap((g) => g.routes);
-function isCovered(route: string): boolean {
-  return allGateRoutes.some(
-    (g) => route === g || route.startsWith(g + "/") || g.startsWith(route + "/"),
-  );
-}
-
 let gatedFiles = 0;
-const uncovered: string[] = [];
+const problems: string[] = [];
 for (const file of walk(ADMIN_ROOT)) {
   const src = readFileSync(file, "utf8");
-  if (!GATE_RE.test(src)) continue;
-  gatedFiles++;
+  // The flip must be complete — no role-name gate may remain.
+  if (/require(Role|AnyRole)\s*\(/.test(src)) {
+    problems.push(`${file}: still has requireRole/requireAnyRole (flip incomplete)`);
+  }
   const route = fileToRoute(file);
-  if (!isCovered(route)) uncovered.push(`${route}  (${file})`);
+  const expected = permForRoute(route);
+  const re = /requirePermission\(\s*"([^"]+)"\s*,\s*"([^"]+)"/g;
+  let m: RegExpExecArray | null;
+  let any = false;
+  while ((m = re.exec(src))) {
+    any = true;
+    const callPerm = `${m[1]}.${m[2]}`;
+    if (expected === null)
+      problems.push(`${file}: requirePermission ${callPerm} but route ${route} has no GATE_MAP perm`);
+    else if (callPerm !== expected)
+      problems.push(`${file}: requirePermission ${callPerm} ≠ GATE_MAP ${expected} (route ${route})`);
+  }
+  if (any) gatedFiles++;
 }
-if (uncovered.length === 0) {
+if (problems.length === 0) {
   ok("coverage");
-  console.log(`  ✓ all ${gatedFiles} gated files map to a GATE_MAP route`);
+  console.log(
+    `  ✓ ${gatedFiles} permission-gated files all use their GATE_MAP perm; 0 role-name gates remain`,
+  );
 } else {
-  bad("coverage", `${uncovered.length} unmapped gated file(s)`);
-  for (const u of uncovered) console.log("     ·", u);
+  bad("flip coverage", `${problems.length} problem(s)`);
+  for (const p of problems) console.log("     ·", p);
 }
 
 console.log(`\n=== parity audit: ${pass} checks passed, ${fail} failed ===`);

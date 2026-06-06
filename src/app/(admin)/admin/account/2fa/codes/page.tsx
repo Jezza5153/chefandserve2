@@ -12,7 +12,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Recovery codes" };
 export const dynamic = "force-dynamic";
@@ -21,13 +21,13 @@ const CODES_COOKIE = "cs_2fa_codes";
 
 async function acknowledge() {
   "use server";
-  await requireRole("owner");
+  await requirePermission("account", "settings");
   (await cookies()).delete(CODES_COOKIE);
   redirect("/admin/account/2fa");
 }
 
 export default async function RecoveryCodesPage() {
-  await requireRole("owner");
+  await requirePermission("account", "settings");
   const cookieStore = await cookies();
   const raw = cookieStore.get(CODES_COOKIE)?.value;
 

@@ -15,7 +15,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { users } from "@/lib/db/schema";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 import { clearAll, verifyAndConsume } from "@/lib/recovery-codes";
 import { decryptSecret, verifyCode } from "@/lib/totp";
 
@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 
 async function disable2FA(formData: FormData) {
   "use server";
-  const session = await requireRole("owner");
+  const session = await requirePermission("account", "settings");
   const raw = String(formData.get("factor") ?? "").trim();
 
   if (!raw) {
@@ -111,7 +111,7 @@ export default async function Disable2FAPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const session = await requireRole("owner");
+  const session = await requirePermission("account", "settings");
   const params = await searchParams;
 
   const [u] = await db

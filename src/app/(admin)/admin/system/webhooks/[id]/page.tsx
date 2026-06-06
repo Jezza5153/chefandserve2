@@ -6,7 +6,7 @@ import { db } from "@/lib/db/client";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { webhooksReceived } from "@/lib/db/schema";
 import { handleJotformWebhook } from "@/lib/intake/handler";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Webhook detail" };
 
@@ -15,7 +15,7 @@ export default async function WebhookDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireRole("super_admin");
+  await requirePermission("webhooks", "read");
   const { id } = await params;
 
   const row = await db.query.webhooksReceived.findFirst({
@@ -32,7 +32,7 @@ export default async function WebhookDetailPage({
 
   async function replay() {
     "use server";
-    const session = await requireRole("super_admin");
+    const session = await requirePermission("webhooks", "read");
     if (kind !== "chef" && kind !== "client") {
       throw new Error("Webhook missing kind metadata, cannot replay");
     }

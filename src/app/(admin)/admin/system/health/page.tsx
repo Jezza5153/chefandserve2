@@ -10,7 +10,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { env, isProduction } from "@/lib/env";
 import { r2IsConfigured } from "@/lib/r2";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Health" };
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ type Check = {
 };
 
 export default async function HealthPage() {
-  await requireRole("super_admin");
+  await requirePermission("health", "read");
 
   // Hit the same logic the /api/health endpoint uses.
   const checks: Check[] = [];

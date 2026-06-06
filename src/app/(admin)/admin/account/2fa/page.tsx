@@ -22,7 +22,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { users } from "@/lib/db/schema";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 import { countUnused, generateAndPersist } from "@/lib/recovery-codes";
 import {
   buildProvisioningUri,
@@ -44,7 +44,7 @@ const CODES_TTL = 5 * 60;
 
 async function startTotpSetup() {
   "use server";
-  await requireRole("owner");
+  await requirePermission("account", "settings");
   const secret = generateSecret();
   (await cookies()).set(SETUP_COOKIE, secret, {
     httpOnly: true,
@@ -58,7 +58,7 @@ async function startTotpSetup() {
 
 async function confirmEnrollment(formData: FormData) {
   "use server";
-  const session = await requireRole("owner");
+  const session = await requirePermission("account", "settings");
   const code = String(formData.get("code") ?? "").trim();
 
   const cookieStore = await cookies();
@@ -122,7 +122,7 @@ export default async function TwoFAPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const session = await requireRole("owner");
+  const session = await requirePermission("account", "settings");
   const params = await searchParams;
 
   const [userRow] = await db

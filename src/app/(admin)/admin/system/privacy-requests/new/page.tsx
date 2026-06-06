@@ -8,7 +8,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createPrivacyRequest } from "@/lib/domain/privacy";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Handmatig privacyverzoek" };
 export const dynamic = "force-dynamic";
@@ -18,11 +18,11 @@ const inputCls =
 const labelCls = "mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy";
 
 export default async function NewPrivacyRequestPage() {
-  await requireRole("super_admin", "/admin/system/privacy-requests", { strict: true });
+  await requirePermission("privacy", "read", "/admin/system/privacy-requests");
 
   async function create(formData: FormData) {
     "use server";
-    const session = await requireRole("super_admin", "/admin/system/privacy-requests", { strict: true });
+    const session = await requirePermission("privacy", "read", "/admin/system/privacy-requests");
     const type = String(formData.get("type") ?? "access") as
       | "access" | "export" | "correction" | "deletion" | "other";
     const requesterKind = String(formData.get("requesterKind") ?? "unknown") as

@@ -4,14 +4,14 @@ import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { webhooksReceived } from "@/lib/db/schema";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 import { TestWebhookButton } from "./_components/TestWebhookButton";
 
 export const metadata = { title: "Webhooks" };
 
 export default async function WebhooksListPage() {
-  await requireRole("super_admin");
+  await requirePermission("webhooks", "read");
 
   // Build the absolute base URL once so the client buttons can POST cross-origin
   // if needed (works whether we're on Vercel, preview, or localhost).

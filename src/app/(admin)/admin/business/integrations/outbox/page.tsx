@@ -15,14 +15,14 @@ import {
   listPendingOutbox,
   retryRow,
 } from "@/lib/integrations";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Outbox", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 async function retry(formData: FormData) {
   "use server";
-  const session = await requireRole("super_admin", undefined, { strict: true });
+  const session = await requirePermission("integrations", "read");
   const outboxId = String(formData.get("outboxId") ?? "");
   if (!outboxId) return;
 
@@ -42,7 +42,7 @@ async function retry(formData: FormData) {
 }
 
 export default async function OutboxPage() {
-  await requireRole("super_admin", undefined, { strict: true });
+  await requirePermission("integrations", "read");
   const rows = await listPendingOutbox(200);
 
   return (

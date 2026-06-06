@@ -10,7 +10,7 @@
  */
 import Link from "next/link";
 
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 import { sampleProps, type TemplateKey } from "./_samples";
 
 export const metadata = { title: "Email preview" };
@@ -53,7 +53,7 @@ const TEMPLATES: Array<{
 ];
 
 export default async function EmailGalleryPage() {
-  await requireRole("super_admin");
+  await requirePermission("emails", "read");
 
   return (
     <div className="mx-auto max-w-6xl">

@@ -21,16 +21,14 @@ import { recordAuditFromRequest } from "@/lib/audit";
 import { db } from "@/lib/db/client";
 import { roles, userRoles, users } from "@/lib/db/schema";
 import { resetInternalUser2FA } from "@/lib/domain/auth-admin";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Gebruiker", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 async function reset2FA(formData: FormData) {
   "use server";
-  const session = await requireRole("super_admin", "/admin/system/users", {
-    strict: true,
-  });
+  const session = await requirePermission("users", "read", "/admin/system/users");
 
   const targetUserId = String(formData.get("targetUserId") ?? "");
   const confirmationEmail = String(formData.get("confirmationEmail") ?? "")
@@ -61,9 +59,7 @@ async function reset2FA(formData: FormData) {
 
 async function manageRoles(formData: FormData) {
   "use server";
-  const session = await requireRole("super_admin", "/admin/system/users", {
-    strict: true,
-  });
+  const session = await requirePermission("users", "read", "/admin/system/users");
 
   const targetUserId = String(formData.get("targetUserId") ?? "");
   const selected = formData.getAll("roleKey").map(String);
@@ -136,7 +132,7 @@ export default async function UserDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ reset?: string; error?: string; roles?: string }>;
 }) {
-  const session = await requireRole("super_admin", undefined, { strict: true });
+  const session = await requirePermission("users", "read");
   const { id } = await params;
   const sp = await searchParams;
 

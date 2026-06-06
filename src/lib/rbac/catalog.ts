@@ -222,3 +222,20 @@ export function rolesWithPermission(perm: string): Set<string> {
   }
   return out;
 }
+
+/**
+ * Longest-prefix GATE_MAP permission for a route — the most specific mapped
+ * route that is a prefix of `route`. The C3 codemod + the parity audit both
+ * use this so a page maps to the same perm in both places.
+ */
+export function permForRoute(route: string): string | null {
+  let best: { g: string; perm: string } | null = null;
+  for (const entry of GATE_MAP) {
+    for (const g of entry.routes) {
+      if (route === g || route.startsWith(g + "/")) {
+        if (!best || g.length > best.g.length) best = { g, perm: entry.perm };
+      }
+    }
+  }
+  return best?.perm ?? null;
+}

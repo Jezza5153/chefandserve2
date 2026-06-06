@@ -8,13 +8,13 @@ import Link from "next/link";
 import { db } from "@/lib/db/client";
 import { clients, shiftTemplates } from "@/lib/db/schema";
 import { formatPattern } from "@/lib/shift-template-format";
-import { requireAnyRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Templates" };
 export const dynamic = "force-dynamic";
 
 export default async function TemplatesPage() {
-  await requireAnyRole(["owner", "planner"]);
+  await requirePermission("templates", "write");
 
   const rows = await db
     .select({

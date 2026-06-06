@@ -35,7 +35,7 @@ import {
 } from "@/lib/domain/dashboard-intel";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { getRosterSettings } from "@/lib/domain/user-settings";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 import {
   addDaysToKey,
   amsterdamDayKey,
@@ -51,7 +51,7 @@ export const dynamic = "force-dynamic";
 const FILLED_STATUSES = ["confirmed", "accepted"] as const;
 
 export default async function BusinessDashboardPage() {
-  const session = await requireRole("owner");
+  const session = await requirePermission("cockpit", "read");
   const rosterSettings = await getRosterSettings(session.user.id);
   const intelSettings = {
     criticalHours: rosterSettings.criticalHours,

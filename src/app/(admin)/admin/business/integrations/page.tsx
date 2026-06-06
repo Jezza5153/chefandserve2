@@ -20,13 +20,13 @@ import {
   listRecentBounces,
   listRecentRuns,
 } from "@/lib/integrations";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Integraties", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 export default async function IntegrationsPage() {
-  await requireRole("super_admin", undefined, { strict: true });
+  await requirePermission("integrations", "read");
 
   const health = await getIntegrationHealth();
   const emails = await emailCounts(7);

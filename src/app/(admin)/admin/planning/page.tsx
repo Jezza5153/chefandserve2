@@ -11,7 +11,7 @@ import { Icon } from "@/components/admin/icons";
 import { OpsCard } from "@/components/dashboard/OpsCard";
 import { getPlannerCockpit, getPlannerReport } from "@/lib/domain/planner-intel";
 import { formatChefRole } from "@/lib/labels";
-import { requireAnyRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Planning", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -27,7 +27,7 @@ const fmtWhen = (d: Date) =>
   }).format(new Date(d));
 
 export default async function PlanningPage() {
-  await requireAnyRole(["owner", "planner"]);
+  await requirePermission("planning", "read");
   const [c, report] = await Promise.all([getPlannerCockpit(), getPlannerReport()]);
   const d = report.intakeDelta;
   const intakeLine =

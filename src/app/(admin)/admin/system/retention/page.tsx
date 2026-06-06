@@ -11,7 +11,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db/client";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { retentionPolicies } from "@/lib/db/schema";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Retentiebeleid" };
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ const inputCls =
   "w-full rounded border border-ink-200 bg-white px-2 py-1.5 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy";
 
 export default async function RetentionAdminPage() {
-  await requireRole("super_admin", "/admin/system", { strict: true });
+  await requirePermission("retention", "read", "/admin/system");
 
   const policies = await db
     .select()
@@ -34,7 +34,7 @@ export default async function RetentionAdminPage() {
 
   async function updatePolicy(formData: FormData) {
     "use server";
-    const s = await requireRole("super_admin", "/admin/system", { strict: true });
+    const s = await requirePermission("retention", "read", "/admin/system");
     const entityType = String(formData.get("entityType") ?? "");
     if (!entityType) return;
     const period = String(formData.get("retentionPeriod") ?? "").trim();

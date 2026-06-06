@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { getFormForBuilder } from "@/lib/domain/forms";
 import type { FieldDTO, FieldOption } from "@/lib/forms/types";
-import { requireAnyRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 import {
   createCustomField,
@@ -52,7 +52,7 @@ export default async function FormBuilderPage({
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ ok?: string; err?: string }>;
 }) {
-  await requireAnyRole(["owner", "planner"], "/admin/business");
+  await requirePermission("forms", "write", "/admin/business");
   const { slug } = await params;
   const sp = await searchParams;
   const form = await getFormForBuilder(slug);

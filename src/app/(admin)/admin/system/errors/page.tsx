@@ -2,7 +2,7 @@ import { desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { errorLog, users } from "@/lib/db/schema";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Errors" };
 
@@ -12,7 +12,7 @@ export const metadata = { title: "Errors" };
  * Phase 0: read-only list (last 100). Pagination + resolution UI in a later phase.
  */
 export default async function ErrorsPage() {
-  await requireRole("super_admin");
+  await requirePermission("errors", "read");
 
   const rows = await db
     .select({

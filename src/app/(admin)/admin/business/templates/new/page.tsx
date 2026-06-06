@@ -12,7 +12,7 @@ import { TemplateForm } from "../TemplateForm";
 import { db } from "@/lib/db/client";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { clients, shiftTemplates } from "@/lib/db/schema";
-import { requireAnyRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Nieuwe template" };
 export const dynamic = "force-dynamic";
@@ -22,12 +22,12 @@ export default async function NewTemplatePage({
 }: {
   searchParams: Promise<{ clientId?: string }>;
 }) {
-  await requireAnyRole(["owner", "planner"]);
+  await requirePermission("templates", "write");
   const { clientId } = await searchParams;
 
   async function createTemplate(formData: FormData) {
     "use server";
-    const session = await requireAnyRole(["owner", "planner"]);
+    const session = await requirePermission("templates", "write");
     const cid = String(formData.get("clientId") ?? "");
     if (!cid) redirect("/admin/business/templates/new");
 

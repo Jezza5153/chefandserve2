@@ -32,7 +32,7 @@ import {
 } from "@/lib/domain/system-intel";
 import { env } from "@/lib/env";
 import { getIntegrationHealth } from "@/lib/integrations";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 import { r2IsConfigured } from "@/lib/r2";
 
 export const metadata = { title: "Systeem" };
@@ -42,7 +42,7 @@ const DAY = 864e5;
 const BOUNCE_SPIKE = 5; // bounces (7d) at/above this = surfaced
 
 export default async function SystemDashboardPage() {
-  await requireRole("super_admin");
+  await requirePermission("system", "read");
 
   const now = new Date();
   const since24h = new Date(now.getTime() - DAY);

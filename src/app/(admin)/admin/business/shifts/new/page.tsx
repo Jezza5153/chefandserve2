@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db/client";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { clients, shifts } from "@/lib/db/schema";
-import { requireAnyRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Nieuwe shift" };
 
@@ -42,7 +42,7 @@ export default async function NewShiftPage({
 }: {
   searchParams: Promise<{ clientId?: string }>;
 }) {
-  await requireAnyRole(["owner", "planner"]);
+  await requirePermission("shifts", "write");
   const params = await searchParams;
 
   const clientList = await db
@@ -56,7 +56,7 @@ export default async function NewShiftPage({
 
   async function createShift(formData: FormData) {
     "use server";
-    const session = await requireAnyRole(["owner", "planner"]);
+    const session = await requirePermission("shifts", "write");
     const clientId = String(formData.get("clientId") ?? "").trim();
     const startsAtStr = String(formData.get("startsAt") ?? "").trim();
     const endsAtStr = String(formData.get("endsAt") ?? "").trim();

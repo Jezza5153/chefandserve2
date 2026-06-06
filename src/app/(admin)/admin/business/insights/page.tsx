@@ -10,7 +10,7 @@ import { getLeaderboards } from "@/lib/domain/leaderboards";
 import { getPlatformRollups, type FillBreakdown, type MoneyWindow } from "@/lib/domain/platform-rollups";
 import { formatEuro } from "@/lib/hours-labels";
 import { formatChefRole, formatSegment } from "@/lib/labels";
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Analyse", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ const SECTION = "font-ui text-[11px] font-medium uppercase tracking-[0.18em] tex
 const pct = (r: number | null) => (r == null ? "—" : `${Math.round(r * 100)}%`);
 
 export default async function InsightsPage() {
-  await requireRole("owner");
+  await requirePermission("cockpit", "read");
   const wantForecast = forecastEnabled();
   const [lb, roll, forecast] = await Promise.all([
     getLeaderboards(90, 5),
