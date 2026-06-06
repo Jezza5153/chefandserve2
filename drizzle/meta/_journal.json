@@ -267,6 +267,13 @@
       "when": 1780697822004,
       "tag": "0037_business_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1780708205586,
+      "tag": "0038_user_permissions",
+      "breakpoints": true
     }
   ]
 }

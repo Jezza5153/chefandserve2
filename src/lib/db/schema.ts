@@ -396,6 +396,37 @@ export const userRoles = pgTable(
   }),
 );
 
+/* ---------------------------------------------------------------------------
+ * Per-user permission overrides (PR-RBAC-1). Layered ON TOP of role grants:
+ *   effective = (rolePerms ∪ grants) − revokes   (super_admin bypasses all).
+ * One row per (user, resource, action) — the PK — so a perm is granted,
+ * revoked, or inherited; never ambiguous. Revoke is final/subtractive. Owners
+ * may only set BUSINESS perms for staff (the save action enforces the
+ * system/business wall + no-escalation-beyond-self).
+ * ------------------------------------------------------------------------- */
+export const permissionEffectEnum = pgEnum("permission_effect", ["grant", "revoke"]);
+
+export const userPermissions = pgTable(
+  "user_permissions",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    resource: text("resource").notNull(),
+    action: text("action").notNull(),
+    effect: permissionEffectEnum("effect").notNull(),
+    grantedBy: text("granted_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.userId, t.resource, t.action] }),
+  }),
+);
+
 /* =============================================================================
  * Observability: auditLog · errorLog · webhooksReceived
  * =========================================================================== */

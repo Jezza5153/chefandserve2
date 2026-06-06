@@ -12,11 +12,12 @@
  */
 
 import { redirect } from "next/navigation";
-import { and, eq, inArray } from "drizzle-orm";
+import { cache } from "react";
+import { eq, inArray } from "drizzle-orm";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
-import { permissions, rolePermissions, roles } from "@/lib/db/schema";
+import { permissions, rolePermissions, roles, userPermissions } from "@/lib/db/schema";
 import { applyImpersonation } from "@/lib/domain/impersonation";
 
 import type { Session } from "next-auth";
@@ -113,6 +114,26 @@ export async function requireAnyRole(
 }
 
 /**
+ * Permission-gated guard (PR-RBAC C2) — the permission-based successor to
+ * requireRole/requireAnyRole. Redirects to the user's landing on deny (no blank
+ * pages); super_admin always passes (holds all). Dormant until the gate-flip
+ * (C3) swaps the role-name gates to call this.
+ *
+ * No `strict` option by design: today's `{ strict: true }` system pages map to
+ * system permissions that only super_admin holds, so the bypass is correct.
+ */
+export async function requirePermission(
+  resource: string,
+  action: string,
+  nextPath = "/admin",
+): Promise<Session> {
+  const session = await requireAuth(nextPath);
+  if (hasRole(session, "super_admin")) return session; // bypass — holds all
+  if (await hasPermission(session, resource, action)) return session;
+  redirect(defaultLandingFor(session.user.roles));
+}
+
+/**
  * Fence 4 — assert that an internal user has completed the setup wizard
  * before allowing a server action / API route to proceed.
  *
@@ -154,9 +175,52 @@ export async function assertSetupComplete(session: Session): Promise<void> {
 }
 
 /**
- * True if the session's roles collectively grant the given permission.
- * Looks up role_permissions live in DB (cached implicitly by Next.js fetch
- * cache + edge — Phase 0 doesn't add an explicit cache).
+ * Per-request memoized loader of a user's EFFECTIVE permission set (PR-RBAC-1):
+ *   effective = (role grants ∪ user grants) − user revokes
+ *
+ * Revoke is final/subtractive (an explicit deny always wins). super_admin is
+ * handled by the caller (returns true before this runs), so this only loads for
+ * non-super_admin users. React cache() memoizes per request lifecycle, so N gate
+ * checks in one render do ONE pair of indexed queries (not N). Keyed on userId +
+ * the sorted role-key CSV so an impersonated effective user doesn't collide.
+ */
+const loadEffectivePermissionSet = cache(
+  async (userId: string, roleKeysCsv: string): Promise<Set<string>> => {
+    const roleKeys = roleKeysCsv.split(",").filter(Boolean);
+    const set = new Set<string>();
+    if (roleKeys.length > 0) {
+      const rolePerms = await db
+        .select({ resource: permissions.resource, action: permissions.action })
+        .from(permissions)
+        .innerJoin(rolePermissions, eq(rolePermissions.permissionId, permissions.id))
+        .innerJoin(roles, eq(roles.id, rolePermissions.roleId))
+        .where(inArray(roles.key, roleKeys));
+      for (const p of rolePerms) set.add(`${p.resource}.${p.action}`);
+    }
+    const overrides = await db
+      .select({
+        resource: userPermissions.resource,
+        action: userPermissions.action,
+        effect: userPermissions.effect,
+      })
+      .from(userPermissions)
+      .where(eq(userPermissions.userId, userId));
+    for (const o of overrides) {
+      const key = `${o.resource}.${o.action}`;
+      if (o.effect === "grant") set.add(key);
+      else set.delete(key); // revoke wins, even over a role grant
+    }
+    return set;
+  },
+);
+
+/**
+ * True if the session's roles + per-user overrides grant the permission.
+ * super_admin holds everything (bypass — never revoke-locked out). Permissions
+ * are loaded once per request (memoized), NOT stored in the JWT, so role/override
+ * edits take effect immediately (paired with permissionsVersion invalidation).
+ *
+ * Dormant until the gate-flip (PR-RBAC C3) wires requirePermission to call this.
  */
 export async function hasPermission(
   session: Session | null,
@@ -164,23 +228,8 @@ export async function hasPermission(
   action: string,
 ): Promise<boolean> {
   if (!session?.user?.roles?.length) return false;
-
-  // super_admin gets everything by convention (also covered by DB grants,
-  // but checking here avoids a DB roundtrip).
-  if (session.user.roles.includes("super_admin")) return true;
-
-  const rows = await db
-    .select({ id: permissions.id })
-    .from(permissions)
-    .innerJoin(rolePermissions, eq(rolePermissions.permissionId, permissions.id))
-    .innerJoin(roles, eq(roles.id, rolePermissions.roleId))
-    .where(
-      and(
-        eq(permissions.resource, resource),
-        eq(permissions.action, action),
-        inArray(roles.key, session.user.roles),
-      ),
-    )
-    .limit(1);
-  return rows.length > 0;
+  if (session.user.roles.includes("super_admin")) return true; // bypass — holds all
+  const roleKeysCsv = [...session.user.roles].sort().join(",");
+  const set = await loadEffectivePermissionSet(session.user.id, roleKeysCsv);
+  return set.has(`${resource}.${action}`);
 }
