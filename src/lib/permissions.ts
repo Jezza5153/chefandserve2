@@ -18,6 +18,7 @@ import { eq, inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { permissions, rolePermissions, roles, userPermissions } from "@/lib/db/schema";
+import { CATALOG } from "@/lib/rbac/catalog";
 import { applyImpersonation } from "@/lib/domain/impersonation";
 
 import type { Session } from "next-auth";
@@ -232,4 +233,20 @@ export async function hasPermission(
   const roleKeysCsv = [...session.user.roles].sort().join(",");
   const set = await loadEffectivePermissionSet(session.user.id, roleKeysCsv);
   return set.has(`${resource}.${action}`);
+}
+
+/**
+ * The user's FULL effective permission-key set ("resource.action"). super_admin
+ * → the entire catalog (holds all). Used by the RBAC management layer to build
+ * the actor for the escalation guards, and by editor UIs to show held perms.
+ */
+export async function effectivePermissionKeys(
+  session: Session | null,
+): Promise<Set<string>> {
+  if (!session?.user?.roles?.length) return new Set();
+  if (session.user.roles.includes("super_admin")) {
+    return new Set(CATALOG.map((p) => p.key));
+  }
+  const roleKeysCsv = [...session.user.roles].sort().join(",");
+  return loadEffectivePermissionSet(session.user.id, roleKeysCsv);
 }
