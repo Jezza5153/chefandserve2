@@ -9,6 +9,8 @@
 
 import { useState } from "react";
 
+import { fieldClass } from "@/components/forms/Fields";
+
 export function ChefFeedbackForm({
   placementId,
   action,
@@ -38,7 +40,7 @@ export function ChefFeedbackForm({
             minLength={1}
             maxLength={1000}
             placeholder="Bijv. ‘Heeft de chef HACCP-ervaring?’ of ‘Graag iemand die ook patisserie doet.’"
-            className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            className={`${fieldClass} placeholder-ink-500`}
           />
           <div className="mt-2 flex gap-2">
             <button

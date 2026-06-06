@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { fieldClass } from "@/components/forms/Fields";
+
 /**
  * RejectWithReason — small toggle-reveal so chef can add a reason when
  * declining. Reason is optional but helps Maarten match better next time.
@@ -36,7 +38,7 @@ export function RejectWithReason({ placementId, respondAction }: Props) {
           name="rejectionReason"
           rows={3}
           placeholder="Helpt Maarten met de volgende match — bijv. ‘andere shift dezelfde dag’ of ‘vakantie volgende week’"
-          className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+          className={`${fieldClass} placeholder-ink-500`}
         />
       </label>
       <div className="flex gap-2">

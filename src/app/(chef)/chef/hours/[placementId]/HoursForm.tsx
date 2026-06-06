@@ -12,6 +12,7 @@
 
 import { useMemo, useState } from "react";
 
+import { fieldClass } from "@/components/forms/Fields";
 import {
   computeChefAmountCents,
   formatEuro,
@@ -177,7 +178,7 @@ export function HoursForm({
           rows={3}
           defaultValue={defaultNotes}
           placeholder="Bijv. ‘15 min later begonnen, klant te laat met de sleutel’"
-          className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+          className={`${fieldClass} placeholder-ink-500`}
         />
       </label>
 

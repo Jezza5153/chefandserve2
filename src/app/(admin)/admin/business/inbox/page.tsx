@@ -2,6 +2,7 @@ import { desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { fieldClass } from "@/components/forms/Fields";
 import { db } from "@/lib/db/client";
 import {
   chefSubmissions,
@@ -230,7 +231,7 @@ export default async function InboxPage({
                     name="decisionNotes"
                     rows={2}
                     placeholder="Toelichting (gedeeld met de klant)"
-                    className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+                    className={`${fieldClass} placeholder-ink-500`}
                   />
                   <div className="mt-2 flex gap-2">
                     <button

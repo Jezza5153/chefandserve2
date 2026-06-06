@@ -24,6 +24,7 @@ import { redirect } from "next/navigation";
 
 import { Resend } from "resend";
 
+import { fieldClass } from "@/components/forms/Fields";
 import { db } from "@/lib/db/client";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { clients, clientSubmissions } from "@/lib/db/schema";
@@ -298,7 +299,7 @@ export default async function ClientRequestPage({
               name="roleNeeded"
               required
               defaultValue=""
-              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              className={fieldClass}
             >
               <option value="" disabled>
                 Kies een rol…
@@ -318,7 +319,7 @@ export default async function ClientRequestPage({
             <select
               name="segment"
               defaultValue={me.segment ?? ""}
-              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              className={fieldClass}
             >
               <option value="">— (zelfde als jouw profiel)</option>
               {SEGMENT_OPTIONS.map((s) => (
@@ -340,7 +341,7 @@ export default async function ClientRequestPage({
               name="startDate"
               required
               min={todayIso}
-              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              className={fieldClass}
             />
           </label>
 
@@ -352,7 +353,7 @@ export default async function ClientRequestPage({
               type="date"
               name="endDate"
               min={todayIso}
-              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              className={fieldClass}
             />
           </label>
 
@@ -366,7 +367,7 @@ export default async function ClientRequestPage({
               min={1}
               max={99}
               defaultValue={1}
-              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              className={fieldClass}
             />
           </label>
         </div>
@@ -379,7 +380,7 @@ export default async function ClientRequestPage({
             type="text"
             name="rateHint"
             placeholder="bijv. €35-40 per uur"
-            className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            className={`${fieldClass} placeholder-ink-500`}
           />
         </label>
 
@@ -391,7 +392,7 @@ export default async function ClientRequestPage({
             name="notes"
             rows={4}
             placeholder="Wat voor avond, brigade-grootte, allergieën, voorkeur voor specifieke chef…"
-            className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            className={`${fieldClass} placeholder-ink-500`}
           />
         </label>
 

@@ -10,6 +10,8 @@
 
 import { useState } from "react";
 
+import { fieldClass } from "@/components/forms/Fields";
+
 const SEGMENT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "casual", label: "Casual / brasserie" },
   { value: "fine_dining", label: "Fine dining" },
@@ -61,7 +63,7 @@ export function ProfileForm({ chef, saveAction }: Props) {
             name="phone"
             defaultValue={chef.phone ?? ""}
             placeholder="06-12345678"
-            className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            className={`${fieldClass} placeholder-ink-500`}
           />
         </label>
 
@@ -74,7 +76,7 @@ export function ProfileForm({ chef, saveAction }: Props) {
             name="city"
             defaultValue={chef.city ?? ""}
             placeholder="Amsterdam"
-            className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            className={`${fieldClass} placeholder-ink-500`}
           />
         </label>
 
@@ -87,7 +89,7 @@ export function ProfileForm({ chef, saveAction }: Props) {
             name="languages"
             defaultValue={chef.languages?.join(", ") ?? ""}
             placeholder="nl, en, fr"
-            className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            className={`${fieldClass} placeholder-ink-500`}
           />
         </label>
 
@@ -100,7 +102,7 @@ export function ProfileForm({ chef, saveAction }: Props) {
             rows={3}
             defaultValue={chef.specialties ?? ""}
             placeholder="bijv. patisserie · banketkok · Frans"
-            className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            className={`${fieldClass} placeholder-ink-500`}
           />
         </label>
 
