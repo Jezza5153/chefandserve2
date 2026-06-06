@@ -231,7 +231,7 @@ export default async function SystemDashboardPage() {
 
         {/* Errors + Aandacht-nodig + Bekijk-als */}
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <section className="overflow-hidden rounded-xl border border-ink-200 bg-white">
+          <section className="overflow-x-auto rounded-xl border border-ink-200 bg-white">
             <div className="flex items-center justify-between px-5 pt-4 pb-2">
               <h2 className="font-serif text-xl text-ink-900">Recente errors</h2>
               <Link href="/admin/system/errors" className="flex items-center gap-1 font-ui text-[12px] font-medium text-burgundy hover:underline">Alle errors <Icon name="arrow-right" className="h-3.5 w-3.5" /></Link>
