@@ -121,10 +121,21 @@ for (const file of walk(ADMIN_ROOT)) {
   while ((m = re.exec(src))) {
     any = true;
     const callPerm = `${m[1]}.${m[2]}`;
-    if (expected === null)
+    if (expected === null) {
       problems.push(`${file}: requirePermission ${callPerm} but route ${route} has no GATE_MAP perm`);
-    else if (callPerm !== expected)
-      problems.push(`${file}: requirePermission ${callPerm} ≠ GATE_MAP ${expected} (route ${route})`);
+    } else if (!permKeyExists(callPerm)) {
+      problems.push(`${file}: requirePermission ${callPerm} not in CATALOG (route ${route})`);
+    } else {
+      // The call perm's role-set must be ⊆ the route perm's (equal or STRICTER).
+      // A read-gated page can have a write/manage action gate — that's narrower,
+      // not a widening. Only a LOOSER gate (more roles) is a parity violation.
+      const callRoles = rolesWithPermission(callPerm);
+      const routeRoles = rolesWithPermission(expected);
+      if (![...callRoles].every((r) => routeRoles.has(r)))
+        problems.push(
+          `${file}: requirePermission ${callPerm} {${[...callRoles].sort()}} ⊄ GATE_MAP ${expected} {${[...routeRoles].sort()}} (route ${route})`,
+        );
+    }
   }
   if (any) gatedFiles++;
 }

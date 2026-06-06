@@ -71,6 +71,8 @@ export const CATALOG: CatalogPerm[] = [
   { key: "account.settings", resource: "account", action: "settings", class: "business", label: "Persoonlijke instellingen" },
   { key: "settings.write", resource: "settings", action: "write", class: "business", label: "Bedrijfsinstellingen beheren" },
   { key: "notifications.read", resource: "notifications", action: "read", class: "business", label: "Eigen notificaties bekijken" },
+  { key: "team.read", resource: "team", action: "read", class: "business", label: "Team bekijken" },
+  { key: "team.manage", resource: "team", action: "manage", class: "business", label: "Team & rechten beheren" },
 
   /* ===== BUSINESS — owner+planner-class (owner + planner + super_admin) ===== */
   { key: "chefs.read", resource: "chefs", action: "read", class: "business", label: "Chefs bekijken" },
@@ -136,6 +138,7 @@ const OWNER_ONLY_PERMS = [
   "invoices.read",
   "account.settings", "settings.write",
   "notifications.read",
+  "team.read", "team.manage",
 ];
 
 export const ROLE_GRANTS: Record<string, string[]> = {
@@ -186,6 +189,8 @@ export const GATE_MAP: GateMapping[] = [
   { id: "account.settings", oldGate: "owner", perm: "account.settings", routes: ["/admin/account/instellingen", "/admin/account/2fa"] },
   { id: "business.settings", oldGate: "owner", perm: "settings.write", routes: ["/admin/business/instellingen"] },
   { id: "notifications.center", oldGate: "owner", perm: "notifications.read", routes: ["/admin/notifications"] },
+  { id: "team.list", oldGate: "owner", perm: "team.read", routes: ["/admin/business/team"] },
+  { id: "team.detail", oldGate: "owner", perm: "team.manage", routes: ["/admin/business/team/[id]", "/admin/business/team/new"] },
 
   /* ---- super_admin class (system) ---- */
   { id: "system.home", oldGate: "super_admin", perm: "system.read", routes: ["/admin/system"] },

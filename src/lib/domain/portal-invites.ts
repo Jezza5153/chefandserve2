@@ -253,7 +253,8 @@ export async function activatePortalUser(
 export async function inviteInternalStaff(args: {
   email: string;
   name: string;
-  role: "owner" | "super_admin";
+  /** any seeded role key (existence is validated below). */
+  role: string;
   actingUserId: string;
 }): Promise<InviteResult> {
   await assertImpersonationAllowed();

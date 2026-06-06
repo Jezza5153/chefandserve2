@@ -352,3 +352,34 @@ export async function createRole(args: {
   });
   return { ok: true };
 }
+
+/* ---------- C6: create an internal employee (owner + super_admin) --------- */
+
+export async function createEmployee(args: {
+  session: Session;
+  email: string;
+  name: string;
+  roleKey: string;
+}): Promise<ManageResult & { userId?: string }> {
+  const actor = await actorFromSession(args.session);
+  // G1+G3 — guard the role the new hire will receive (owner can't mint a
+  // super_admin or a role exceeding their own perms).
+  try {
+    assertCanAssignRole(actor, args.roleKey, await roleGrantKeys(args.roleKey));
+  } catch (e) {
+    if (e instanceof RbacGuardError) {
+      await auditBlocked(args.session, "createEmployee", { roleKey: args.roleKey, reason: e.reason });
+      return { ok: false, error: e.reason };
+    }
+    throw e;
+  }
+  const { inviteInternalStaff } = await import("@/lib/domain/portal-invites");
+  const res = await inviteInternalStaff({
+    email: args.email,
+    name: args.name,
+    role: args.roleKey,
+    actingUserId: args.session.user.id,
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true, userId: res.userId };
+}
