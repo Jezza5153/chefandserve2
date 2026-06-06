@@ -20,7 +20,7 @@
  */
 
 import { config } from "dotenv";
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 
@@ -33,6 +33,7 @@ import {
   userRoles,
   users,
 } from "./schema";
+import { CATALOG, ROLE_GRANTS } from "../rbac/catalog";
 
 /* ----------------------------- config ----------------------------------- */
 
@@ -43,31 +44,12 @@ if (!DB_URL) {
 
 const dbClient = drizzle(neon(DB_URL));
 
-// All Phase 0 permissions. Keep flat — easy to scan.
-const PERMISSIONS: { resource: string; action: string }[] = [
-  // Tech / system surface (super_admin only)
-  { resource: "users", action: "read" },
-  { resource: "users", action: "write" },
-  { resource: "roles", action: "read" },
-  { resource: "roles", action: "write" },
-  { resource: "audit", action: "read" },
-  { resource: "errors", action: "read" },
-  { resource: "errors", action: "resolve" },
-  // Business surface (owner + super_admin)
-  { resource: "dashboard", action: "read" },
-  { resource: "chefs", action: "read" },
-  { resource: "clients", action: "read" },
-  { resource: "shifts", action: "read" },
-  { resource: "hours", action: "read" },
-  { resource: "invoices", action: "read" },
-  // PR-FB-1: planner/owner write surfaces
-  { resource: "chefs", action: "write" },
-  { resource: "shifts", action: "write" },
-  { resource: "forms", action: "read" },
-  { resource: "forms", action: "write" },
-  { resource: "reminders", action: "read" },
-  { resource: "reminders", action: "write" },
-];
+// Permissions are the single source of truth in src/lib/rbac/catalog.ts
+// (PR-RBAC-1). The seed inserts them + reconciles each role's grants below.
+const PERMISSIONS: { resource: string; action: string }[] = CATALOG.map((p) => ({
+  resource: p.resource,
+  action: p.action,
+}));
 
 const ROLES = [
   {
@@ -88,39 +70,11 @@ const ROLES = [
   },
 ] as const;
 
-// Which permissions each role gets. super_admin = all; owner = business only.
-const ROLE_PERMS: Record<string, string[]> = {
-  super_admin: PERMISSIONS.map((p) => `${p.resource}.${p.action}`),
-  owner: [
-    "dashboard.read",
-    "chefs.read",
-    "chefs.write",
-    "clients.read",
-    "shifts.read",
-    "shifts.write",
-    "hours.read",
-    "invoices.read",
-    "forms.read",
-    "forms.write",
-    "reminders.read",
-    "reminders.write",
-  ],
-  // PR-FB-1: planner = chefs + shift/roster planning + forms + reminders.
-  // Deliberately NO clients-write / hours-approval / invoices / system.
-  planner: [
-    "dashboard.read",
-    "chefs.read",
-    "chefs.write",
-    "clients.read",
-    "shifts.read",
-    "shifts.write",
-    "hours.read",
-    "forms.read",
-    "forms.write",
-    "reminders.read",
-    "reminders.write",
-  ],
-};
+// Role → permission grants come from the catalog (PR-RBAC-1). Engineered to
+// mirror today's role-name access EXACTLY — proven by
+// scripts/audit-permission-parity.ts. The seed reconciles role_permissions to
+// these exactly (delete stale + insert missing) so the dormant→live flip is safe.
+const ROLE_PERMS: Record<string, string[]> = ROLE_GRANTS;
 
 type SeedUser = {
   seedKey: string;
@@ -194,9 +148,32 @@ async function seed() {
   for (const [roleKey, permKeys] of Object.entries(ROLE_PERMS)) {
     const rId = roleId(roleKey);
     if (!rId) throw new Error(`Seed bug: role ${roleKey} not found after insert`);
+    const targetIds = new Set<string>();
     for (const permKey of permKeys) {
       const pId = permId(permKey);
       if (!pId) throw new Error(`Seed bug: permission ${permKey} not found`);
+      targetIds.add(pId);
+    }
+    // Reconcile to EXACTLY the catalog grants. The old Phase-0 seed left stale
+    // planner grants (clients.read / hours.read / dashboard.read) that would
+    // WIDEN access once gates check permissions — delete anything not in target.
+    const existing = await dbClient
+      .select()
+      .from(rolePermissions)
+      .where(eq(rolePermissions.roleId, rId));
+    for (const row of existing) {
+      if (!targetIds.has(row.permissionId)) {
+        await dbClient
+          .delete(rolePermissions)
+          .where(
+            and(
+              eq(rolePermissions.roleId, rId),
+              eq(rolePermissions.permissionId, row.permissionId),
+            ),
+          );
+      }
+    }
+    for (const pId of targetIds) {
       await dbClient
         .insert(rolePermissions)
         .values({ roleId: rId, permissionId: pId })
