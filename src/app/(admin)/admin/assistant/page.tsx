@@ -4,7 +4,7 @@
  */
 import { requireRole } from "@/lib/permissions";
 import { aiEnabled } from "@/lib/ai/config";
-import { AssistantChat } from "./AssistantChat";
+import { AssistantChat } from "@/components/ai/AssistantChat";
 
 export const metadata = { title: "Assistent", robots: { index: false } };
 export const dynamic = "force-dynamic";

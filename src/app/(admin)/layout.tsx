@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
+import { AssistantWidget } from "@/components/ai/AssistantWidget";
 import { NotificationBell } from "@/components/NotificationBell";
 import { SidebarNav } from "@/components/admin/SidebarNav";
+import { aiEnabled } from "@/lib/ai/config";
 import { requireAuth } from "@/lib/permissions";
 import { site } from "@/lib/site";
 
@@ -36,6 +38,12 @@ export default async function AdminLayout({
       : session.user.roles.includes("planner")
         ? "Planner"
         : session.user.roles.join(", ");
+
+  // Floating assistant rides every admin page — owner/super_admin only, and only when
+  // AI is actually configured (otherwise no dead bubble).
+  const showAssistant =
+    aiEnabled() &&
+    (session.user.roles.includes("owner") || session.user.roles.includes("super_admin"));
 
   return (
     <div className="flex min-h-screen bg-bg-gray">
@@ -90,6 +98,8 @@ export default async function AdminLayout({
 
         <div className="px-6 py-10 md:px-10 md:py-12">{children}</div>
       </main>
+
+      {showAssistant && <AssistantWidget />}
     </div>
   );
 }

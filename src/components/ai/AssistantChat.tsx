@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 type Pending = { tool: string; input: unknown; summary: string; token: string };
@@ -19,14 +19,32 @@ type ApiResponse = {
   result?: { status: string; summary?: string; reason?: string; error?: string };
 };
 
-export function AssistantChat({ enabled }: { enabled: boolean }) {
+/**
+ * The owner assistant's chat surface. Used by both the dedicated /admin/assistant page
+ * (`variant="page"`) and the floating AssistantWidget (`variant="widget"`, a compact
+ * flex-column that scrolls internally). Same /api/ai/chat round-trip + confirm gate.
+ */
+export function AssistantChat({
+  enabled,
+  variant = "page",
+}: {
+  enabled: boolean;
+  variant?: "page" | "widget";
+}) {
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const pushAssistant = (content: string) => setMsgs((m) => [...m, { role: "assistant", content }]);
+  // keep the newest message in view (matters most in the compact widget)
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [msgs, pending, busy]);
+
+  const pushAssistant = (content: string) =>
+    setMsgs((m) => [...m, { role: "assistant", content }]);
 
   function applyResponse(data: ApiResponse) {
     if (data.disabled && data.message) {
@@ -110,9 +128,16 @@ export function AssistantChat({ enabled }: { enabled: boolean }) {
     );
   }
 
+  const isWidget = variant === "widget";
+
   return (
-    <div className="space-y-3">
-      <div className="min-h-[280px] space-y-2 rounded-lg border border-ink-200 bg-white p-4">
+    <div className={isWidget ? "flex h-full flex-col gap-3" : "space-y-3"}>
+      <div
+        ref={scrollRef}
+        className={`space-y-2 rounded-lg border border-ink-200 bg-white p-4 ${
+          isWidget ? "flex-1 overflow-y-auto" : "min-h-[280px]"
+        }`}
+      >
         {msgs.length === 0 && (
           <p className="text-sm text-ink-400">
             Stel een vraag, bijvoorbeeld: &ldquo;wie heeft z&rsquo;n uren nog niet goedgekeurd?&rdquo;
@@ -166,7 +191,7 @@ export function AssistantChat({ enabled }: { enabled: boolean }) {
           onChange={(e) => setInput(e.target.value)}
           disabled={busy}
           placeholder="Vraag iets…"
-          className="flex-1 rounded-md border border-ink-300 px-3 py-2 text-sm"
+          className="flex-1 rounded-md border border-ink-300 bg-white px-3 py-2 text-sm"
         />
         <button
           type="submit"
