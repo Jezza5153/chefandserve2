@@ -17,6 +17,7 @@ import { placementsPropose, placementsConfirm, placementsCancel } from "@/lib/ai
 import { chefsFind, clientsFind, shiftsFind } from "@/lib/ai/tools/directory";
 import { emailSend } from "@/lib/ai/tools/comms";
 import { remindersCreate, remindersList, remindersComplete } from "@/lib/ai/tools/reminders";
+import { memoryRemember, memoryList, memoryForget } from "@/lib/ai/tools/memory";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -40,6 +41,10 @@ export const ALL_TOOLS: AnyTool[] = [
   remindersCreate,
   remindersList,
   remindersComplete,
+  // personal — what Maarten teaches the assistant to remember
+  memoryRemember,
+  memoryList,
+  memoryForget,
 ];
 
 export function buildRegistry(): ToolRegistry {

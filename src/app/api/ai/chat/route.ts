@@ -17,6 +17,7 @@ import { env } from "@/lib/env";
 import { aiConfirmSecret, aiEnabled, aiModel } from "@/lib/ai/config";
 import { createOpenAiBrain, DEFAULT_SYSTEM_PROMPT } from "@/lib/ai/runtime/openai-brain";
 import { confirmOwnerAction, runOwnerAssistant } from "@/lib/ai/runtime/assistant";
+import { ownerMemoryPromptBlock } from "@/lib/ai/read-model/owner-memory";
 import type { Msg } from "@/lib/ai/runtime/agent";
 
 export const dynamic = "force-dynamic";
@@ -54,9 +55,12 @@ export async function POST(req: Request): Promise<Response> {
   const rawPath = (body as { context?: { path?: unknown } }).context?.path;
   const pagePath =
     typeof rawPath === "string" && /^\/admin[\w/.[\]-]*$/.test(rawPath) ? rawPath.slice(0, 200) : null;
-  const systemPrompt = pagePath
-    ? `${DEFAULT_SYSTEM_PROMPT}\n\nContext: Maarten kijkt nu naar de pagina "${pagePath}". Verwijst hij naar "deze/dit/hier" zonder verdere details, gebruik dan deze pagina als context. Haal de bijbehorende gegevens altijd via een tool op.`
-    : DEFAULT_SYSTEM_PROMPT;
+  const pageBlock = pagePath
+    ? `\n\nContext: Maarten kijkt nu naar de pagina "${pagePath}". Verwijst hij naar "deze/dit/hier" zonder verdere details, gebruik dan deze pagina als context. Haal de bijbehorende gegevens altijd via een tool op.`
+    : "";
+  // Inject what Maarten has had the assistant remember (memory.remember), so it uses it automatically.
+  const memoryBlock = await ownerMemoryPromptBlock(userId);
+  const systemPrompt = `${DEFAULT_SYSTEM_PROMPT}${pageBlock}${memoryBlock}`;
   const brain = createOpenAiBrain({ apiKey: env.OPENAI_API_KEY, model: aiModel(), systemPrompt });
 
   try {

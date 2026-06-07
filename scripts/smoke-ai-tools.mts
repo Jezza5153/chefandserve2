@@ -35,7 +35,7 @@ try {
 }
 
 const tools = registry.list();
-assert("at least 18 tools registered", tools.length >= 18, `got ${tools.length}`);
+assert("at least 21 tools registered", tools.length >= 21, `got ${tools.length}`);
 
 for (const t of tools) {
   assert(`${t.name}: has title + meaningful description`, Boolean(t.title) && t.description.length > 10);
@@ -65,6 +65,8 @@ assert("insights.leaderboards present (read)", byName.get("insights.leaderboards
 assert("integrations.health present (read)", byName.get("integrations.health")?.risk === "read");
 assert("reminders.create present (self, no confirm)", byName.get("reminders.create")?.risk === "self");
 assert("reminders.list present (read)", byName.get("reminders.list")?.risk === "read");
+assert("memory.remember present (self)", byName.get("memory.remember")?.risk === "self");
+assert("memory.list present (read)", byName.get("memory.list")?.risk === "read");
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 if (fail > 0) process.exit(1);
