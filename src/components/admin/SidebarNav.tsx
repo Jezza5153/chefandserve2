@@ -20,6 +20,7 @@ type Item = { label: string; href?: string; icon: IconName; soon?: boolean };
 
 const MAIN: Item[] = [
   { label: "Cockpit", href: "/admin/business", icon: "dashboard" },
+  { label: "Assistent", href: "/admin/assistant", icon: "message" },
   { label: "Rooster", href: "/admin/business/roster", icon: "calendar-days" },
   { label: "Planning", href: "/admin/business/shifts", icon: "list" },
   { label: "Chefs", href: "/admin/business/chefs", icon: "users" },

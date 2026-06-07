@@ -176,43 +176,54 @@ export async function assertSetupComplete(session: Session): Promise<void> {
 }
 
 /**
- * Per-request memoized loader of a user's EFFECTIVE permission set (PR-RBAC-1):
+ * Worker/route-safe core of the effective-permission computation (PR-RBAC-1):
  *   effective = (role grants ∪ user grants) − user revokes
  *
- * Revoke is final/subtractive (an explicit deny always wins). super_admin is
- * handled by the caller (returns true before this runs), so this only loads for
- * non-super_admin users. React cache() memoizes per request lifecycle, so N gate
- * checks in one render do ONE pair of indexed queries (not N). Keyed on userId +
- * the sorted role-key CSV so an impersonated effective user doesn't collide.
+ * Revoke is final/subtractive (an explicit deny always wins). super_admin is handled
+ * by the callers (they short-circuit before this runs). No request or session needed —
+ * callable from server actions, API routes, AND the AI assistant runtime, which acts
+ * on the owner's behalf and must inherit EXACTLY this set (never more). The single
+ * source of truth for "what can this user actually do".
+ */
+export async function computeEffectivePermissionSet(
+  userId: string,
+  roleKeys: string[],
+): Promise<Set<string>> {
+  const set = new Set<string>();
+  if (roleKeys.length > 0) {
+    const rolePerms = await db
+      .select({ resource: permissions.resource, action: permissions.action })
+      .from(permissions)
+      .innerJoin(rolePermissions, eq(rolePermissions.permissionId, permissions.id))
+      .innerJoin(roles, eq(roles.id, rolePermissions.roleId))
+      .where(inArray(roles.key, roleKeys));
+    for (const p of rolePerms) set.add(`${p.resource}.${p.action}`);
+  }
+  const overrides = await db
+    .select({
+      resource: userPermissions.resource,
+      action: userPermissions.action,
+      effect: userPermissions.effect,
+    })
+    .from(userPermissions)
+    .where(eq(userPermissions.userId, userId));
+  for (const o of overrides) {
+    const key = `${o.resource}.${o.action}`;
+    if (o.effect === "grant") set.add(key);
+    else set.delete(key); // revoke wins, even over a role grant
+  }
+  return set;
+}
+
+/**
+ * Per-request memoized wrapper around {@link computeEffectivePermissionSet}. React
+ * cache() memoizes per request lifecycle, so N gate checks in one render do ONE pair
+ * of indexed queries (not N). Keyed on userId + the sorted role-key CSV so an
+ * impersonated effective user doesn't collide.
  */
 const loadEffectivePermissionSet = cache(
-  async (userId: string, roleKeysCsv: string): Promise<Set<string>> => {
-    const roleKeys = roleKeysCsv.split(",").filter(Boolean);
-    const set = new Set<string>();
-    if (roleKeys.length > 0) {
-      const rolePerms = await db
-        .select({ resource: permissions.resource, action: permissions.action })
-        .from(permissions)
-        .innerJoin(rolePermissions, eq(rolePermissions.permissionId, permissions.id))
-        .innerJoin(roles, eq(roles.id, rolePermissions.roleId))
-        .where(inArray(roles.key, roleKeys));
-      for (const p of rolePerms) set.add(`${p.resource}.${p.action}`);
-    }
-    const overrides = await db
-      .select({
-        resource: userPermissions.resource,
-        action: userPermissions.action,
-        effect: userPermissions.effect,
-      })
-      .from(userPermissions)
-      .where(eq(userPermissions.userId, userId));
-    for (const o of overrides) {
-      const key = `${o.resource}.${o.action}`;
-      if (o.effect === "grant") set.add(key);
-      else set.delete(key); // revoke wins, even over a role grant
-    }
-    return set;
-  },
+  (userId: string, roleKeysCsv: string): Promise<Set<string>> =>
+    computeEffectivePermissionSet(userId, roleKeysCsv.split(",").filter(Boolean)),
 );
 
 /**

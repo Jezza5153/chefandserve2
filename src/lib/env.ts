@@ -65,6 +65,18 @@ const serverSchema = z.object({
   // Phase 9 — embedding API. Optional until Phase 9 ships.
   OPENAI_API_KEY: z.string().startsWith("sk-").optional(),
 
+  // Owner AI assistant runtime. All optional until the assistant is switched on.
+  //   AI_ENABLED        — master switch for the assistant surfaces (dashboard/WhatsApp/voice).
+  //   AI_CONFIRM_SECRET — HMAC key that signs action-confirmation tokens; the executor
+  //                       throws at call time if a confirm-gated tool runs without it.
+  //   OPENAI_MODEL      — chat/agent model id (e.g. gpt-4o); embeddings use OPENAI_API_KEY above.
+  AI_ENABLED: z.enum(["true", "false"]).optional(),
+  AI_CONFIRM_SECRET: z
+    .string()
+    .min(32, "AI_CONFIRM_SECRET must be ≥32 chars (openssl rand -base64 32)")
+    .optional(),
+  OPENAI_MODEL: z.string().optional(),
+
   // Phase 1 PR-S1A — rate-limit key derivation secret.
   // hmac_sha256(SECRET, scope+":"+identifier) becomes the row primary key.
   // Optional during the deploy window where the env var hasn't been set yet;
