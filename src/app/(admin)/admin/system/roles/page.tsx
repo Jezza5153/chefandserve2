@@ -1,6 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
+import { fieldClass } from "@/components/forms/Fields";
 import { db } from "@/lib/db/client";
 import { permissions, rolePermissions, roles } from "@/lib/db/schema";
 import { requirePermission } from "@/lib/permissions";
@@ -79,9 +80,9 @@ export default async function RolesPage({
       <details className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
         <summary className="cursor-pointer font-ui text-[12px] font-medium text-burgundy">+ Nieuwe rol</summary>
         <form action={addRole} className="mt-4 grid gap-3 sm:grid-cols-3">
-          <input name="key" placeholder="key (bv. senior_planner)" required className="rounded border border-ink-200 px-3 py-2 text-sm" />
-          <input name="label" placeholder="Label" required className="rounded border border-ink-200 px-3 py-2 text-sm" />
-          <input name="description" placeholder="Omschrijving" className="rounded border border-ink-200 px-3 py-2 text-sm" />
+          <input name="key" placeholder="key (bv. senior_planner)" required className={fieldClass} />
+          <input name="label" placeholder="Label" required className={fieldClass} />
+          <input name="description" placeholder="Omschrijving" className={fieldClass} />
           <button type="submit" className="rounded-full bg-burgundy px-4 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.14em] text-white hover:bg-burgundy-900 sm:col-span-1">
             Aanmaken
           </button>
