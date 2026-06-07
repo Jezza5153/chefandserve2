@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 
 async function retry(formData: FormData) {
   "use server";
-  const session = await requirePermission("integrations", "read");
+  const session = await requirePermission("integrations", "write");
   const outboxId = String(formData.get("outboxId") ?? "");
   if (!outboxId) return;
 

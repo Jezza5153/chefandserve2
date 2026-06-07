@@ -18,7 +18,7 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await requirePermission("privacy", "read", "/admin/system/privacy-requests");
+  const session = await requirePermission("privacy", "export", "/admin/system/privacy-requests");
   const { id } = await params;
 
   const res = await createExportDownloadLink({ requestId: id, actorId: session.user.id });

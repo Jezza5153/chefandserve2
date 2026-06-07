@@ -32,7 +32,7 @@ export default async function WebhookDetailPage({
 
   async function replay() {
     "use server";
-    const session = await requirePermission("webhooks", "read");
+    const session = await requirePermission("webhooks", "replay");
     if (kind !== "chef" && kind !== "client") {
       throw new Error("Webhook missing kind metadata, cannot replay");
     }

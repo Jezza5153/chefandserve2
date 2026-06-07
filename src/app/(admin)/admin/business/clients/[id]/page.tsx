@@ -1,9 +1,10 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { recordAuditFromRequest } from "@/lib/audit";
+import { recordAuditCore, recordAuditFromRequest, stampFromRequest } from "@/lib/audit";
+import { withTx } from "@/lib/db/tx";
 import {
   chefs,
   clientChangeRequests,
@@ -11,6 +12,7 @@ import {
   clients,
   users,
 } from "@/lib/db/schema";
+import { isValidEmail } from "@/lib/forms/validation";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { buildClientTrends, getClientSummary } from "@/lib/domain/client-history";
 import { getClientDailySeries } from "@/lib/domain/metrics-history";
@@ -231,58 +233,92 @@ export default async function ClientDetailPage({
       redirect(`/admin/business/clients/${id}?err=request-gone`);
     }
 
-    // Apply the field change on approval.
-    if (decision === "approved") {
-      if (req.field === "authEmail") {
-        // Auth email lives on users — update it (klant logs in with new email).
-        if (client!.userId) {
-          await db
-            .update(users)
-            .set({ email: String(req.proposedValue).toLowerCase(), updatedAt: new Date() })
-            .where(eq(users.id, client!.userId));
-        }
-      } else if (req.field === "paymentTermsDays") {
-        await db
-          .update(clients)
-          .set({ paymentTermsDays: Number(req.proposedValue), updatedAt: new Date() })
-          .where(eq(clients.id, id));
-      } else {
-        const col = CLIENT_FIELD_COLUMN[req.field];
-        if (col) {
-          await db
-            .update(clients)
-            .set({ [col]: String(req.proposedValue), updatedAt: new Date() })
-            .where(eq(clients.id, id));
-        }
+    // Validate the proposed value BEFORE applying (no raw DB throw on bad input).
+    // authEmail is the klant login address — validate format + uniqueness.
+    const proposedEmail =
+      decision === "approved" && req.field === "authEmail"
+        ? String(req.proposedValue ?? "").trim().toLowerCase()
+        : null;
+    if (decision === "approved" && req.field === "authEmail") {
+      if (!proposedEmail || !isValidEmail(proposedEmail)) {
+        redirect(`/admin/business/clients/${id}?err=ongeldig-emailadres`);
+      }
+      // users.email is UNIQUE — a clash would 500 inside the tx. Exclude the
+      // klant's own linked user.
+      const clash = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(
+          client!.userId
+            ? and(eq(users.email, proposedEmail), ne(users.id, client!.userId))
+            : eq(users.email, proposedEmail),
+        )
+        .limit(1);
+      if (clash.length > 0) {
+        redirect(`/admin/business/clients/${id}?err=emailadres-in-gebruik`);
       }
     }
 
-    // Atomic state transition — only flip a still-pending request.
-    const updated = await db
-      .update(clientChangeRequests)
-      .set({
-        status: decision,
-        decidedAt: new Date(),
-        decidedBy: session.user.id,
-        decisionNotes,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(clientChangeRequests.id, requestId),
-          eq(clientChangeRequests.status, "pending"),
-        ),
-      )
-      .returning({ id: clientChangeRequests.id });
-    if (updated.length === 0) redirect(`/admin/business/clients/${id}?err=request-gone`);
-
-    await recordAuditFromRequest({
+    // Atomic: apply the field change + flip the status in ONE tx (so a partial
+    // apply can't outlive a failed/stale transition). Audit commits in the same
+    // tx. redirect() stays OUTSIDE (it throws → would roll back).
+    const auditBase = await stampFromRequest({
       userId: session.user.id,
       action: decision === "approved" ? "client.change_approved" : "client.change_rejected",
       resource: "client_change_requests",
       resourceId: requestId,
       after: { field: req.field, decision, decisionNotes },
     });
+    const result = await withTx(async (tx) => {
+      // Guard first: only a still-pending request flips. Zero rows → stale.
+      const flipped = await tx
+        .update(clientChangeRequests)
+        .set({
+          status: decision,
+          decidedAt: new Date(),
+          decidedBy: session.user.id,
+          decisionNotes,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(clientChangeRequests.id, requestId),
+            eq(clientChangeRequests.status, "pending"),
+          ),
+        )
+        .returning({ id: clientChangeRequests.id });
+      if (flipped.length === 0) return { ok: false as const };
+
+      // Apply the validated field change (only when approved).
+      if (decision === "approved") {
+        if (req.field === "authEmail") {
+          // Auth email lives on users — update it (klant logs in with new email).
+          if (client!.userId && proposedEmail) {
+            await tx
+              .update(users)
+              .set({ email: proposedEmail, updatedAt: new Date() })
+              .where(eq(users.id, client!.userId));
+          }
+        } else if (req.field === "paymentTermsDays") {
+          await tx
+            .update(clients)
+            .set({ paymentTermsDays: Number(req.proposedValue), updatedAt: new Date() })
+            .where(eq(clients.id, id));
+        } else {
+          const col = CLIENT_FIELD_COLUMN[req.field];
+          if (col) {
+            await tx
+              .update(clients)
+              .set({ [col]: String(req.proposedValue), updatedAt: new Date() })
+              .where(eq(clients.id, id));
+          }
+        }
+      }
+
+      await recordAuditCore(auditBase, tx);
+      return { ok: true as const };
+    });
+    if (!result.ok) redirect(`/admin/business/clients/${id}?err=request-gone`);
 
     if (decision === "approved") {
       await enqueueIntegrationEvent({
