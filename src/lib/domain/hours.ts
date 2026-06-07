@@ -14,7 +14,7 @@
  * Auth is the CALLER's responsibility — these helpers do not check roles.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { recordAuditCore, stampFromRequest } from "@/lib/audit";
@@ -31,6 +31,7 @@ import {
   computeChefAmountCents,
   formatEuro,
   formatWorkedMinutes,
+  type HoursStatus,
 } from "@/lib/hours-labels";
 import {
   createNotification,
@@ -90,7 +91,17 @@ export function isMagicApproveEligible(row: {
 export async function approveHoursRow(args: {
   hoursId: string;
   approverUserId: string;
+  /**
+   * Source statuses the row may be in to approve. Default: only `client_signed`
+   * (the normal flow). Admin finalize/override widens this so a row that never
+   * went through chef-submit + client-sign can still be approved (admin enters
+   * the hours on the chef's behalf). All side-effects stay identical.
+   */
+  fromStatuses?: readonly HoursStatus[];
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const allowedFrom: HoursStatus[] = args.fromStatuses
+    ? [...args.fromStatuses]
+    : ["client_signed"];
   // Atomic: the status transition + its audit row commit together (withTx).
   // Side effects (outbox/notifications/emails) stay post-commit, below.
   const auditBase = await stampFromRequest({
@@ -110,7 +121,7 @@ export async function approveHoursRow(args: {
       .where(
         and(
           eq(shiftHours.id, args.hoursId),
-          eq(shiftHours.status, "client_signed"),
+          inArray(shiftHours.status, allowedFrom),
         ),
       )
       .returning({
