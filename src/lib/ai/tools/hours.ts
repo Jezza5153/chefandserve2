@@ -1,13 +1,14 @@
 /**
- * Hours tools — read the approval queue, and approve a row (the first real financial
- * action). `hours.approve` wraps the existing atomic+audited `approveHoursRow`, so the
- * executor's `ai.tool_*` row pairs with the domain's `shift_hours.admin_approved` row.
+ * Hours tools — read the approval queue, approve a row (first real financial action),
+ * and remind the blocking party (first real outbound action). The mutating tools wrap
+ * existing helpers so the AI's meta-audit row pairs with the domain's business row.
  */
 import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
 import { approveHoursRow } from "@/lib/domain/hours";
 import { listHoursAwaitingApproval } from "@/lib/ai/read-model/hours";
+import { sendHoursReminder } from "@/lib/ai/actions/send-hours-reminder";
 
 export const hoursListAwaitingApproval = defineTool({
   name: "hours.list_awaiting_approval",
@@ -45,5 +46,24 @@ export const hoursApprove = defineTool({
       throw new Error(res.reason === "stale" ? "deze urenregel is alweer veranderd" : res.reason);
     }
     return { data: { id: input.hoursId }, summary: "Uren goedgekeurd." };
+  },
+});
+
+export const hoursSendReminder = defineTool({
+  name: "hours.send_reminder",
+  title: "Herinnering sturen over uren",
+  description:
+    "Stuurt een vriendelijke herinnering over één urenregel naar de partij die nog aan zet is: de chef (moet indienen) of de klant (moet goedkeuren). Doet niets als de regel op jou wacht of al klaar is.",
+  risk: "outbound",
+  permission: { resource: "reminders", action: "write" },
+  input: z.object({ hoursId: z.string().min(1, "hoursId is verplicht") }),
+  describeAction: (input) => `Een herinnering sturen over urenregel ${input.hoursId} aan de partij die nog aan zet is.`,
+  run: async (input) => {
+    const res = await sendHoursReminder(input.hoursId);
+    if (!res.ok) throw new Error(res.reason);
+    return {
+      data: { hoursId: input.hoursId, party: res.party, recipients: res.recipients },
+      summary: `Herinnering gestuurd naar de ${res.party} (${res.recipients.join(", ")}).`,
+    };
   },
 });

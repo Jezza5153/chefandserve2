@@ -35,7 +35,7 @@ try {
 }
 
 const tools = registry.list();
-assert("at least 3 tools registered", tools.length >= 3, `got ${tools.length}`);
+assert("at least 4 tools registered", tools.length >= 4, `got ${tools.length}`);
 
 for (const t of tools) {
   assert(`${t.name}: has title + meaningful description`, Boolean(t.title) && t.description.length > 10);
@@ -57,6 +57,7 @@ const byName = new Map(tools.map((t) => [t.name, t]));
 assert("business.overview present (read)", byName.get("business.overview")?.risk === "read");
 assert("hours.list_awaiting_approval present (read)", byName.get("hours.list_awaiting_approval")?.risk === "read");
 assert("hours.approve present (financial)", byName.get("hours.approve")?.risk === "financial");
+assert("hours.send_reminder present (outbound)", byName.get("hours.send_reminder")?.risk === "outbound");
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 if (fail > 0) process.exit(1);

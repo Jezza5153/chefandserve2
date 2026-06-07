@@ -27,3 +27,27 @@ export async function listHoursAwaitingApproval() {
 }
 
 export type HoursAwaitingApproval = Awaited<ReturnType<typeof listHoursAwaitingApproval>>[number];
+
+/** One hours row with everything needed to remind the blocking party (chef or klant). */
+export async function loadHoursReminderTarget(hoursId: string) {
+  const [row] = await db
+    .select({
+      status: shiftHours.status,
+      placementId: shiftHours.placementId,
+      shiftId: shiftHours.shiftId,
+      clientId: shiftHours.clientId,
+      chefFullName: chefs.fullName,
+      chefEmail: chefs.email,
+      chefUserId: chefs.userId,
+      clientCompanyName: clients.companyName,
+      clientUserId: clients.userId,
+      shiftStartsAt: shifts.startsAt,
+    })
+    .from(shiftHours)
+    .innerJoin(chefs, eq(chefs.id, shiftHours.chefId))
+    .innerJoin(clients, eq(clients.id, shiftHours.clientId))
+    .innerJoin(shifts, eq(shifts.id, shiftHours.shiftId))
+    .where(eq(shiftHours.id, hoursId))
+    .limit(1);
+  return row ?? null;
+}

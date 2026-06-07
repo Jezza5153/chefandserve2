@@ -6,9 +6,14 @@ import { createRegistry, type ToolRegistry } from "@/lib/ai/tools/registry";
 import type { AnyTool } from "@/lib/ai/types";
 
 import { businessOverview } from "@/lib/ai/tools/business";
-import { hoursApprove, hoursListAwaitingApproval } from "@/lib/ai/tools/hours";
+import { hoursApprove, hoursListAwaitingApproval, hoursSendReminder } from "@/lib/ai/tools/hours";
 
-export const ALL_TOOLS: AnyTool[] = [businessOverview, hoursListAwaitingApproval, hoursApprove];
+export const ALL_TOOLS: AnyTool[] = [
+  businessOverview,
+  hoursListAwaitingApproval,
+  hoursApprove,
+  hoursSendReminder,
+];
 
 export function buildRegistry(): ToolRegistry {
   return createRegistry(ALL_TOOLS);
