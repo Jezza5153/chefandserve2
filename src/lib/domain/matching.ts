@@ -424,18 +424,53 @@ export async function findMatchesForShift(
   return results.slice(0, limit);
 }
 
+/** Outcome of {@link proposePlacement}. `already_proposed` means a live
+ * (proposed/accepted/confirmed) row already exists — nothing changed, no
+ * second notification fires. `proposed` covers a fresh row AND a re-proposal
+ * that reset a prior rejected/cancelled row back to `proposed`. */
+export type ProposeResult = {
+  placementId: string;
+  status: "proposed" | "already_proposed";
+};
+
 /**
- * Propose a chef for a shift. Creates a placement row, audit-logs, and
- * (eventually) sends a Resend email. Returns the new placement id.
+ * Propose a chef for a shift. IDEMPOTENT against the
+ * `placements_chef_shift_unique` (chefId, shiftId) index — re-proposing must
+ * never crash the server action:
  *
- * Phase 7 wires the email send. For now we create the row + audit and
- * the chef portal (Phase 4) will see the proposal next time they load.
+ *   - No row yet            → insert a fresh `proposed` row.
+ *   - Prior rejected/cancelled row → RESET it back to `proposed` (clear the
+ *     responded/confirmed/cancelled stamps, refresh proposedAt/proposedBy/
+ *     matchScore/notes) via `onConflictDoUpdate`.
+ *   - Prior active row (proposed/accepted/confirmed) → no-op, returns
+ *     `already_proposed` so the caller can show a friendly "al voorgesteld"
+ *     message instead of throwing on the unique constraint.
+ *
+ * Notifications (chef + klant) only fire when a NEW proposal is actually made.
  */
 export async function proposePlacement(
   shiftId: string,
   chefId: string,
   options: { proposedBy: string; matchScore?: number; notes?: string },
-): Promise<{ placementId: string }> {
+): Promise<ProposeResult> {
+  // Friendly guard: a still-active row means the chef is already on the table
+  // for this shift. Don't reset it, don't notify twice — just report it back.
+  const existing = await db
+    .select({ id: placements.id, status: placements.status })
+    .from(placements)
+    .where(and(eq(placements.shiftId, shiftId), eq(placements.chefId, chefId)))
+    .limit(1);
+  if (
+    existing.length > 0 &&
+    ["proposed", "accepted", "confirmed"].includes(existing[0].status)
+  ) {
+    return { placementId: existing[0].id, status: "already_proposed" };
+  }
+
+  const now = new Date();
+  // Insert-or-reset on the unique (chefId, shiftId) target. A prior
+  // rejected/cancelled row is reset to a clean `proposed` state; concurrent
+  // inserts converge on the same row instead of throwing 23505.
   const [placement] = await db
     .insert(placements)
     .values({
@@ -445,6 +480,22 @@ export async function proposePlacement(
       proposedBy: options.proposedBy,
       matchScore: options.matchScore ?? null,
       notes: options.notes ?? null,
+    })
+    .onConflictDoUpdate({
+      target: [placements.chefId, placements.shiftId],
+      set: {
+        status: "proposed",
+        proposedAt: now,
+        proposedBy: options.proposedBy,
+        matchScore: options.matchScore ?? null,
+        notes: options.notes ?? null,
+        // Clear the prior lifecycle stamps so the timeline restarts cleanly.
+        respondedAt: null,
+        confirmedAt: null,
+        cancelledAt: null,
+        completedAt: null,
+        updatedAt: now,
+      },
     })
     .returning({ id: placements.id });
 
@@ -459,7 +510,7 @@ export async function proposePlacement(
   try {
     const chef = await db.query.chefs.findFirst({ where: eq(chefs.id, chefId) });
     const shift = await db.query.shifts.findFirst({ where: eq(shifts.id, shiftId) });
-    if (!shift) return { placementId: placement.id };
+    if (!shift) return { placementId: placement.id, status: "proposed" };
 
     const client = await db.query.clients.findFirst({
       where: eq(clients.id, shift.clientId),
@@ -545,5 +596,5 @@ export async function proposePlacement(
     console.error("[propose] notification(s) failed:", e);
   }
 
-  return { placementId: placement.id };
+  return { placementId: placement.id, status: "proposed" };
 }

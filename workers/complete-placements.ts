@@ -111,8 +111,42 @@ async function main() {
     }
   }
 
+  // ----- Step 3: advance the parent SHIFT to 'completed' -----
+  // The shift backbone follows its placements (mirrors
+  // src/lib/domain/shift-status.ts rule 2 — kept inline because the worker
+  // can't import src/lib). A shift is completed when it has ended AND it has at
+  // least one non-cancelled placement AND every non-cancelled placement is
+  // 'completed'. Scoped to the shifts we just touched this run, and never
+  // resurrects a 'cancelled' shift.
+  const shiftIds = Array.from(new Set(flipped.map((p) => p.shift_id)));
+  let completedShifts = 0;
+  if (shiftIds.length > 0) {
+    const updatedShifts = await sql`
+      UPDATE shifts s
+      SET status = 'completed', updated_at = now()
+      WHERE s.id = ANY(${shiftIds})
+        AND s.status NOT IN ('completed', 'cancelled')
+        AND s.ends_at <= now()
+        AND EXISTS (
+          SELECT 1 FROM placements p
+          WHERE p.shift_id = s.id AND p.status <> 'cancelled'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM placements p
+          WHERE p.shift_id = s.id
+            AND p.status <> 'cancelled'
+            AND p.status <> 'completed'
+        )
+      RETURNING s.id
+    ` as Array<{ id: string }>;
+    completedShifts = updatedShifts.length;
+    for (const s of updatedShifts) {
+      await audit("shift.completed", "shifts", s.id, { via: "worker" });
+    }
+  }
+
   log(
-    `created ${createdRows} draft shift_hours rows (took ${
+    `created ${createdRows} draft shift_hours rows, completed ${completedShifts} shifts (took ${
       Date.now() - startedAt.getTime()
     }ms)`,
   );
