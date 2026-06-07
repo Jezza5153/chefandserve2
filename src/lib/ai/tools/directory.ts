@@ -5,7 +5,7 @@
 import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
-import { findChefs, findClients } from "@/lib/ai/read-model/directory";
+import { findChefs, findClients, findShifts } from "@/lib/ai/read-model/directory";
 
 export const chefsFind = defineTool({
   name: "chefs.find",
@@ -43,6 +43,27 @@ export const clientsFind = defineTool({
     return {
       data: { count: rows.length, clients: rows },
       summary: rows.length ? `${rows.length} klant(en) gevonden.` : "Geen klanten gevonden.",
+    };
+  },
+});
+
+export const shiftsFind = defineTool({
+  name: "shifts.find",
+  title: "Diensten opzoeken",
+  description:
+    'Zoek diensten (shifts) op klantnaam, rol, locatie of stad — bijv. "hotel Okura", "sous-chef", "Amsterdam". Filter optioneel op status (request, open, filled, completed, cancelled). Read-only.',
+  risk: "read",
+  permission: { resource: "shifts", action: "read" },
+  input: z.object({
+    query: z.string().optional(),
+    status: z.enum(["request", "open", "filled", "completed", "cancelled"]).optional(),
+    limit: z.number().int().min(1).max(25).optional(),
+  }),
+  run: async (input) => {
+    const rows = await findShifts({ q: input.query, status: input.status, limit: input.limit });
+    return {
+      data: { count: rows.length, shifts: rows },
+      summary: rows.length ? `${rows.length} dienst(en) gevonden.` : "Geen diensten gevonden.",
     };
   },
 });
