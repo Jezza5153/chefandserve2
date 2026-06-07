@@ -102,3 +102,62 @@ Until then the whole layer is built, tested, and dormant — zero cost.
   buttons. Maarten to choose.
 - Owner personal-reminders feature (table + tool) — does not exist yet; build when wiring the
   "remind me …" capability.
+
+---
+
+## Shipped state — V1 COMPLETE (June 2026, live on prod)
+
+Everything in the "Build status" table above is now built, tested, and merged to `main` — that
+table is superseded by this section. **21 tools**, ~162 smoke assertions green, every
+confirm-gated action verified.
+
+### Tools (21) — `src/lib/ai/tools/index.ts`
+- **See** (read, no confirm): `business.overview`, `shifts.open_soon`, `insights.leaderboards`,
+  `integrations.health`, `hours.list_awaiting_approval`, `chefs.find`, `clients.find`, `shifts.find`
+- **Do** (confirm-gated): `hours.approve`/`hours.reject` (financial), `hours.send_reminder`
+  (outbound), `placements.propose` (outbound), `placements.confirm`/`placements.cancel`
+  (financial), `email.send` (outbound)
+- **Personal** (self/read, no confirm — owner's own): `reminders.create`/`list`/`complete`,
+  `memory.remember`/`list`/`forget`
+
+### Runtime (`src/lib/ai/runtime/`)
+- `agent.ts` — native OpenAI tool-call threading (assistant `tool_calls` + `tool` result by id);
+  feeds STRUCTURED tool data back to the brain (not just the summary); caps history
+  (`maxHistoryMessages`, default 24); on step-exhaustion makes a tool-less final call so it
+  always answers.
+- `openai-brain.ts` — Chat Completions over an injectable transport; **retries transient 429/5xx
+  with backoff**; maps tool ids `.`↔`__` (OpenAI rejects dots in function names); system prompt =
+  warm proactive Dutch "right-hand" + `playbook.ts` + per-request page context + owner memory.
+- `execute.ts` (the gate), `confirm-token.ts`, `actor.ts`, `audit-sink.ts`, `assistant.ts`.
+
+### "Smarter over time" levers
+- **Playbook** (`src/lib/ai/playbook.ts`) — curated domain knowledge injected every turn. Edit it.
+- **Writable memory** (`src/lib/ai/read-model/owner-memory.ts`) — `memory.remember` stores facts;
+  `ownerMemoryPromptBlock` injects them into the system prompt so the assistant uses them.
+
+### No-migration storage trick
+Owner **reminders** + **memory** live as jsonb bags under the `owner_reminders` / `owner_memory`
+keys in the existing **`business_settings`** table → shipped live with NO migration. Namespaced
+by userId; mutations via `withTx` + upsert. If a list ever grows large, move it to a dedicated
+table (needs `db:migrate`).
+
+### Surfaces
+`/admin/assistant` page + a floating widget on every `/admin/*` page
+(`src/components/ai/{AssistantWidget,AssistantChat}.tsx`), owner/super_admin only, page-aware.
+Route: `src/app/api/ai/chat/route.ts`. Model: `gpt-5.4`.
+
+### Tests (browser-free, key-free except the live check)
+`scripts/smoke-ai-spine.mts` (31) · `smoke-ai-brain.mts` (21) · `smoke-ai-tools.mts` (81, run
+with `--env-file=.env.local`) · `smoke-ai-safety.mts` (29) · `live-ai-loop-check.mts` (1–2 real
+OpenAI calls, manual).
+
+### NOT built yet — do these in a DB-connected session
+- **`profile-change` approve/reject tool** — approval logic is ~180 lines inline in
+  `chefs/[id]/page.tsx`; mirror to a worker-safe helper + build the tool WITH a live DB to test.
+- **Proactive reminder push** — extend the Railway reminders worker to read `owner_reminders` and
+  notify at `dueAt` (today reminders are recall-on-ask only).
+- **WhatsApp + voice** — ON HOLD (chosen path: WhatsApp Coexistence + Meta Cloud API).
+
+### Operational
+- Switch-on env (prod): `AI_ENABLED=true`, `OPENAI_API_KEY`, `AI_CONFIRM_SECRET` (≥32), `OPENAI_MODEL=gpt-5.4`.
+- **Rotate the `OPENAI_API_KEY`** — the key in use was shared in chat during the build.
