@@ -115,6 +115,10 @@ const serverSchema = z.object({
   // Default off; flip to 'true' once Maarten's first rule is verified.
   REMINDERS_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // KPI-5 — forecast/projection panel dark-launch flag. Default off; the insights
+  // page stays correct when unset (forecastEnabled() gates only the projection block).
+  KPI_FORECAST_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });

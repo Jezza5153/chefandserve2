@@ -1,0 +1,7 @@
+{
+  "//": "Used only by render-based smokes (npx tsx --tsconfig tsconfig.smoke.json scripts/smoke-*.mts). Forces the automatic JSX runtime so production .tsx components (which omit the React import, per Next's jsx:preserve) execute under tsx/esbuild without a React global.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx"
+  }
+}

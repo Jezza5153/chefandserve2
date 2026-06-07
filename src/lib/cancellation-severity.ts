@@ -23,7 +23,10 @@ export function tierForShift(startsAt: Date | string): CancellationTier {
   return tierForHoursUntilShift(ms / (1000 * 60 * 60));
 }
 
-export const MAARTEN_PHONE = "+31612345678"; // TODO: env var
+// Configurable via NEXT_PUBLIC_MAARTEN_PHONE (this module is imported by the chef-side
+// "use client" CancelShiftSection, so it must be client-readable). Falls back to the
+// canonical number when unset.
+export const MAARTEN_PHONE = process.env.NEXT_PUBLIC_MAARTEN_PHONE ?? "+31612345678";
 
 export function urgentCopy(tier: CancellationTier): {
   warning: string | null;

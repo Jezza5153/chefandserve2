@@ -13,6 +13,7 @@ import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { Icon, type IconName } from "@/components/admin/icons";
 import { shiftStatusChip } from "@/components/admin/shiftVisuals";
 import { OpsCard } from "@/components/dashboard/OpsCard";
+import { MoneyStrip } from "@/components/dashboard/MoneyStrip";
 import { db } from "@/lib/db/client";
 import {
   chefSubmissions,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/domain/dashboard-intel";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { getRosterSettings } from "@/lib/domain/user-settings";
+import { getPlatformRollups } from "@/lib/domain/platform-rollups";
 import { requirePermission } from "@/lib/permissions";
 import {
   addDaysToKey,
@@ -166,6 +168,9 @@ export default async function BusinessDashboardPage() {
     db.select({ pendingProfileChanges: sql<number>`count(*)::int` }).from(profileChangeRequests).where(eq(profileChangeRequests.status, "pending")),
     db.select({ pendingClientChanges: sql<number>`count(*)::int` }).from(clientChangeRequests).where(eq(clientChangeRequests.status, "pending")),
   ]);
+
+  // KPI-5: owner money overview (week/maand/YTD FINAL-hours rollups).
+  const roll = await getPlatformRollups();
 
   /* ---- derive per-shift intel + day metrics ---- */
   const countByShift = new Map<string, number>();
@@ -455,6 +460,12 @@ export default async function BusinessDashboardPage() {
             lines={[{ text: "deze week" }, deltaLine(confirmedDelta)]} />
           <OpsCard icon="user-round" label="Profieldata" value={missingDataCount} href="/admin/business/chefs?filter=mist_data" cta="Naar overzicht"
             lines={[{ text: "ontbrekend" }, missingDataCount > 0 ? { text: "actie vereist", tone: "amber" } : { text: "compleet", tone: "emerald" }]} />
+        </div>
+
+        {/* KPI-5: money overview (FINAL hours) */}
+        <div className="mt-6">
+          <h2 className="mb-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-500">Omzet &amp; marge</h2>
+          <MoneyStrip week={roll.week} month={roll.month} ytd={roll.ytd} />
         </div>
 
         {/* Operational footer — system/integration health lives on the
