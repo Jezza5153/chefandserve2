@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/permissions";
 import { env } from "@/lib/env";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { aiConfirmSecret, aiEnabled, aiModel } from "@/lib/ai/config";
 import { createOpenAiBrain, DEFAULT_SYSTEM_PROMPT } from "@/lib/ai/runtime/openai-brain";
 import { confirmOwnerAction, runOwnerAssistant } from "@/lib/ai/runtime/assistant";
@@ -26,6 +27,20 @@ export async function POST(req: Request): Promise<Response> {
   const session = await auth();
   if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
   if (!hasRole(session, "owner", "super_admin")) return new NextResponse("Forbidden", { status: 403 });
+
+  // Per-user rate limit — every request can trigger paid OpenAI calls. Fail OPEN if the
+  // limiter backend is unavailable/unconfigured, so it never breaks the assistant itself.
+  try {
+    const rl = await checkRateLimit("ai_chat_user", session.user.id);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: `Even rustig aan — te veel verzoeken achter elkaar. Probeer het over ${rl.retryAfterSec}s opnieuw.` },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } },
+      );
+    }
+  } catch {
+    // limiter unavailable → allow the request
+  }
 
   if (!aiEnabled() || !env.OPENAI_API_KEY) {
     return NextResponse.json({
