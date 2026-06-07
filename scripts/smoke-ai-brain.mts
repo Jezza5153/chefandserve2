@@ -55,7 +55,7 @@ console.log("\n── brain: tool_call response ──");
           {
             message: {
               content: null,
-              tool_calls: [{ function: { name: "hours.approve", arguments: JSON.stringify({ hoursId: "h1" }) } }],
+              tool_calls: [{ function: { name: "hours__approve", arguments: JSON.stringify({ hoursId: "h1" }) } }],
             },
           },
         ],
@@ -74,9 +74,10 @@ console.log("\n── brain: tool_call response ──");
   ];
   const step = await brain.plan({ messages: [{ role: "user", content: "keur h1 goed" }], tools });
   assert("returns tool_call", step.kind === "tool_call");
-  assert("tool name parsed", step.kind === "tool_call" && step.tool === "hours.approve");
+  assert("tool name un-mapped back to dotted id", step.kind === "tool_call" && step.tool === "hours.approve");
   assert("arguments parsed", step.kind === "tool_call" && (step.input as { hoursId?: string }).hoursId === "h1");
-  assert("request carried the tool", capturedBody.includes("hours.approve"));
+  assert("request carried the DOTLESS tool name (OpenAI rejects dots)", capturedBody.includes("hours__approve"));
+  assert("request did NOT send a dotted name", !capturedBody.includes('"hours.approve"'));
   assert("request carried the system prompt", capturedBody.includes("Maarten"));
   assert("request set tool_choice", capturedBody.includes("tool_choice"));
 }

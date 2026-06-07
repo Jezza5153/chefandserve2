@@ -81,10 +81,16 @@ function toOpenAiMessages(system: string, messages: Msg[]): Array<{ role: string
   return out;
 }
 
+// OpenAI function names must match ^[a-zA-Z0-9_-]{1,64}$ — no dots. Our tool ids are
+// "resource.action", so map "." <-> "__" on the way out and back (tool names use single
+// underscores only, so "__" is a safe, reversible delimiter).
+const toOpenAiName = (name: string): string => name.replaceAll(".", "__");
+const fromOpenAiName = (name: string): string => name.replaceAll("__", ".");
+
 function toOpenAiTool(spec: ToolSpec) {
   return {
     type: "function",
-    function: { name: spec.name, description: spec.description, parameters: spec.parameters },
+    function: { name: toOpenAiName(spec.name), description: spec.description, parameters: spec.parameters },
   };
 }
 
@@ -110,7 +116,7 @@ function parseChoice(json: unknown): BrainStep {
         input = {};
       }
     }
-    return { kind: "tool_call", tool: String(fn?.name ?? ""), input };
+    return { kind: "tool_call", tool: fromOpenAiName(String(fn?.name ?? "")), input };
   }
   return { kind: "final", text: typeof msg?.content === "string" ? msg.content : "" };
 }
