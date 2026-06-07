@@ -11,6 +11,8 @@
 
 import { useState } from "react";
 
+import { fieldClass } from "@/components/forms/Fields";
+
 const TOPICS: Array<{ value: string; label: string }> = [
   { value: "datetime", label: "Datum of tijd" },
   { value: "headcount", label: "Aantal personen" },
@@ -79,7 +81,7 @@ export function ChangeRequestModal({
               required
               minLength={5}
               placeholder="Bijv. ‘evenement verschoven naar zaterdag’ of ‘we hebben 2 koks nodig i.p.v. 1’"
-              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              className={`${fieldClass} placeholder-ink-500`}
             />
           </label>
 

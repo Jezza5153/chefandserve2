@@ -9,6 +9,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { fieldClass } from "@/components/forms/Fields";
+
 type Props = {
   hoursId: string;
   shiftId: string;
@@ -63,7 +65,7 @@ export function RejectForm({
           minLength={5}
           rows={4}
           placeholder="Bijv. ‘Chef was 30 min later begonnen’ of ‘pauze klopt niet’"
-          className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+          className={`${fieldClass} placeholder-ink-500`}
         />
       </label>
       <p className="text-xs text-ink-500">

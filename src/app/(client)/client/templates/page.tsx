@@ -9,6 +9,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
+import { fieldClass } from "@/components/forms/Fields";
 import { db } from "@/lib/db/client";
 import { recordAuditFromRequest } from "@/lib/audit";
 import {
@@ -232,7 +233,7 @@ export default async function ClientTemplatesPage({
                       required
                       minLength={5}
                       placeholder="Bijv. ‘graag 30 min later starten’ of ‘pauzeren in juli’"
-                      className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+                      className={`${fieldClass} placeholder-ink-500`}
                     />
                     <button
                       type="submit"

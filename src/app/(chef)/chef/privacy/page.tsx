@@ -5,6 +5,7 @@
 
 import { redirect } from "next/navigation";
 
+import { fieldClass } from "@/components/forms/Fields";
 import { createPrivacyRequest } from "@/lib/domain/privacy";
 import { requireAuth } from "@/lib/permissions";
 
@@ -70,7 +71,7 @@ export default async function ChefPrivacyPage({
           </span>
           <select
             name="type"
-            className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            className={fieldClass}
           >
             {TYPE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -85,7 +86,7 @@ export default async function ChefPrivacyPage({
             name="reason"
             rows={4}
             placeholder="Bijv. welke gegevens het betreft, of wat er gecorrigeerd moet worden."
-            className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            className={`${fieldClass} placeholder-ink-500`}
           />
         </label>
         <button

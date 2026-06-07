@@ -8,6 +8,7 @@
 
 import { useState } from "react";
 
+import { fieldClass } from "@/components/forms/Fields";
 import {
   NEGATIVE_TAGS,
   POSITIVE_TAGS,
@@ -86,7 +87,7 @@ export function RatingForm({
           name="comment"
           rows={3}
           placeholder="Iets dat je wilt delen met Chef & Serve…"
-          className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+          className={`${fieldClass} placeholder-ink-500`}
         />
       </label>
 

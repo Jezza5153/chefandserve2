@@ -7,6 +7,7 @@
  * on those dates are NOT auto-removed (admin cancels them manually).
  */
 
+import { fieldClass } from "@/components/forms/Fields";
 import { formatIsoDate } from "@/lib/shift-template-format";
 
 type Exception = { id: string; date: string; reason: string | null };
@@ -75,7 +76,7 @@ export function ExceptionsManager({
             type="text"
             name="reason"
             placeholder="Kerstvakantie"
-            className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            className={`${fieldClass} placeholder-ink-500`}
           />
         </label>
         <button

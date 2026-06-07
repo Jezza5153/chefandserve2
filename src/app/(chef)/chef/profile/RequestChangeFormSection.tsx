@@ -14,6 +14,7 @@
 
 import { useState } from "react";
 
+import { fieldClass } from "@/components/forms/Fields";
 import { formatChefRole } from "@/lib/labels";
 
 const VAKNIVEAU_OPTIONS: Array<{ value: string; label: string }> = [
@@ -122,7 +123,7 @@ export function RequestChangeFormSection({ chef, requestAction }: Props) {
                 name="proposed"
                 required
                 defaultValue={chef.vakniveau ?? ""}
-                className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+                className={fieldClass}
               >
                 <option value="" disabled>
                   Kies een vakniveau…
@@ -142,7 +143,7 @@ export function RequestChangeFormSection({ chef, requestAction }: Props) {
                 name="proposed"
                 required
                 defaultValue={chef.email ?? ""}
-                className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+                className={fieldClass}
               />
             </label>
           ) : (
@@ -153,7 +154,7 @@ export function RequestChangeFormSection({ chef, requestAction }: Props) {
                 name="proposed"
                 required
                 defaultValue={chef.fullName}
-                className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+                className={fieldClass}
               />
             </label>
           )}
@@ -168,7 +169,7 @@ export function RequestChangeFormSection({ chef, requestAction }: Props) {
               required
               minLength={5}
               placeholder="Bijv. ‘Ik heb een nieuw mobiel-nummer’ of ‘meer ervaring met fine-dining sinds april’"
-              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              className={`${fieldClass} placeholder-ink-500`}
             />
           </label>
 

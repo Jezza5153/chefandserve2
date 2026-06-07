@@ -10,6 +10,7 @@
 
 import { useState } from "react";
 
+import { fieldClass } from "@/components/forms/Fields";
 import {
   MAARTEN_PHONE,
   urgentCopy,
@@ -84,7 +85,7 @@ export function CancelShiftSection({
               minLength={5}
               rows={4}
               placeholder="Bijv. ‘Ziek geworden’ of ‘familie-noodgeval’"
-              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              className={`${fieldClass} placeholder-ink-500`}
               autoFocus
             />
           </label>
