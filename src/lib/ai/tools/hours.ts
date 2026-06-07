@@ -6,7 +6,7 @@
 import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
-import { approveHoursRow } from "@/lib/domain/hours";
+import { approveHoursRow, rejectHoursRow } from "@/lib/domain/hours";
 import { listHoursAwaitingApproval } from "@/lib/ai/read-model/hours";
 import { sendHoursReminder } from "@/lib/ai/actions/send-hours-reminder";
 
@@ -46,6 +46,31 @@ export const hoursApprove = defineTool({
       throw new Error(res.reason === "stale" ? "deze urenregel is alweer veranderd" : res.reason);
     }
     return { data: { id: input.hoursId }, summary: "Uren goedgekeurd." };
+  },
+});
+
+export const hoursReject = defineTool({
+  name: "hours.reject",
+  title: "Uren afkeuren",
+  description:
+    "Keurt een urenregel af met een korte reden. De chef (of klant) krijgt bericht om het te corrigeren en opnieuw in te dienen.",
+  risk: "financial",
+  permission: { resource: "hours", action: "approve" },
+  input: z.object({
+    hoursId: z.string().min(1, "hoursId is verplicht"),
+    reason: z.string().min(5, "geef een korte reden (min. 5 tekens)"),
+  }),
+  describeAction: (input) => `Urenregel ${input.hoursId} afkeuren met reden: "${input.reason}".`,
+  run: async (input, ctx) => {
+    const res = await rejectHoursRow({
+      hoursId: input.hoursId,
+      rejecterUserId: ctx.actor.requestedByUserId,
+      adminNotes: input.reason,
+    });
+    if (!res.ok) {
+      throw new Error(res.reason === "reason-too-short" ? "de reden is te kort" : res.reason);
+    }
+    return { data: { id: input.hoursId }, summary: "Uren afgekeurd — de chef is op de hoogte gebracht." };
   },
 });
 

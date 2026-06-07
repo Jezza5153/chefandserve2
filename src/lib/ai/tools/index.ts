@@ -6,8 +6,14 @@ import { createRegistry, type ToolRegistry } from "@/lib/ai/tools/registry";
 import type { AnyTool } from "@/lib/ai/types";
 
 import { businessOverview } from "@/lib/ai/tools/business";
-import { hoursApprove, hoursListAwaitingApproval, hoursSendReminder } from "@/lib/ai/tools/hours";
+import {
+  hoursApprove,
+  hoursListAwaitingApproval,
+  hoursReject,
+  hoursSendReminder,
+} from "@/lib/ai/tools/hours";
 import { shiftsOpenSoon, insightsLeaderboards, integrationsHealth } from "@/lib/ai/tools/ops";
+import { placementsPropose } from "@/lib/ai/tools/placements";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -18,7 +24,9 @@ export const ALL_TOOLS: AnyTool[] = [
   hoursListAwaitingApproval,
   // act — the hands
   hoursApprove,
+  hoursReject,
   hoursSendReminder,
+  placementsPropose,
 ];
 
 export function buildRegistry(): ToolRegistry {
