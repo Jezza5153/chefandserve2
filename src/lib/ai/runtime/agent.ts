@@ -10,14 +10,20 @@ import type { ConfirmationRequest, ToolContext, ToolResult } from "@/lib/ai/type
 import type { ToolRegistry, ToolSpec } from "@/lib/ai/tools/registry";
 import { executeTool, type ExecuteOptions } from "@/lib/ai/runtime/execute";
 
+export type ToolCallRef = { id: string; name: string; arguments: string };
+
 export type Msg = {
   role: "user" | "assistant" | "tool";
   content: string;
+  /** Present on an assistant message that IS a tool call — so the model sees its own call. */
+  toolCall?: ToolCallRef;
+  /** Present on a tool-result message: the call it answers + the tool name. */
+  toolCallId?: string;
   toolName?: string;
 };
 
 export type BrainStep =
-  | { kind: "tool_call"; tool: string; input: unknown }
+  | { kind: "tool_call"; tool: string; input: unknown; call?: ToolCallRef }
   | { kind: "final"; text: string };
 
 /** The pluggable reasoning layer. The real implementation calls the LLM; tests script it. */
@@ -58,9 +64,20 @@ export async function runAgent(args: RunAgentArgs): Promise<AgentOutcome> {
       return { kind: "final", text: step.text, steps };
     }
 
+    // Record the assistant's tool-call turn, then the tool result as a proper `tool`
+    // message tied to it by id. This native threading is what lets the model SEE that its
+    // own call was answered and then produce a final reply — without it the model doesn't
+    // recognise the result and re-calls the tool until maxSteps ("maximum aantal stappen").
+    const call: ToolCallRef = step.call ?? {
+      id: `call_${i}`,
+      name: step.tool,
+      arguments: safeArguments(step.input),
+    };
+
     const tool = registry.get(step.tool);
     if (!tool) {
-      convo.push({ role: "tool", toolName: step.tool, content: `Onbekende tool: ${step.tool}` });
+      convo.push({ role: "assistant", content: "", toolCall: call });
+      convo.push({ role: "tool", toolCallId: call.id, toolName: step.tool, content: `Onbekende tool: ${step.tool}` });
       continue;
     }
 
@@ -77,7 +94,8 @@ export async function runAgent(args: RunAgentArgs): Promise<AgentOutcome> {
       };
     }
 
-    convo.push({ role: "tool", toolName: step.tool, content: toolMessage(result) });
+    convo.push({ role: "assistant", content: "", toolCall: call });
+    convo.push({ role: "tool", toolCallId: call.id, toolName: step.tool, content: toolMessage(result) });
   }
 
   return { kind: "final", text: "Ik heb het maximum aantal stappen bereikt zonder af te ronden.", steps };
@@ -85,13 +103,40 @@ export async function runAgent(args: RunAgentArgs): Promise<AgentOutcome> {
 
 function toolMessage(result: ToolResult): string {
   switch (result.status) {
-    case "ok":
-      return result.summary;
+    case "ok": {
+      // Feed the STRUCTURED data back to the brain, not just the human summary. The
+      // summary is a short headline and usually omits the exact number/name the user
+      // asked for; without the data the brain can't see its own tool's output and just
+      // re-calls the tool until maxSteps ("maximum aantal stappen bereikt"). Capped so a
+      // large snapshot can't blow the context window.
+      const json = jsonForBrain(result.data);
+      return json ? `${result.summary}\n\nData (JSON): ${json}` : result.summary;
+    }
     case "denied":
       return `[geweigerd] ${result.reason}`;
     case "error":
       return `[fout] ${result.error}`;
     default:
       return "[onbekend]";
+  }
+}
+
+function jsonForBrain(data: unknown): string {
+  if (data === undefined || data === null) return "";
+  try {
+    const s = JSON.stringify(data);
+    if (!s || s === "{}" || s === "[]") return "";
+    const MAX = 6000;
+    return s.length > MAX ? `${s.slice(0, MAX)}…(ingekort)` : s;
+  } catch {
+    return "";
+  }
+}
+
+function safeArguments(input: unknown): string {
+  try {
+    return JSON.stringify(input ?? {});
+  } catch {
+    return "{}";
   }
 }

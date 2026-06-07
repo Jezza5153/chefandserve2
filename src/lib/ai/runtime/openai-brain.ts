@@ -19,6 +19,7 @@ export const DEFAULT_SYSTEM_PROMPT = [
   "- Gebruik UITSLUITEND de tools voor feiten en acties. Verzin nooit cijfers, namen of statussen — kun je iets niet via een tool ophalen, zeg dat dan eerlijk.",
   "- Voor acties die iets versturen of geld/onomkeerbaar raken: roep de tool aan; het systeem vraagt Maarten zelf om bevestiging. Doe nooit alsof iets al verstuurd of goedgekeurd is voordat het bevestigd is.",
   "- Antwoord kort en in het Nederlands, op de toon van een capabele rechterhand.",
+  "- Zodra een tool de gevraagde gegevens heeft teruggegeven, geef je meteen antwoord op basis van die gegevens — roep niet nóg een keer dezelfde tool aan.",
   "- Je kunt nooit méér dan Maarten zelf mag; het systeem dwingt dat af.",
 ].join("\n");
 
@@ -69,11 +70,32 @@ export function createOpenAiBrain(opts: OpenAiBrainOptions): Brain {
   };
 }
 
-function toOpenAiMessages(system: string, messages: Msg[]): Array<{ role: string; content: string }> {
-  const out: Array<{ role: string; content: string }> = [{ role: "system", content: system }];
+type OpenAiMessage = {
+  role: string;
+  content: string | null;
+  tool_call_id?: string;
+  tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>;
+};
+
+function toOpenAiMessages(system: string, messages: Msg[]): OpenAiMessage[] {
+  const out: OpenAiMessage[] = [{ role: "system", content: system }];
   for (const m of messages) {
     if (m.role === "tool") {
-      out.push({ role: "assistant", content: `[resultaat van tool ${m.toolName ?? "?"}] ${m.content}` });
+      // a proper tool-result turn, tied to the assistant's tool_call by id
+      out.push({ role: "tool", content: m.content, tool_call_id: m.toolCallId ?? "call_0" });
+    } else if (m.role === "assistant" && m.toolCall) {
+      // the assistant's own tool-call turn (no text content)
+      out.push({
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: m.toolCall.id,
+            type: "function",
+            function: { name: toOpenAiName(m.toolCall.name), arguments: m.toolCall.arguments },
+          },
+        ],
+      });
     } else {
       out.push({ role: m.role, content: m.content });
     }
@@ -98,7 +120,7 @@ type OpenAiResponse = {
   choices?: Array<{
     message?: {
       content?: string | null;
-      tool_calls?: Array<{ function?: { name?: string; arguments?: string } }>;
+      tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
     };
   }>;
 };
@@ -107,16 +129,17 @@ function parseChoice(json: unknown): BrainStep {
   const msg = (json as OpenAiResponse).choices?.[0]?.message;
   const toolCalls = msg?.tool_calls;
   if (Array.isArray(toolCalls) && toolCalls.length > 0) {
-    const fn = toolCalls[0]?.function;
+    const tc = toolCalls[0];
+    const fn = tc?.function;
+    const rawArgs = typeof fn?.arguments === "string" && fn.arguments.trim() ? fn.arguments : "{}";
     let input: unknown = {};
-    if (typeof fn?.arguments === "string" && fn.arguments.trim()) {
-      try {
-        input = JSON.parse(fn.arguments);
-      } catch {
-        input = {};
-      }
+    try {
+      input = JSON.parse(rawArgs);
+    } catch {
+      input = {};
     }
-    return { kind: "tool_call", tool: fromOpenAiName(String(fn?.name ?? "")), input };
+    const dotted = fromOpenAiName(String(fn?.name ?? ""));
+    return { kind: "tool_call", tool: dotted, input, call: { id: String(tc?.id ?? "call_0"), name: dotted, arguments: rawArgs } };
   }
   return { kind: "final", text: typeof msg?.content === "string" ? msg.content : "" };
 }

@@ -5,7 +5,7 @@
  *   npx tsx scripts/smoke-ai-spine.mts
  */
 import type { AiActor, AiAuditEvent, ToolContext } from "@/lib/ai/types";
-import type { Brain, BrainStep } from "@/lib/ai/runtime/agent";
+import type { Brain, BrainStep, Msg } from "@/lib/ai/runtime/agent";
 
 const { z } = await import("zod");
 const { defineTool, createRegistry } = await import("@/lib/ai/tools/registry");
@@ -208,6 +208,34 @@ console.log("\n── agent loop: resumes when pre-confirmed ──");
   });
   assert("pre-confirmed agent reaches final", outcome.kind === "final");
   assert("final text from the brain", outcome.kind === "final" && outcome.text === "herinnering verstuurd");
+}
+
+console.log("\n── agent loop: tool DATA (not just the summary) is fed back to the brain ──");
+{
+  let lastSeen: Msg[] = [];
+  const script: BrainStep[] = [
+    { kind: "tool_call", tool: "fake.read", input: { q: "tel de chefs" } },
+    { kind: "final", text: "klaar" },
+  ];
+  const brain: Brain = {
+    plan: async ({ messages }) => {
+      lastSeen = messages;
+      return script.shift() ?? { kind: "final", text: "(leeg)" };
+    },
+  };
+  await runAgent({
+    brain,
+    registry,
+    messages: [{ role: "user", content: "hoeveel chefs" }],
+    ctx: ctx(owner),
+    executeOptions: opts(makeSink().sink),
+  });
+  const toolMsg = lastSeen.find((m) => m.role === "tool");
+  assert("tool result is fed back to the brain", Boolean(toolMsg));
+  assert(
+    "fed-back message carries the STRUCTURED data, not just the summary (regression: 'maximum aantal stappen')",
+    Boolean(toolMsg && toolMsg.content.includes('"rows"')),
+  );
 }
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
