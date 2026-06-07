@@ -28,20 +28,20 @@ import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import {
   estimateMargin,
   estimateTravel,
-  eur,
   type TransportMode,
 } from "@/lib/domain/travel";
 import {
-  getChefCandidateBadges,
-  getChefMatchExplanation,
-  getMatchConfidenceLabel,
-  getRankGapReasons,
   getRankScore,
   type CandidateSignals,
 } from "@/lib/domain/staffing-intelligence";
 import { amsterdamDayKey } from "@/lib/roster-format";
-import { fieldClass } from "@/components/forms/Fields";
 import { requirePermission } from "@/lib/permissions";
+import { DetailShell } from "@/components/ui/DetailShell";
+import { SummaryCard } from "./_components/SummaryCard";
+import { NotesForm } from "./_components/NotesForm";
+import { ExistingPlacements } from "./_components/ExistingPlacements";
+import { MatchSuggestions } from "./_components/MatchSuggestions";
+import { EmptyState } from "./_components/EmptyState";
 
 export const metadata = { title: "Shift" };
 
@@ -524,499 +524,67 @@ export default async function ShiftDetailPage({
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-6">
+    <DetailShell
+      className="mx-auto max-w-5xl"
+      backHref="/admin/business/shifts"
+      backLabel="Shifts"
+      eyebrow="Shift"
+      title={
+        <>
+          {shift.roleNeeded}
+          {shift.segment && (
+            <span className="ml-2 text-ink-500">· {shift.segment}</span>
+          )}
+        </>
+      }
+      actions={<StatusBadge status={shift.status} />}
+    >
+      <p className="mt-2 text-sm text-ink-700">
         <Link
-          href="/admin/business/shifts"
-          className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy hover:underline"
+          href={`/admin/business/clients/${shift.clientId}`}
+          className="text-burgundy underline-offset-4 hover:underline"
         >
-          ← Shifts
+          {client?.companyName ?? "(klant verwijderd)"}
         </Link>
-      </div>
-
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-            Shift
-          </p>
-          <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
-            {shift.roleNeeded}
-            {shift.segment && (
-              <span className="ml-2 text-ink-500">· {shift.segment}</span>
-            )}
-          </h1>
-          <p className="mt-2 text-sm text-ink-700">
-            <Link
-              href={`/admin/business/clients/${shift.clientId}`}
-              className="text-burgundy underline-offset-4 hover:underline"
-            >
-              {client?.companyName ?? "(klant verwijderd)"}
-            </Link>
-            {" · "}
-            {formatDateRange(shift.startsAt, shift.endsAt)}
-            {shift.city && ` · ${shift.city}`}
-          </p>
-        </div>
-        <StatusBadge status={shift.status} />
-      </div>
+        {" · "}
+        {formatDateRange(shift.startsAt, shift.endsAt)}
+        {shift.city && ` · ${shift.city}`}
+      </p>
 
       {/* Summary card */}
-      <div className="mt-8 grid gap-4 rounded-lg border border-ink-200 bg-white p-6 md:grid-cols-3">
-        <SummaryCell label="Aantal nodig" value={shift.headcount.toString()} />
-        <SummaryCell
-          label="Bevestigd"
-          value={`${confirmedCount} / ${shift.headcount}`}
-          highlight={confirmedCount >= shift.headcount}
-        />
-        <SummaryCell
-          label="Tarief klant"
-          value={shift.clientRateCents ? `€${(shift.clientRateCents / 100).toFixed(2)}/u` : "—"}
-        />
-        <SummaryCell
-          label="Tarief chef"
-          value={shift.chefRateCents ? `€${(shift.chefRateCents / 100).toFixed(2)}/u` : "—"}
-        />
-        <SummaryCell label="Locatie" value={shift.location ?? "—"} />
-      </div>
+      <SummaryCard shift={shift} confirmedCount={confirmedCount} />
 
       {/* PR-CHEF-2b — three note channels with explicit visibility. */}
-      <section className="mt-6 rounded-lg border border-ink-200 bg-white p-6">
-        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-          Notities
-        </h2>
-        <form action={updateShiftNotes} className="mt-4 space-y-4">
-          <input type="hidden" name="shiftId" value={shift.id} />
-          <label className="block">
-            <span className="block text-[13px] font-medium text-ink-800">
-              Intern · alleen Chef &amp; Serve
-            </span>
-            <span className="mb-1 block text-xs text-ink-500">
-              Nooit zichtbaar voor chef of klant.
-            </span>
-            <textarea
-              name="notes"
-              rows={2}
-              defaultValue={shift.notes ?? ""}
-              className={fieldClass}
-            />
-          </label>
-          <label className="block">
-            <span className="block text-[13px] font-medium text-ink-800">
-              Zichtbaar voor chef
-            </span>
-            <span className="mb-1 block text-xs text-ink-500">
-              Werkinstructies — getoond op het shift-voorstel.
-            </span>
-            <textarea
-              name="chefVisibleNotes"
-              rows={2}
-              defaultValue={shift.chefVisibleNotes ?? ""}
-              className={fieldClass}
-            />
-          </label>
-          <label className="block">
-            <span className="block text-[13px] font-medium text-ink-800">
-              Zichtbaar voor klant
-            </span>
-            <span className="mb-1 block text-xs text-ink-500">
-              Optionele info voor de klant.
-            </span>
-            <textarea
-              name="clientVisibleNotes"
-              rows={2}
-              defaultValue={shift.clientVisibleNotes ?? ""}
-              className={fieldClass}
-            />
-          </label>
-          <button
-            type="submit"
-            className="rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900"
-          >
-            Notities opslaan
-          </button>
-        </form>
-      </section>
+      <NotesForm updateShiftNotes={updateShiftNotes} shift={shift} />
 
       {/* Existing placements */}
       {existingPlacements.length > 0 && (
-        <section className="mt-10">
-          <h2 className="font-serif text-xl text-ink-900">
-            Voorgestelde chefs ({existingPlacements.length})
-          </h2>
-          <ul className="mt-4 space-y-2">
-            {existingPlacements.map(({ placement, chef }) => (
-              <li
-                key={placement.id}
-                className="rounded-lg border border-ink-200 bg-white p-4"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <Link
-                      href={`/admin/business/chefs/${chef.id}`}
-                      className="font-serif text-base text-ink-900 hover:text-burgundy hover:underline"
-                    >
-                      {chef.fullName}
-                    </Link>
-                    <p className="mt-0.5 text-xs text-ink-500">
-                      {chef.vakniveau ?? "—"} · {chef.city ?? "—"}
-                      {placement.matchScore && ` · match-score: ${placement.matchScore}`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <PlacementStatusBadge status={placement.status} />
-                    {placement.status === "proposed" && (
-                      <>
-                        <PlacementAction
-                          action={setPlacementStatus}
-                          placementId={placement.id}
-                          newStatus="accepted"
-                          label="✓ Accepteer"
-                          tone="green"
-                        />
-                        <PlacementAction
-                          action={setPlacementStatus}
-                          placementId={placement.id}
-                          newStatus="rejected"
-                          label="✗ Wijs af"
-                          tone="red"
-                        />
-                      </>
-                    )}
-                    {placement.status === "accepted" && (
-                      <PlacementAction
-                        action={setPlacementStatus}
-                        placementId={placement.id}
-                        newStatus="confirmed"
-                        label="Bevestig"
-                        tone="green"
-                      />
-                    )}
-                  </div>
-                </div>
-
-                {/* PR-KLANT-3: comment thread (all visibilities) + reply */}
-                <div className="mt-3 border-t border-ink-100 pt-3">
-                  <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
-                    Berichten
-                  </p>
-                  {(commentsByPlacement.get(placement.id) ?? []).length > 0 ? (
-                    <ul className="mt-2 space-y-1.5">
-                      {(commentsByPlacement.get(placement.id) ?? []).map((c) => (
-                        <li key={c.id} className="text-sm">
-                          <span className="text-ink-900">{c.body}</span>
-                          <span className="ml-2 text-[11px] text-ink-500">
-                            {c.authorKind === "client"
-                              ? "Klant"
-                              : c.authorKind === "chef"
-                                ? "Chef"
-                                : c.authorKind === "admin"
-                                  ? "Chef & Serve"
-                                  : "Systeem"}{" "}
-                            · <CommentVisibilityTag visibility={c.visibility} />
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="mt-1 text-xs text-ink-500">Nog geen berichten.</p>
-                  )}
-
-                  <form action={replyComment} className="mt-2">
-                    <input type="hidden" name="placementId" value={placement.id} />
-                    <textarea
-                      name="body"
-                      rows={2}
-                      required
-                      maxLength={1000}
-                      placeholder="Reageer op de klant / chef…"
-                      className={`${fieldClass} placeholder-ink-500`}
-                    />
-                    <div className="mt-2 flex items-center gap-2">
-                      <select
-                        name="visibility"
-                        defaultValue="client_visible"
-                        className="rounded border border-ink-200 bg-white px-2 py-1.5 text-xs text-ink-900 focus:border-burgundy focus:outline-none"
-                      >
-                        <option value="client_visible">Zichtbaar voor klant</option>
-                        <option value="chef_visible">Zichtbaar voor chef</option>
-                        <option value="internal">Interne notitie</option>
-                      </select>
-                      <button
-                        type="submit"
-                        className="rounded-full bg-burgundy px-4 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900"
-                      >
-                        Plaats bericht
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <ExistingPlacements
+          existingPlacements={existingPlacements}
+          commentsByPlacement={commentsByPlacement}
+          setPlacementStatus={setPlacementStatus}
+          replyComment={replyComment}
+        />
       )}
 
       {/* Match suggestions */}
       {matches.length > 0 && (
-        <section className="mt-10">
-          <h2 className="font-serif text-xl text-ink-900">
-            Vul deze dienst — beste matches (top {matches.length})
-          </h2>
-          <p className="mt-2 text-sm text-ink-700">
-            Gerankt op match × beschikbaarheid × afstand × marge × historie ·
-            klant-favorieten boven, geblokkeerde chefs onderaan. Bestaande
-            voorstellen zijn uitgesloten.
-          </p>
-          <ul className="mt-4 space-y-2">
-            {rankedMatches.map((m, idx) => {
-              const c = chefById.get(m.chef.id);
-              const sig = signalsFor(m.chef.id, m.score);
-              const conf = getMatchConfidenceLabel(sig);
-              const expl = getChefMatchExplanation(sig);
-              const badges = getChefCandidateBadges(sig);
-              const allWarnings = [...new Set([...m.warnings, ...expl.warnings])];
-              const gapReasons =
-                idx > 0 && topSignals && !sig.isBlocked
-                  ? getRankGapReasons(topSignals, sig)
-                  : [];
-              const phoneDigits = c?.phone?.replace(/\D/g, "") ?? "";
-              const tm = travelFor(m.chef.id);
-              return (
-                <li
-                  key={m.chef.id}
-                  className={`rounded-lg border bg-white p-4 ${
-                    sig.isBlocked ? "border-red-300 bg-red-50/40" : "border-ink-200"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Link
-                          href={`/admin/business/chefs/${m.chef.id}`}
-                          className="font-serif text-base text-ink-900 hover:text-burgundy hover:underline"
-                        >
-                          {m.chef.fullName}
-                        </Link>
-                        <span className={`rounded-full px-2 py-0.5 font-ui text-[10px] font-medium uppercase tracking-wider ${scoreTone(m.score)}`}>
-                          {m.score}
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 font-ui text-[10px] font-medium uppercase tracking-wider ${confTone(conf.label)}`}>
-                          {conf.label}
-                          {conf.reason ? ` · ${conf.reason}` : ""}
-                        </span>
-                        {sig.isFavorite && (
-                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-ui text-[10px] font-medium uppercase tracking-wider text-emerald-700">
-                            ★ favoriet
-                          </span>
-                        )}
-                        {sig.isBlocked && (
-                          <span className="rounded-full bg-red-100 px-2 py-0.5 font-ui text-[10px] font-medium uppercase tracking-wider text-red-700">
-                            ⊘ geblokkeerd
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-xs text-ink-500">
-                        {m.chef.vakniveau ?? "—"} · {m.chef.city ?? "—"}
-                        {m.chef.yearsExperience ? ` · ${m.chef.yearsExperience}j ervaring` : ""}
-                      </p>
-                      {badges.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {badges.map((b, i) => (
-                            <span key={i} className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badgeTone(b.tone)}`}>
-                              {b.label}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {tm && (
-                        <div className="mt-1.5 flex flex-wrap gap-1 text-[10px]">
-                          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
-                            ≈ {eur(tm.t.costCents)} reis · {tm.t.km} km · {tm.t.basis}
-                          </span>
-                          <span
-                            className={`rounded-full px-2 py-0.5 font-medium ${
-                              tm.margin.tone === "negative"
-                                ? "bg-red-100 text-red-700"
-                                : tm.margin.tone === "low"
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-emerald-100 text-emerald-700"
-                            }`}
-                          >
-                            marge {eur(tm.margin.marginCents)}
-                            {tm.margin.tone === "low" ? " (laag)" : tm.margin.tone === "negative" ? " (negatief)" : ""}
-                          </span>
-                        </div>
-                      )}
-                      {m.reasons.length > 0 && (
-                        <ul className="mt-2 flex flex-wrap gap-1">
-                          {m.reasons.map((r) => (
-                            <li key={r} className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">✓ {r}</li>
-                          ))}
-                        </ul>
-                      )}
-                      {allWarnings.length > 0 && (
-                        <ul className="mt-1 flex flex-wrap gap-1">
-                          {allWarnings.map((w) => (
-                            <li key={w} className="rounded bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">⚠ {w}</li>
-                          ))}
-                        </ul>
-                      )}
-                      {expl.nextCheck.length > 0 && (
-                        <p className="mt-1.5 text-[11px] text-ink-500">
-                          <span className="font-medium text-ink-700">Checken:</span>{" "}
-                          {expl.nextCheck.join(" · ")}
-                        </p>
-                      )}
-                      {gapReasons.length > 0 && (
-                        <p className="mt-1 text-[11px] text-ink-500">
-                          <span className="font-medium text-ink-700">Waarom niet nr 1:</span>{" "}
-                          {gapReasons.join(" · ")}
-                        </p>
-                      )}
-                    </div>
-                    <form action={propose}>
-                      <input type="hidden" name="chefId" value={m.chef.id} />
-                      <input type="hidden" name="matchScore" value={m.score} />
-                      <button type="submit" className="shrink-0 rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900">
-                        Voorstel
-                      </button>
-                    </form>
-                  </div>
-                  {/* Contact actions (one-click + log) */}
-                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink-100 pt-3">
-                    {phoneDigits && (
-                      <a href={`https://wa.me/${phoneDigits}`} target="_blank" rel="noopener noreferrer" className="rounded-full border border-ink-200 bg-white px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-ink-700 hover:border-burgundy hover:text-burgundy">
-                        App
-                      </a>
-                    )}
-                    {c?.email && (
-                      <a href={`mailto:${c.email}`} className="rounded-full border border-ink-200 bg-white px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-ink-700 hover:border-burgundy hover:text-burgundy">
-                        Mail
-                      </a>
-                    )}
-                    <form action={logContact} className="flex items-center gap-1.5">
-                      <input type="hidden" name="chefId" value={m.chef.id} />
-                      <select name="outcome" className="rounded border border-ink-200 bg-white px-2 py-1 text-[11px] text-ink-700">
-                        <option value="spoken">Gesproken</option>
-                        <option value="no_answer">Geen gehoor</option>
-                        <option value="callback_requested">Teruggebeld</option>
-                        <option value="not_suitable">Niet passend</option>
-                        <option value="note_only">Notitie</option>
-                      </select>
-                      <input name="note" placeholder="notitie" className="w-28 rounded border border-ink-200 bg-white px-2 py-1 text-[11px] text-ink-700" />
-                      <button type="submit" className="rounded-full border border-burgundy/40 bg-white px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy hover:bg-burgundy/5">
-                        Log
-                      </button>
-                    </form>
-                    {/* PR-2B: klant-favoriet / blokkeer toggle */}
-                    <div className="ml-auto flex items-center gap-1.5">
-                      <form action={toggleClientChef}>
-                        <input type="hidden" name="chefId" value={m.chef.id} />
-                        <input type="hidden" name="clientId" value={shift.clientId} />
-                        <input type="hidden" name="kind" value="favorite" />
-                        <button
-                          type="submit"
-                          className={`rounded-full border px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] ${
-                            sig.isFavorite
-                              ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                              : "border-ink-200 bg-white text-ink-700 hover:border-emerald-300 hover:text-emerald-700"
-                          }`}
-                        >
-                          {sig.isFavorite ? "★ favoriet" : "☆ favoriet"}
-                        </button>
-                      </form>
-                      <form action={toggleClientChef}>
-                        <input type="hidden" name="chefId" value={m.chef.id} />
-                        <input type="hidden" name="clientId" value={shift.clientId} />
-                        <input type="hidden" name="kind" value="blocked" />
-                        <button
-                          type="submit"
-                          className={`rounded-full border px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] ${
-                            sig.isBlocked
-                              ? "border-red-300 bg-red-50 text-red-700"
-                              : "border-ink-200 bg-white text-ink-700 hover:border-red-300 hover:text-red-700"
-                          }`}
-                        >
-                          {sig.isBlocked ? "⊘ geblokkeerd" : "⊘ blokkeer"}
-                        </button>
-                      </form>
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+        <MatchSuggestions
+          matches={matches}
+          rankedMatches={rankedMatches}
+          chefById={chefById}
+          signalsFor={signalsFor}
+          travelFor={travelFor}
+          topSignals={topSignals}
+          shift={shift}
+          propose={propose}
+          logContact={logContact}
+          toggleClientChef={toggleClientChef}
+        />
       )}
 
-      {matches.length === 0 && existingPlacements.length === 0 && (
-        <div className="mt-10 rounded-lg border border-ink-200 bg-white p-10 text-center">
-          <p className="font-serif text-xl text-ink-900">
-            Geen geschikte chefs gevonden
-          </p>
-          <p className="mt-2 text-sm text-ink-500">
-            Voeg meer chefs toe of pas de shift-criteria aan.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SummaryCell({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div>
-      <p className="font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
-        {label}
-      </p>
-      <p
-        className={`mt-1 font-serif text-base ${
-          highlight ? "text-emerald-700" : "text-ink-900"
-        }`}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function PlacementAction({
-  action,
-  placementId,
-  newStatus,
-  label,
-  tone,
-}: {
-  action: (formData: FormData) => Promise<void>;
-  placementId: string;
-  newStatus: string;
-  label: string;
-  tone: "green" | "red";
-}) {
-  const c =
-    tone === "green"
-      ? "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-      : "border-red-300 text-red-700 hover:bg-red-50";
-  return (
-    <form action={action}>
-      <input type="hidden" name="placementId" value={placementId} />
-      <input type="hidden" name="newStatus" value={newStatus} />
-      <button
-        type="submit"
-        className={`rounded-full border px-3 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] ${c}`}
-      >
-        {label}
-      </button>
-    </form>
+      {matches.length === 0 && existingPlacements.length === 0 && <EmptyState />}
+    </DetailShell>
   );
 }
 
@@ -1038,60 +606,6 @@ function StatusBadge({ status }: { status: string }) {
       {status}
     </span>
   );
-}
-
-function PlacementStatusBadge({ status }: { status: string }) {
-  const tone =
-    status === "confirmed"
-      ? "bg-emerald-100 text-emerald-700"
-      : status === "accepted"
-        ? "bg-blue-100 text-blue-700"
-        : status === "proposed"
-          ? "bg-amber-100 text-amber-700"
-          : status === "rejected" || status === "cancelled" || status === "no_show"
-            ? "bg-red-100 text-red-700"
-            : "bg-bg-gray text-ink-500";
-  return (
-    <span
-      className={`rounded-full px-2.5 py-1 font-ui text-[9px] font-medium uppercase tracking-wider ${tone}`}
-    >
-      {status}
-    </span>
-  );
-}
-
-function scoreTone(score: number): string {
-  if (score >= 80) return "bg-emerald-100 text-emerald-700";
-  if (score >= 60) return "bg-blue-100 text-blue-700";
-  if (score >= 40) return "bg-amber-100 text-amber-700";
-  return "bg-bg-gray text-ink-500";
-}
-
-function confTone(label: "hoog" | "midden" | "laag"): string {
-  if (label === "hoog") return "bg-emerald-100 text-emerald-700";
-  if (label === "midden") return "bg-amber-100 text-amber-800";
-  return "bg-red-100 text-red-700";
-}
-
-function badgeTone(tone: "green" | "amber" | "blue" | "grey" | "red"): string {
-  const map = {
-    green: "bg-emerald-100 text-emerald-700",
-    amber: "bg-amber-100 text-amber-800",
-    blue: "bg-blue-100 text-blue-700",
-    grey: "bg-bg-gray text-ink-600",
-    red: "bg-red-100 text-red-700",
-  } as const;
-  return map[tone];
-}
-
-function CommentVisibilityTag({ visibility }: { visibility: string }) {
-  const label =
-    visibility === "client_visible"
-      ? "klant ziet dit"
-      : visibility === "chef_visible"
-        ? "chef ziet dit"
-        : "intern";
-  return <span className="italic">{label}</span>;
 }
 
 function formatDateRange(start: Date, end: Date): string {
