@@ -238,5 +238,30 @@ console.log("\n── agent loop: tool DATA (not just the summary) is fed back t
   );
 }
 
+console.log("\n── agent loop: caps long conversation history ──");
+{
+  const longHistory: Msg[] = Array.from(
+    { length: 100 },
+    (_, i) => ({ role: i % 2 === 0 ? "user" : "assistant", content: `bericht ${i}` }) as Msg,
+  );
+  let seenCount = 0;
+  const brain: Brain = {
+    plan: async ({ messages }) => {
+      seenCount = messages.length;
+      return { kind: "final", text: "klaar" };
+    },
+  };
+  await runAgent({
+    brain,
+    registry,
+    messages: longHistory,
+    ctx: ctx(owner),
+    executeOptions: opts(makeSink().sink),
+    maxHistoryMessages: 24,
+  });
+  assert("long history is capped before reaching the brain", seenCount <= 24, `saw ${seenCount}`);
+  assert("cap still keeps recent messages", seenCount > 0);
+}
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 if (fail > 0) process.exit(1);
