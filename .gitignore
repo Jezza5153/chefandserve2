@@ -47,3 +47,6 @@ next-env.d.ts
 * 2.*
 *\ 2.*
 "* 2/"
+
+# Render-proof harness scratch output (header-delta-*.mts)
+/_harness/
