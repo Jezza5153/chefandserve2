@@ -31,7 +31,8 @@ export type RateLimitScope =
   | "totp_verify"
   | "chef_apply_ip"
   | "client_request_ip"
-  | "intake_webhook_ip";
+  | "intake_webhook_ip"
+  | "ai_chat_user";
 
 export type RateLimitResult =
   | { ok: true; remaining: number }
@@ -150,6 +151,9 @@ export const THRESHOLDS = {
   client_request_ip: { max: 5, windowSeconds: 60 * 60 },
   // Public Jotform intake webhooks (legacy, being retired): cap injection abuse.
   intake_webhook_ip: { max: 60, windowSeconds: 60 * 60 },
+  // Owner AI assistant — per-user chat-request ceiling. A human types a handful per minute;
+  // this stops a runaway client or over-eager loop from racking up OpenAI cost.
+  ai_chat_user: { max: 30, windowSeconds: 60 },
 } as const satisfies Record<RateLimitScope, { max: number; windowSeconds: number }>;
 
 /** Convenience wrapper using the standard thresholds. */
