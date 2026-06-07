@@ -40,6 +40,7 @@ import {
   type CandidateSignals,
 } from "@/lib/domain/staffing-intelligence";
 import { amsterdamDayKey } from "@/lib/roster-format";
+import { fieldClass } from "@/components/forms/Fields";
 import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Shift" };
@@ -597,7 +598,7 @@ export default async function ShiftDetailPage({
               name="notes"
               rows={2}
               defaultValue={shift.notes ?? ""}
-              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              className={fieldClass}
             />
           </label>
           <label className="block">
@@ -611,7 +612,7 @@ export default async function ShiftDetailPage({
               name="chefVisibleNotes"
               rows={2}
               defaultValue={shift.chefVisibleNotes ?? ""}
-              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              className={fieldClass}
             />
           </label>
           <label className="block">
@@ -625,7 +626,7 @@ export default async function ShiftDetailPage({
               name="clientVisibleNotes"
               rows={2}
               defaultValue={shift.clientVisibleNotes ?? ""}
-              className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+              className={fieldClass}
             />
           </label>
           <button
@@ -729,7 +730,7 @@ export default async function ShiftDetailPage({
                       required
                       maxLength={1000}
                       placeholder="Reageer op de klant / chef…"
-                      className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+                      className={`${fieldClass} placeholder-ink-500`}
                     />
                     <div className="mt-2 flex items-center gap-2">
                       <select

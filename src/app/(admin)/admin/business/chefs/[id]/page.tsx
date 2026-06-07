@@ -37,6 +37,7 @@ import {
   listProfileDataRequests,
 } from "@/lib/domain/profile-data-requests";
 import { getChefAverageForAdmin } from "@/lib/domain/ratings";
+import { fieldClass } from "@/components/forms/Fields";
 import { RATING_TAG_LABELS, type RatingTag } from "@/lib/rating-tags";
 import { sendEmail } from "@/lib/email";
 import { recordEmailMessage } from "@/lib/integrations";
@@ -604,7 +605,7 @@ export default async function ChefDetailPage({
                     name="decisionNotes"
                     rows={2}
                     placeholder="Optionele toelichting (gedeeld met de chef)"
-                    className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+                    className={`${fieldClass} placeholder-ink-500`}
                   />
                   <div className="mt-2 flex gap-2">
                     <button
@@ -1336,8 +1337,7 @@ function Field({
   as = "input",
   options,
 }: FieldProps) {
-  const baseClass =
-    "w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy";
+  const baseClass = `${fieldClass} placeholder-ink-500`;
   return (
     <label className="block">
       <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
