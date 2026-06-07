@@ -83,8 +83,10 @@ exceed the requesting human's permission ceiling.
 | Brain (OpenAI adapter, key-gated) + grounding | ⏳ |
 | Dashboard chat surface | ⏳ |
 | Eval harness (refusal + ceiling + grounding) | ⏳ |
-| WhatsApp channel | ⏳ (pending API choice) |
+| WhatsApp channel | ⏸ ON HOLD — chosen path is **WhatsApp Coexistence + Meta Cloud API** (official, no ban risk, freeform inside the 24h window; keeps Maarten's business number + phone app). Resume later. |
 | Voice channel | ⏳ (R&D / endgame) |
+
+**sent.dm** is kept for **templated chef/klant notifications** (business-initiated reminders — ban-safe templates), NOT for the assistant chat. The conversational assistant is the dashboard (now) and WhatsApp Coexistence (when resumed).
 
 ## Switch-on gates (owner-provided)
 

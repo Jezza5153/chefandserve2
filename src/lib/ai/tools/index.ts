@@ -7,10 +7,16 @@ import type { AnyTool } from "@/lib/ai/types";
 
 import { businessOverview } from "@/lib/ai/tools/business";
 import { hoursApprove, hoursListAwaitingApproval, hoursSendReminder } from "@/lib/ai/tools/hours";
+import { shiftsOpenSoon, insightsLeaderboards, integrationsHealth } from "@/lib/ai/tools/ops";
 
 export const ALL_TOOLS: AnyTool[] = [
+  // read — the eyes
   businessOverview,
+  shiftsOpenSoon,
+  insightsLeaderboards,
+  integrationsHealth,
   hoursListAwaitingApproval,
+  // act — the hands
   hoursApprove,
   hoursSendReminder,
 ];

@@ -12,7 +12,7 @@ export const businessOverview = defineTool({
   description:
     "Actueel bedrijfsoverzicht: omzet en marge (week/maand/YTD), bezetting, actieve chefs, en operationele aandachtspunten (open diensten binnen 48u, geaccepteerd-niet-bevestigd, intake).",
   risk: "read",
-  permission: null, // the owner's own aggregate dashboard; the channel already gates to the owner
+  permission: { resource: "cockpit", action: "read" },
   input: z.object({}),
   run: async () => {
     const snap = await getBusinessSnapshot();
