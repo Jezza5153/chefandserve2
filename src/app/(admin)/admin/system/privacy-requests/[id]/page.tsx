@@ -105,13 +105,13 @@ export default async function PrivacyRequestDetailPage({
   /* ----- server actions (super_admin) ----- */
   async function doClaim() {
     "use server";
-    const s = await requirePermission("privacy", "read", "/admin/system/privacy-requests");
+    const s = await requirePermission("privacy", "process", "/admin/system/privacy-requests");
     await claimPrivacyRequest({ requestId: id, actorId: s.user.id });
     redirect(`/admin/system/privacy-requests/${id}`);
   }
   async function doSetIdentity(formData: FormData) {
     "use server";
-    const s = await requirePermission("privacy", "read", "/admin/system/privacy-requests");
+    const s = await requirePermission("privacy", "process", "/admin/system/privacy-requests");
     await setIdentityVerification({
       requestId: id,
       actorId: s.user.id,
@@ -123,7 +123,7 @@ export default async function PrivacyRequestDetailPage({
   }
   async function doLogMessage(formData: FormData) {
     "use server";
-    const s = await requirePermission("privacy", "read", "/admin/system/privacy-requests");
+    const s = await requirePermission("privacy", "process", "/admin/system/privacy-requests");
     await logRequestMessage({
       requestId: id,
       actorId: s.user.id,
@@ -135,7 +135,7 @@ export default async function PrivacyRequestDetailPage({
   }
   async function doExtendSla(formData: FormData) {
     "use server";
-    const s = await requirePermission("privacy", "read", "/admin/system/privacy-requests");
+    const s = await requirePermission("privacy", "process", "/admin/system/privacy-requests");
     const dateStr = String(formData.get("newDueDate") ?? "");
     const reason = String(formData.get("reason") ?? "");
     if (dateStr && reason.trim()) {
@@ -145,13 +145,13 @@ export default async function PrivacyRequestDetailPage({
   }
   async function doWithdraw(formData: FormData) {
     "use server";
-    const s = await requirePermission("privacy", "read", "/admin/system/privacy-requests");
+    const s = await requirePermission("privacy", "process", "/admin/system/privacy-requests");
     await withdrawRequest({ requestId: id, actorId: s.user.id, notes: String(formData.get("notes") ?? "").trim() || null });
     redirect(`/admin/system/privacy-requests/${id}`);
   }
   async function doDecide(formData: FormData) {
     "use server";
-    const s = await requirePermission("privacy", "read", "/admin/system/privacy-requests");
+    const s = await requirePermission("privacy", "process", "/admin/system/privacy-requests");
     await decidePrivacyRequest({
       requestId: id,
       actorId: s.user.id,
@@ -162,7 +162,7 @@ export default async function PrivacyRequestDetailPage({
   }
   async function doBuildExport() {
     "use server";
-    const s = await requirePermission("privacy", "read", "/admin/system/privacy-requests");
+    const s = await requirePermission("privacy", "export", "/admin/system/privacy-requests");
     const res = await buildUserDataExport({ requestId: id, actorId: s.user.id, handlerName: s.user.name ?? null });
     redirect(
       res.ok
@@ -172,7 +172,7 @@ export default async function PrivacyRequestDetailPage({
   }
   async function doApplyCorrection(formData: FormData) {
     "use server";
-    const s = await requirePermission("privacy", "read", "/admin/system/privacy-requests");
+    const s = await requirePermission("privacy", "process", "/admin/system/privacy-requests");
     const table = String(formData.get("table") ?? "") as CorrectableTable;
     const entityId = String(formData.get("entityId") ?? "");
     const field = String(formData.get("field") ?? "");
@@ -189,7 +189,7 @@ export default async function PrivacyRequestDetailPage({
   }
   async function doErase(formData: FormData) {
     "use server";
-    const s = await requirePermission("privacy", "read", "/admin/system/privacy-requests");
+    const s = await requirePermission("privacy", "process", "/admin/system/privacy-requests");
     const fresh = await db.query.privacyRequests.findFirst({ where: eq(privacyRequests.id, id) });
     if (!fresh) notFound();
     const subj = await resolveSubject(fresh);

@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 
 async function reset2FA(formData: FormData) {
   "use server";
-  const session = await requirePermission("users", "read", "/admin/system/users");
+  const session = await requirePermission("users", "write", "/admin/system/users");
 
   const targetUserId = String(formData.get("targetUserId") ?? "");
   const confirmationEmail = String(formData.get("confirmationEmail") ?? "")
@@ -61,7 +61,7 @@ async function reset2FA(formData: FormData) {
 
 async function manageRoles(formData: FormData) {
   "use server";
-  const session = await requirePermission("users", "read", "/admin/system/users");
+  const session = await requirePermission("users", "write", "/admin/system/users");
   const targetUserId = String(formData.get("targetUserId") ?? "");
   const roleKeys = formData.getAll("roleKey").map(String);
   // Shared, guarded path (G3/G4/G5 + version bump + audit live in manage.ts).
@@ -75,7 +75,7 @@ async function manageRoles(formData: FormData) {
 
 async function setOverride(formData: FormData) {
   "use server";
-  const session = await requirePermission("users", "read", "/admin/system/users");
+  const session = await requirePermission("users", "write", "/admin/system/users");
   const targetUserId = String(formData.get("targetUserId") ?? "");
   const current = await db
     .select({

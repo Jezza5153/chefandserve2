@@ -34,7 +34,7 @@ export default async function RetentionAdminPage() {
 
   async function updatePolicy(formData: FormData) {
     "use server";
-    const s = await requirePermission("retention", "read", "/admin/system");
+    const s = await requirePermission("retention", "run", "/admin/system");
     const entityType = String(formData.get("entityType") ?? "");
     if (!entityType) return;
     const period = String(formData.get("retentionPeriod") ?? "").trim();

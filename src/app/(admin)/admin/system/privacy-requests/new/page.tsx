@@ -22,7 +22,7 @@ export default async function NewPrivacyRequestPage() {
 
   async function create(formData: FormData) {
     "use server";
-    const session = await requirePermission("privacy", "read", "/admin/system/privacy-requests");
+    const session = await requirePermission("privacy", "process", "/admin/system/privacy-requests");
     const type = String(formData.get("type") ?? "access") as
       | "access" | "export" | "correction" | "deletion" | "other";
     const requesterKind = String(formData.get("requesterKind") ?? "unknown") as

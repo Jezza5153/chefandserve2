@@ -28,7 +28,7 @@ export const dynamic = "force-dynamic";
 async function inviteStaff(formData: FormData) {
   "use server";
   // Server-side authority check (NOT just dropdown hiding).
-  const session = await requirePermission("users", "read", "/admin/system/users/new");
+  const session = await requirePermission("users", "invite", "/admin/system/users/new");
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const name = String(formData.get("name") ?? "").trim();

@@ -1,15 +1,18 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { recordAuditFromRequest } from "@/lib/audit";
+import { recordAuditCore, recordAuditFromRequest, stampFromRequest } from "@/lib/audit";
+import { withTx } from "@/lib/db/tx";
 import {
   chefSubmissions,
   chefs,
   profileChangeRequests,
   users,
+  vakniveauEnum,
 } from "@/lib/db/schema";
+import { isValidEmail } from "@/lib/forms/validation";
 import {
   listChefDocuments,
   requestChefDocumentUpload,
@@ -342,57 +345,44 @@ export default async function ChefDetailPage({
       redirect(`/admin/business/chefs/${id}?err=request-gone`);
     }
 
-    // Apply the proposed value on approval.
+    // Validate the proposed value BEFORE applying (no raw DB throw on bad input).
+    // Only relevant on approval — a rejection writes no master-table field.
+    const pv = req.proposedValue as unknown;
+    const proposedEmail =
+      decision === "approved" && req.field === "email"
+        ? String(pv ?? "").trim().toLowerCase()
+        : null;
     if (decision === "approved") {
-      const pv = req.proposedValue as unknown;
-      if (req.field === "hourlyRate" && pv && typeof pv === "object") {
-        const { min, max } = pv as { min?: number; max?: number };
-        await db
-          .update(chefs)
-          .set({
-            hourlyRateMinCents: typeof min === "number" ? min : null,
-            hourlyRateMaxCents: typeof max === "number" ? max : null,
-            updatedAt: new Date(),
-          })
-          .where(eq(chefs.id, id));
-      } else if (req.field === "fullName") {
-        await db
-          .update(chefs)
-          .set({ fullName: String(pv), updatedAt: new Date() })
-          .where(eq(chefs.id, id));
-      } else if (req.field === "email") {
-        await db
-          .update(chefs)
-          .set({ email: String(pv).toLowerCase(), updatedAt: new Date() })
-          .where(eq(chefs.id, id));
-      } else if (req.field === "vakniveau") {
-        await db
-          .update(chefs)
-          .set({ vakniveau: String(pv) as never, updatedAt: new Date() })
-          .where(eq(chefs.id, id));
+      if (req.field === "vakniveau") {
+        // vakniveau is a pg enum — reject anything outside it (avoids a 22P02).
+        if (!(vakniveauEnum.enumValues as readonly string[]).includes(String(pv))) {
+          redirect(`/admin/business/chefs/${id}?err=ongeldig-vakniveau`);
+        }
+      } else if (req.field === "email" && proposedEmail) {
+        if (!isValidEmail(proposedEmail)) {
+          redirect(`/admin/business/chefs/${id}?err=ongeldig-emailadres`);
+        }
+        // Uniqueness against the login table (users.email is UNIQUE — a clash
+        // would 500 inside the tx). Exclude the chef's own linked user.
+        const clash = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(
+            chef!.userId
+              ? and(eq(users.email, proposedEmail), ne(users.id, chef!.userId))
+              : eq(users.email, proposedEmail),
+          )
+          .limit(1);
+        if (clash.length > 0) {
+          redirect(`/admin/business/chefs/${id}?err=emailadres-in-gebruik`);
+        }
       }
     }
 
-    // Atomic transition — only flip a still-pending request.
-    const updated = await db
-      .update(profileChangeRequests)
-      .set({
-        status: decision,
-        decidedAt: new Date(),
-        decidedBy: session.user.id,
-        decisionNotes,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(profileChangeRequests.id, requestId),
-          eq(profileChangeRequests.status, "pending"),
-        ),
-      )
-      .returning({ id: profileChangeRequests.id });
-    if (updated.length === 0) redirect(`/admin/business/chefs/${id}?err=request-gone`);
-
-    await recordAuditFromRequest({
+    // Atomic: apply the master-table field + flip the status in ONE tx (so a
+    // partial apply can't outlive a failed/stale transition). Audit commits in
+    // the same tx. redirect() stays OUTSIDE (it throws → would roll back).
+    const auditBase = await stampFromRequest({
       userId: session.user.id,
       action:
         decision === "approved"
@@ -402,6 +392,69 @@ export default async function ChefDetailPage({
       resourceId: requestId,
       after: { field: req.field, decision, decisionNotes },
     });
+    const result = await withTx(async (tx) => {
+      // Guard first: only a still-pending request flips. Zero rows → stale.
+      const flipped = await tx
+        .update(profileChangeRequests)
+        .set({
+          status: decision,
+          decidedAt: new Date(),
+          decidedBy: session.user.id,
+          decisionNotes,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(profileChangeRequests.id, requestId),
+            eq(profileChangeRequests.status, "pending"),
+          ),
+        )
+        .returning({ id: profileChangeRequests.id });
+      if (flipped.length === 0) return { ok: false as const };
+
+      // Apply the validated proposed value (only when approved).
+      if (decision === "approved") {
+        if (req.field === "hourlyRate" && pv && typeof pv === "object") {
+          const { min, max } = pv as { min?: number; max?: number };
+          await tx
+            .update(chefs)
+            .set({
+              hourlyRateMinCents: typeof min === "number" ? min : null,
+              hourlyRateMaxCents: typeof max === "number" ? max : null,
+              updatedAt: new Date(),
+            })
+            .where(eq(chefs.id, id));
+        } else if (req.field === "fullName") {
+          await tx
+            .update(chefs)
+            .set({ fullName: String(pv), updatedAt: new Date() })
+            .where(eq(chefs.id, id));
+        } else if (req.field === "email" && proposedEmail) {
+          await tx
+            .update(chefs)
+            .set({ email: proposedEmail, updatedAt: new Date() })
+            .where(eq(chefs.id, id));
+          // Keep the portal-login email in sync — chefs.email is the login
+          // address (mirrored to users.email at invite time), so an approved
+          // email change must follow through to users or login silently drifts.
+          if (chef!.userId) {
+            await tx
+              .update(users)
+              .set({ email: proposedEmail, updatedAt: new Date() })
+              .where(eq(users.id, chef!.userId));
+          }
+        } else if (req.field === "vakniveau") {
+          await tx
+            .update(chefs)
+            .set({ vakniveau: String(pv) as never, updatedAt: new Date() })
+            .where(eq(chefs.id, id));
+        }
+      }
+
+      await recordAuditCore(auditBase, tx);
+      return { ok: true as const };
+    });
+    if (!result.ok) redirect(`/admin/business/chefs/${id}?err=request-gone`);
 
     // Outcome email to the chef (direct — chefs have no recipientsFor seam).
     if (chef!.email) {
