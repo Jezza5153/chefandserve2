@@ -177,13 +177,17 @@ export async function inviteClientToPortal(
  * Activate an invited user — flips status to active + sends the
  * PortalInviteEmail so they know they can log in.
  */
+export type ActivateResult =
+  | { ok: true; emailSent: boolean; emailError?: string }
+  | { ok: false; error: string };
+
 export async function activatePortalUser(
   userId: string,
   actingUserId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<ActivateResult> {
   const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
   if (!user) return { ok: false, error: "Gebruiker niet gevonden" };
-  if (user.status === "active") return { ok: true }; // already active, no-op
+  if (user.status === "active") return { ok: true, emailSent: false }; // already active, no-op
 
   await db
     .update(users)
@@ -201,39 +205,60 @@ export async function activatePortalUser(
     resourceId: userId,
   });
 
-  // Send the welcome email — best-effort, doesn't block activation if it fails
+  // Activation already succeeded. We DON'T block on the welcome email, but we DO report
+  // whether it actually sent — so the admin is never left thinking it went out when it
+  // did not (the silent-failure trap this fix closes).
+  if (!user.email) return { ok: true, emailSent: false, emailError: "geen e-mailadres bekend" };
+  if (user.kind === "internal") return { ok: true, emailSent: false };
+
+  let emailSent = false;
+  let emailError: string | undefined;
   try {
-    if (user.email && user.kind !== "internal") {
-      const send = await sendEmail({
-        to: user.email,
-        subject:
-          user.kind === "chef"
-            ? "Welkom bij Chef & Serve — toegang tot je chef-portaal"
-            : "Welkom bij Chef & Serve — toegang tot je klant-portaal",
-        react: PortalInviteEmail({
-          recipientName: user.name ?? user.email,
-          recipientKind: user.kind as "chef" | "client",
-          loginUrl: `${env.NEXT_PUBLIC_APP_URL}/login`,
-        }),
-      });
+    const send = await sendEmail({
+      to: user.email,
+      subject:
+        user.kind === "chef"
+          ? "Welkom bij Chef & Serve — toegang tot je chef-portaal"
+          : "Welkom bij Chef & Serve — toegang tot je klant-portaal",
+      react: PortalInviteEmail({
+        recipientName: user.name ?? user.email,
+        recipientKind: user.kind as "chef" | "client",
+        loginUrl: `${env.NEXT_PUBLIC_APP_URL}/login`,
+      }),
+    });
+    if (send.ok) {
+      emailSent = true;
       // PR-AUDIT-4: track the welcome/invite send.
-      if (send.ok) {
-        await recordEmailMessage({
-          providerMessageId: send.id,
-          toEmail: user.email,
-          template: "PortalInviteEmail",
-          eventKey: "portal_invite",
-          entityType: "users",
-          entityId: userId,
-          userId,
-        });
-      }
+      await recordEmailMessage({
+        providerMessageId: send.id,
+        toEmail: user.email,
+        template: "PortalInviteEmail",
+        eventKey: "portal_invite",
+        entityType: "users",
+        entityId: userId,
+        userId,
+      });
+    } else {
+      emailError = send.error;
     }
   } catch (e) {
-    console.error("[activate] invite email failed:", e);
+    emailError = e instanceof Error ? e.message : String(e);
   }
 
-  return { ok: true };
+  // A failed send has no provider id, so it can't go in email_messages — record it in
+  // the audit log instead, so the failure is visible (not a console line that dies in prod).
+  if (!emailSent) {
+    console.error("[activate] invite email NOT sent:", emailError);
+    await recordAuditFromRequest({
+      userId: actingUserId,
+      action: "portal.invite_email_failed",
+      resource: "users",
+      resourceId: userId,
+      after: { emailError, toEmail: user.email },
+    }).catch(() => {});
+  }
+
+  return { ok: true, emailSent, emailError };
 }
 
 /**

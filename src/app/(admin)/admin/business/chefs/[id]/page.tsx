@@ -95,11 +95,14 @@ const SEGMENT_OPTIONS = [
 
 export default async function ChefDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ portal?: string; reason?: string }>;
 }) {
   await requirePermission("chefs", "write");
   const { id } = await params;
+  const sp = await searchParams;
 
   const chef = await db.query.chefs.findFirst({ where: eq(chefs.id, id) });
   if (!chef) notFound();
@@ -231,17 +234,26 @@ export default async function ChefDetailPage({
     const session = await requirePermission("chefs", "write");
     const result = await inviteChefToPortal(id, session.user.id);
     if (!result.ok) {
-      throw new Error(result.error);
+      redirect(`/admin/business/chefs/${id}?portal=invite_failed&reason=${encodeURIComponent(result.error)}`);
     }
-    redirect(`/admin/business/chefs/${id}`);
+    // Account created — but NO email yet (two-step by design). Guide to the activate step.
+    redirect(`/admin/business/chefs/${id}?portal=invited`);
   }
 
   async function doActivatePortal() {
     "use server";
     const session = await requirePermission("chefs", "write");
     if (!chef!.userId) throw new Error("Chef has no portal user yet");
-    await activatePortalUser(chef!.userId, session.user.id);
-    redirect(`/admin/business/chefs/${id}`);
+    const res = await activatePortalUser(chef!.userId, session.user.id);
+    if (!res.ok) {
+      redirect(`/admin/business/chefs/${id}?portal=activate_failed&reason=${encodeURIComponent(res.error)}`);
+    }
+    if (res.emailSent) {
+      redirect(`/admin/business/chefs/${id}?portal=activated_sent`);
+    }
+    redirect(
+      `/admin/business/chefs/${id}?portal=activated_no_email&reason=${encodeURIComponent(res.emailError ?? "onbekend")}`,
+    );
   }
 
   async function doDisablePortal() {
@@ -546,6 +558,28 @@ export default async function ChefDetailPage({
           </>
         )}
       </p>
+
+      {sp.portal && (
+        <div
+          className={`mt-3 rounded-lg border p-3 text-sm ${
+            sp.portal === "activated_sent"
+              ? "border-green-300 bg-green-50 text-green-900"
+              : sp.portal === "invited"
+                ? "border-blue-300 bg-blue-50 text-blue-900"
+                : sp.portal === "activated_no_email"
+                  ? "border-amber-300 bg-amber-50 text-amber-900"
+                  : "border-red-300 bg-red-50 text-red-900"
+          }`}
+        >
+          {sp.portal === "invited" &&
+            "Portaal-account aangemaakt. Klik nu hieronder op 'Activeer (stuur welkom-mail)' om de chef toegang te geven en de welkomstmail te versturen."}
+          {sp.portal === "activated_sent" && "Geactiveerd - de welkomstmail is verstuurd."}
+          {sp.portal === "activated_no_email" &&
+            `Geactiveerd, maar de welkomstmail kon NIET verzonden worden${sp.reason ? `: ${sp.reason}` : ""}. Controleer het e-mailadres en de Resend-domeinverificatie (RESEND_FROM_EMAIL moet een geverifieerd domein zijn).`}
+          {sp.portal === "invite_failed" && `Uitnodigen mislukt${sp.reason ? `: ${sp.reason}` : ""}.`}
+          {sp.portal === "activate_failed" && `Activeren mislukt${sp.reason ? `: ${sp.reason}` : ""}.`}
+        </div>
+      )}
 
       {/* PR-KLANT-5: rating summary (internal — admin only) */}
       <RatingSummary rating={rating} />
