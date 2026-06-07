@@ -154,6 +154,14 @@ async function markExported(formData: FormData) {
         .where(and(eq(shiftHours.id, l.shiftHoursId), eq(shiftHours.status, "admin_approved")));
     }
 
+    // Flip the batch's OWN line rows to 'exported' too — they used to stay
+    // 'pending' forever even though the batch + the underlying hours read
+    // exported. Same tx so the three states never diverge.
+    await tx
+      .update(payrollBatchLines)
+      .set({ status: "exported", externalRef: batchId })
+      .where(eq(payrollBatchLines.batchId, batchId));
+
     await recordAuditCore(auditBase, tx);
     return { ok: true as const, lineCount: lines.length };
   });

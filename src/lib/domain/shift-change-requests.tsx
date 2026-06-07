@@ -11,14 +11,25 @@
  * recipientsForClient() (klant) / recipientsFor() (admin) per the seam rule.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { recordAuditFromRequest } from "@/lib/audit";
 import {
+  recordAuditCore,
+  recordAuditFromRequest,
+  stampFromRequest,
+} from "@/lib/audit";
+import { withTx } from "@/lib/db/tx";
+import {
+  cancelShiftAndPlacements,
+  recomputeShiftStatus,
+} from "@/lib/domain/shift-status";
+import {
+  chefs,
   clientShiftChangeRequests,
   clientSubmissions,
   clients,
+  placements,
   shifts,
 } from "@/lib/db/schema";
 import { ClientChangeRequestAdminEmail } from "@/emails/ClientChangeRequestAdminEmail";
@@ -243,9 +254,15 @@ type DecideResult = { ok: true } | { ok: false; error: "not_found" | "wrong_stat
 
 /**
  * Admin decides a shift change/cancel request. Marks the row + emails the
- * klant the outcome. Does NOT itself mutate the shift/placements — the admin
- * does that explicitly in the shift detail UI (chefs are committed; the human
- * coordinates the actual change). This records the decision + closes the loop.
+ * klant the outcome.
+ *
+ * APPROVING a `cancel` request now ACTUALLY cancels the shift (+ all live
+ * placements) in the SAME transaction as the decision stamp — previously it
+ * only emailed "doorgevoerd" while the shift stayed live, so the promise to the
+ * klant didn't match reality. Shares the cancel logic with the admin
+ * "Dienst annuleren" action (`cancelShiftAndPlacements`). A `change` request,
+ * or a rejection, still only records the decision — the admin applies a change
+ * by hand in the shift detail UI (chefs are committed; the human coordinates).
  */
 export async function decideShiftChangeRequest(args: {
   requestId: string;
@@ -260,31 +277,67 @@ export async function decideShiftChangeRequest(args: {
     .limit(1);
   if (!req) return { ok: false, error: "not_found" };
 
-  const updated = await db
-    .update(clientShiftChangeRequests)
-    .set({
-      status: args.decision,
-      decidedAt: new Date(),
-      decidedBy: args.decidedBy,
-      decisionNotes: args.decisionNotes?.trim() || null,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(clientShiftChangeRequests.id, args.requestId),
-        inArray(clientShiftChangeRequests.status, ["pending", "in_progress"]),
-      ),
-    )
-    .returning({ id: clientShiftChangeRequests.id });
-  if (updated.length === 0) return { ok: false, error: "wrong_status" };
+  const notes = args.decisionNotes?.trim() || null;
+  // Only an APPROVED cancel request triggers a real shift cancellation.
+  const shouldCancelShift = args.decision === "approved" && req.kind === "cancel";
 
-  await recordAuditFromRequest({
+  const decisionAudit = await stampFromRequest({
     userId: args.decidedBy,
-    action: args.decision === "approved" ? "client_shift_change.approved" : "client_shift_change.rejected",
+    action:
+      args.decision === "approved"
+        ? "client_shift_change.approved"
+        : "client_shift_change.rejected",
     resource: "client_shift_change_requests",
     resourceId: args.requestId,
-    after: { decision: args.decision, decisionNotes: args.decisionNotes?.trim() || null },
+    after: { decision: args.decision, decisionNotes: notes },
   });
+  const cancelAudit = shouldCancelShift
+    ? await stampFromRequest({
+        userId: args.decidedBy,
+        action: "shifts.cancelled",
+        resource: "shifts",
+        resourceId: req.shiftId,
+        after: { reason: notes, via: "client_change_request", requestId: args.requestId },
+      })
+    : null;
+
+  // Atomic: decision stamp + (when approving a cancel) the shift+placements
+  // cancel + both audits, all-or-nothing. Email/notify stay post-commit.
+  const result = await withTx(async (tx) => {
+    const u = await tx
+      .update(clientShiftChangeRequests)
+      .set({
+        status: args.decision,
+        decidedAt: new Date(),
+        decidedBy: args.decidedBy,
+        decisionNotes: notes,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(clientShiftChangeRequests.id, args.requestId),
+          inArray(clientShiftChangeRequests.status, ["pending", "in_progress"]),
+        ),
+      )
+      .returning({ id: clientShiftChangeRequests.id });
+    if (u.length === 0) return { decided: false as const };
+
+    await recordAuditCore(decisionAudit, tx);
+
+    if (shouldCancelShift && cancelAudit) {
+      // Guard the shift cancel inside the SAME tx. If it was already cancelled
+      // we still honour the decision (idempotent) — just skip the audit.
+      const { changed } = await cancelShiftAndPlacements(req.shiftId, notes, tx);
+      if (changed) await recordAuditCore(cancelAudit, tx);
+    }
+    return { decided: true as const };
+  });
+
+  if (!result.decided) return { ok: false, error: "wrong_status" };
+
+  // Recompute is a no-op for a cancelled shift (it stays cancelled) but keeps
+  // the call-site honest + future-proof.
+  if (shouldCancelShift) await recomputeShiftStatus(req.shiftId);
 
   // Outcome email + notification to the klant.
   const [shift] = await db
@@ -345,6 +398,72 @@ export async function decideShiftChangeRequest(args: {
       entityType: "client_shift_change_requests",
       entityId: args.requestId,
     });
+  }
+
+  // When the shift was actually cancelled, tell the CONFIRMED chefs — they were
+  // committed and must know. (Only confirmed placements ever get `confirmedAt`.)
+  if (shouldCancelShift && shift) {
+    try {
+      const affected = await db
+        .select({
+          chefName: chefs.fullName,
+          chefEmail: chefs.email,
+          chefUserId: chefs.userId,
+        })
+        .from(placements)
+        .innerJoin(chefs, eq(chefs.id, placements.chefId))
+        .where(
+          and(
+            eq(placements.shiftId, req.shiftId),
+            eq(placements.status, "cancelled"),
+            sql`${placements.confirmedAt} IS NOT NULL`,
+          ),
+        );
+      const companyName = client?.companyName ?? "de klant";
+      const shiftWhen = formatShiftWhen(shift.startsAt, shift.endsAt);
+      for (const a of affected) {
+        if (a.chefEmail) {
+          const send = await sendEmail({
+            to: a.chefEmail,
+            subject: `Shift geannuleerd: ${shift.roleNeeded} bij ${companyName}`,
+            react: (
+              <div>
+                <h1>Shift geannuleerd</h1>
+                <p>
+                  {`Beste ${a.chefName.split(" ")[0]}, de shift op ${shiftWhen} bij ${companyName} is geannuleerd.`}
+                </p>
+                {notes ? <p>{`Reden: ${notes}`}</p> : null}
+                <p>Onze excuses voor het ongemak. Wij nemen contact op zodra er een nieuwe shift is.</p>
+              </div>
+            ),
+          });
+          if (send.ok) {
+            await recordEmailMessage({
+              providerMessageId: send.id,
+              toEmail: a.chefEmail,
+              template: "ShiftCancelledByAdminChefInline",
+              eventKey: "shift_cancelled",
+              entityType: "shift",
+              entityId: req.shiftId,
+              userId: a.chefUserId ?? undefined,
+            });
+          }
+        }
+        if (a.chefUserId) {
+          await createNotification({
+            userId: a.chefUserId,
+            type: "shift_cancelled",
+            title: `Shift geannuleerd bij ${companyName}`,
+            body: shiftWhen,
+            actionUrl: "/chef/shifts",
+            entityType: "shift",
+            entityId: req.shiftId,
+          });
+        }
+      }
+    } catch (e) {
+      console.error("[decideShiftChangeRequest] chef cancel-notify failed:", e);
+    }
   }
 
   return { ok: true };

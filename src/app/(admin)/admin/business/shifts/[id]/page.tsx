@@ -25,6 +25,10 @@ import {
   findMatchesForShift,
   proposePlacement,
 } from "@/lib/domain/matching";
+import {
+  cancelShiftAndPlacements,
+  recomputeShiftStatus,
+} from "@/lib/domain/shift-status";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import {
   estimateMargin,
@@ -48,11 +52,22 @@ export const metadata = { title: "Shift" };
 
 export default async function ShiftDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ info?: string; ok?: string; err?: string }>;
 }) {
   await requirePermission("shifts", "write");
   const { id } = await params;
+  const sp = await searchParams;
+  const flash =
+    sp.info === "al-voorgesteld"
+      ? { tone: "info" as const, text: "Deze chef is al voorgesteld voor deze dienst." }
+      : sp.ok === "cancelled"
+        ? { tone: "ok" as const, text: "Dienst geannuleerd. Bevestigde chefs zijn op de hoogte gebracht." }
+        : sp.err === "already-cancelled"
+          ? { tone: "err" as const, text: "Deze dienst was al geannuleerd." }
+          : null;
 
   const shift = await db.query.shifts.findFirst({
     where: eq(shifts.id, id),
@@ -262,10 +277,15 @@ export default async function ShiftDetailPage({
       : undefined;
     if (!chefId) throw new Error("chefId missing");
 
-    const { placementId } = await proposePlacement(id, chefId, {
+    const { placementId, status } = await proposePlacement(id, chefId, {
       proposedBy: session.user.id,
       matchScore,
     });
+
+    // Already-active placement → friendly notice, no second audit/notify.
+    if (status === "already_proposed") {
+      redirect(`/admin/business/shifts/${id}?info=al-voorgesteld`);
+    }
 
     await recordAuditFromRequest({
       userId: session.user.id,
@@ -274,6 +294,10 @@ export default async function ShiftDetailPage({
       resourceId: placementId,
       after: { shiftId: id, chefId, matchScore },
     });
+
+    // Keep the shift status aligned (request → open, or → filled if this was a
+    // re-propose of an already-confirmed-elsewhere chef count).
+    await recomputeShiftStatus(id);
 
     redirect(`/admin/business/shifts/${id}`);
   }
@@ -333,6 +357,9 @@ export default async function ShiftDetailPage({
       if (updated.length === 0) return; // terminal/stale — no-op
       changed = true;
       await recordAuditCore(auditBase, tx);
+      // Backbone follows the placements: advance the shift to filled/open in the
+      // SAME tx so its status never drifts from reality.
+      await recomputeShiftStatus(id, tx);
     });
     if (!changed) {
       redirect(`/admin/business/shifts/${id}?err=placement-terminal`);
@@ -475,10 +502,130 @@ export default async function ShiftDetailPage({
     if (!result.ok) {
       redirect(`/admin/business/shifts/${id}?err=${result.reason}`);
     }
+    // The placement is now completed — let the shift follow (→ completed once it
+    // has ended and every non-cancelled placement is done).
+    await recomputeShiftStatus(id);
     if (result.hoursId) {
       redirect(`/admin/business/hours/${result.hoursId}`);
     }
     redirect(`/admin/business/shifts/${id}?ok=completed`);
+  }
+
+  // P3: admin cancels the whole dienst. Atomic: shift → cancelled, every
+  // non-terminal placement (proposed/accepted/confirmed) → cancelled, audit.
+  // Confirmed chefs were committed, so they're notified after commit. Blocked
+  // during "Bekijk als" (destructive).
+  async function cancelShift(formData: FormData) {
+    "use server";
+    const session = await requirePermission("shifts", "write");
+    await assertImpersonationAllowed();
+    const sid = String(formData.get("shiftId") ?? "").trim();
+    if (sid !== id) return;
+    const reason = String(formData.get("reason") ?? "").trim() || null;
+
+    const auditBase = await stampFromRequest({
+      userId: session.user.id,
+      action: "shifts.cancelled",
+      resource: "shifts",
+      resourceId: id,
+      after: { reason },
+    });
+
+    // Atomic transition: shift → cancelled (guarded against double-cancel) +
+    // every still-live placement → cancelled + audit, all-or-nothing. Shares
+    // the cancel logic with the approve-a-cancel-request path.
+    const cancelled = await withTx(async (tx) => {
+      const { changed } = await cancelShiftAndPlacements(id, reason, tx);
+      if (!changed) return false;
+      await recordAuditCore(auditBase, tx);
+      return true;
+    });
+
+    if (!cancelled) {
+      redirect(`/admin/business/shifts/${id}?err=already-cancelled`);
+    }
+
+    // Notify the chefs who were CONFIRMED (committed) — they're the ones who
+    // need telling. Only confirmed placements ever get `confirmedAt` set, so
+    // that's a reliable post-commit filter for the now-cancelled rows.
+    try {
+      // Self-contained read (incl. shift + klant fields) so we don't rely on
+      // outer-scope narrowing inside this server-action closure.
+      const affected = await db
+        .select({
+          chefName: chefs.fullName,
+          chefEmail: chefs.email,
+          chefUserId: chefs.userId,
+          startsAt: shifts.startsAt,
+          endsAt: shifts.endsAt,
+          roleNeeded: shifts.roleNeeded,
+          companyName: clients.companyName,
+        })
+        .from(placements)
+        .innerJoin(chefs, eq(chefs.id, placements.chefId))
+        .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+        .leftJoin(clients, eq(clients.id, shifts.clientId))
+        .where(
+          and(
+            eq(placements.shiftId, id),
+            eq(placements.status, "cancelled"),
+            sql`${placements.confirmedAt} IS NOT NULL`,
+          ),
+        );
+
+      if (affected.length > 0) {
+        const { sendEmail, formatShiftWhen } = await import("@/lib/email");
+        const { recordEmailMessage, createNotification } = await import(
+          "@/lib/integrations"
+        );
+        for (const a of affected) {
+          const shiftWhen = formatShiftWhen(a.startsAt, a.endsAt);
+          const companyName = a.companyName ?? "de klant";
+          if (a.chefEmail) {
+            const send = await sendEmail({
+              to: a.chefEmail,
+              subject: `Shift geannuleerd: ${a.roleNeeded} bij ${companyName}`,
+              react: (
+                <div>
+                  <h1>Shift geannuleerd</h1>
+                  <p>
+                    {`Beste ${a.chefName.split(" ")[0]}, de shift op ${shiftWhen} bij ${companyName} is geannuleerd.`}
+                  </p>
+                  {reason ? <p>{`Reden: ${reason}`}</p> : null}
+                  <p>Onze excuses voor het ongemak. Wij nemen contact op zodra er een nieuwe shift is.</p>
+                </div>
+              ),
+            });
+            if (send.ok) {
+              await recordEmailMessage({
+                providerMessageId: send.id,
+                toEmail: a.chefEmail,
+                template: "ShiftCancelledByAdminChefInline",
+                eventKey: "shift_cancelled",
+                entityType: "shift",
+                entityId: id,
+                userId: a.chefUserId ?? undefined,
+              });
+            }
+          }
+          if (a.chefUserId) {
+            await createNotification({
+              userId: a.chefUserId,
+              type: "shift_cancelled",
+              title: `Shift geannuleerd bij ${companyName}`,
+              body: shiftWhen,
+              actionUrl: "/chef/shifts",
+              entityType: "shift",
+              entityId: id,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[cancelShift] notification failed:", e);
+    }
+
+    redirect(`/admin/business/shifts/${id}?ok=cancelled`);
   }
 
   // PR-KLANT-3: admin replies to / posts placement comments.
@@ -575,6 +722,20 @@ export default async function ShiftDetailPage({
         {shift.city && ` · ${shift.city}`}
       </p>
 
+      {flash ? (
+        <p
+          className={
+            flash.tone === "ok"
+              ? "mt-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800"
+              : flash.tone === "err"
+                ? "mt-4 rounded border border-burgundy/30 bg-burgundy/5 px-4 py-2 text-sm text-burgundy"
+                : "mt-4 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800"
+          }
+        >
+          {flash.text}
+        </p>
+      ) : null}
+
       {/* Summary card */}
       <SummaryCard shift={shift} confirmedCount={confirmedCount} />
 
@@ -609,7 +770,52 @@ export default async function ShiftDetailPage({
       )}
 
       {matches.length === 0 && existingPlacements.length === 0 && <EmptyState />}
+
+      {/* P3 — cancel the whole dienst. Hidden once cancelled/completed. */}
+      {shift.status !== "cancelled" && shift.status !== "completed" && (
+        <CancelShiftSection cancelShift={cancelShift} shiftId={shift.id} />
+      )}
     </DetailShell>
+  );
+}
+
+function CancelShiftSection({
+  cancelShift,
+  shiftId,
+}: {
+  cancelShift: (formData: FormData) => Promise<void>;
+  shiftId: string;
+}) {
+  return (
+    <section className="mt-12 rounded-lg border border-red-200 bg-red-50/50 p-6">
+      <h2 className="font-serif text-lg text-red-800">Dienst annuleren</h2>
+      <p className="mt-1 text-sm text-ink-700">
+        Zet de dienst op <strong>geannuleerd</strong> en trekt alle voorgestelde,
+        geaccepteerde en bevestigde plaatsingen in. Bevestigde chefs krijgen
+        automatisch bericht. Dit kan niet ongedaan gemaakt worden.
+      </p>
+      <form action={cancelShift} className="mt-4 flex flex-wrap items-end gap-3">
+        <input type="hidden" name="shiftId" value={shiftId} />
+        <label className="block flex-1 min-w-[220px]">
+          <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-red-700">
+            Reden (optioneel)
+          </span>
+          <input
+            type="text"
+            name="reason"
+            maxLength={500}
+            placeholder="bijv. klant heeft het event afgezegd"
+            className="w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 focus:border-red-400 focus:outline-none focus:ring-1 focus:ring-red-400"
+          />
+        </label>
+        <button
+          type="submit"
+          className="rounded-full bg-red-600 px-6 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-red-700"
+        >
+          Dienst annuleren
+        </button>
+      </form>
+    </section>
   );
 }
 

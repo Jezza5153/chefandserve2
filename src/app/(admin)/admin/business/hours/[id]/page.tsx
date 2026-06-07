@@ -491,8 +491,12 @@ export default async function AdminHoursDetailPage({
   const canApprove = status === "client_signed";
   // Hours-ops gating:
   const isLocked = status === "exported" || status === "void";
-  // Correct + void: any status except exported/void.
-  const canEdit = !isLocked;
+  // Correct: any status EXCEPT exported/void AND not admin_approved. An
+  // approved row is read-only in place — post-approval corrections need the
+  // future shift_hour_corrections subsystem (PR-CHEF-7), so hide the form.
+  const canEdit = !isLocked && status !== "admin_approved";
+  // Void: any status except exported/void (an approved row can still be voided
+  // e.g. a no-show discovered after approval).
   const canVoid = !isLocked;
   // Manual finalize/override: rows that never went through client-sign and
   // aren't already final. (client_signed uses the existing Approve button.)

@@ -146,9 +146,13 @@ export async function completePlacement(args: {
 
 /**
  * Correct the actual numbers on a hours row (admin). Recomputes workedMinutes.
- * Refuses to touch 'exported' (already handed to payroll) or 'void'. Keeps the
- * current status — a correction on an already-approved row stays approved with
- * the new values (re-export picks them up). Audits before→after.
+ * Editable ONLY while the row is still mutable in place — i.e. NOT
+ * 'admin_approved', 'exported' or 'void'. Once a row is admin-approved the
+ * schema treats it as READ-ONLY (it has, or is about to, become a payroll
+ * obligation): post-approval changes must go through a `shift_hour_corrections`
+ * row, not an in-place mutation. That corrections subsystem is future work
+ * (PR-CHEF-7) — until it exists, an admin who needs to change approved hours
+ * must reject the row back first. Audits before→after.
  */
 export async function adminEditHours(args: {
   hoursId: string;
@@ -211,7 +215,9 @@ export async function adminEditHours(args: {
       .where(
         and(
           eq(shiftHours.id, args.hoursId),
-          notInArray(shiftHours.status, ["exported", "void"]),
+          // admin_approved is READ-ONLY in place — post-approval edits need the
+          // future shift_hour_corrections subsystem (see docstring).
+          notInArray(shiftHours.status, ["exported", "void", "admin_approved"]),
         ),
       )
       .returning({ id: shiftHours.id });
