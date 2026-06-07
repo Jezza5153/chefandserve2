@@ -13,7 +13,7 @@ import {
   hoursSendReminder,
 } from "@/lib/ai/tools/hours";
 import { shiftsOpenSoon, insightsLeaderboards, integrationsHealth } from "@/lib/ai/tools/ops";
-import { placementsPropose } from "@/lib/ai/tools/placements";
+import { placementsPropose, placementsConfirm, placementsCancel } from "@/lib/ai/tools/placements";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -27,6 +27,8 @@ export const ALL_TOOLS: AnyTool[] = [
   hoursReject,
   hoursSendReminder,
   placementsPropose,
+  placementsConfirm,
+  placementsCancel,
 ];
 
 export function buildRegistry(): ToolRegistry {
