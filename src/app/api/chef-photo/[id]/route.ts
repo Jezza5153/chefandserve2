@@ -13,7 +13,7 @@
  * redirect target briefly so successive renders don't re-presign each time.
  */
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
@@ -93,6 +93,10 @@ export async function GET(
             and(
               eq(placements.chefId, doc.chefId),
               eq(shifts.clientId, client.id),
+              // Match /api/chef-document/[id]: only an active relationship
+              // (confirmed/completed) grants photo access. A klant who only
+              // ever received or rejected a proposal must not pull the photo.
+              inArray(placements.status, ["confirmed", "completed"]),
             ),
           )
           .limit(1);

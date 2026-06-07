@@ -35,6 +35,17 @@ export default auth(async (request: NextRequest & {
   auth: import("next-auth").Session | null;
 }) => {
   const path = request.nextUrl.pathname;
+
+  // Calendar ICS feeds (/chef/calendar.ics, /client/calendar.ics) are
+  // token-authed by their own route handlers (?token=…). External calendar
+  // apps (Google/Apple) send NO session cookie, so the auth gate below would
+  // redirect them to /login and the subscription would return HTML instead of
+  // the .ics payload. Let these specific paths through BEFORE the auth gate.
+  // Scoped to the exact filename so nothing else is exposed.
+  if (path.endsWith("/calendar.ics")) {
+    return NextResponse.next();
+  }
+
   const isAppRoute = APP_PATH_PREFIXES.some((p) => path.startsWith(p));
   const isAdminRoute = path.startsWith("/admin");
   const isChefRoute = path.startsWith("/chef");
