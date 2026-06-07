@@ -13,6 +13,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
+import { fieldClass } from "@/components/forms/Fields";
 import { recordAuditFromRequest } from "@/lib/audit";
 
 import { inviteInternalStaff } from "@/lib/domain/portal-invites";
@@ -111,7 +112,7 @@ export default async function NewUserPage({
             required
             autoFocus
             placeholder="bijv. Maarten Hogeveen"
-            className="w-full rounded border border-ink-200 bg-white px-4 py-3 text-base text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            className={fieldClass}
           />
         </label>
 
@@ -125,7 +126,7 @@ export default async function NewUserPage({
             required
             autoComplete="off"
             placeholder="bijv. maarten@chefandserve.nl"
-            className="w-full rounded border border-ink-200 bg-white px-4 py-3 text-base text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            className={fieldClass}
           />
         </label>
 
@@ -137,7 +138,7 @@ export default async function NewUserPage({
             name="role"
             required
             defaultValue=""
-            className="w-full rounded border border-ink-200 bg-white px-4 py-3 text-base text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            className={fieldClass}
           >
             <option value="" disabled>
               Kies een rol…

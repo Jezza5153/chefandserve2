@@ -10,10 +10,19 @@ import { asc, eq, ne } from "drizzle-orm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { fieldClass } from "@/components/forms/Fields";
+import { Column, DataTable } from "@/components/ui/DataTable";
+import { StatusBadge, StatusTone } from "@/components/ui/StatusBadge";
 import { db } from "@/lib/db/client";
 import { roles, userRoles, users } from "@/lib/db/schema";
 import { requirePermission } from "@/lib/permissions";
 import { createEmployee } from "@/lib/rbac/manage";
+
+/** Local employee status → canonical badge tone. */
+const STATUS_TONE: Record<string, StatusTone> = {
+  active: "green",
+  invited: "amber",
+};
 
 export const metadata = { title: "Team", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -61,6 +70,41 @@ export default async function TeamPage({
     redirect(res.ok ? "/admin/business/team?ok=created" : `/admin/business/team?err=${encodeURIComponent(res.error)}`);
   }
 
+  type EmployeeRow = (typeof internal)[number];
+  const teamColumns: Column<EmployeeRow>[] = [
+    {
+      key: "name",
+      header: "Naam",
+      cell: (u) => (
+        <>
+          <p className="font-medium text-ink-900">{u.name}</p>
+          <p className="text-xs text-ink-500">{u.email}</p>
+        </>
+      ),
+    },
+    {
+      key: "roles",
+      header: "Rollen",
+      cell: (u) =>
+        (rolesByUser.get(u.id) ?? []).join(", ") || <span className="text-ink-400">—</span>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      cell: (u) => <StatusBadge tone={STATUS_TONE[u.status] ?? "gray"} label={u.status} />,
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      cell: (u) => (
+        <Link href={`/admin/business/team/${u.id}`} className="font-ui text-[12px] font-medium text-burgundy hover:underline">
+          Beheren →
+        </Link>
+      ),
+    },
+  ];
+
   return (
     <div className="mx-auto max-w-3xl">
       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">Bedrijf</p>
@@ -84,9 +128,9 @@ export default async function TeamPage({
       <details className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
         <summary className="cursor-pointer font-ui text-[12px] font-medium text-burgundy">+ Nieuwe medewerker</summary>
         <form action={addEmployee} className="mt-4 grid gap-3 sm:grid-cols-2">
-          <input name="name" placeholder="Volledige naam" required className="rounded border border-ink-200 px-3 py-2 text-sm" />
-          <input name="email" type="email" placeholder="E-mailadres" required className="rounded border border-ink-200 px-3 py-2 text-sm" />
-          <select name="roleKey" required defaultValue="" className="rounded border border-ink-200 px-3 py-2 text-sm">
+          <input name="name" placeholder="Volledige naam" required className={fieldClass} />
+          <input name="email" type="email" placeholder="E-mailadres" required className={fieldClass} />
+          <select name="roleKey" required defaultValue="" className={fieldClass}>
             <option value="" disabled>
               Kies een rol…
             </option>
@@ -103,41 +147,12 @@ export default async function TeamPage({
       </details>
 
       {/* employee list */}
-      <div className="mt-6 overflow-hidden rounded-lg border border-ink-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-bg-gray text-left font-ui text-[10px] uppercase tracking-[0.14em] text-ink-500">
-            <tr>
-              <th className="px-4 py-2.5">Naam</th>
-              <th className="px-4 py-2.5">Rollen</th>
-              <th className="px-4 py-2.5">Status</th>
-              <th className="px-4 py-2.5"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-ink-100">
-            {internal.map((u) => (
-              <tr key={u.id}>
-                <td className="px-4 py-3">
-                  <p className="font-medium text-ink-900">{u.name}</p>
-                  <p className="text-xs text-ink-500">{u.email}</p>
-                </td>
-                <td className="px-4 py-3 text-ink-700">
-                  {(rolesByUser.get(u.id) ?? []).join(", ") || <span className="text-ink-400">—</span>}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${u.status === "active" ? "bg-emerald-100 text-emerald-700" : u.status === "invited" ? "bg-amber-100 text-amber-800" : "bg-ink-100 text-ink-600"}`}>
-                    {u.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <Link href={`/admin/business/team/${u.id}`} className="font-ui text-[12px] font-medium text-burgundy hover:underline">
-                    Beheren →
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        className="mt-6"
+        columns={teamColumns}
+        rows={internal}
+        getRowKey={(u) => u.id}
+      />
     </div>
   );
 }

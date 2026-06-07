@@ -8,6 +8,7 @@ import { asc, eq, ne } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { fieldClass } from "@/components/forms/Fields";
 import { db } from "@/lib/db/client";
 import { roles, userPermissions, userRoles, users } from "@/lib/db/schema";
 import { effectivePermissionKeys, requirePermission } from "@/lib/permissions";
@@ -158,7 +159,7 @@ export default async function TeamMemberPage({
                         </span>
                       )}
                     </span>
-                    <select name={`effect_${p.key}`} defaultValue={overrideMap.get(p.key) ?? "inherit"} className="rounded border border-ink-200 px-2 py-1 text-xs text-ink-800">
+                    <select name={`effect_${p.key}`} defaultValue={overrideMap.get(p.key) ?? "inherit"} className={`${fieldClass} !w-auto`}>
                       <option value="inherit">Standaard (rol)</option>
                       <option value="grant">Toekennen</option>
                       <option value="revoke">Intrekken</option>

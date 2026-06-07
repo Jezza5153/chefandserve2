@@ -1,11 +1,19 @@
 import { asc, eq, sql } from "drizzle-orm";
 import Link from "next/link";
 
+import { Column, DataTable } from "@/components/ui/DataTable";
+import { StatusBadge, StatusTone } from "@/components/ui/StatusBadge";
 import { db } from "@/lib/db/client";
 import { auditLog, roles, userRoles, users } from "@/lib/db/schema";
 import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Users" };
+
+/** Local account status → canonical badge tone. */
+const STATUS_TONE: Record<string, StatusTone> = {
+  active: "green",
+  invited: "amber",
+};
 
 /**
  * User listing. super_admin only.
@@ -81,6 +89,101 @@ export default async function UsersPage() {
     });
   }
 
+  type UserRow = (typeof userRows)[number];
+  const userColumns: Column<UserRow>[] = [
+    {
+      key: "email",
+      header: "E-mail",
+      cell: (u) => (
+        <Link
+          href={`/admin/system/users/${u.id}`}
+          className="text-ink-900 hover:text-burgundy hover:underline"
+        >
+          {u.email}
+        </Link>
+      ),
+    },
+    { key: "name", header: "Naam", cell: (u) => u.name ?? "—" },
+    { key: "type", header: "Type", cell: (u) => u.kind },
+    {
+      key: "status",
+      header: "Status",
+      cell: (u) => <StatusBadge tone={STATUS_TONE[u.status] ?? "gray"} label={u.status} />,
+    },
+    {
+      key: "setup",
+      header: "Setup",
+      cell: (u) => {
+        const setupDone =
+          u.kind !== "internal" ? null : Boolean(u.passwordHash) && Boolean(u.totpEnabled);
+        return u.kind !== "internal" ? (
+          <span className="text-ink-500">n.v.t.</span>
+        ) : setupDone ? (
+          <span className="text-emerald-700">✓ klaar</span>
+        ) : (
+          <span className="text-amber-700">⚠ wacht</span>
+        );
+      },
+    },
+    {
+      key: "twofa",
+      header: "2FA",
+      cell: (u) =>
+        u.kind !== "internal" ? (
+          <span className="text-ink-500">n.v.t.</span>
+        ) : u.totpEnabled ? (
+          <span
+            className="text-emerald-700"
+            title={
+              u.totpEnrolledAt
+                ? `sinds ${new Date(u.totpEnrolledAt).toLocaleDateString("nl-NL")}`
+                : undefined
+            }
+          >
+            ✓ aan
+          </span>
+        ) : (
+          <span className="text-ink-500">uit</span>
+        ),
+    },
+    {
+      key: "roles",
+      header: "Rollen",
+      cell: (u) => (rolesByUser.get(u.id) ?? []).join(", ") || "—",
+    },
+    {
+      key: "lastLogin",
+      header: "Laatste login",
+      cell: (u) => relativeTime(lastSigninByUser.get(u.id)),
+    },
+    {
+      key: "impersonate",
+      header: "Bekijk als",
+      cell: (u) =>
+        u.status === "active" && !(rolesByUser.get(u.id) ?? []).includes("super_admin") ? (
+          <form method="POST" action={`/api/impersonate/${u.id}`}>
+            <button
+              type="submit"
+              className="rounded-full border border-burgundy/40 px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-burgundy hover:bg-burgundy/5"
+            >
+              Bekijk als
+            </button>
+          </form>
+        ) : (
+          <span
+            className="font-ui text-[10px] uppercase tracking-wider text-ink-400"
+            title={
+              (rolesByUser.get(u.id) ?? []).includes("super_admin")
+                ? "Kan geen super-admin impersoneren"
+                : "Account niet actief"
+            }
+          >
+            {(rolesByUser.get(u.id) ?? []).includes("super_admin") ? "—" : "geen toegang"}
+          </span>
+        ),
+    },
+  ];
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="flex items-baseline justify-between gap-4">
@@ -105,145 +208,12 @@ export default async function UsersPage() {
         hun eerste login door de setup-wizard.
       </p>
 
-      <div className="mt-8 overflow-x-auto rounded-lg border border-ink-200 bg-white">
-        <table className="w-full min-w-[860px]">
-          <thead className="bg-bg-gray text-left">
-            <tr>
-              <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                E-mail
-              </th>
-              <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                Naam
-              </th>
-              <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                Type
-              </th>
-              <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                Status
-              </th>
-              <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                Setup
-              </th>
-              <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                2FA
-              </th>
-              <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                Rollen
-              </th>
-              <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                Laatste login
-              </th>
-              <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
-                Bekijk als
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {userRows.map((u, i) => {
-              const setupDone = u.kind !== "internal"
-                ? null
-                : Boolean(u.passwordHash) && Boolean(u.totpEnabled);
-              return (
-                <tr
-                  key={u.id}
-                  className={
-                    i < userRows.length - 1 ? "border-b border-ink-200" : ""
-                  }
-                >
-                  <td className="px-4 py-3 text-sm">
-                    <Link
-                      href={`/admin/system/users/${u.id}`}
-                      className="text-ink-900 hover:text-burgundy hover:underline"
-                    >
-                      {u.email}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-ink-700">
-                    {u.name ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-ink-500">{u.kind}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={u.status} />
-                  </td>
-                  <td className="px-4 py-3 text-xs">
-                    {u.kind !== "internal" ? (
-                      <span className="text-ink-500">n.v.t.</span>
-                    ) : setupDone ? (
-                      <span className="text-emerald-700">✓ klaar</span>
-                    ) : (
-                      <span className="text-amber-700">⚠ wacht</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-xs">
-                    {u.kind !== "internal" ? (
-                      <span className="text-ink-500">n.v.t.</span>
-                    ) : u.totpEnabled ? (
-                      <span
-                        className="text-emerald-700"
-                        title={
-                          u.totpEnrolledAt
-                            ? `sinds ${new Date(u.totpEnrolledAt).toLocaleDateString("nl-NL")}`
-                            : undefined
-                        }
-                      >
-                        ✓ aan
-                      </span>
-                    ) : (
-                      <span className="text-ink-500">uit</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-ink-700">
-                    {(rolesByUser.get(u.id) ?? []).join(", ") || "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-ink-500">
-                    {relativeTime(lastSigninByUser.get(u.id))}
-                  </td>
-                  <td className="px-4 py-3">
-                    {u.status === "active" &&
-                    !(rolesByUser.get(u.id) ?? []).includes("super_admin") ? (
-                      <form method="POST" action={`/api/impersonate/${u.id}`}>
-                        <button
-                          type="submit"
-                          className="rounded-full border border-burgundy/40 px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-burgundy hover:bg-burgundy/5"
-                        >
-                          Bekijk als
-                        </button>
-                      </form>
-                    ) : (
-                      <span
-                        className="font-ui text-[10px] uppercase tracking-wider text-ink-400"
-                        title={
-                          (rolesByUser.get(u.id) ?? []).includes("super_admin")
-                            ? "Kan geen super-admin impersoneren"
-                            : "Account niet actief"
-                        }
-                      >
-                        {(rolesByUser.get(u.id) ?? []).includes("super_admin") ? "—" : "geen toegang"}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        className="mt-8"
+        columns={userColumns}
+        rows={userRows}
+        getRowKey={(u) => u.id}
+      />
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const tone =
-    status === "active"
-      ? "bg-emerald-100 text-emerald-700"
-      : status === "invited"
-        ? "bg-amber-100 text-amber-700"
-        : "bg-bg-gray text-ink-500";
-  return (
-    <span
-      className={`rounded-full px-2.5 py-1 font-ui text-[9px] font-medium uppercase tracking-wider ${tone}`}
-    >
-      {status}
-    </span>
   );
 }
