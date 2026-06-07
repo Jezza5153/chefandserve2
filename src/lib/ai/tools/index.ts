@@ -14,7 +14,7 @@ import {
 } from "@/lib/ai/tools/hours";
 import { shiftsOpenSoon, insightsLeaderboards, integrationsHealth } from "@/lib/ai/tools/ops";
 import { placementsPropose, placementsConfirm, placementsCancel } from "@/lib/ai/tools/placements";
-import { chefsFind, clientsFind } from "@/lib/ai/tools/directory";
+import { chefsFind, clientsFind, shiftsFind } from "@/lib/ai/tools/directory";
 import { emailSend } from "@/lib/ai/tools/comms";
 
 export const ALL_TOOLS: AnyTool[] = [
@@ -26,6 +26,7 @@ export const ALL_TOOLS: AnyTool[] = [
   hoursListAwaitingApproval,
   chefsFind,
   clientsFind,
+  shiftsFind,
   // act — the hands
   hoursApprove,
   hoursReject,
