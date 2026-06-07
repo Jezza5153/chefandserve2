@@ -101,7 +101,21 @@ export async function runAgent(args: RunAgentArgs): Promise<AgentOutcome> {
     convo.push({ role: "tool", toolCallId: call.id, toolName: step.tool, content: toolMessage(result) });
   }
 
-  return { kind: "final", text: "Ik heb het maximum aantal stappen bereikt zonder af te ronden.", steps };
+  // Step budget exhausted. Make one last call with NO tools so the model must answer in
+  // words using whatever it already gathered, instead of a dead-end "max steps" message.
+  try {
+    const finalStep = await brain.plan({ messages: convo, tools: [] });
+    if (finalStep.kind === "final" && finalStep.text.trim()) {
+      return { kind: "final", text: finalStep.text, steps };
+    }
+  } catch {
+    // fall through to the safe fallback below
+  }
+  return {
+    kind: "final",
+    text: "Ik kon dit niet helemaal afronden — kun je het iets specifieker vragen?",
+    steps,
+  };
 }
 
 function toolMessage(result: ToolResult): string {

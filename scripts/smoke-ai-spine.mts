@@ -263,5 +263,29 @@ console.log("\n── agent loop: caps long conversation history ──");
   assert("cap still keeps recent messages", seenCount > 0);
 }
 
+console.log("\n── agent loop: graceful final answer on step exhaustion ──");
+{
+  // never finishes while tools are offered, but answers when tools are withheld
+  const brain: Brain = {
+    plan: async ({ tools }) =>
+      tools.length === 0
+        ? { kind: "final", text: "samenvatting met wat ik heb" }
+        : { kind: "tool_call", tool: "fake.read", input: { q: "x" } },
+  };
+  const outcome = await runAgent({
+    brain,
+    registry,
+    messages: [{ role: "user", content: "blijf maar zoeken" }],
+    ctx: ctx(owner),
+    executeOptions: opts(makeSink().sink),
+    maxSteps: 2,
+  });
+  assert("exhaustion still yields a final answer", outcome.kind === "final");
+  assert(
+    "exhaustion forces a real answer, not the dead-end message",
+    outcome.kind === "final" && outcome.text === "samenvatting met wat ik heb",
+  );
+}
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 if (fail > 0) process.exit(1);
