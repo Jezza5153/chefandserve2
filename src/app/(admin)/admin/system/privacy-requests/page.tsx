@@ -7,6 +7,7 @@
 import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
 
+import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { db } from "@/lib/db/client";
 import { privacyRequests, users } from "@/lib/db/schema";
 import { requirePermission } from "@/lib/permissions";
@@ -172,12 +173,12 @@ function StatusPill({ status }: { status: string }) {
     pending: "Nieuw", in_progress: "In behandeling", fulfilled: "Afgehandeld",
     partially_fulfilled: "Deels afgehandeld", rejected: "Afgewezen", withdrawn: "Ingetrokken",
   };
-  const tone =
-    status === "fulfilled" ? "bg-emerald-100 text-emerald-700"
-    : status === "in_progress" ? "bg-blue-100 text-blue-700"
-    : status === "pending" ? "bg-amber-100 text-amber-800"
-    : "bg-bg-gray text-ink-500";
-  return <span className={`shrink-0 rounded-full px-2.5 py-1 font-ui text-[9px] font-medium uppercase tracking-wider ${tone}`}>{labels[status] ?? status}</span>;
+  const tone: StatusTone =
+    status === "fulfilled" ? "green"
+    : status === "in_progress" ? "blue"
+    : status === "pending" ? "amber"
+    : "gray";
+  return <StatusBadge tone={tone} label={labels[status] ?? status} className="shrink-0" />;
 }
 
 function IdentityPill({ status }: { status: string }) {
