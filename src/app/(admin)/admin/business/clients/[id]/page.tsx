@@ -11,16 +11,9 @@ import {
   clients,
   users,
 } from "@/lib/db/schema";
-import {
-  CLIENT_TAG_OPTIONS,
-  CLIENT_TYPE_OPTIONS,
-} from "@/lib/domain/client-taxonomy";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { buildClientTrends, getClientSummary } from "@/lib/domain/client-history";
 import { getClientDailySeries } from "@/lib/domain/metrics-history";
-import { TrendTile } from "@/components/dashboard/TrendTile";
-import { fieldClass } from "@/components/forms/Fields";
-import { formatEuro } from "@/lib/hours-labels";
 import {
   activatePortalUser,
   disablePortalUser,
@@ -29,6 +22,13 @@ import {
 import { sendEmail } from "@/lib/email";
 import { enqueueIntegrationEvent, recordEmailMessage } from "@/lib/integrations";
 import { requirePermission } from "@/lib/permissions";
+import { DetailShell } from "@/components/ui/DetailShell";
+import { BasicsForm } from "./_components/BasicsForm";
+import { Binnenkort } from "./_components/Binnenkort";
+import { ChangeRequestsSection } from "./_components/ChangeRequestsSection";
+import { ClientTypeSection } from "./_components/ClientTypeSection";
+import { Klant360 } from "./_components/Klant360";
+import { PortalAccessSection } from "./_components/PortalAccessSection";
 
 export const metadata = { title: "Klant" };
 
@@ -359,546 +359,69 @@ export default async function ClientDetailPage({
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-6">
-        <Link
-          href="/admin/business/clients"
-          className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy hover:underline"
-        >
-          ← Alle klanten
-        </Link>
-      </div>
+    <DetailShell
+      className="mx-auto max-w-3xl"
+      backHref="/admin/business/clients"
+      backLabel="Alle klanten"
+      eyebrow="Klant-profiel"
+      title={client.companyName}
+      actions={<StatusBadge status={client.status} />}
+    >
+      <p className="mt-1 text-xs text-ink-500">
+        Toegevoegd{" "}
+        {new Date(client.joinedAt).toLocaleDateString("nl-NL", {
+          dateStyle: "long",
+        })}
+        {sourceSubmission && (
+          <>
+            {" · "}
+            <Link
+              href={`/admin/business/inbox/client/${sourceSubmission.id}`}
+              className="text-burgundy underline-offset-4 hover:underline"
+            >
+              via inbox
+            </Link>
+          </>
+        )}
+      </p>
 
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-            Klant-profiel
-          </p>
-          <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
-            {client.companyName}
-          </h1>
-          <p className="mt-1 text-xs text-ink-500">
-            Toegevoegd{" "}
-            {new Date(client.joinedAt).toLocaleDateString("nl-NL", {
-              dateStyle: "long",
-            })}
-            {sourceSubmission && (
-              <>
-                {" · "}
-                <Link
-                  href={`/admin/business/inbox/client/${sourceSubmission.id}`}
-                  className="text-burgundy underline-offset-4 hover:underline"
-                >
-                  via inbox
-                </Link>
-              </>
-            )}
-          </p>
-        </div>
-        <StatusBadge status={client.status} />
-      </div>
-
-      <form
-        action={updateBasics}
-        className="mt-8 grid gap-4 rounded-lg border border-ink-200 bg-white p-6 md:grid-cols-2"
-      >
-        <Field label="Bedrijfsnaam" name="companyName" defaultValue={client.companyName} required />
-        <Field
-          label="Status"
-          name="status"
-          as="select"
-          defaultValue={client.status}
-          options={[
-            { value: "prospect", label: "Prospect" },
-            { value: "active", label: "Actief" },
-            { value: "paused", label: "Gepauzeerd" },
-            { value: "archived", label: "Gearchiveerd" },
-          ]}
-        />
-        <Field label="Contactpersoon" name="contactName" defaultValue={client.contactName ?? ""} />
-        <Field label="E-mail" name="email" type="email" defaultValue={client.email ?? ""} />
-        <Field label="Telefoon" name="phone" defaultValue={client.phone ?? ""} />
-        <Field label="Stad" name="city" defaultValue={client.city ?? ""} />
-        <div className="md:col-span-2">
-          <Field label="Adres" name="address" defaultValue={client.address ?? ""} />
-        </div>
-        <Field label="KvK-nummer" name="kvk" defaultValue={client.kvk ?? ""} />
-        <Field label="Btw / VAT" name="btw" defaultValue={client.btw ?? ""} />
-        <Field
-          label="Factuur-e-mail"
-          name="billingEmail"
-          type="email"
-          defaultValue={client.billingEmail ?? ""}
-        />
-        <Field
-          label="Betalingstermijn (dagen)"
-          name="paymentTermsDays"
-          type="number"
-          defaultValue={(client.paymentTermsDays ?? 14).toString()}
-        />
-        <div className="md:col-span-2">
-          <Field
-            label="Notities (Maarten's tribal knowledge)"
-            name="notes"
-            as="textarea"
-            defaultValue={client.notes ?? ""}
-          />
-        </div>
-        <div className="md:col-span-2 flex justify-end">
-          <button
-            type="submit"
-            className="rounded-full bg-burgundy px-6 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
-          >
-            Opslaan
-          </button>
-        </div>
-      </form>
+      <BasicsForm client={client} updateBasics={updateBasics} />
 
       {/* PR-2B: Klanttype + tags + favoriete / geblokkeerde chefs */}
       {/* KPI-3: Klant 360 — realized performance + 8-week trends */}
-      <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="font-serif text-lg text-ink-900">Klant 360</h2>
-          <span className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-400">
-            uit goedgekeurde uren · gerealiseerde diensten
-          </span>
-        </div>
+      <Klant360 clientSummary={clientSummary} clientTrends={clientTrends} />
 
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <KSnap
-            label="Bezetting"
-            value={clientSummary.fillRate != null ? `${Math.round(clientSummary.fillRate * 100)}%` : "—"}
-            note={`${clientSummary.realizedFilled}/${clientSummary.realizedSlots} plekken`}
-          />
-          <KSnap label="Omzet" value={formatEuro(clientSummary.spendCents)} note="gefactureerd" />
-          <KSnap
-            label="Marge"
-            value={formatEuro(clientSummary.marginCents)}
-            note={`loonkost ${formatEuro(clientSummary.loonCostCents)}`}
-          />
-          <KSnap
-            label="Uren"
-            value={`${clientSummary.totalHoursWorked} u`}
-            note={`${clientSummary.completedShifts} diensten`}
-          />
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-          <span className="rounded-full bg-bg-gray px-2.5 py-1 text-ink-700">
-            Vaste koks: <b className="text-ink-900">{clientSummary.repeatChefs}</b> van {clientSummary.distinctChefs}
-          </span>
-          <span className="rounded-full bg-bg-gray px-2.5 py-1 text-ink-700">
-            Beoordelingen gegeven: <b className="text-ink-900">{clientSummary.ratingsGiven}</b>
-            {clientSummary.averageRatingGiven != null ? ` · ${clientSummary.averageRatingGiven.toFixed(1)}★` : ""}
-          </span>
-          <span
-            className={`rounded-full px-2.5 py-1 ${clientSummary.pendingSignoff > 0 ? "bg-amber-100 text-amber-800" : "bg-bg-gray text-ink-700"}`}
-          >
-            Uren te tekenen: <b>{clientSummary.pendingSignoff}</b>
-          </span>
-          {clientSummary.signoffAvgHours != null ? (
-            <span className="rounded-full bg-bg-gray px-2.5 py-1 text-ink-700">
-              Tekent gem. in <b className="text-ink-900">{clientSummary.signoffAvgHours} u</b>
-            </span>
-          ) : null}
-        </div>
-
-        {clientSummary.topChefs.length > 0 ? (
-          <p className="mt-2 text-xs text-ink-600">
-            Vaakst ingezet: {clientSummary.topChefs.map((c) => `${c.name} (${c.count}×)`).join(" · ")}
-          </p>
-        ) : null}
-
-        <div className="mt-4">
-          <p className="mb-2 font-ui text-[10px] font-medium uppercase tracking-wider text-ink-500">
-            Trend · laatste 8 weken
-          </p>
-          {clientTrends.hasEnoughHistory ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <TrendTile label="Omzet" spark={clientTrends.spendSparkline} value={`€ ${clientTrends.spendDelta.thisPeriod}`} delta={clientTrends.spendDelta} />
-              <TrendTile label="Marge" spark={clientTrends.marginSparkline} value={`€ ${clientTrends.marginDelta.thisPeriod}`} delta={clientTrends.marginDelta} />
-              <TrendTile label="Diensten" spark={clientTrends.shiftsSparkline} value={String(clientTrends.shiftsDelta.thisPeriod)} delta={clientTrends.shiftsDelta} />
-            </div>
-          ) : (
-            <p className="rounded-lg border border-dashed border-ink-200 bg-bg-gray/40 px-3 py-2 text-xs text-ink-500">
-              Te weinig historie voor een trend — vanaf ±2 weken activiteit verschijnt hier de 8-weekse grafiek.
-            </p>
-          )}
-          <p className="mt-1 text-[10px] text-ink-500">
-            {clientTrends.fillRate28d != null
-              ? `Bezetting laatste 28 dagen: ${Math.round(clientTrends.fillRate28d * 100)}% · `
-              : ""}
-            Per week opgeteld uit de dagelijkse snapshot · deze week vs. vorige · ▲▼ alleen bij een betekenisvolle basis.
-          </p>
-        </div>
-      </section>
-
-      <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
-        <h2 className="font-serif text-lg text-ink-900">Klanttype &amp; voorkeuren</h2>
-        <p className="mt-1 text-sm text-ink-700">
-          Bepaalt &quot;wat voor klant&quot; — voedt Chef 360 (&quot;welk klanttype
-          doet deze chef&quot;), de filters en de matching-redenen.
-        </p>
-        <form action={updateClientType} className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="block">
-            <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
-              Klanttype
-            </span>
-            <select
-              name="clientType"
-              defaultValue={client.clientType ?? ""}
-              className={fieldClass}
-            >
-              <option value="">— kies —</option>
-              {CLIENT_TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <fieldset className="md:col-span-2">
-            <legend className="mb-1.5 font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
-              Tags
-            </legend>
-            <div className="flex flex-wrap gap-x-4 gap-y-2">
-              {CLIENT_TAG_OPTIONS.map((t) => (
-                <label key={t.value} className="flex items-center gap-1.5 text-sm text-ink-700">
-                  <input
-                    type="checkbox"
-                    name="clientTags"
-                    value={t.value}
-                    defaultChecked={(client.clientTags ?? []).includes(t.value)}
-                    className="accent-burgundy"
-                  />
-                  {t.label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <div className="md:col-span-2 flex justify-end">
-            <button
-              type="submit"
-              className="rounded-full bg-burgundy px-6 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
-            >
-              Opslaan
-            </button>
-          </div>
-        </form>
-
-        <div className="mt-6 grid gap-6 border-t border-ink-100 pt-6 md:grid-cols-2">
-          <ClientChefList
-            tone="favorite"
-            heading="★ Favoriete chefs"
-            chefIds={client.favoriteChefIds ?? []}
-            chefNameById={chefNameById}
-            action={removeClientChef}
-            emptyHint="Nog geen favorieten. Markeer een chef vanaf een shift."
-          />
-          <ClientChefList
-            tone="blocked"
-            heading="⊘ Geblokkeerde chefs"
-            chefIds={client.blockedChefIds ?? []}
-            chefNameById={chefNameById}
-            action={removeClientChef}
-            emptyHint="Geen geblokkeerde chefs. Blokkeer een chef vanaf een shift."
-          />
-        </div>
-      </section>
+      <ClientTypeSection
+        client={client}
+        chefNameById={chefNameById}
+        updateClientType={updateClientType}
+        removeClientChef={removeClientChef}
+      />
 
       {/* Portal access */}
-      <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="font-serif text-lg text-ink-900">
-              Klant-portaal toegang
-            </h2>
-            <p className="mt-1 text-sm text-ink-700">
-              Geef deze klant toegang om zelf hun bookings te zien en aanvragen
-              in te dienen.
-            </p>
-          </div>
-          {!client.email ? (
-            <p className="rounded bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Vul eerst een e-mailadres in.
-            </p>
-          ) : !portalUser ? (
-            <form action={doInviteToPortal}>
-              <button
-                type="submit"
-                className="rounded-full bg-burgundy px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
-              >
-                Nodig uit voor portaal
-              </button>
-            </form>
-          ) : portalUser.status === "invited" ? (
-            <form action={doActivatePortal}>
-              <button
-                type="submit"
-                className="rounded-full bg-emerald-600 px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-emerald-700"
-              >
-                Activeer (stuur welkom-mail)
-              </button>
-            </form>
-          ) : portalUser.status === "active" ? (
-            <div className="flex flex-col items-end gap-2">
-              <span className="rounded-full bg-emerald-100 px-3 py-1 font-ui text-[9px] font-medium uppercase tracking-wider text-emerald-700">
-                Actief
-              </span>
-              <form action={doDisablePortal}>
-                <button
-                  type="submit"
-                  className="rounded-full border border-red-300 bg-white px-4 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-red-700 hover:bg-red-50"
-                >
-                  Toegang intrekken
-                </button>
-              </form>
-            </div>
-          ) : (
-            <span className="rounded-full bg-bg-gray px-3 py-1 font-ui text-[9px] font-medium uppercase tracking-wider text-ink-500">
-              {portalUser.status}
-            </span>
-          )}
-        </div>
-        {portalUser && (
-          <p className="mt-4 text-xs text-ink-500">
-            Portal user: {portalUser.email} · status: {portalUser.status}
-          </p>
-        )}
-      </section>
+      <PortalAccessSection
+        client={client}
+        portalUser={portalUser ?? null}
+        doInviteToPortal={doInviteToPortal}
+        doActivatePortal={doActivatePortal}
+        doDisablePortal={doDisablePortal}
+      />
 
       {/* PR-KLANT-1: Wijzigingsverzoeken */}
-      <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
-        <h2 className="font-serif text-lg text-ink-900">Wijzigingsverzoeken</h2>
-        <p className="mt-1 text-sm text-ink-700">
-          Bedrijfs- en facturatiegegevens die de klant via het portaal heeft
-          aangevraagd. Goedkeuren voert de wijziging direct door.
-        </p>
+      <ChangeRequestsSection
+        pendingChanges={pendingChanges}
+        decidedChanges={decidedChanges}
+        approveClientChange={approveClientChange}
+        rejectClientChange={rejectClientChange}
+        clientChangeFieldLabel={clientChangeFieldLabel}
+      />
 
-        {pendingChanges.length === 0 ? (
-          <p className="mt-4 rounded bg-bg-gray px-3 py-2 text-xs text-ink-500">
-            Geen openstaande verzoeken.
-          </p>
-        ) : (
-          <ul className="mt-4 space-y-4">
-            {pendingChanges.map((r) => (
-              <li
-                key={r.id}
-                className="rounded-lg border border-amber-300 bg-amber-50/50 p-4"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-                    {clientChangeFieldLabel(r.field)}
-                  </p>
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider text-amber-800">
-                    Wacht op akkoord
-                  </span>
-                </div>
-                <div className="mt-2 grid gap-1 text-sm text-ink-900">
-                  <p>
-                    <span className="text-ink-500">Huidig:</span>{" "}
-                    {formatChangeValue(r.currentValue)}
-                  </p>
-                  <p>
-                    <span className="text-ink-500">Voorgesteld:</span>{" "}
-                    <strong>{formatChangeValue(r.proposedValue)}</strong>
-                  </p>
-                  {r.reason ? (
-                    <p className="text-xs text-ink-500">
-                      Toelichting klant: {r.reason}
-                    </p>
-                  ) : null}
-                </div>
-
-                <form action={approveClientChange} className="mt-3">
-                  <input type="hidden" name="requestId" value={r.id} />
-                  <textarea
-                    name="decisionNotes"
-                    rows={2}
-                    placeholder="Optionele toelichting (gedeeld met de klant)"
-                    className={`${fieldClass} placeholder-ink-500`}
-                  />
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      type="submit"
-                      className="rounded-full bg-emerald-600 px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-emerald-700"
-                    >
-                      Goedkeuren
-                    </button>
-                    <button
-                      type="submit"
-                      formAction={rejectClientChange}
-                      className="rounded-full border border-red-300 bg-white px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-red-700 hover:bg-red-50"
-                    >
-                      Afwijzen
-                    </button>
-                  </div>
-                </form>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {decidedChanges.length > 0 ? (
-          <details className="mt-5">
-            <summary className="cursor-pointer font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500 hover:text-burgundy">
-              Geschiedenis ({decidedChanges.length})
-            </summary>
-            <ul className="mt-3 space-y-2 text-sm">
-              {decidedChanges.map((r) => (
-                <li
-                  key={r.id}
-                  className="flex items-baseline justify-between gap-3 border-b border-ink-200 pb-2"
-                >
-                  <span className="text-ink-900">
-                    {clientChangeFieldLabel(r.field)} →{" "}
-                    {formatChangeValue(r.proposedValue)}
-                  </span>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider ${
-                      r.status === "approved"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-bg-gray text-ink-500"
-                    }`}
-                  >
-                    {r.status === "approved" ? "Doorgevoerd" : "Afgewezen"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ) : null}
-      </section>
-
-      <div className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
-        <h2 className="font-serif text-lg text-ink-900">Binnenkort op deze pagina</h2>
-        <ul className="mt-3 space-y-2 text-sm text-ink-700">
-          <li>· Plaatsings-geschiedenis (Phase 3)</li>
-          <li>· Aankomende shifts (Phase 3)</li>
-          <li>· Facturen + betalingsstatus (Phase 5)</li>
-          <li>· Gegeven ratings</li>
-        </ul>
-      </div>
-    </div>
+      <Binnenkort />
+    </DetailShell>
   );
 }
 
 /* ----- helpers ----- */
-function KSnap({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
-    <div className="rounded-lg border border-ink-200 bg-bg-gray/40 p-3">
-      <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold leading-none text-ink-900">{value}</p>
-      {note ? <p className="mt-1 text-[10px] text-ink-500">{note}</p> : null}
-    </div>
-  );
-}
-
-function ClientChefList({
-  tone,
-  heading,
-  chefIds,
-  chefNameById,
-  action,
-  emptyHint,
-}: {
-  tone: "favorite" | "blocked";
-  heading: string;
-  chefIds: string[];
-  chefNameById: Map<string, string>;
-  action: (formData: FormData) => Promise<void>;
-  emptyHint: string;
-}) {
-  const headTone = tone === "favorite" ? "text-emerald-700" : "text-red-700";
-  return (
-    <div>
-      <p className={`font-ui text-[10px] uppercase tracking-[0.2em] ${headTone}`}>
-        {heading}
-      </p>
-      {chefIds.length === 0 ? (
-        <p className="mt-2 text-xs text-ink-500">{emptyHint}</p>
-      ) : (
-        <ul className="mt-2 space-y-1.5">
-          {chefIds.map((cid) => (
-            <li key={cid} className="flex items-center justify-between gap-2 text-sm">
-              <Link
-                href={`/admin/business/chefs/${cid}`}
-                className="text-ink-900 hover:text-burgundy hover:underline"
-              >
-                {chefNameById.get(cid) ?? cid}
-              </Link>
-              <form action={action}>
-                <input type="hidden" name="chefId" value={cid} />
-                <input type="hidden" name="kind" value={tone} />
-                <button
-                  type="submit"
-                  className="font-ui text-[10px] uppercase tracking-[0.15em] text-ink-500 hover:text-red-600"
-                >
-                  verwijderen
-                </button>
-              </form>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-type FieldProps = {
-  label: string;
-  name: string;
-  type?: string;
-  defaultValue?: string;
-  required?: boolean;
-  as?: "input" | "textarea" | "select";
-  options?: { value: string; label: string }[];
-};
-
-function Field({
-  label,
-  name,
-  type = "text",
-  defaultValue = "",
-  required,
-  as = "input",
-  options,
-}: FieldProps) {
-  const baseClass = `${fieldClass} placeholder-ink-500`;
-  return (
-    <label className="block">
-      <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
-        {label}
-      </span>
-      {as === "textarea" ? (
-        <textarea
-          name={name}
-          defaultValue={defaultValue}
-          required={required}
-          rows={4}
-          className={baseClass}
-        />
-      ) : as === "select" ? (
-        <select name={name} defaultValue={defaultValue} className={baseClass}>
-          {options?.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <input
-          type={type}
-          name={name}
-          defaultValue={defaultValue}
-          required={required}
-          className={baseClass}
-        />
-      )}
-    </label>
-  );
-}
-
 function StatusBadge({ status }: { status: string }) {
   const tone =
     status === "active"
@@ -934,11 +457,4 @@ function clientChangeFieldLabel(field: string): string {
       authEmail: "Inlog-e-mailadres",
     } as Record<string, string>
   )[field] ?? field;
-}
-
-function formatChangeValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "number") return String(value);
-  if (typeof value === "string") return value;
-  return JSON.stringify(value);
 }
