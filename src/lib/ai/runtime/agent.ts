@@ -49,11 +49,14 @@ export type RunAgentArgs = {
   ctx: ToolContext;
   executeOptions: ExecuteOptions;
   maxSteps?: number;
+  /** Cap on conversation-history messages kept (most recent), so a long session can't
+   *  overflow the model's context window. Default 24. */
+  maxHistoryMessages?: number;
 };
 
 export async function runAgent(args: RunAgentArgs): Promise<AgentOutcome> {
   const { brain, registry, ctx, executeOptions } = args;
-  const convo: Msg[] = [...args.messages];
+  const convo: Msg[] = capRecentHistory(args.messages, args.maxHistoryMessages ?? 24);
   const steps: AgentStep[] = [];
   const maxSteps = args.maxSteps ?? 8;
 
@@ -139,4 +142,14 @@ function safeArguments(input: unknown): string {
   } catch {
     return "{}";
   }
+}
+
+/** Keep only the most recent `max` messages so a long conversation can't overflow the
+ *  model's context window. Skips a leading orphaned tool result (its assistant tool_call
+ *  would otherwise be dropped, which the API rejects). */
+function capRecentHistory(messages: Msg[], max: number): Msg[] {
+  if (max <= 0 || messages.length <= max) return [...messages];
+  let start = messages.length - max;
+  while (start < messages.length && messages[start]?.role === "tool") start += 1;
+  return messages.slice(start);
 }
