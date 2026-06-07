@@ -19,10 +19,16 @@ import { notFound, redirect } from "next/navigation";
 import { HumanStatusBadge } from "@/components/hours/HumanStatusBadge";
 import { TrustTimeline } from "@/components/hours/TrustTimeline";
 import { AdminRejectForm } from "./AdminRejectForm";
+import { HoursCorrectForm, HoursVoidForm } from "./HoursOpsForms";
 import { db } from "@/lib/db/client";
 import { recordAuditCore, stampFromRequest } from "@/lib/audit";
 import { withTx } from "@/lib/db/tx";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
+import { approveHoursRow } from "@/lib/domain/hours";
+import {
+  adminEditHours,
+  voidHours as voidHoursRow,
+} from "@/lib/domain/hours-admin";
 import {
   chefs,
   clients,
@@ -355,6 +361,107 @@ async function reject(formData: FormData) {
   redirect("/admin/business/hours?ok=rejected");
 }
 
+/* -------- hours-ops actions (correct / finalize / void) ---------------- */
+
+// Correct the actual numbers on a row (admin). Recomputes worked-minutes in
+// the domain layer; keeps the current status. Blocked for exported/void.
+async function editHours(formData: FormData) {
+  "use server";
+  const session = await requirePermission("hours", "approve");
+  const id = String(formData.get("hoursId") ?? "");
+  if (!id) return;
+
+  const startedAt = new Date(String(formData.get("startedAt") ?? ""));
+  const endedAt = new Date(String(formData.get("endedAt") ?? ""));
+  if (Number.isNaN(startedAt.getTime()) || Number.isNaN(endedAt.getTime())) {
+    redirect(`/admin/business/hours/${id}?error=invalid-dates`);
+  }
+  const breakMinutes = parseInt(String(formData.get("breakMinutes") ?? "0"), 10);
+
+  const chefRateRaw = String(formData.get("chefRateEur") ?? "").trim();
+  const clientRateRaw = String(formData.get("clientRateEur") ?? "").trim();
+  const chefRateCents = chefRateRaw
+    ? Math.round(Number(chefRateRaw) * 100)
+    : undefined;
+  const clientRateCents = clientRateRaw
+    ? Math.round(Number(clientRateRaw) * 100)
+    : undefined;
+
+  const adminNotesRaw = String(formData.get("adminNotes") ?? "").trim();
+  const adminNotes = adminNotesRaw.length > 0 ? adminNotesRaw : null;
+
+  const result = await adminEditHours({
+    hoursId: id,
+    actorUserId: session.user.id,
+    startedAt,
+    endedAt,
+    breakMinutes: Number.isNaN(breakMinutes) ? 0 : breakMinutes,
+    chefRateCents,
+    clientRateCents,
+    adminNotes,
+  });
+
+  if (!result.ok) {
+    if (result.reason === "end-before-start") {
+      redirect(`/admin/business/hours/${id}?error=end-before-start`);
+    }
+    redirect(`/admin/business/hours/${id}?error=stale`);
+  }
+
+  redirect(`/admin/business/hours/${id}?ok=edited`);
+}
+
+// Manual finalize/override: approve a row that never went through client-sign.
+// Reuses the full payroll/notify/email cascade via approveHoursRow.
+async function finalizeHours(formData: FormData) {
+  "use server";
+  const session = await requirePermission("hours", "approve");
+  const id = String(formData.get("hoursId") ?? "");
+  if (!id) return;
+
+  const result = await approveHoursRow({
+    hoursId: id,
+    approverUserId: session.user.id,
+    fromStatuses: [
+      "draft",
+      "submitted",
+      "client_signed",
+      "client_rejected",
+      "admin_rejected",
+    ],
+  });
+
+  if (!result.ok) {
+    redirect(`/admin/business/hours/${id}?error=stale`);
+  }
+
+  redirect("/admin/business/hours?ok=approved");
+}
+
+// Void a row (no-show / cancelled after completion). Blocked for exported.
+async function voidHours(formData: FormData) {
+  "use server";
+  const session = await requirePermission("hours", "approve");
+  const id = String(formData.get("hoursId") ?? "");
+  if (!id) return;
+  const reason = String(formData.get("reason") ?? "").trim();
+
+  const result = await voidHoursRow({
+    hoursId: id,
+    actorUserId: session.user.id,
+    reason,
+  });
+
+  if (!result.ok) {
+    if (result.reason === "reason-too-short") {
+      redirect(`/admin/business/hours/${id}?error=reason-too-short`);
+    }
+    redirect(`/admin/business/hours/${id}?error=stale`);
+  }
+
+  redirect("/admin/business/hours?ok=voided");
+}
+
 /* -------- page --------------------------------------------------------- */
 
 export default async function AdminHoursDetailPage({
@@ -362,7 +469,7 @@ export default async function AdminHoursDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
   await requirePermission("hours", "approve");
   const { id } = await params;
@@ -379,14 +486,50 @@ export default async function AdminHoursDetailPage({
     ctx.h.clientRateCents,
   );
   const margin = clientRev - chefCost;
-  const canApprove = ctx.h.status === "client_signed";
+  const status = ctx.h.status;
+  // Existing approve/reject path — ONLY from client_signed (unchanged).
+  const canApprove = status === "client_signed";
+  // Hours-ops gating:
+  const isLocked = status === "exported" || status === "void";
+  // Correct + void: any status except exported/void.
+  const canEdit = !isLocked;
+  const canVoid = !isLocked;
+  // Manual finalize/override: rows that never went through client-sign and
+  // aren't already final. (client_signed uses the existing Approve button.)
+  const canFinalize =
+    status === "draft" ||
+    status === "submitted" ||
+    status === "client_rejected" ||
+    status === "admin_rejected";
+  // Any action controls at all → show the action section; else "Geen actie".
+  const hasActions = canApprove || canEdit || canVoid || canFinalize;
 
   const errorMsg =
     sp.error === "reason-required"
       ? "Geef een reden (minimaal 5 tekens) waarom je terugzet."
-      : sp.error === "stale"
-        ? "Status is in de tussentijd veranderd."
-        : null;
+      : sp.error === "reason-too-short"
+        ? "Geef een reden (minimaal 3 tekens) waarom de uren vervallen."
+        : sp.error === "end-before-start"
+          ? "Het einde moet ná het begin liggen."
+          : sp.error === "invalid-dates"
+            ? "Begin- en eindtijd zijn ongeldig."
+            : sp.error === "stale"
+              ? "Status is in de tussentijd veranderd."
+              : null;
+  const okMsg =
+    sp.ok === "edited"
+      ? "Uren bijgewerkt."
+      : sp.ok === "approved"
+        ? "Uren goedgekeurd."
+        : sp.ok === "voided"
+          ? "Uren gemarkeerd als vervallen."
+          : null;
+
+  // Prefill values for the correction form (local wall-clock + euros).
+  const startedAtLocal = toDatetimeLocal(ctx.h.startedAt);
+  const endedAtLocal = toDatetimeLocal(ctx.h.endedAt);
+  const chefRateEur = (ctx.h.chefRateCents / 100).toFixed(2);
+  const clientRateEur = (ctx.h.clientRateCents / 100).toFixed(2);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -452,25 +595,72 @@ export default async function AdminHoursDetailPage({
       </div>
 
       {/* Action */}
-      {canApprove ? (
-        <section className="mt-8 space-y-4">
+      {hasActions ? (
+        <section className="mt-8 space-y-6">
+          {okMsg ? (
+            <p className="rounded border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+              {okMsg}
+            </p>
+          ) : null}
           {errorMsg ? (
             <p className="rounded border border-burgundy/30 bg-burgundy/5 px-4 py-2 text-sm text-burgundy">
               {errorMsg}
             </p>
           ) : null}
 
-          <form action={approve} className="inline">
-            <input type="hidden" name="hoursId" value={id} />
-            <button
-              type="submit"
-              className="rounded-full bg-emerald-600 px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-emerald-700"
-            >
-              ✓ Goedkeuren
-            </button>
-          </form>
+          {/* Existing approve/reject — ONLY from client_signed (unchanged). */}
+          {canApprove ? (
+            <div className="space-y-4">
+              <form action={approve} className="inline">
+                <input type="hidden" name="hoursId" value={id} />
+                <button
+                  type="submit"
+                  className="rounded-full bg-emerald-600 px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-emerald-700"
+                >
+                  ✓ Goedkeuren
+                </button>
+              </form>
 
-          <AdminRejectForm hoursId={id} rejectAction={reject} />
+              <AdminRejectForm hoursId={id} rejectAction={reject} />
+            </div>
+          ) : null}
+
+          {/* Manual finalize/override — approves a row that skipped client-sign. */}
+          {canFinalize ? (
+            <div>
+              <form action={finalizeHours} className="inline">
+                <input type="hidden" name="hoursId" value={id} />
+                <button
+                  type="submit"
+                  className="rounded-full bg-emerald-600 px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-emerald-700"
+                >
+                  ✓ Goedkeuren (handmatig)
+                </button>
+              </form>
+              <p className="mt-2 text-xs text-ink-500">
+                Keurt deze uren direct goed — ook zonder akkoord van de klant.
+                Zet payroll, notificaties en mails in gang zoals een normale
+                goedkeuring.
+              </p>
+            </div>
+          ) : null}
+
+          {/* Correct the actual numbers (any status except exported/void). */}
+          {canEdit ? (
+            <HoursCorrectForm
+              hoursId={id}
+              editAction={editHours}
+              startedAtLocal={startedAtLocal}
+              endedAtLocal={endedAtLocal}
+              breakMinutes={ctx.h.breakMinutes}
+              chefRateEur={chefRateEur}
+              clientRateEur={clientRateEur}
+              adminNotes={ctx.h.adminNotes ?? ""}
+            />
+          ) : null}
+
+          {/* Void (any status except exported/void). */}
+          {canVoid ? <HoursVoidForm hoursId={id} voidAction={voidHours} /> : null}
         </section>
       ) : (
         <section className="mt-8 rounded-lg border border-ink-200 bg-white p-4 text-sm text-ink-700">
@@ -499,4 +689,14 @@ function formatTime(d: Date | string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** Date → local wall-clock "YYYY-MM-DDTHH:mm" for a datetime-local input. */
+function toDatetimeLocal(d: Date | string): string {
+  const dt = new Date(d);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}` +
+    `T${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+  );
 }

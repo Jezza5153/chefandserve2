@@ -18,11 +18,13 @@ export function ExistingPlacements({
   commentsByPlacement,
   setPlacementStatus,
   replyComment,
+  completePlacementAction,
 }: {
   existingPlacements: { placement: Placement; chef: Chef }[];
   commentsByPlacement: Map<string, PlacementComment[]>;
   setPlacementStatus: (formData: FormData) => Promise<void>;
   replyComment: (formData: FormData) => Promise<void>;
+  completePlacementAction: (formData: FormData) => Promise<void>;
 }) {
   return (
     <section className="mt-10">
@@ -75,6 +77,12 @@ export function ExistingPlacements({
                     newStatus="confirmed"
                     label="Bevestig"
                     tone="green"
+                  />
+                )}
+                {placement.status === "confirmed" && (
+                  <CompletePlacementButton
+                    action={completePlacementAction}
+                    placementId={placement.id}
                   />
                 )}
               </div>
@@ -169,6 +177,26 @@ function PlacementAction({
         className={`rounded-full border px-3 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] ${c}`}
       >
         {label}
+      </button>
+    </form>
+  );
+}
+
+function CompletePlacementButton({
+  action,
+  placementId,
+}: {
+  action: (formData: FormData) => Promise<void>;
+  placementId: string;
+}) {
+  return (
+    <form action={action}>
+      <input type="hidden" name="placementId" value={placementId} />
+      <button
+        type="submit"
+        className="rounded-full border border-emerald-300 bg-emerald-600 px-3 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-emerald-700"
+      >
+        Markeer als afgerond
       </button>
     </form>
   );

@@ -20,6 +20,7 @@ import {
   shifts,
 } from "@/lib/db/schema";
 import { addPlacementComment, listVisibleComments } from "@/lib/domain/comments";
+import { completePlacement } from "@/lib/domain/hours-admin";
 import {
   findMatchesForShift,
   proposePlacement,
@@ -457,6 +458,29 @@ export default async function ShiftDetailPage({
     redirect(`/admin/business/shifts/${id}`);
   }
 
+  // Hours-ops: force-complete a CONFIRMED placement on demand (instead of
+  // waiting for the complete-placements cron). Mints the draft shift_hours row
+  // and jumps straight to it so the admin can keep the loop moving.
+  async function completePlacementAction(formData: FormData) {
+    "use server";
+    const session = await requirePermission("shifts", "write");
+    const placementId = String(formData.get("placementId") ?? "").trim();
+    if (!placementId) return;
+
+    const result = await completePlacement({
+      placementId,
+      actorUserId: session.user.id,
+    });
+
+    if (!result.ok) {
+      redirect(`/admin/business/shifts/${id}?err=${result.reason}`);
+    }
+    if (result.hoursId) {
+      redirect(`/admin/business/hours/${result.hoursId}`);
+    }
+    redirect(`/admin/business/shifts/${id}?ok=completed`);
+  }
+
   // PR-KLANT-3: admin replies to / posts placement comments.
   async function replyComment(formData: FormData) {
     "use server";
@@ -564,6 +588,7 @@ export default async function ShiftDetailPage({
           commentsByPlacement={commentsByPlacement}
           setPlacementStatus={setPlacementStatus}
           replyComment={replyComment}
+          completePlacementAction={completePlacementAction}
         />
       )}
 
