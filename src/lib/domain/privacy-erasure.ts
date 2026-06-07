@@ -30,8 +30,10 @@ import {
   chefAvailability,
   chefDocuments,
   chefFieldValues,
+  chefSubmissions,
   chefs,
   clientContacts,
+  clientSubmissions,
   clients,
   notifications,
   privacyErasureTombstones,
@@ -39,11 +41,13 @@ import {
   profileDataRequests,
   ratings,
   users,
+  webhooksReceived,
 } from "@/lib/db/schema";
 import { createNotification } from "@/lib/integrations";
 import { recipientsFor } from "@/lib/notifications";
 import { deleteObject, r2IsConfigured } from "@/lib/r2";
 
+import { redactRawPayloadForSubject } from "./privacy-erasure-submissions";
 import {
   getLegalHoldsForUser,
   resolveSubject,
@@ -145,6 +149,36 @@ export async function previewUserErasure(
       willErase.push({ table: "notifications", count: notifs.length, action: "verwijderen" });
   }
 
+  // Intake rows matched by email — same selection the erasure tx scrubs (PII
+  // columns nulled + rawPayload redacted in place).
+  if (subject.email) {
+    const chefSubs = await db
+      .select({ id: chefSubmissions.id })
+      .from(chefSubmissions)
+      .where(eq(sql`lower(${chefSubmissions.email})`, subject.email));
+    if (chefSubs.length > 0)
+      willErase.push({ table: "chef_submissions (intake)", count: chefSubs.length, action: "anonymiseren" });
+
+    const clientSubs = await db
+      .select({ id: clientSubmissions.id })
+      .from(clientSubmissions)
+      .where(eq(sql`lower(${clientSubmissions.email})`, subject.email));
+    if (clientSubs.length > 0)
+      willErase.push({ table: "client_submissions (intake)", count: clientSubs.length, action: "anonymiseren" });
+
+    const hooks = await db
+      .select({ id: webhooksReceived.id })
+      .from(webhooksReceived)
+      .where(
+        and(
+          eq(webhooksReceived.source, "jotform"),
+          sql`${webhooksReceived.payload}::text ILIKE ${"%" + subject.email + "%"}`,
+        ),
+      );
+    if (hooks.length > 0)
+      willErase.push({ table: "webhooks_received (ruwe payload)", count: hooks.length, action: "verwijderen" });
+  }
+
   if (subject.kind === "unknown") {
     warnings.push(
       "Geen gekoppeld chef-/klantprofiel gevonden — er valt mogelijk niets te anonimiseren.",
@@ -241,6 +275,15 @@ export async function eraseUserData(args: {
   // All-or-nothing, so a mid-way failure can never leave half-erased PII without
   // a tombstone/audit. R2 bytes were already purged above (external).
   const tombstoneId = await withTx(async (tx) => {
+    // Intake-scrub tally for the audit `after` (counts only — never values).
+    const intakeScrub = {
+      chefSubmissions: 0,
+      clientSubmissions: 0,
+      webhooks: 0,
+      rawPayloadRedacted: 0,
+      rawPayloadKinds: new Set<string>(),
+    };
+
     // chef path
     if (subject.chefId) {
       await tx
@@ -384,6 +427,95 @@ export async function eraseUserData(args: {
       await tx.delete(notifications).where(eq(notifications.userId, subject.userId));
     }
 
+    // intake path — chef_submissions / client_submissions / webhooks_received.
+    // These also hold the subject's PII (name/email/phone) AND historical rows
+    // from the retired onboarding Jotform can hold UNENCRYPTED BSN/IBAN/ID in
+    // rawPayload (pii-inventory "High risk"). Anonymise IN PLACE (the established
+    // pattern): match the subject's rows by email — the SAME selection the DSAR
+    // export uses (privacy-export.ts) — null the PII columns AND redact the raw
+    // blob via the shared rawpayload-pii detector, keeping an audited shell.
+    if (subject.email) {
+      // chef_submissions
+      const chefSubs = await tx
+        .select({ id: chefSubmissions.id, rawPayload: chefSubmissions.rawPayload })
+        .from(chefSubmissions)
+        .where(eq(sql`lower(${chefSubmissions.email})`, subject.email));
+      for (const s of chefSubs) {
+        const red = redactRawPayloadForSubject(s.rawPayload);
+        await tx
+          .update(chefSubmissions)
+          .set({
+            fullName: null,
+            email: null,
+            phone: null,
+            locationPreference: null,
+            notes: null,
+            street: null,
+            houseNumber: null,
+            postcode: null,
+            rawPayload: red.cleaned,
+            updatedAt: new Date(),
+          })
+          .where(eq(chefSubmissions.id, s.id));
+        intakeScrub.chefSubmissions++;
+        if (red.changed) {
+          intakeScrub.rawPayloadRedacted++;
+          for (const k of red.kinds) intakeScrub.rawPayloadKinds.add(k);
+        }
+      }
+
+      // client_submissions
+      const clientSubs = await tx
+        .select({ id: clientSubmissions.id, rawPayload: clientSubmissions.rawPayload })
+        .from(clientSubmissions)
+        .where(eq(sql`lower(${clientSubmissions.email})`, subject.email));
+      for (const s of clientSubs) {
+        const red = redactRawPayloadForSubject(s.rawPayload);
+        await tx
+          .update(clientSubmissions)
+          .set({
+            companyName: null,
+            contactName: null,
+            email: null,
+            phone: null,
+            location: null,
+            notes: null,
+            rawPayload: red.cleaned,
+            updatedAt: new Date(),
+          })
+          .where(eq(clientSubmissions.id, s.id));
+        intakeScrub.clientSubmissions++;
+        if (red.changed) {
+          intakeScrub.rawPayloadRedacted++;
+          for (const k of red.kinds) intakeScrub.rawPayloadKinds.add(k);
+        }
+      }
+
+      // webhooks_received — the raw Jotform body keyed under {kind, body}. The
+      // email can sit under any Jotform field key, so match on the email
+      // appearing anywhere in the jsonb (case-insensitive). Null the whole
+      // payload — it is debug/replay only and now holds erased-subject PII.
+      const hookRows = await tx
+        .select({ id: webhooksReceived.id })
+        .from(webhooksReceived)
+        .where(
+          and(
+            eq(webhooksReceived.source, "jotform"),
+            sql`${webhooksReceived.payload}::text ILIKE ${"%" + subject.email + "%"}`,
+          ),
+        );
+      for (const h of hookRows) {
+        await tx
+          .update(webhooksReceived)
+          .set({
+            payload: { redacted: true, reason: "avg_erasure" },
+            processingError: null,
+          })
+          .where(eq(webhooksReceived.id, h.id));
+        intakeScrub.webhooks++;
+      }
+    }
+
     // tombstone (proof)
     const [tomb] = await tx
       .insert(privacyErasureTombstones)
@@ -423,6 +555,13 @@ export async function eraseUserData(args: {
           failedDocuments,
           retained: retained.map((h) => `${h.entityType}:${h.count}`),
           tombstoneId: tomb.id,
+          intakeScrub: {
+            chefSubmissions: intakeScrub.chefSubmissions,
+            clientSubmissions: intakeScrub.clientSubmissions,
+            webhooks: intakeScrub.webhooks,
+            rawPayloadRedacted: intakeScrub.rawPayloadRedacted,
+            rawPayloadKinds: [...intakeScrub.rawPayloadKinds],
+          },
         },
       }),
       tx,
