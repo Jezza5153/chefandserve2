@@ -137,7 +137,7 @@ export default async function IntegrationsPage() {
             Nog geen runs uitgevoerd.
           </p>
         ) : (
-          <div className="mt-4 overflow-hidden rounded-lg border border-ink-200 bg-white">
+          <div className="mt-4 overflow-x-auto rounded-lg border border-ink-200 bg-white">
             <table className="w-full text-sm">
               <thead className="bg-bg-gray text-left">
                 <tr>
