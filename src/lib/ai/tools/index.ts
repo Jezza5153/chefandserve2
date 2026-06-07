@@ -16,6 +16,7 @@ import { shiftsOpenSoon, insightsLeaderboards, integrationsHealth } from "@/lib/
 import { placementsPropose, placementsConfirm, placementsCancel } from "@/lib/ai/tools/placements";
 import { chefsFind, clientsFind, shiftsFind } from "@/lib/ai/tools/directory";
 import { emailSend } from "@/lib/ai/tools/comms";
+import { remindersCreate, remindersList, remindersComplete } from "@/lib/ai/tools/reminders";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -35,6 +36,10 @@ export const ALL_TOOLS: AnyTool[] = [
   placementsConfirm,
   placementsCancel,
   emailSend,
+  // personal — Maarten's own to-remember list
+  remindersCreate,
+  remindersList,
+  remindersComplete,
 ];
 
 export function buildRegistry(): ToolRegistry {
