@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
@@ -37,6 +38,7 @@ export function AssistantChat({
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   // keep the newest message in view (matters most in the compact widget)
   useEffect(() => {
@@ -105,7 +107,7 @@ export function AssistantChat({
     const next: ChatMsg[] = [...msgs, { role: "user", content: text }];
     setMsgs(next);
     setInput("");
-    await post({ messages: next });
+    await post({ messages: next, context: { path: pathname } });
   }
 
   async function confirmPending() {

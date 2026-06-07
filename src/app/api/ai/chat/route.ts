@@ -15,7 +15,7 @@ import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/permissions";
 import { env } from "@/lib/env";
 import { aiConfirmSecret, aiEnabled, aiModel } from "@/lib/ai/config";
-import { createOpenAiBrain } from "@/lib/ai/runtime/openai-brain";
+import { createOpenAiBrain, DEFAULT_SYSTEM_PROMPT } from "@/lib/ai/runtime/openai-brain";
 import { confirmOwnerAction, runOwnerAssistant } from "@/lib/ai/runtime/assistant";
 import type { Msg } from "@/lib/ai/runtime/agent";
 
@@ -48,7 +48,16 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const userId = session.user.id;
-  const brain = createOpenAiBrain({ apiKey: env.OPENAI_API_KEY, model: aiModel() });
+  // Page-aware: the dashboard widget tells us which /admin page the owner is on, so
+  // "deze chef / dit / hier" resolves to what's on screen. Owner-supplied, so sanitized:
+  // only a clean /admin path (no whitespace/quotes/newlines) is accepted, and capped.
+  const rawPath = (body as { context?: { path?: unknown } }).context?.path;
+  const pagePath =
+    typeof rawPath === "string" && /^\/admin[\w/.[\]-]*$/.test(rawPath) ? rawPath.slice(0, 200) : null;
+  const systemPrompt = pagePath
+    ? `${DEFAULT_SYSTEM_PROMPT}\n\nContext: Maarten kijkt nu naar de pagina "${pagePath}". Verwijst hij naar "deze/dit/hier" zonder verdere details, gebruik dan deze pagina als context. Haal de bijbehorende gegevens altijd via een tool op.`
+    : DEFAULT_SYSTEM_PROMPT;
+  const brain = createOpenAiBrain({ apiKey: env.OPENAI_API_KEY, model: aiModel(), systemPrompt });
 
   try {
     const confirm = (body as { confirm?: { tool: string; input: unknown; token: string } }).confirm;
