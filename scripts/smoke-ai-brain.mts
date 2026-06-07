@@ -79,6 +79,7 @@ console.log("\n── brain: tool_call response ──");
   assert("request carried the DOTLESS tool name (OpenAI rejects dots)", capturedBody.includes("hours__approve"));
   assert("request did NOT send a dotted name", !capturedBody.includes('"hours.approve"'));
   assert("request carried the system prompt", capturedBody.includes("Maarten"));
+  assert("request carried the playbook (domain knowledge)", capturedBody.includes("vakniveau"));
   assert("request set tool_choice", capturedBody.includes("tool_choice"));
 }
 
