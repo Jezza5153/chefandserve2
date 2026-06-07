@@ -27,9 +27,7 @@ import {
   getChefWorkSummary,
 } from "@/lib/domain/chef-history";
 import { getChefDailySeries } from "@/lib/domain/metrics-history";
-import { buildChefTrends, type ChurnRisk } from "@/lib/domain/chef-trends";
-import { TrendTile } from "@/components/dashboard/TrendTile";
-import { clientTypeLabel } from "@/lib/domain/client-taxonomy";
+import { buildChefTrends } from "@/lib/domain/chef-trends";
 import { getOnboardingReadiness, getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { getChefReliability } from "@/lib/chef-events";
 import {
@@ -37,14 +35,22 @@ import {
   listProfileDataRequests,
 } from "@/lib/domain/profile-data-requests";
 import { getChefAverageForAdmin } from "@/lib/domain/ratings";
-import { fieldClass } from "@/components/forms/Fields";
-import { RATING_TAG_LABELS, type RatingTag } from "@/lib/rating-tags";
 import { sendEmail } from "@/lib/email";
 import { recordEmailMessage } from "@/lib/integrations";
 import { requirePermission } from "@/lib/permissions";
 import { r2IsConfigured } from "@/lib/r2";
+import { DetailShell } from "@/components/ui/DetailShell";
 
-import { DocumentUploader } from "./_components/DocumentUploader";
+import { RatingSummary } from "./_components/RatingSummary";
+import {
+  ChangeRequests,
+  chefChangeFieldLabel,
+  formatChefChangeValue,
+} from "./_components/ChangeRequests";
+import { BasicsForm } from "./_components/BasicsForm";
+import { PortalAccess } from "./_components/PortalAccess";
+import { DocumentsSection } from "./_components/DocumentsSection";
+import { Chef360 } from "./_components/Chef360";
 
 export const metadata = { title: "Chef" };
 
@@ -54,18 +60,6 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   certificate: "Certificaat",
   id_document: "ID-bewijs",
   other: "Overig",
-};
-
-const TRANSPORT_LABELS: Record<string, string> = {
-  car: "Auto", motorbike: "Motor", ebike: "E-bike", none: "Geen (OV)",
-};
-const PREF_LABELS: Record<string, string> = {
-  bbq: "BBQ", breakfast: "Ontbijt", banqueting: "Banqueting", beachclub: "Beachclub",
-  early_shifts: "Vroege diensten", hotels: "Hotels", restaurants: "Restaurants",
-  michelin: "Michelin", flexible: "Flexibel",
-};
-const REQ_STATUS_LABELS: Record<string, string> = {
-  draft: "concept", sent: "verzonden", completed: "ingevuld", expired: "verlopen", failed: "mislukt",
 };
 
 const VAKNIVEAU_OPTIONS = [
@@ -472,903 +466,87 @@ export default async function ChefDetailPage({
 
   /* ---------- view --------------------------------------------- */
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-6">
-        <Link
-          href="/admin/business/chefs"
-          className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy hover:underline"
-        >
-          ← Alle chefs
-        </Link>
-      </div>
-
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-            Chef-profiel
-          </p>
-          <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
-            {chef.fullName}
-          </h1>
-          <p className="mt-1 text-xs text-ink-500">
-            Toegevoegd{" "}
-            {new Date(chef.joinedAt).toLocaleDateString("nl-NL", {
-              dateStyle: "long",
-            })}
-            {sourceSubmission && (
-              <>
-                {" · "}
-                <Link
-                  href={`/admin/business/inbox/chef/${sourceSubmission.id}`}
-                  className="text-burgundy underline-offset-4 hover:underline"
-                >
-                  via inbox
-                </Link>
-              </>
-            )}
-          </p>
-        </div>
-        <StatusBadge status={chef.status} />
-      </div>
-
-      {/* PR-KLANT-5: rating summary (internal — admin only) */}
-      <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
-        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-          Klant-feedback (intern)
-        </h2>
-        {rating.ratingCount === 0 ? (
-          <p className="mt-2 text-sm text-ink-500">Nog geen feedback ontvangen.</p>
-        ) : (
+    <DetailShell
+      className="mx-auto max-w-3xl"
+      backHref="/admin/business/chefs"
+      backLabel="Alle chefs"
+      eyebrow="Chef-profiel"
+      title={chef.fullName}
+      actions={<StatusBadge status={chef.status} />}
+    >
+      {/* Subtitle preserved: DetailShell has no subtitle slot, so the original
+          "Toegevoegd … via inbox" line is rendered here, just under the header. */}
+      <p className="mt-1 text-xs text-ink-500">
+        Toegevoegd{" "}
+        {new Date(chef.joinedAt).toLocaleDateString("nl-NL", {
+          dateStyle: "long",
+        })}
+        {sourceSubmission && (
           <>
-            <p className="mt-2 text-sm text-ink-900">
-              <span className="font-serif text-2xl">
-                {rating.averageRating?.toFixed(2) ?? "—"}
-              </span>{" "}
-              gemiddeld · {rating.ratingCount} feedback
-              {rating.ratingCount === 1 ? "" : "s"}
-              {rating.ratingCount < 5 ? (
-                <span className="ml-2 text-xs text-ink-500">
-                  (chef ziet eigen gemiddelde pas vanaf 5)
-                </span>
-              ) : null}
-            </p>
-            <ul className="mt-3 space-y-1.5 text-sm">
-              {rating.recent.map((r, i) => (
-                <li key={i} className="border-b border-ink-100 pb-1.5">
-                  <span className="text-burgundy">{"★".repeat(r.stars)}</span>
-                  <span className="text-ink-200">{"★".repeat(5 - r.stars)}</span>
-                  {r.tags.length > 0 ? (
-                    <span className="ml-2 text-xs text-ink-500">
-                      {r.tags
-                        .map((t) => RATING_TAG_LABELS[t as RatingTag] ?? t)
-                        .join(" · ")}
-                    </span>
-                  ) : null}
-                  {r.comment ? (
-                    <p className="mt-0.5 text-xs text-ink-700">{r.comment}</p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+            {" · "}
+            <Link
+              href={`/admin/business/inbox/chef/${sourceSubmission.id}`}
+              className="text-burgundy underline-offset-4 hover:underline"
+            >
+              via inbox
+            </Link>
           </>
         )}
-      </section>
+      </p>
+
+      {/* PR-KLANT-5: rating summary (internal — admin only) */}
+      <RatingSummary rating={rating} />
 
       {/* PR-CHEF-4 admin review: chef-submitted change requests */}
-      <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
-        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-          Wijzigingsverzoeken
-        </h2>
-        <p className="mt-1 text-sm text-ink-700">
-          Velden die de chef via het portaal heeft aangevraagd. Goedkeuren
-          voert de wijziging direct door.
-        </p>
+      <ChangeRequests
+        pendingChanges={pendingChanges}
+        decidedChanges={decidedChanges}
+        approveProfileChange={approveProfileChange}
+        rejectProfileChange={rejectProfileChange}
+      />
 
-        {pendingChanges.length === 0 ? (
-          <p className="mt-4 rounded bg-bg-gray px-3 py-2 text-xs text-ink-500">
-            Geen openstaande verzoeken.
-          </p>
-        ) : (
-          <ul className="mt-4 space-y-4">
-            {pendingChanges.map((r) => (
-              <li
-                key={r.id}
-                className="rounded-lg border border-amber-300 bg-amber-50/50 p-4"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-                    {chefChangeFieldLabel(r.field)}
-                  </p>
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider text-amber-800">
-                    Wacht op akkoord
-                  </span>
-                </div>
-                <div className="mt-2 grid gap-1 text-sm text-ink-900">
-                  <p>
-                    <span className="text-ink-500">Huidig:</span>{" "}
-                    {formatChefChangeValue(r.field, r.currentValue)}
-                  </p>
-                  <p>
-                    <span className="text-ink-500">Voorgesteld:</span>{" "}
-                    <strong>{formatChefChangeValue(r.field, r.proposedValue)}</strong>
-                  </p>
-                  {r.reason ? (
-                    <p className="text-xs text-ink-500">
-                      Toelichting chef: {r.reason}
-                    </p>
-                  ) : null}
-                </div>
-
-                <form action={approveProfileChange} className="mt-3">
-                  <input type="hidden" name="requestId" value={r.id} />
-                  <textarea
-                    name="decisionNotes"
-                    rows={2}
-                    placeholder="Optionele toelichting (gedeeld met de chef)"
-                    className={`${fieldClass} placeholder-ink-500`}
-                  />
-                  <div className="mt-2 flex gap-2">
-                    <button
-                      type="submit"
-                      className="rounded-full bg-emerald-600 px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-emerald-700"
-                    >
-                      Goedkeuren
-                    </button>
-                    <button
-                      type="submit"
-                      formAction={rejectProfileChange}
-                      className="rounded-full border border-red-300 bg-white px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-red-700 hover:bg-red-50"
-                    >
-                      Afwijzen
-                    </button>
-                  </div>
-                </form>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {decidedChanges.length > 0 ? (
-          <details className="mt-5">
-            <summary className="cursor-pointer font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500 hover:text-burgundy">
-              Geschiedenis ({decidedChanges.length})
-            </summary>
-            <ul className="mt-3 space-y-2 text-sm">
-              {decidedChanges.map((r) => (
-                <li
-                  key={r.id}
-                  className="flex items-baseline justify-between gap-3 border-b border-ink-200 pb-2"
-                >
-                  <span className="text-ink-900">
-                    {chefChangeFieldLabel(r.field)} →{" "}
-                    {formatChefChangeValue(r.field, r.proposedValue)}
-                  </span>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider ${
-                      r.status === "approved"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-bg-gray text-ink-500"
-                    }`}
-                  >
-                    {r.status === "approved" ? "Doorgevoerd" : "Afgewezen"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ) : null}
-      </section>
-
-      <form
-        action={updateBasics}
-        className="mt-8 grid gap-4 rounded-lg border border-ink-200 bg-white p-6 md:grid-cols-2"
-      >
-        <Field label="Volledige naam" name="fullName" defaultValue={chef.fullName} required />
-        <Field
-          label="Status"
-          name="status"
-          as="select"
-          defaultValue={chef.status}
-          options={[
-            { value: "onboarding", label: "Onboarding" },
-            { value: "active", label: "Actief" },
-            { value: "paused", label: "Gepauzeerd" },
-            { value: "inactive", label: "Inactief" },
-            { value: "archived", label: "Gearchiveerd" },
-          ]}
-        />
-        <Field label="E-mail" name="email" type="email" defaultValue={chef.email ?? ""} />
-        <Field label="Telefoon" name="phone" defaultValue={chef.phone ?? ""} />
-        <Field label="Stad / regio" name="city" defaultValue={chef.city ?? ""} />
-        <Field
-          label="Jaren ervaring"
-          name="yearsExperience"
-          type="number"
-          defaultValue={chef.yearsExperience?.toString() ?? ""}
-        />
-
-        <Field
-          label="Vakniveau"
-          name="vakniveau"
-          as="select"
-          defaultValue={chef.vakniveau ?? ""}
-          options={[
-            { value: "", label: "— Geen —" },
-            ...VAKNIVEAU_OPTIONS.map((v) => ({ value: v, label: v })),
-          ]}
-        />
-
-        <div className="md:col-span-2">
-          <label className="block">
-            <span className="mb-2 block font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
-              Segmenten (waar werkt deze chef?)
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {SEGMENT_OPTIONS.map((s) => {
-                const checked = (chef.segments ?? []).includes(s);
-                return (
-                  <label
-                    key={s}
-                    className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 font-ui text-[11px] uppercase tracking-[0.15em] ${
-                      checked
-                        ? "border-burgundy bg-burgundy text-white"
-                        : "border-ink-200 bg-white text-ink-700 hover:border-burgundy/40"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      name="segments"
-                      value={s}
-                      defaultChecked={checked}
-                      className="sr-only"
-                    />
-                    {s}
-                  </label>
-                );
-              })}
-            </div>
-          </label>
-        </div>
-
-        <div className="md:col-span-2">
-          <Field
-            label="Specialties (vrije tekst — komma-gescheiden of vrij)"
-            name="specialties"
-            defaultValue={chef.specialties ?? ""}
-          />
-        </div>
-
-        <Field
-          label="Talen (komma-gescheiden, bv. NL, EN, FR)"
-          name="languages"
-          defaultValue={(chef.languages ?? []).join(", ")}
-        />
-
-        <div />
-
-        <Field
-          label="Tarief van (€/uur)"
-          name="hourlyRateMinEur"
-          type="number"
-          defaultValue={
-            chef.hourlyRateMinCents
-              ? (chef.hourlyRateMinCents / 100).toString()
-              : ""
-          }
-        />
-        <Field
-          label="Tarief tot (€/uur)"
-          name="hourlyRateMaxEur"
-          type="number"
-          defaultValue={
-            chef.hourlyRateMaxCents
-              ? (chef.hourlyRateMaxCents / 100).toString()
-              : ""
-          }
-        />
-
-        <div className="md:col-span-2">
-          <Field
-            label="Notities (Maarten's tribal knowledge)"
-            name="notes"
-            as="textarea"
-            defaultValue={chef.notes ?? ""}
-          />
-        </div>
-        <div className="md:col-span-2 flex justify-end">
-          <button
-            type="submit"
-            className="rounded-full bg-burgundy px-6 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
-          >
-            Opslaan
-          </button>
-        </div>
-      </form>
+      <BasicsForm
+        chef={chef}
+        updateBasics={updateBasics}
+        VAKNIVEAU_OPTIONS={VAKNIVEAU_OPTIONS}
+        SEGMENT_OPTIONS={SEGMENT_OPTIONS}
+      />
 
       {/* Portal access */}
-      <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="font-serif text-lg text-ink-900">
-              Chef-portaal toegang
-            </h2>
-            <p className="mt-1 text-sm text-ink-700">
-              Geef deze chef toegang tot het portaal om zelf shifts te bekijken
-              en te accepteren.
-            </p>
-          </div>
-          {!chef.email ? (
-            <p className="rounded bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Vul eerst een e-mailadres in.
-            </p>
-          ) : !portalUser ? (
-            <form action={doInviteToPortal}>
-              <button
-                type="submit"
-                className="rounded-full bg-burgundy px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
-              >
-                Nodig uit voor portaal
-              </button>
-            </form>
-          ) : portalUser.status === "invited" ? (
-            <form action={doActivatePortal}>
-              <button
-                type="submit"
-                className="rounded-full bg-emerald-600 px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-emerald-700"
-              >
-                Activeer (stuur welkom-mail)
-              </button>
-            </form>
-          ) : portalUser.status === "active" ? (
-            <div className="flex flex-col items-end gap-2">
-              <span className="rounded-full bg-emerald-100 px-3 py-1 font-ui text-[9px] font-medium uppercase tracking-wider text-emerald-700">
-                Actief
-              </span>
-              <form action={doDisablePortal}>
-                <button
-                  type="submit"
-                  className="rounded-full border border-red-300 bg-white px-4 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-red-700 hover:bg-red-50"
-                >
-                  Toegang intrekken
-                </button>
-              </form>
-            </div>
-          ) : (
-            <span className="rounded-full bg-bg-gray px-3 py-1 font-ui text-[9px] font-medium uppercase tracking-wider text-ink-500">
-              {portalUser.status}
-            </span>
-          )}
-        </div>
-        {portalUser && (
-          <p className="mt-4 text-xs text-ink-500">
-            Portal user: {portalUser.email} · status: {portalUser.status}
-          </p>
-        )}
-      </section>
+      <PortalAccess
+        chef={chef}
+        portalUser={portalUser}
+        doInviteToPortal={doInviteToPortal}
+        doActivatePortal={doActivatePortal}
+        doDisablePortal={doDisablePortal}
+      />
 
       {/* Documents */}
-      <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
-        <div className="mb-4">
-          <h2 className="font-serif text-lg text-ink-900">Documenten</h2>
-          <p className="mt-1 text-sm text-ink-700">
-            CV, foto, certificaten, ID-bewijs. Bestanden worden veilig opgeslagen
-            in Cloudflare R2 — alleen toegankelijk via tijdelijk-getekende links.
-          </p>
-        </div>
-
-        {documents.length > 0 ? (
-          <ul className="mb-4 space-y-2">
-            {documents.map((doc) => (
-              <li
-                key={doc.id}
-                className="flex items-center justify-between gap-3 rounded border border-ink-200 bg-bg-gray px-3 py-2"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-ink-900">
-                    {doc.filename}
-                  </p>
-                  <p className="text-xs text-ink-500">
-                    {DOC_TYPE_LABELS[doc.type] ?? doc.type}
-                    {doc.sizeBytes &&
-                      ` · ${(doc.sizeBytes / 1024 / 1024).toFixed(1)} MB`}
-                    {" · "}
-                    {new Date(doc.createdAt).toLocaleDateString("nl-NL")}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {doc.downloadUrl && (
-                    <a
-                      href={doc.downloadUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded-full border border-ink-200 bg-white px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-ink-900 hover:border-burgundy hover:text-burgundy"
-                    >
-                      Bekijk
-                    </a>
-                  )}
-                  <form action={deleteDocument}>
-                    <input type="hidden" name="documentId" value={doc.id} />
-                    <button
-                      type="submit"
-                      className="rounded-full border border-red-200 bg-white px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-red-700 hover:bg-red-50"
-                    >
-                      Verwijder
-                    </button>
-                  </form>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mb-4 text-sm text-ink-500">Nog geen documenten geupload.</p>
-        )}
-
-        <DocumentUploader
-          chefId={chef.id}
-          requestUpload={uploadRequest}
-          disabled={!r2Ready}
-        />
-      </section>
+      <DocumentsSection
+        chef={chef}
+        documents={documents}
+        DOC_TYPE_LABELS={DOC_TYPE_LABELS}
+        deleteDocument={deleteDocument}
+        uploadRequest={uploadRequest}
+        r2Ready={r2Ready}
+      />
 
       {/* PR-1.6: Chef 360 — track record at a glance */}
-      <section className="mt-8">
-        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-          Chef 360 — staat van dienst
-        </h2>
-
-        {/* PR-KPI: onboarding readiness (payroll/identity data) */}
-        <div className="mt-3 rounded-lg border border-ink-200 bg-white p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
-              Onboarding &amp; uitbetaalgegevens
-            </p>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                onboarding.ready
-                  ? "bg-emerald-100 text-emerald-700"
-                  : onboarding.score >= 60
-                    ? "bg-amber-100 text-amber-800"
-                    : "bg-red-100 text-red-700"
-              }`}
-            >
-              {chef.onboardingStatus === "submitted"
-                ? "Ingediend"
-                : chef.onboardingStatus === "in_progress"
-                  ? "Bezig"
-                  : "Niet gestart"}{" "}
-              · {onboarding.score}%
-            </span>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
-            {[
-              { label: "Naam", ok: !!(chef.firstName && chef.surname) },
-              { label: "Geb.datum", ok: !!chef.dateOfBirth },
-              { label: "Adres", ok: !!(chef.street && chef.postcode) },
-              { label: "BSN", ok: !!chef.bsnEncrypted },
-              { label: "IBAN", ok: !!chef.ibanEncrypted },
-              { label: "Rekeninghouder", ok: !!chef.bankAccountHolderName },
-              { label: "ID-nr", ok: !!chef.idNumberEncrypted },
-              { label: "ID-kopie", ok: hasIdFront && hasIdBack },
-              { label: "Dienstverband", ok: !!chef.employmentType },
-            ].map((c) => (
-              <span
-                key={c.label}
-                className={`rounded-full px-2 py-0.5 ${c.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
-              >
-                {c.ok ? "✓" : "✗"} {c.label}
-              </span>
-            ))}
-          </div>
-          {onboarding.missingCritical.length > 0 ? (
-            <p className="mt-1.5 text-[11px] text-amber-700">Mist: {onboarding.missingCritical.join(", ")}</p>
-          ) : (
-            <p className="mt-1.5 text-[11px] text-emerald-700">✓ Klaar voor inplannen en uitbetaling.</p>
-          )}
-          {onboarding.idExpired ? (
-            <p className="mt-1 text-[11px] text-red-700">⚠ ID-bewijs is verlopen.</p>
-          ) : onboarding.idExpiringSoon ? (
-            <p className="mt-1 text-[11px] text-amber-700">
-              ID-bewijs verloopt binnenkort
-              {chef.idExpiresAt ? ` (${new Date(chef.idExpiresAt).toLocaleDateString("nl-NL")})` : ""}.
-            </p>
-          ) : null}
-        </div>
-
-        {/* PR-2: profiel & voorkeuren (uit Jotform) */}
-        <div className="mt-3 rounded-lg border border-ink-200 bg-white p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Profiel & voorkeuren</p>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                completeness.score >= 80
-                  ? "bg-emerald-100 text-emerald-700"
-                  : completeness.score >= 55
-                    ? "bg-amber-100 text-amber-800"
-                    : "bg-red-100 text-red-700"
-              }`}
-            >
-              profiel {completeness.score}% · {completeness.label}
-            </span>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {chef.transportMode && (
-              <span className="rounded-full bg-burgundy/5 px-2 py-0.5 text-xs text-burgundy">
-                {TRANSPORT_LABELS[chef.transportMode] ?? chef.transportMode}
-              </span>
-            )}
-            {(chef.preferences ?? []).map((p) => (
-              <span key={p} className="rounded-full bg-bg-gray px-2 py-0.5 text-xs text-ink-700">
-                {PREF_LABELS[p] ?? p}
-              </span>
-            ))}
-            {chef.employmentType && (
-              <span className="rounded-full bg-bg-gray px-2 py-0.5 text-xs text-ink-700">
-                {chef.employmentType.toUpperCase()}
-              </span>
-            )}
-            {!chef.transportMode && (chef.preferences ?? []).length === 0 && (
-              <span className="text-xs text-ink-500">Nog niet uit Jotform overgenomen.</span>
-            )}
-          </div>
-          {(chef.street || chef.postcode) && (
-            <p className="mt-2 text-xs text-ink-500">
-              {[chef.street, chef.houseNumber].filter(Boolean).join(" ")}
-              {chef.postcode ? `, ${chef.postcode}` : ""}
-              {chef.city ? ` ${chef.city}` : ""}
-            </p>
-          )}
-          {completeness.missingCritical.length > 0 && (
-            <p className="mt-1 text-[11px] text-amber-700">Mist: {completeness.missingCritical.join(", ")}</p>
-          )}
-          {(completeness.missingCritical.length > 0 || completeness.score < 80) && (
-            <form action={doRequestData} className="mt-3">
-              <input
-                type="hidden"
-                name="fields"
-                value={[...completeness.missingCritical, ...completeness.missingNiceToHave].join(",")}
-              />
-              <button
-                type="submit"
-                className="rounded-full border border-burgundy/40 bg-white px-4 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy hover:bg-burgundy/5"
-              >
-                Vraag ontbrekende gegevens (e-mail)
-              </button>
-            </form>
-          )}
-          {dataRequests.length > 0 && (
-            <div className="mt-3 border-t border-ink-100 pt-2">
-              <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Verzoeken</p>
-              <ul className="mt-1 space-y-0.5 text-[11px] text-ink-700">
-                {dataRequests.map((rq) => (
-                  <li key={rq.id}>
-                    {rq.requestType} · {rq.channel} ·{" "}
-                    <span
-                      className={
-                        rq.status === "completed"
-                          ? "text-emerald-700"
-                          : rq.status === "failed"
-                            ? "text-red-700"
-                            : "text-ink-500"
-                      }
-                    >
-                      {REQ_STATUS_LABELS[rq.status] ?? rq.status}
-                    </span>
-                    {rq.sentAt ? ` · ${fmtNlDate(rq.sentAt)}` : ""}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Snap label="Uren gewerkt" value={`${workSummary.totalHoursWorked} u`} note="goedgekeurd" />
-          <Snap
-            label="Diensten afgerond"
-            value={String(workSummary.completedShifts)}
-            note={workSummary.upcomingShifts > 0 ? `${workSummary.upcomingShifts} gepland` : undefined}
-          />
-          <Snap
-            label="Beoordeling"
-            value={workSummary.averageRating != null ? `${workSummary.averageRating.toFixed(1)}★` : "—"}
-            note={workSummary.ratingCount > 0 ? `${workSummary.ratingCount} reviews` : "geen reviews"}
-          />
-          <Snap
-            label="Laatst gewerkt"
-            value={workSummary.lastWorkedAt ? fmtNlDate(workSummary.lastWorkedAt) : "—"}
-          />
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Rel label="Geaccepteerd" n={workSummary.acceptedCount} />
-          <Rel label="Geweigerd" n={workSummary.declinedCount} />
-          <Rel label="Geannuleerd" n={workSummary.cancelledCount} tone={workSummary.cancelledCount > 0 ? "amber" : undefined} />
-          <Rel label="No-show" n={workSummary.noShowCount} tone={workSummary.noShowCount > 0 ? "red" : undefined} />
-        </div>
-        <p className="mt-1 text-[10px] text-ink-500">
-          Uren uit goedgekeurde urenstaten · betrouwbaarheid uit plaatsingen · beoordelingen uit klantfeedback.
-        </p>
-
-        {reliability.totalEvents > 0 ? (
-          <div className="mt-3">
-            <p className="mb-1 font-ui text-[10px] font-medium uppercase tracking-wider text-ink-500">
-              Gedrag · uit activiteitslog ({reliability.totalEvents})
-            </p>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="rounded-full bg-bg-gray px-2.5 py-1 text-ink-700">
-                Acceptatie:{" "}
-                <b className="text-ink-900">
-                  {reliability.acceptanceRate != null
-                    ? `${Math.round(reliability.acceptanceRate * 100)}%`
-                    : "—"}
-                </b>
-                {reliability.proposalsAccepted + reliability.proposalsRejected > 0 ? (
-                  <span className="text-ink-400">
-                    {" "}
-                    ({reliability.proposalsAccepted}/
-                    {reliability.proposalsAccepted + reliability.proposalsRejected})
-                  </span>
-                ) : null}
-              </span>
-              <span className="rounded-full bg-bg-gray px-2.5 py-1 text-ink-700">
-                Reactietijd:{" "}
-                <b className="text-ink-900">
-                  {reliability.avgResponseMinutes != null ? `${reliability.avgResponseMinutes} min` : "—"}
-                </b>
-              </span>
-              <span
-                className={`rounded-full px-2.5 py-1 ${reliability.cancellations > 0 ? "bg-red-50 text-red-700" : "bg-bg-gray text-ink-700"}`}
-              >
-                Zelf geannuleerd: <b>{reliability.cancellations}</b>
-              </span>
-              <span className="rounded-full bg-bg-gray px-2.5 py-1 text-ink-700">
-                Laatste activiteit:{" "}
-                <b className="text-ink-900">
-                  {reliability.lastActivityAt ? fmtNlDate(reliability.lastActivityAt) : "—"}
-                </b>
-              </span>
-            </div>
-          </div>
-        ) : null}
-
-        {/* KPI-2: 8-week trend — sparklines + noise-guarded deltas + honest churn signal */}
-        <div className="mt-4">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="font-ui text-[10px] font-medium uppercase tracking-wider text-ink-500">
-              Trend · laatste 8 weken
-            </p>
-            <ChurnChip churn={trends.churn} />
-          </div>
-          {trends.hasEnoughHistory ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <TrendTile label="Uren" spark={trends.hoursSparkline} value={`${trends.hoursDelta.thisPeriod} u`} delta={trends.hoursDelta} />
-              <TrendTile label="Marge" spark={trends.marginSparkline} value={`€ ${trends.marginDelta.thisPeriod}`} delta={trends.marginDelta} />
-              <TrendTile label="Diensten" spark={trends.shiftsSparkline} value={String(trends.shiftsDelta.thisPeriod)} delta={trends.shiftsDelta} />
-            </div>
-          ) : (
-            <p className="rounded-lg border border-dashed border-ink-200 bg-bg-gray/40 px-3 py-2 text-xs text-ink-500">
-              Te weinig historie voor een trend — vanaf ±2 weken activiteit verschijnt hier de 8-weekse grafiek.
-            </p>
-          )}
-          <p className="mt-1 text-[10px] text-ink-500">
-            Per week opgeteld uit de dagelijkse snapshot · deze week vs. vorige · ▲▼ alleen bij een betekenisvolle basis (ruisfilter).
-          </p>
-        </div>
-
-        {(workSummary.topClients.length > 0 ||
-          workSummary.topSegments.length > 0 ||
-          workSummary.topClientTypes.length > 0) && (
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            {workSummary.topClients.length > 0 && (
-              <div className="rounded-lg border border-ink-200 bg-white p-4">
-                <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Meeste ervaring bij</p>
-                <ul className="mt-2 space-y-1 text-sm text-ink-900">
-                  {workSummary.topClients.map((c) => (
-                    <li key={c.name} className="flex justify-between gap-2">
-                      <span className="truncate">{c.name}</span>
-                      <span className="shrink-0 text-ink-500">{c.count}×</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {workSummary.topSegments.length > 0 && (
-              <div className="rounded-lg border border-ink-200 bg-white p-4">
-                <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Sterk in</p>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {workSummary.topSegments.map((s) => (
-                    <span key={s.segment} className="rounded-full bg-burgundy/5 px-2 py-0.5 text-xs text-burgundy">
-                      {s.segment} · {s.count}×
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {workSummary.topClientTypes.length > 0 && (
-              <div className="rounded-lg border border-ink-200 bg-white p-4">
-                <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Werkt vooral voor</p>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {workSummary.topClientTypes.map((t) => (
-                    <span key={t.clientType} className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
-                      {clientTypeLabel(t.clientType)} · {t.count}×
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="mt-4 rounded-lg border border-ink-200 bg-white p-4">
-          <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">Wat klanten zeggen</p>
-          {feedback.topTags.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-1">
-              <span className="text-[11px] text-ink-500">Meest genoemd:</span>
-              {feedback.topTags.map((t) => (
-                <span key={t.tag} className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
-                  {RATING_TAG_LABELS[t.tag as RatingTag] ?? t.tag} ({t.count})
-                </span>
-              ))}
-            </div>
-          )}
-          {feedback.recent.length === 0 ? (
-            <p className="mt-2 text-sm text-ink-500">Nog geen beoordelingen.</p>
-          ) : (
-            <ul className="mt-3 space-y-3">
-              {feedback.recent.map((f, i) => (
-                <li key={i} className="border-t border-ink-100 pt-2 first:border-t-0 first:pt-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-amber-500">
-                      {"★".repeat(f.stars)}
-                      <span className="text-ink-200">{"★".repeat(5 - f.stars)}</span>
-                    </span>
-                    <span className="text-[11px] text-ink-500">{f.clientName ?? "Klant"} · {fmtNlDate(f.createdAt)}</span>
-                  </div>
-                  {f.tags.length > 0 && (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {f.tags.map((t) => (
-                        <span key={t} className="rounded bg-bg-gray px-1.5 py-0.5 text-[10px] text-ink-700">
-                          {RATING_TAG_LABELS[t as RatingTag] ?? t}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {f.comment && <p className="mt-1 text-sm text-ink-700">&ldquo;{f.comment}&rdquo;</p>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="mt-4 rounded-lg border border-ink-200 bg-white p-4">
-          <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">Recente diensten</p>
-          {recentShifts.length === 0 ? (
-            <p className="mt-2 text-sm text-ink-500">Nog geen plaatsingen.</p>
-          ) : (
-            <ul className="mt-2 space-y-1.5">
-              {recentShifts.map((s) => (
-                <li key={s.shiftId}>
-                  <Link
-                    href={`/admin/business/shifts/${s.shiftId}`}
-                    className="flex flex-wrap items-center gap-x-2 text-sm hover:text-burgundy"
-                  >
-                    <span className="text-ink-500">{fmtNlDate(s.startsAt)}</span>
-                    <span className="text-ink-900">{s.clientName ?? "Onbekende klant"}</span>
-                    <span className="text-ink-500">· {s.roleNeeded}{s.city ? ` · ${s.city}` : ""}</span>
-                    <span className="ml-auto rounded-full bg-bg-gray px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-500">
-                      {s.placementStatus}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function fmtNlDate(d: Date | string): string {
-  return new Date(d).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" });
-}
-
-const CHURN_STYLE: Record<Exclude<ChurnRisk["level"], "none">, { cls: string; label: string }> = {
-  low: { cls: "bg-bg-gray text-ink-600", label: "Actief" },
-  watch: { cls: "bg-amber-100 text-amber-800", label: "Let op" },
-  elevated: { cls: "bg-red-100 text-red-700", label: "Risico" },
-};
-
-function ChurnChip({ churn }: { churn: ChurnRisk }) {
-  if (churn.level === "none") return null;
-  const s = CHURN_STYLE[churn.level];
-  return (
-    <span
-      className={`rounded-full px-2.5 py-1 font-ui text-[11px] ${s.cls}`}
-      title={churn.reasons.join(" · ")}
-    >
-      {s.label} · {churn.reasons[0]}
-    </span>
-  );
-}
-
-function Snap({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
-    <div className="rounded-lg border border-ink-200 bg-white p-4">
-      <p className="font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">{label}</p>
-      <p className="mt-1 font-serif text-2xl text-ink-900">{value}</p>
-      {note && <p className="mt-0.5 text-[11px] text-ink-500">{note}</p>}
-    </div>
-  );
-}
-
-function Rel({ label, n, tone }: { label: string; n: number; tone?: "amber" | "red" }) {
-  const cls =
-    tone === "red"
-      ? "bg-red-100 text-red-700"
-      : tone === "amber"
-        ? "bg-amber-100 text-amber-800"
-        : "bg-bg-gray text-ink-700";
-  return (
-    <span className={`rounded-full px-2.5 py-1 font-ui text-[11px] ${cls}`}>
-      {label}: <strong>{n}</strong>
-    </span>
-  );
-}
-
-/* ----- helpers ----- */
-
-type FieldProps = {
-  label: string;
-  name: string;
-  type?: string;
-  defaultValue?: string;
-  required?: boolean;
-  as?: "input" | "textarea" | "select";
-  options?: { value: string; label: string }[];
-};
-
-function Field({
-  label,
-  name,
-  type = "text",
-  defaultValue = "",
-  required,
-  as = "input",
-  options,
-}: FieldProps) {
-  const baseClass = `${fieldClass} placeholder-ink-500`;
-  return (
-    <label className="block">
-      <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
-        {label}
-      </span>
-      {as === "textarea" ? (
-        <textarea
-          name={name}
-          defaultValue={defaultValue}
-          required={required}
-          rows={4}
-          className={baseClass}
-        />
-      ) : as === "select" ? (
-        <select name={name} defaultValue={defaultValue} className={baseClass}>
-          {options?.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <input
-          type={type}
-          name={name}
-          defaultValue={defaultValue}
-          required={required}
-          className={baseClass}
-        />
-      )}
-    </label>
+      <Chef360
+        chef={chef}
+        onboarding={onboarding}
+        hasIdFront={hasIdFront}
+        hasIdBack={hasIdBack}
+        completeness={completeness}
+        dataRequests={dataRequests}
+        workSummary={workSummary}
+        feedback={feedback}
+        recentShifts={recentShifts}
+        reliability={reliability}
+        trends={trends}
+        doRequestData={doRequestData}
+      />
+    </DetailShell>
   );
 }
 
@@ -1395,27 +573,4 @@ function StatusBadge({ status }: { status: string }) {
       {labels[status] ?? status}
     </span>
   );
-}
-
-/* ----- PR-CHEF-4 admin review helpers ----- */
-function chefChangeFieldLabel(field: string): string {
-  return (
-    {
-      fullName: "Naam",
-      email: "E-mailadres",
-      vakniveau: "Vakniveau",
-      hourlyRate: "Uurtarief",
-    } as Record<string, string>
-  )[field] ?? field;
-}
-
-function formatChefChangeValue(field: string, value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
-  if (field === "hourlyRate" && typeof value === "object") {
-    const { min, max } = value as { min?: number; max?: number };
-    const fmt = (c?: number) => (typeof c === "number" ? `€${(c / 100).toFixed(0)}` : "—");
-    return `${fmt(min)} – ${fmt(max)} per uur`;
-  }
-  if (typeof value === "string" || typeof value === "number") return String(value);
-  return JSON.stringify(value);
 }
