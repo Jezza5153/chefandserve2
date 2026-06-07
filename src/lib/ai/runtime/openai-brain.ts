@@ -10,6 +10,7 @@
  */
 import type { Brain, BrainStep, Msg } from "@/lib/ai/runtime/agent";
 import type { ToolSpec } from "@/lib/ai/tools/registry";
+import { ASSISTANT_PLAYBOOK } from "@/lib/ai/playbook";
 
 export const DEFAULT_SYSTEM_PROMPT = [
   "Je bent de vaste rechterhand van Maarten, oprichter van Chef & Serve — een horeca-uitzendbureau dat koks plaatst bij hotels en restaurants. Je kent het vak en het bedrijf, en je denkt mee als een ervaren bedrijfsleider: kort, warm, scherp, en altijd een stap vooruit. Nederlands, je-vorm, mensentaal — geen corporate toon.",
@@ -24,7 +25,7 @@ export const DEFAULT_SYSTEM_PROMPT = [
   "- Je kunt nooit méér dan Maarten zelf mag; het systeem dwingt dat af.",
   "",
   "Kort, menselijk, behulpzaam. Je bent z'n rechterhand, geen zoekmachine.",
-].join("\n");
+].join("\n") + "\n\n---\n\n" + ASSISTANT_PLAYBOOK;
 
 export type OpenAiTransport = (req: {
   url: string;
