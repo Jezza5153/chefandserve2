@@ -45,6 +45,8 @@ const SAMPLE: Record<string, unknown> = {
   "hours.reject": { hoursId: "x", reason: "test reden" },
   "hours.send_reminder": { hoursId: "x" },
   "placements.propose": { shiftId: "x", chefId: "y" },
+  "placements.confirm": { placementId: "x" },
+  "placements.cancel": { placementId: "x" },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 
