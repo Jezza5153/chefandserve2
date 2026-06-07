@@ -33,6 +33,8 @@
 import { spawn } from "node:child_process";
 import cron from "node-cron";
 
+import { logError } from "./_lib";
+
 const TIMEZONE = "Europe/Amsterdam";
 
 type Job = {
@@ -77,6 +79,40 @@ function ts(): string {
   return new Date().toISOString();
 }
 
+/**
+ * Record a crashed/failed worker run to error_log so it surfaces in the daily
+ * error-digest (workers/error-digest.ts) and the /admin/system/errors board.
+ * Best-effort: a logging failure must never crash the supervisor — we swallow
+ * it (after a stderr note) so the job promise still resolves.
+ */
+async function recordJobFailure(
+  job: Job,
+  exitCode: number,
+  reason: "exit" | "spawn",
+): Promise<void> {
+  const message = `worker ${job.name} exited ${exitCode}`;
+  try {
+    await logError({
+      message,
+      // Non-zero exit is operationally a warning; a spawn failure (worker never
+      // ran) is a harder error worth flagging as such.
+      severity: reason === "spawn" ? "error" : "warning",
+      context: {
+        source: "worker",
+        job: job.name,
+        script: job.script,
+        exitCode,
+        reason,
+      },
+    });
+  } catch (err) {
+    console.error(
+      `[${ts()}] [supervisor] failed to write error_log for ${job.name}:`,
+      err,
+    );
+  }
+}
+
 function runJob(job: Job): Promise<number> {
   return new Promise((resolve) => {
     console.log(`[${ts()}] [supervisor] starting ${job.name}`);
@@ -85,14 +121,21 @@ function runJob(job: Job): Promise<number> {
       env: process.env,
     });
     child.on("exit", (code) => {
+      const exitCode = code ?? 1;
       console.log(
         `[${ts()}] [supervisor] ${job.name} exited code=${code ?? "null"}`,
       );
-      resolve(code ?? 1);
+      // Observability: a non-zero exit now leaves an error_log row, not just a
+      // stdout line. Resolve only after the write settles (best-effort).
+      if (exitCode !== 0) {
+        void recordJobFailure(job, exitCode, "exit").finally(() => resolve(exitCode));
+      } else {
+        resolve(exitCode);
+      }
     });
     child.on("error", (err) => {
       console.error(`[${ts()}] [supervisor] ${job.name} spawn error:`, err);
-      resolve(1);
+      void recordJobFailure(job, 1, "spawn").finally(() => resolve(1));
     });
   });
 }

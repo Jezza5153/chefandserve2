@@ -40,6 +40,33 @@ export async function audit(
   `;
 }
 
+/**
+ * Write a row to error_log — the app's minimal Sentry replacement that
+ * workers/error-digest.ts reads. Without this, a crashed worker produces ZERO
+ * operator signal. Standalone (raw SQL, no src/lib) — same convention as
+ * audit() above. There is no `source` column on error_log, so the source/job
+ * goes into the `context` jsonb. `severity` is an enum (info|warning|error|
+ * critical) defaulting to 'error'.
+ */
+export async function logError(args: {
+  message: string;
+  severity?: "info" | "warning" | "error" | "critical";
+  context?: Record<string, unknown>;
+  stack?: string | null;
+}): Promise<void> {
+  const severity = args.severity ?? "error";
+  await sql`
+    INSERT INTO error_log (message, severity, context, stack, created_at)
+    VALUES (
+      ${args.message},
+      ${severity},
+      ${JSON.stringify(args.context ?? {})},
+      ${args.stack ?? null},
+      now()
+    )
+  `;
+}
+
 export async function sendPlainEmail(
   to: string,
   subject: string,

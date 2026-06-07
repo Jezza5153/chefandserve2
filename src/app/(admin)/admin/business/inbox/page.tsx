@@ -12,6 +12,7 @@ import {
   shifts,
 } from "@/lib/db/schema";
 import { decideShiftChangeRequest } from "@/lib/domain/shift-change-requests";
+import { isErasedResubmission } from "@/lib/domain/privacy-subject";
 import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Inbox" };
@@ -68,6 +69,7 @@ export default async function InboxPage({
             rolesRequested: chefSubmissions.rolesRequested,
             notes: chefSubmissions.notes,
             status: chefSubmissions.status,
+            rejectedReason: chefSubmissions.rejectedReason,
             createdAt: chefSubmissions.createdAt,
           })
           .from(chefSubmissions)
@@ -91,6 +93,7 @@ export default async function InboxPage({
             headcount: clientSubmissions.headcount,
             notes: clientSubmissions.notes,
             status: clientSubmissions.status,
+            rejectedReason: clientSubmissions.rejectedReason,
             createdAt: clientSubmissions.createdAt,
           })
           .from(clientSubmissions)
@@ -118,25 +121,17 @@ export default async function InboxPage({
     .orderBy(desc(clientShiftChangeRequests.createdAt))
     .limit(25);
 
-  type Row =
-    | {
-        kind: "chef";
-        id: string;
-        title: string;
-        subtitle: string;
-        meta: string;
-        status: string;
-        createdAt: Date;
-      }
-    | {
-        kind: "client";
-        id: string;
-        title: string;
-        subtitle: string;
-        meta: string;
-        status: string;
-        createdAt: Date;
-      };
+  type Row = {
+    kind: "chef" | "client";
+    id: string;
+    title: string;
+    subtitle: string;
+    meta: string;
+    status: string;
+    /** AVG: quarantined re-import from an erased subject — needs human review. */
+    quarantined: boolean;
+    createdAt: Date;
+  };
 
   const rows: Row[] = [
     ...chefRows.map((r) => ({
@@ -146,6 +141,7 @@ export default async function InboxPage({
       subtitle: r.email ?? r.phone ?? "—",
       meta: r.rolesRequested ?? "Chef-aanmelding",
       status: r.status,
+      quarantined: isErasedResubmission(r.rejectedReason),
       createdAt: r.createdAt,
     })),
     ...clientRows.map((r) => ({
@@ -162,6 +158,7 @@ export default async function InboxPage({
           .filter(Boolean)
           .join(" · ") || "Klant-aanvraag",
       status: r.status,
+      quarantined: isErasedResubmission(r.rejectedReason),
       createdAt: r.createdAt,
     })),
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -306,7 +303,13 @@ export default async function InboxPage({
                     <p className="mt-1 text-xs text-ink-500">{r.meta}</p>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <StatusBadge status={r.status} />
+                    {r.quarantined ? (
+                      <span className="rounded-full bg-red-100 px-2.5 py-1 font-ui text-[9px] font-medium uppercase tracking-wider text-red-700">
+                        Review — gewiste persoon
+                      </span>
+                    ) : (
+                      <StatusBadge status={r.status} />
+                    )}
                     <span className="text-xs text-ink-500">
                       {new Date(r.createdAt).toLocaleString("nl-NL", {
                         dateStyle: "short",

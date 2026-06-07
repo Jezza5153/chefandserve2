@@ -12,6 +12,7 @@ import {
   convertChefSubmission,
   convertClientSubmission,
 } from "@/lib/domain/conversions";
+import { isErasedResubmission } from "@/lib/domain/privacy-subject";
 import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Aanmelding" };
@@ -197,6 +198,22 @@ export default async function InboxDetailPage({
         </div>
         <StatusBadge status={row.status} />
       </div>
+
+      {/* AVG: quarantined re-import from an erased subject — needs human review */}
+      {isErasedResubmission(row.rejectedReason) && (
+        <div className="mt-6 rounded-lg border border-red-300 bg-red-50/70 p-5">
+          <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-red-700">
+            Review vereist — gewiste persoon heeft opnieuw ingediend
+          </p>
+          <p className="mt-2 text-sm text-ink-700">
+            Dit e-mailadres is eerder gewist op verzoek (AVG art. 17). Deze
+            aanmelding is <strong>niet</strong> automatisch verwerkt. Beoordeel
+            handmatig of dit een nieuwe, rechtmatige relatie is — leg pas
+            gegevens vast (converteren) met een geldige grondslag en verse
+            toestemming; wijs anders af.
+          </p>
+        </div>
+      )}
 
       {/* Structured fields */}
       <dl className="mt-8 grid gap-4 rounded-lg border border-ink-200 bg-white p-6 md:grid-cols-2">

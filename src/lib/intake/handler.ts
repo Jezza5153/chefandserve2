@@ -25,6 +25,10 @@ import {
   type NewChefSubmission,
   type NewClientSubmission,
 } from "@/lib/db/schema";
+import {
+  ERASED_RESUBMISSION_MARKER,
+  findTombstoneByEmail,
+} from "@/lib/domain/privacy-subject";
 import { env } from "@/lib/env";
 
 import {
@@ -32,6 +36,67 @@ import {
   extractClientSubmission,
   type JotformBody,
 } from "./jotform";
+
+/* -------- erased-subject re-import notify ------------------------------ */
+
+/**
+ * Tell the privacy-routable admins that an intake arrived from an already-erased
+ * email and was QUARANTINED (not auto-materialised). Mirrors the privacy notify
+ * pattern in domain/privacy.ts: recipientsFor("privacy_request") → sendEmail →
+ * recordEmailMessage. Best-effort: a failure here never fails the webhook 200.
+ */
+async function notifyErasedResubmission(args: {
+  kind: IntakeKind;
+  submissionId: string;
+  email: string;
+}) {
+  try {
+    const { recipientsFor } = await import("@/lib/notifications");
+    const to = await recipientsFor("privacy_request");
+    if (to.length === 0) return;
+    const { sendEmail } = await import("@/lib/email");
+    const { recordEmailMessage } = await import("@/lib/integrations");
+    const { createElement } = await import("react");
+
+    const send = await sendEmail({
+      to,
+      subject: "AVG: gewiste persoon heeft zich opnieuw aangemeld",
+      react: createElement(
+        "div",
+        null,
+        createElement(
+          "p",
+          null,
+          "Er kwam een nieuwe aanmelding binnen van een e-mailadres dat eerder is gewist (art. 17).",
+        ),
+        createElement(
+          "p",
+          null,
+          "De aanmelding is in quarantaine geplaatst en NIET automatisch verwerkt. Beoordeel handmatig of dit een nieuwe, rechtmatige relatie is voordat er gegevens worden vastgelegd.",
+        ),
+        createElement(
+          "p",
+          null,
+          `Type: ${args.kind === "chef" ? "Chef-aanmelding" : "Klant-aanvraag"} · Bekijk in inbox: ${env.NEXT_PUBLIC_APP_URL}/admin/business/inbox/${args.kind}/${args.submissionId}`,
+        ),
+      ),
+    });
+    if (send.ok) {
+      for (const addr of to) {
+        await recordEmailMessage({
+          providerMessageId: send.id,
+          toEmail: addr,
+          template: "ErasedResubmissionAdminNotice",
+          eventKey: "privacy_request",
+          entityType: `${args.kind}_submission`,
+          entityId: args.submissionId,
+        });
+      }
+    }
+  } catch (e) {
+    console.error("[intake] notifyErasedResubmission failed:", e);
+  }
+}
 
 type IntakeKind = "chef" | "client";
 
@@ -174,6 +239,64 @@ export async function handleJotformWebhook(
       { ok: false, error: e instanceof Error ? e.message : "extract failed" },
       { status: 400 },
     );
+  }
+
+  // Step 2.5: dead re-import guard (AVG art. 17). If this intake's email was
+  // already erased, do NOT auto-materialise it. The raw body is already logged
+  // to webhooks_received above (recovery point); here we QUARANTINE a submission
+  // shell (status 'triaged' + a marker the inbox shows as "needs review") and
+  // SKIP the normal master-record upsert, then alert the privacy admins. The
+  // normal (non-tombstoned) path below is untouched.
+  const subjectEmail = row.email?.trim().toLowerCase() ?? null;
+  if (subjectEmail) {
+    const tombstone = await findTombstoneByEmail(subjectEmail);
+    if (tombstone) {
+      // Plain insert (NOT onConflictDoUpdate) so a live record is never
+      // refreshed from the erased subject. onConflictDoNothing keeps a Jotform
+      // retry idempotent: a second delivery of the same submission is a no-op.
+      let quarantinedId: string | undefined;
+      if (kind === "chef") {
+        const chefRow = row as Omit<NewChefSubmission, "id" | "createdAt" | "updatedAt">;
+        const [q] = await db
+          .insert(chefSubmissions)
+          .values({ ...chefRow, status: "triaged", rejectedReason: ERASED_RESUBMISSION_MARKER })
+          .onConflictDoNothing({
+            target: [chefSubmissions.source, chefSubmissions.externalId],
+          })
+          .returning({ id: chefSubmissions.id });
+        quarantinedId = q?.id;
+      } else {
+        const clientRow = row as Omit<NewClientSubmission, "id" | "createdAt" | "updatedAt">;
+        const [q] = await db
+          .insert(clientSubmissions)
+          .values({ ...clientRow, status: "triaged", rejectedReason: ERASED_RESUBMISSION_MARKER })
+          .onConflictDoNothing({
+            target: [clientSubmissions.source, clientSubmissions.externalId],
+          })
+          .returning({ id: clientSubmissions.id });
+        quarantinedId = q?.id;
+      }
+
+      console.warn(
+        `[intake/${kind}] erased subject re-submitted — quarantined (geen master-record), submission=${quarantinedId ?? "(bestond al)"}`,
+      );
+
+      // Notify privacy admins only on the FIRST capture (a returned row).
+      if (quarantinedId) {
+        await notifyErasedResubmission({
+          kind,
+          submissionId: quarantinedId,
+          email: subjectEmail,
+        });
+      }
+
+      // Return 200 (the webhook succeeded) WITHOUT running the normal upsert or
+      // the Maarten submission notify.
+      return Response.json(
+        { ok: true, quarantined: true, kind },
+        { status: 200 },
+      );
+    }
   }
 
   // Step 3: idempotent upsert (on (source, externalId))

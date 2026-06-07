@@ -13,6 +13,10 @@
 import { db } from "@/lib/db/client";
 import { chefSubmissions } from "@/lib/db/schema";
 import { flattenFields, getPublishedForm } from "@/lib/domain/forms";
+import {
+  ERASED_RESUBMISSION_MARKER,
+  findTombstoneByEmail,
+} from "@/lib/domain/privacy-subject";
 import type { FormSubmitValue } from "@/lib/forms/types";
 import { validateForm } from "@/lib/forms/validation";
 
@@ -60,6 +64,90 @@ export async function submitApplication(args: {
   const employmentType =
     employmentRaw === "payroll" || employmentRaw === "zzp" || employmentRaw === "both" ? employmentRaw : null;
 
+  const email = str(args.values.email)?.toLowerCase() ?? null;
+
+  // Dead re-import guard (AVG art. 17) — same as the Jotform webhook path. If
+  // this email was already erased, QUARANTINE the application (status 'triaged'
+  // + a marker the inbox shows as "needs review") instead of materialising a
+  // normal 'new' submission for triage, and alert the privacy admins rather
+  // than the office. The normal (non-tombstoned) path is unaffected.
+  if (email) {
+    const tombstone = await findTombstoneByEmail(email);
+    if (tombstone) {
+      const [quarantined] = await db
+        .insert(chefSubmissions)
+        .values({
+          externalId: `native_${crypto.randomUUID()}`,
+          source: "native_apply",
+          rawPayload: sanitized,
+          fullName: str(args.values.full_name),
+          email,
+          phone: str(args.values.phone),
+          locationPreference: str(args.values.city),
+          notes: str(args.values.message),
+          applyingAs,
+          employmentType,
+          status: "triaged",
+          rejectedReason: ERASED_RESUBMISSION_MARKER,
+        })
+        .returning({ id: chefSubmissions.id });
+
+      console.warn(
+        `[applications] erased subject re-submitted via /sollicitatie — quarantined, submission=${quarantined.id}`,
+      );
+
+      // Notify privacy-routable admins (mirrors domain/privacy.ts notify).
+      try {
+        const { recipientsFor } = await import("@/lib/notifications");
+        const to = await recipientsFor("privacy_request");
+        if (to.length > 0) {
+          const { sendEmail } = await import("@/lib/email");
+          const { recordEmailMessage } = await import("@/lib/integrations");
+          const { createElement } = await import("react");
+          const send = await sendEmail({
+            to,
+            subject: "AVG: gewiste persoon heeft zich opnieuw aangemeld",
+            react: createElement(
+              "div",
+              null,
+              createElement(
+                "p",
+                null,
+                "Een nieuwe aanmelding via /sollicitatie komt van een e-mailadres dat eerder is gewist (art. 17).",
+              ),
+              createElement(
+                "p",
+                null,
+                "De aanmelding is in quarantaine geplaatst en NIET automatisch verwerkt. Beoordeel handmatig voordat er gegevens worden vastgelegd.",
+              ),
+              createElement(
+                "p",
+                null,
+                `Bekijk in inbox: /admin/business/inbox/chef/${quarantined.id}`,
+              ),
+            ),
+          });
+          if (send.ok) {
+            for (const addr of to) {
+              await recordEmailMessage({
+                providerMessageId: send.id,
+                toEmail: addr,
+                template: "ErasedResubmissionAdminNotice",
+                eventKey: "privacy_request",
+                entityType: "chef_submission",
+                entityId: quarantined.id,
+              });
+            }
+          }
+        }
+      } catch {
+        // best-effort — the quarantined submission already lives in the inbox
+      }
+
+      return { ok: true, submissionId: quarantined.id };
+    }
+  }
+
   const [row] = await db
     .insert(chefSubmissions)
     .values({
@@ -67,7 +155,7 @@ export async function submitApplication(args: {
       source: "native_apply",
       rawPayload: sanitized,
       fullName: str(args.values.full_name),
-      email: str(args.values.email)?.toLowerCase() ?? null,
+      email,
       phone: str(args.values.phone),
       locationPreference: str(args.values.city),
       notes: str(args.values.message),

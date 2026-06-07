@@ -228,3 +228,25 @@ export async function findTombstoneByEmail(email: string | null | undefined) {
     .limit(1);
   return row ?? null;
 }
+
+/* ----- erased-subject re-import quarantine ---------------------------------- */
+
+/**
+ * Marker written to a submission's `rejectedReason` when an intake arrives from
+ * an email that was already erased (art. 17). The submission is quarantined —
+ * NOT auto-materialised into a master record — and the inbox surfaces it as
+ * "needs review" so a human decides whether this is a genuine new relationship
+ * (which warrants fresh, consented data) or noise to discard.
+ *
+ * A plain text marker (not an enum value) so no migration is needed; the inbox
+ * detects it via `isErasedResubmission`.
+ */
+export const ERASED_RESUBMISSION_MARKER =
+  "AVG: gewiste persoon heeft opnieuw ingediend — handmatige review vereist";
+
+/** Quarantined re-import? Detect the marker on a submission's rejectedReason. */
+export function isErasedResubmission(
+  rejectedReason: string | null | undefined,
+): boolean {
+  return rejectedReason === ERASED_RESUBMISSION_MARKER;
+}
