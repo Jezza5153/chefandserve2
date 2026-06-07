@@ -35,7 +35,7 @@ try {
 }
 
 const tools = registry.list();
-assert("at least 13 tools registered", tools.length >= 13, `got ${tools.length}`);
+assert("at least 14 tools registered", tools.length >= 14, `got ${tools.length}`);
 
 for (const t of tools) {
   assert(`${t.name}: has title + meaningful description`, Boolean(t.title) && t.description.length > 10);

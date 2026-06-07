@@ -15,6 +15,7 @@ import {
 import { shiftsOpenSoon, insightsLeaderboards, integrationsHealth } from "@/lib/ai/tools/ops";
 import { placementsPropose, placementsConfirm, placementsCancel } from "@/lib/ai/tools/placements";
 import { chefsFind, clientsFind } from "@/lib/ai/tools/directory";
+import { emailSend } from "@/lib/ai/tools/comms";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -32,6 +33,7 @@ export const ALL_TOOLS: AnyTool[] = [
   placementsPropose,
   placementsConfirm,
   placementsCancel,
+  emailSend,
 ];
 
 export function buildRegistry(): ToolRegistry {
