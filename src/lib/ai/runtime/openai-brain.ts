@@ -39,7 +39,17 @@ export type OpenAiBrainOptions = {
   systemPrompt?: string;
   transport?: OpenAiTransport;
   temperature?: number;
+  /** Backoff (ms) per retry on transient errors (429 / 5xx). Default [400, 1200] → up to
+   *  2 retries. Tests pass [0, 0] for instant retries. */
+  retryDelaysMs?: number[];
 };
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+function extractApiError(json: unknown): string | null {
+  const msg = (json as { error?: { message?: unknown } })?.error?.message;
+  return typeof msg === "string" && msg.trim() ? msg : null;
+}
 
 const defaultFetchTransport: OpenAiTransport = async (req) => {
   const r = await fetch(req.url, { method: "POST", headers: req.headers, body: req.body });
@@ -61,15 +71,29 @@ export function createOpenAiBrain(opts: OpenAiBrainOptions): Brain {
         payload.tools = tools.map(toOpenAiTool);
         payload.tool_choice = "auto";
       }
-      const res = await transport({
+      const req = {
         url: "https://api.openai.com/v1/chat/completions",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${opts.apiKey}` },
         body: JSON.stringify(payload),
-      });
-      if (res.status < 200 || res.status >= 300) {
-        throw new Error(`OpenAI API gaf status ${res.status}`);
+      };
+      // Resilient send: retry transient failures (429 rate-limit, 5xx) with backoff so a
+      // single hiccup doesn't fail the whole turn. Other 4xx fail fast (no point retrying).
+      const retryDelays = opts.retryDelaysMs ?? [400, 1200];
+      let lastError = "onbekende fout";
+      for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+        const res = await transport(req);
+        if (res.status >= 200 && res.status < 300) {
+          return parseChoice(res.json);
+        }
+        lastError = extractApiError(res.json) ?? `status ${res.status}`;
+        const transient = res.status === 429 || res.status >= 500;
+        if (transient && attempt < retryDelays.length) {
+          await sleep(retryDelays[attempt] ?? 0);
+          continue;
+        }
+        break;
       }
-      return parseChoice(res.json);
+      throw new Error(`OpenAI API gaf een fout: ${lastError}`);
     },
   };
 }

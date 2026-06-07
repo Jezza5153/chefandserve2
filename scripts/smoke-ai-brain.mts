@@ -95,17 +95,38 @@ console.log("\n── brain: final-answer response ──");
   assert("final text passed through", step.kind === "final" && step.text.includes("3 urenregels"));
 }
 
-console.log("\n── brain: API error ──");
+console.log("\n── brain: transient-error retry ──");
 {
-  const transport: OpenAiTransport = async () => ({ status: 500, json: {} });
-  const brain = createOpenAiBrain({ apiKey: "sk-test", model: "gpt-4o", transport });
-  let threw = false;
+  let calls = 0;
+  const transport: OpenAiTransport = async () => {
+    calls++;
+    return calls < 3
+      ? { status: 503, json: { error: { message: "overloaded" } } }
+      : { status: 200, json: { choices: [{ message: { content: "ok na retry" } }] } };
+  };
+  const brain = createOpenAiBrain({ apiKey: "sk-test", model: "gpt-4o", transport, retryDelaysMs: [0, 0] });
+  const step = await brain.plan({ messages: [], tools: [] });
+  assert("retries transient 5xx then succeeds", step.kind === "final" && step.text === "ok na retry");
+  assert("retried exactly until success (3 calls)", calls === 3);
+}
+
+console.log("\n── brain: non-transient error fails fast with API message ──");
+{
+  let calls = 0;
+  const transport: OpenAiTransport = async () => {
+    calls++;
+    return { status: 400, json: { error: { message: "bad request body" } } };
+  };
+  const brain = createOpenAiBrain({ apiKey: "sk-test", model: "gpt-4o", transport, retryDelaysMs: [0, 0] });
+  let msg = "";
   try {
     await brain.plan({ messages: [], tools: [] });
-  } catch {
-    threw = true;
+  } catch (e) {
+    msg = e instanceof Error ? e.message : String(e);
   }
-  assert("non-2xx throws", threw);
+  assert("4xx throws", msg.length > 0);
+  assert("4xx surfaces the real API message", msg.includes("bad request body"));
+  assert("4xx is not retried (1 call)", calls === 1);
 }
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
