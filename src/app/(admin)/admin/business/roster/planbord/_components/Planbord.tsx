@@ -10,11 +10,14 @@
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  KeyboardSensor,
+  MouseSensor,
+  TouchSensor,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
+  type Announcements,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -136,8 +139,55 @@ export function Planbord({
   const [msg, setMsg] = useState<string | null>(null);
   const [lens, setLens] = useState<"day" | "chef">("day");
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  // Mouse + Touch + Keyboard, so the board is operable on desktop, phone AND
+  // without a mouse. Touch uses a hold-delay so a quick swipe still scrolls.
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+    useSensor(KeyboardSensor),
+  );
   const chefById = useMemo(() => new Map(chefPool.map((c) => [c.id, c])), [chefPool]);
+  const shiftById = useMemo(() => {
+    const m = new Map<string, PlanbordShift>();
+    for (const day of Object.values(byDay)) for (const s of day) m.set(s.id, s);
+    return m;
+  }, [byDay]);
+
+  // Dutch screen-reader feedback for the whole drag lifecycle (pointer + keyboard).
+  const screenReaderInstructions = useMemo(
+    () => ({
+      draggable:
+        "Druk op spatie of enter om een chef op te pakken. Beweeg met de pijltjestoetsen naar een dienst, druk opnieuw op spatie om als concept te plaatsen, of escape om te annuleren.",
+    }),
+    [],
+  );
+  const announcements = useMemo<Announcements>(
+    () => ({
+      onDragStart: ({ active }) => {
+        const c = chefById.get(String(active.id));
+        return c ? `${c.fullName} opgepakt.` : "Chef opgepakt.";
+      },
+      onDragOver: ({ active, over }) => {
+        const c = chefById.get(String(active.id));
+        const s = over ? shiftById.get(String(over.id)) : null;
+        return s
+          ? `${c?.fullName ?? "Chef"} boven ${s.companyName}, ${s.role}.`
+          : `${c?.fullName ?? "Chef"} buiten een dienst.`;
+      },
+      onDragEnd: ({ active, over }) => {
+        const c = chefById.get(String(active.id));
+        const s = over ? shiftById.get(String(over.id)) : null;
+        return s
+          ? `${c?.fullName ?? "Chef"} als concept op ${s.companyName} geplaatst.`
+          : "Plaatsing geannuleerd, niet geplaatst.";
+      },
+      onDragCancel: ({ active }) => {
+        const c = chefById.get(String(active.id));
+        return `${c?.fullName ?? "Chef"} losgelaten, niet geplaatst.`;
+      },
+    }),
+    [chefById, shiftById],
+  );
 
   function focusOnShift(shift: PlanbordShift) {
     setFocusShift(shift);
@@ -286,6 +336,7 @@ export function Planbord({
   return (
     <DndContext
       sensors={sensors}
+      accessibility={{ announcements, screenReaderInstructions }}
       onDragStart={(e: DragStartEvent) => setActiveChef(chefById.get(String(e.active.id)) ?? null)}
       onDragEnd={onDragEnd}
     >
