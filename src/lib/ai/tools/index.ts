@@ -28,6 +28,7 @@ import { chefsWorkSummary, chefsFeedback, chefsTrends } from "@/lib/ai/tools/che
 import { rosterOverview } from "@/lib/ai/tools/roster";
 import { clientsHistory } from "@/lib/ai/tools/clients";
 import { plannerCockpitTool, shiftsSuggestChefs } from "@/lib/ai/tools/staffing";
+import { chefsSemanticSearch } from "@/lib/ai/tools/semantic";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -47,6 +48,7 @@ export const ALL_TOOLS: AnyTool[] = [
   clientsHistory,
   plannerCockpitTool,
   shiftsSuggestChefs,
+  chefsSemanticSearch,
   // act — the hands
   hoursApprove,
   hoursReject,
