@@ -32,12 +32,13 @@ const REQ_STATUS_LABELS: Record<string, string> = {
 };
 
 /**
- * PR-1.6: Chef 360 — track record at a glance. Largely presentational but holds ONE
- * embedded form (the "vraag ontbrekende gegevens" request), so `doRequestData` stays
- * in page.tsx (it closes over the route `id`) and arrives as a prop. The outer
- * `<section className="mt-8">` is not a card, so DetailSection does not apply; the
- * entire inner render is relocated verbatim. The Chef-360-only label maps and the
- * Snap / Rel / ChurnChip / fmtNlDate presentational helpers move here with it.
+ * Chef 360 — the full track record, shown below the InzetbaarheidCard verdict.
+ * Largely presentational but holds ONE embedded form (the "vraag ontbrekende
+ * gegevens" request), so `doRequestData` stays in page.tsx (it closes over the route
+ * `id`) and arrives as a prop. The onboarding/profiel checklists and the recente-
+ * diensten list are collapsed behind <details> to cut information overload — the
+ * verdict card above already surfaces deployability and what's missing, with the
+ * two completeness scores echoed on the collapsed summary bar.
  */
 export function Chef360({
   chef,
@@ -68,10 +69,44 @@ export function Chef360({
 }) {
   return (
     <section className="mt-8">
-      {/* @verbatim-start */}
       <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
         Chef 360 — staat van dienst
       </h2>
+
+      {/* Onboarding + profiel checklists — collapsed by default to cut the info
+          wall. The verdict card at the top already surfaces what's missing; the two
+          completeness scores stay on the summary bar so nothing is hidden at a glance. */}
+      <details className="mt-3">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-lg border border-ink-200 bg-white px-4 py-2.5 hover:bg-bg-gray/40">
+          <span className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
+            Onboarding &amp; profiel — checklist &amp; gegevensverzoeken
+          </span>
+          <span className="flex items-center gap-1.5 text-[11px]">
+            <span
+              className={`rounded-full px-2 py-0.5 ${
+                onboarding.ready
+                  ? "bg-emerald-100 text-emerald-700"
+                  : onboarding.score >= 60
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-red-100 text-red-700"
+              }`}
+            >
+              onb. {onboarding.score}%
+            </span>
+            <span
+              className={`rounded-full px-2 py-0.5 ${
+                completeness.score >= 80
+                  ? "bg-emerald-100 text-emerald-700"
+                  : completeness.score >= 55
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-red-100 text-red-700"
+              }`}
+            >
+              prof. {completeness.score}%
+            </span>
+            <span className="text-ink-400">▾</span>
+          </span>
+        </summary>
 
       {/* PR-KPI: onboarding readiness (payroll/identity data) */}
       <div className="mt-3 rounded-lg border border-ink-200 bg-white p-4">
@@ -217,6 +252,7 @@ export function Chef360({
           </div>
         )}
       </div>
+      </details>
 
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Snap label="Uren gewerkt" value={`${workSummary.totalHoursWorked} u`} note="goedgekeurd" />
@@ -397,8 +433,13 @@ export function Chef360({
         )}
       </div>
 
-      <div className="mt-4 rounded-lg border border-ink-200 bg-white p-4">
-        <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">Recente diensten</p>
+      <details className="mt-4 rounded-lg border border-ink-200 bg-white p-4">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+          <span className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
+            Recente diensten
+          </span>
+          <span className="text-ink-400">▾</span>
+        </summary>
         {recentShifts.length === 0 ? (
           <p className="mt-2 text-sm text-ink-500">Nog geen plaatsingen.</p>
         ) : (
@@ -420,8 +461,7 @@ export function Chef360({
             ))}
           </ul>
         )}
-      </div>
-      {/* @verbatim-end */}
+      </details>
     </section>
   );
 }
