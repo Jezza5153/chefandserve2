@@ -50,6 +50,8 @@ const SAMPLE: Record<string, unknown> = {
   "email.send": { to: "test@example.nl", subject: "Test", body: "Hallo" },
   "chefs.approve_profile_change": { requestId: "x" },
   "chefs.reject_profile_change": { requestId: "x" },
+  "chefs.work_summary": { chefId: "x" },
+  "chefs.feedback": { chefId: "x" },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 
