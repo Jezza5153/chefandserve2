@@ -62,6 +62,7 @@ const SAMPLE: Record<string, unknown> = {
   "shifts.margin": { shiftId: "x" },
   "contacts.timeline": { targetType: "chef", targetId: "x" },
   "knowledge.search": { query: "test" },
+  "documents.list_for_chef": { chefId: "x" },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 
