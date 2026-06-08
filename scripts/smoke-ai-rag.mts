@@ -5,6 +5,7 @@
  */
 const { redact, isPiiDense, REDACTION_VERSION } = await import("@/lib/ai/rag/redact");
 const { chunkText } = await import("@/lib/ai/rag/chunk");
+const { accessFilterFor } = await import("@/lib/ai/rag/access");
 
 let pass = 0;
 let fail = 0;
@@ -48,6 +49,31 @@ assert("short → 1 chunk", chunkText("kort stukje tekst").length === 1);
   assert("long text → multiple chunks", chunks.length > 1, `got ${chunks.length}`);
   assert("every chunk under hard cap", chunks.every((c) => c.length <= 4200));
   assert("chunks are non-empty", chunks.every((c) => c.trim().length > 0));
+}
+
+console.log("\n── access filter: tenant_scope + visibility (the no-cross-tenant-leak guarantee) ──");
+{
+  const internal = accessFilterFor({ kind: "internal" });
+  assert("internal spans all tenants (scopes=null)", internal.tenantScopes === null);
+  assert("internal sees admin_only", internal.visibilities.includes("admin_only"));
+  assert("internal (non-super) does NOT see super_admin_only", !internal.visibilities.includes("super_admin_only"));
+  assert("super_admin sees super_admin_only", accessFilterFor({ kind: "internal", superAdmin: true }).visibilities.includes("super_admin_only"));
+
+  const chefA = accessFilterFor({ kind: "chef", entityId: "A", placementIds: ["p1"] });
+  assert("chef scoped to self", chefA.tenantScopes?.includes("chefId:A") === true);
+  assert("chef gets public scope", chefA.tenantScopes?.includes("public") === true);
+  assert("chef gets placement bridge", chefA.tenantScopes?.includes("placement:p1") === true);
+  assert("chef NOT scoped to internal", !chefA.tenantScopes?.includes("internal"));
+  assert("chef does NOT see another chef", !chefA.tenantScopes?.includes("chefId:B"));
+  assert("chef does NOT see admin_only", !chefA.visibilities.includes("admin_only"));
+  assert("chef does NOT see klant chunks", !chefA.visibilities.includes("klant_own_and_admin"));
+  assert("chef sees own + bridge", chefA.visibilities.includes("chef_own_and_admin") && chefA.visibilities.includes("placement_bridge"));
+
+  const client = accessFilterFor({ kind: "client", entityId: "C" });
+  assert("klant scoped to self", client.tenantScopes?.includes("clientId:C") === true);
+  assert("klant does NOT see admin_only", !client.visibilities.includes("admin_only"));
+  assert("klant does NOT see chef chunks", !client.visibilities.includes("chef_own_and_admin"));
+  assert("klant sees own + bridge", client.visibilities.includes("klant_own_and_admin") && client.visibilities.includes("placement_bridge"));
 }
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);

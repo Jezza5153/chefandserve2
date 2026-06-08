@@ -512,16 +512,20 @@ Owner/super_admin chat on `/admin/assistant` + a floating widget on every `/admi
 
 **Gate (every tool call, `executeTool`):** permission check against the actor's set (else `denied`) → for `outbound`/`financial` tools, mint a signed confirm token and PAUSE (`needs_confirmation`); the human echoes it back via the confirm UI before the action runs. Reads run immediately. Every call emits an AI meta-audit row (`aiAuditSink`), paired with the domain's own business audit. Rate-limited `ai_chat_user` (30/min).
 
-**Tool registry (`src/lib/ai/tools/index.ts`) — 34 tools (18 read / 10 act / 6 personal):**
-- *read:* `business.overview` · `shifts.open_soon`/`find` · `chefs.find` · `clients.find` · `insights.leaderboards` · `integrations.health` · `hours.list_awaiting_approval` · `chefs.list_profile_changes` · `chefs.work_summary`/`feedback`/`trends` · `clients.history` · `roster.overview` · `planner.cockpit` · `shifts.suggest_chefs` · `chefs`/`clients.semantic_search`
+**Tool registry (`src/lib/ai/tools/index.ts`) — 38 tools (22 read / 10 act / 6 personal):**
+- *read:* `business.overview` · `shifts.open_soon`/`find` · `chefs.find` · `clients.find` · `insights.leaderboards` · `integrations.health` · `hours.list_awaiting_approval` · `chefs.list_profile_changes` · `chefs.work_summary`/`feedback`/`trends` · `clients.history` · `roster.overview` · `planner.cockpit` · `shifts.suggest_chefs` · `shifts.margin` · `contacts.timeline` · `chefs`/`clients.semantic_search` · `knowledge.search`
 - *act (confirm-gated):* `hours.approve`/`reject`/`send_reminder` · `placements.propose`/`confirm`/`cancel` · `email.send` · `chefs.approve`/`reject_profile_change` · `chefs.send_availability_reminder`
 - *personal (self, no confirm):* `reminders.create`/`list`/`complete` · `memory.remember`/`list`/`forget`
 
 Read tools wrap the SAME tested domain logic the screens use (chef-history · client-history · roster-intel `rosterAiSummary` · planner-intel · matching) — never a re-implementation, so the AI can't disagree with the UI. Act tools share the domain mutation (e.g. `decideChefProfileChange` is used by both the admin chef page and `chefs.approve/reject_profile_change`). Enum codes are humanised via `src/lib/labels.ts` before the brain sees them.
 
-**RAG (Layer-2, v1):** `chefs`/`clients.semantic_search` embed the query (`src/lib/ai/embeddings.ts`, text-embedding-3-small) and cosine-search the per-row `embedding` vectors (`read-model/semantic.ts`, raw SQL `<=>`) that the `embedding-refresh` worker maintains. Degrades to "niet beschikbaar" without a key/vectors. Deeper chunked + PII-redacted notes-RAG (`docs/ai/rag-ingestion-contract.md`) is the planned next step (needs an `ai_embeddings` migration + redaction pipeline).
+**RAG — two layers, both live:**
+- *Layer 2a (per-row semantic search):* `chefs`/`clients.semantic_search` embed the query (`src/lib/ai/embeddings.ts`, text-embedding-3-small) and cosine-search the per-row `embedding` vectors (`read-model/semantic.ts`, raw SQL `<=>`) the `embedding-refresh` worker maintains.
+- *Layer 2b (chunked notes-RAG → `knowledge.search`):* semantic recall over the free-text NOTES corpus. **Ingestion** (`src/lib/ai/rag/{sources,ingest}.ts` + `scripts/rag-ingest.mts`): each allowlisted source (chef/klant-notities, dienstomschrijvingen, contactlogs — `sources.ts` is the indexer's allowlist) → build text → **redact PII** (`rag/redact.ts` — email/phone/IBAN/BSN/card/DOB, the load-bearing AVG step, runs at INDEX time) → density-gate (>30% redacted ⇒ skip) → **chunk** (`rag/chunk.ts`, ~500-tok) → embed → **soft-supersede + insert** into `ai_embeddings` (manual `manual_ai_embeddings.sql`: `vector(1536)` + HNSW cosine), idempotent via `content_hash`. **Retrieval** (`rag/retrieve.ts`): embed query → cosine over `ai_embeddings`, filtered by the **PURE** access filter (`rag/access.ts`) — `tenant_scope` ∩ caller-scopes AND `visibility` — BEFORE the LLM sees a chunk. Owner spans all tenants; chef/klant are scoped to self + placement-bridge (future PAs are safe-by-construction). `read-model/knowledge.ts` turns hits into human citations ("Notitie over chef Lisa de Vries").
 
-Files: `src/lib/ai/{runtime,tools,read-model,actions}/**` · `src/lib/ai/{playbook,config,embeddings,types}.ts` · `src/app/api/ai/chat/route.ts` · `src/components/ai/Assistant{Widget,Chat}.tsx`. Smokes: `scripts/smoke-ai-{spine,brain,tools,safety,usage}.mts` + live `scripts/live-ai-{brain,loop,context}-check.mts`. ⚠ OpenAI key rotation pending; WhatsApp/voice channels ON HOLD.
+Both layers degrade to "niet beschikbaar" without a key/vectors. The chunked store is (re)indexed by running `scripts/rag-ingest.mts`; ⏳ a nightly auto-refresh into `ai_embeddings` is not yet wired into `embedding-refresh.ts` (Railway workers can't import the shared redact/chunk).
+
+Files: `src/lib/ai/{runtime,tools,read-model,actions,rag}/**` · `src/lib/ai/{playbook,config,embeddings,types}.ts` · `src/app/api/ai/chat/route.ts` · `src/components/ai/Assistant{Widget,Chat}.tsx`. Smokes (key-free gate): `scripts/smoke-ai-{spine,brain,tools,safety,usage,rag}.mts` (rag covers redaction + chunking + the access-filter logic) + LIVE `scripts/smoke-ai-rag-retrieval.mts` (NEVER-source allowlist · redaction-in-corpus · chef-A-never-sees-chef-B) + live `scripts/live-ai-{brain,loop,context}-check.mts`. ⚠ OpenAI key rotation pending; WhatsApp/voice channels ON HOLD.
 
 ---
 
@@ -1208,13 +1212,13 @@ are covered by Parts 1–4 above.
 
 ## 7.3 — AI assistant tool layer (LIVE — see §1.22)
 
-The owner AI assistant is **live** (PA-V1 + 2026-06 expansion): 34 tools in
+The owner AI assistant is **live** (PA-V1 + 2026-06 expansion + notes-RAG): 38 tools in
 `src/lib/ai/tools/index.ts`, runtime in `src/lib/ai/runtime/**`, full flow in §1.22.
 Design contracts: `docs/ai/tool-contracts/` (client-tools · client-request-tools ·
 client-template-tools · rating-tools) · safety envelope `docs/ai/ai-safety-rules.md` ·
 RAG source rules `docs/ai/rag-source-catalog.md` (NEVER read `placements.notes` for
 klant-facing answers) · RAG ingestion spec `docs/ai/rag-ingestion-contract.md`
-(chunked notes-RAG — not yet built).
+(chunked notes-RAG — **LIVE**: `src/lib/ai/rag/**` + `knowledge.search`, `ai_embeddings` store).
 
 ---
 

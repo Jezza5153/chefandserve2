@@ -60,6 +60,7 @@ const SAMPLE: Record<string, unknown> = {
   "clients.semantic_search": { query: "test" },
   "shifts.margin": { shiftId: "x" },
   "contacts.timeline": { targetType: "chef", targetId: "x" },
+  "knowledge.search": { query: "test" },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 
