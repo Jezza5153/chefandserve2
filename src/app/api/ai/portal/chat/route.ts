@@ -13,8 +13,8 @@ import { env } from "@/lib/env";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { aiConfirmSecret, aiEnabled, aiModel } from "@/lib/ai/config";
 import { createOpenAiBrain } from "@/lib/ai/runtime/openai-brain";
-import { CHEF_SYSTEM_PROMPT } from "@/lib/ai/runtime/portal-prompts";
-import { runChefAssistant } from "@/lib/ai/runtime/assistant";
+import { CHEF_SYSTEM_PROMPT, CLIENT_SYSTEM_PROMPT } from "@/lib/ai/runtime/portal-prompts";
+import { runChefAssistant, runClientAssistant } from "@/lib/ai/runtime/assistant";
 import { recordAiUsage } from "@/lib/ai/read-model/ai-usage";
 import type { Msg } from "@/lib/ai/runtime/agent";
 
@@ -67,17 +67,16 @@ export async function POST(req: Request): Promise<Response> {
   };
 
   try {
-    // PR-PORTAL-A ships the chef assistant; the klant branch follows.
-    if (kind !== "chef") {
-      return NextResponse.json({ disabled: true, message: "De klant-assistent komt binnenkort." });
-    }
-    const brain = createOpenAiBrain({ apiKey: env.OPENAI_API_KEY, model: aiModel(), systemPrompt: CHEF_SYSTEM_PROMPT, onUsage });
-    const outcome = await runChefAssistant({ userId: session.user.id, channel: "dashboard", messages, brain, confirmSecret });
+    const systemPrompt = kind === "chef" ? CHEF_SYSTEM_PROMPT : CLIENT_SYSTEM_PROMPT;
+    const brain = createOpenAiBrain({ apiKey: env.OPENAI_API_KEY, model: aiModel(), systemPrompt, onUsage });
+    const run = { userId: session.user.id, channel: "dashboard" as const, messages, brain, confirmSecret };
+    const outcome = kind === "chef" ? await runChefAssistant(run) : await runClientAssistant(run);
     if (outcome === null) {
+      const what = kind === "chef" ? "chef-profiel" : "klant-profiel";
       return NextResponse.json({
         outcome: {
           kind: "final",
-          text: "Er is nog geen chef-profiel aan je account gekoppeld. Neem contact op met het kantoor.",
+          text: `Er is nog geen ${what} aan je account gekoppeld. Neem contact op met het kantoor.`,
           steps: [],
         },
       });
