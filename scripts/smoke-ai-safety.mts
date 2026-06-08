@@ -53,6 +53,7 @@ const SAMPLE: Record<string, unknown> = {
   "chefs.work_summary": { chefId: "x" },
   "chefs.feedback": { chefId: "x" },
   "chefs.trends": { chefId: "x" },
+  "chefs.profile_completeness": { chefId: "x" },
   "clients.history": { clientId: "x" },
   "shifts.suggest_chefs": { shiftId: "x" },
   "chefs.semantic_search": { query: "test" },
