@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-const { ingestAll, ingestDocs, ingestCvs } = await import("@/lib/ai/rag/ingest");
+const { ingestAll, ingestDocs } = await import("@/lib/ai/rag/ingest");
 
 console.log("=== RAG ingestion ===\n");
 console.log("── DB sources ──");
@@ -37,12 +37,9 @@ if (existsSync("docs/ai")) {
 const docs = docPaths.map((p) => ({ path: p, content: readFileSync(p, "utf8") }));
 const docCounts = await ingestDocs(docs, { onLog: (m) => console.log(m) });
 
-console.log("\n── chef CVs (text PDFs) ──");
-const cvCounts = await ingestCvs({ onLog: (m) => console.log(m) });
-
+// Note: chef CVs are indexed inside ingestAll() above (the `cv:` line) — they ride the cron too.
 console.log(
-  `\n=== totals — DB: ${result.totals.indexed} chunks indexed · ${result.totals.unchanged} unchanged · ${result.totals.skippedPiiDense} skipped(PII) ` +
-    `| docs: ${docCounts.indexed} indexed · ${docCounts.unchanged} unchanged (${docPaths.length} files) ` +
-    `| cv: ${cvCounts.indexed} indexed · ${cvCounts.rows} doc(s) ===`,
+  `\n=== totals — DB sources + CVs: ${result.totals.indexed} chunks indexed · ${result.totals.unchanged} unchanged · ${result.totals.skippedPiiDense} skipped(PII) ` +
+    `| docs: ${docCounts.indexed} indexed · ${docCounts.unchanged} unchanged (${docPaths.length} files) ===`,
 );
 process.exit(0);

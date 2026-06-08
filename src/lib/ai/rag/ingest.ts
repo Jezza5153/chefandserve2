@@ -264,7 +264,8 @@ export async function ingestDocs(
  * uploaded_by = chef.userId, per rag-source-catalog.md: never OCR third-party/ID docs). Fetches
  * the PDF from R2 → extracts text (unpdf, no OCR — scanned PDFs with no embedded text are
  * skipped) → redact → chunk → embed. visibility=chef_own_and_admin, tenant_scope=chefId:<id>.
- * Script-driven (like docs) — R2 + PDF parsing stays out of the nightly cron's hot path.
+ * Called from ingestAll(), so the nightly Vercel cron self-maintains it (R2 is reachable from
+ * the cron; `unpdf` is dynamic-imported). Skips cleanly when R2 is unconfigured.
  */
 export async function ingestCvs(opts: Opts = {}): Promise<SourceCounts> {
   const log = opts.onLog ?? (() => {});
@@ -387,6 +388,10 @@ export async function ingestAll(opts: Opts = {}): Promise<IngestResult> {
   for (const def of RAG_SOURCES) {
     sources.push(await ingestSource(def, opts));
   }
+  // Chef CVs (R2 PDFs → unpdf). Self-maintaining via the nightly cron — R2 IS reachable from
+  // the Vercel runtime (unlike repo docs), and `unpdf` is dynamic-imported so it only loads
+  // when there are CVs to parse. Skips cleanly when R2 is unconfigured (e.g. dev).
+  sources.push(await ingestCvs(opts));
 
   const totals = sources.reduce(
     (acc, c) => ({
