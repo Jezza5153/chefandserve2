@@ -371,7 +371,11 @@ export default async function RosterPage({
           <Link href={navHref(prevAnchor)} className="rounded-full border border-ink-200 bg-white px-3 py-1.5 font-ui text-[11px] text-ink-700 hover:border-burgundy hover:text-burgundy">←</Link>
           <Link href={`/admin/business/roster?view=${view}`} className="rounded-full border border-ink-200 bg-white px-3 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-ink-700 hover:border-burgundy hover:text-burgundy">Vandaag</Link>
           <Link href={navHref(nextAnchor)} className="rounded-full border border-ink-200 bg-white px-3 py-1.5 font-ui text-[11px] text-ink-700 hover:border-burgundy hover:text-burgundy">→</Link>
-          <Link href="/admin/business/shifts/new" className="ml-1 flex items-center gap-1 rounded-full bg-burgundy px-3.5 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy/90">
+          <Link href="/admin/business/roster/planbord" className="ml-1 flex items-center gap-1 rounded-full border border-burgundy/30 bg-white px-3.5 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy hover:bg-burgundy/5">
+            <Icon name="calendar-days" className="h-3.5 w-3.5" />
+            Planbord
+          </Link>
+          <Link href="/admin/business/shifts/new" className="flex items-center gap-1 rounded-full bg-burgundy px-3.5 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy/90">
             <Icon name="plus-circle" className="h-3.5 w-3.5" />
             Nieuwe shift
           </Link>
