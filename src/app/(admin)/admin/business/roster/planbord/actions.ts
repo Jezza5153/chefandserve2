@@ -13,7 +13,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
 import { shifts } from "@/lib/db/schema";
 import { draftPlacement, findMatchesForShift } from "@/lib/domain/matching";
-import { estimateTravel } from "@/lib/domain/travel";
+import { estimateMargin, estimateTravel } from "@/lib/domain/travel";
 import { autofillWeek, type AutofillResult } from "@/lib/domain/roster-autofill";
 import {
   clearDraftsForPeriod,
@@ -21,7 +21,7 @@ import {
   removeDraftPlacement,
   type PublishResult,
 } from "@/lib/domain/roster-publish";
-import { requirePermission } from "@/lib/permissions";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 import { getAmsterdamWeekRange } from "@/lib/roster-format";
 
 const PLANBORD_PATH = "/admin/business/roster/planbord";
@@ -71,28 +71,49 @@ export async function matchesForShiftAction(shiftId: string): Promise<
     reason: string | null;
     warning: string | null;
     travelKm: number | null;
+    marginCents: number | null;
+    marginTone: "ok" | "low" | "negative" | null;
   }>
 > {
-  await requirePermission("shifts", "write");
+  const session = await requirePermission("shifts", "write");
+  // Margin reveals rates → owner-only (payroll.read). Planners see score + travel.
+  const canSeeMargin = await hasPermission(session, "payroll", "read");
   const shift = await db.query.shifts.findFirst({ where: eq(shifts.id, shiftId) });
   const to =
     shift?.latitude != null && shift?.longitude != null
       ? { lat: Number(shift.latitude), lng: Number(shift.longitude) }
       : null;
+  const hours = shift
+    ? (new Date(shift.endsAt).getTime() - new Date(shift.startsAt).getTime()) / 3_600_000
+    : 0;
   const matches = await findMatchesForShift(shiftId, { limit: 8 });
   return matches.map((m) => {
     const from =
       m.chef.latitude != null && m.chef.longitude != null
         ? { lat: Number(m.chef.latitude), lng: Number(m.chef.longitude) }
         : null;
-    const travelKm = to && from ? estimateTravel({ from, to, mode: m.chef.transportMode }).km : null;
+    const travel = to && from ? estimateTravel({ from, to, mode: m.chef.transportMode }) : null;
+    let marginCents: number | null = null;
+    let marginTone: "ok" | "low" | "negative" | null = null;
+    if (canSeeMargin && shift) {
+      const mg = estimateMargin({
+        clientRateCents: shift.clientRateCents,
+        chefRateCents: m.chef.hourlyRateMinCents ?? shift.chefRateCents,
+        hours,
+        travelCents: travel?.costCents ?? 0,
+      });
+      marginCents = mg.marginCents;
+      marginTone = mg.tone;
+    }
     return {
       chefId: m.chef.id,
       fullName: m.chef.fullName,
       score: m.score,
       reason: m.reasons[0] ?? null,
       warning: m.warnings[0] ?? null,
-      travelKm,
+      travelKm: travel?.km ?? null,
+      marginCents,
+      marginTone,
     };
   });
 }

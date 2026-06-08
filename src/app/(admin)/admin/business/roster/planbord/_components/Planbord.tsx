@@ -52,6 +52,7 @@ export type PlanbordChef = {
   skills: string[];
   city: string | null;
 };
+type MarginTone = "ok" | "low" | "negative";
 type ShiftMatch = {
   chefId: string;
   fullName: string;
@@ -59,12 +60,22 @@ type ShiftMatch = {
   reason: string | null;
   warning: string | null;
   travelKm: number | null;
+  marginCents: number | null;
+  marginTone: MarginTone | null;
 };
 type RailChef = PlanbordChef & {
   score?: number;
   reason?: string | null;
   warning?: string | null;
   travelKm?: number | null;
+  marginCents?: number | null;
+  marginTone?: MarginTone | null;
+};
+
+const MARGIN_TONE: Record<MarginTone, string> = {
+  ok: "bg-emerald-50 text-emerald-700",
+  low: "bg-amber-50 text-amber-700",
+  negative: "bg-red-50 text-red-700",
 };
 
 const SLOT_META: Record<string, { label: string; cls: string }> = {
@@ -221,6 +232,8 @@ export function Planbord({
             reason: m.reason,
             warning: m.warning,
             travelKm: m.travelKm,
+            marginCents: m.marginCents,
+            marginTone: m.marginTone,
           };
         })
       : chefPool;
@@ -528,11 +541,21 @@ function ChefCard({ chef }: { chef: RailChef }) {
     >
       <div className="flex items-center justify-between gap-1">
         <span className="truncate font-ui text-[12px] font-medium text-ink-900">{chef.fullName}</span>
-        {typeof chef.score === "number" && (
-          <span className="shrink-0 rounded-full bg-burgundy/10 px-1.5 py-0.5 font-ui text-[9px] font-medium text-burgundy">
-            {chef.score}
-          </span>
-        )}
+        <span className="flex shrink-0 items-center gap-1">
+          {chef.marginCents != null && chef.marginTone && (
+            <span
+              title="Geschatte marge bij deze chef (omzet − loon − reis)"
+              className={`rounded-full px-1.5 py-0.5 font-ui text-[9px] font-medium ${MARGIN_TONE[chef.marginTone]}`}
+            >
+              €{Math.round(chef.marginCents / 100)}
+            </span>
+          )}
+          {typeof chef.score === "number" && (
+            <span className="rounded-full bg-burgundy/10 px-1.5 py-0.5 font-ui text-[9px] font-medium text-burgundy">
+              {chef.score}
+            </span>
+          )}
+        </span>
       </div>
       <p className="truncate text-[10px] text-ink-500">
         {[chef.niveau, chef.city, chef.travelKm != null ? `${chef.travelKm} km` : null]
