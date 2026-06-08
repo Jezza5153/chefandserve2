@@ -84,6 +84,8 @@ function labelFor(
   }
   if (h.sourceTable === "contact_logs") return "Contactnotitie";
   if (h.sourceTable === "docs") return `Documentatie: ${h.sourcePk}`;
+  if (h.sourceTable === "chef_documents") return "CV-fragment";
+  if (h.sourceTable === "placements") return "Afgeronde plaatsing";
   return h.sourceTable;
 }
 

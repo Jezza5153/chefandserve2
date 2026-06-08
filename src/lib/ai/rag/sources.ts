@@ -182,6 +182,7 @@ export const RAG_SOURCES: RagSourceDef[] = [
 
 /**
  * The allowlisted source tables — smoke asserts the live corpus contains ONLY these. Includes
- * `docs` (project documentation, ingested via ingestDocs, not a RAG_SOURCES DB SELECT).
+ * `docs` (project documentation, ingestDocs) + `chef_documents` (chef-uploaded CV text,
+ * ingestCvs) — both ingested outside the RAG_SOURCES DB-SELECT path.
  */
-export const ALLOWED_SOURCE_TABLES = [...new Set([...RAG_SOURCES.map((d) => d.sourceTable), "docs"])];
+export const ALLOWED_SOURCE_TABLES = [...new Set([...RAG_SOURCES.map((d) => d.sourceTable), "docs", "chef_documents"])];
