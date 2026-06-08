@@ -27,6 +27,7 @@ import { Icon } from "@/components/admin/icons";
 import {
   autofillWeekAction,
   clearDraftsAction,
+  copyLastWeekAction,
   draftChefAction,
   matchesForShiftAction,
   publishWeekAction,
@@ -205,6 +206,24 @@ export function Planbord({
     });
   }
 
+  function copyPrevWeek() {
+    if (
+      !window.confirm(
+        "Kopieer vorige week?\n\nDe chefs van vorige week komen als concept op dezelfde dagen en diensten (zelfde klant, weekdag, rol). Je kunt daarna nog slepen en aanpassen voordat je publiceert.",
+      )
+    )
+      return;
+    startTransition(async () => {
+      const res = await copyLastWeekAction(weekStartKey);
+      setMsg(
+        res.filled === 0
+          ? "Niets te kopiëren — geen open plekken, of vorige week was er niets ingepland."
+          : `${res.filled} concept${res.filled === 1 ? "" : "en"} gekopieerd van vorige week op ${res.matchedShifts} dienst${res.matchedShifts === 1 ? "" : "en"} — controleer en publiceer.`,
+      );
+      router.refresh();
+    });
+  }
+
   function clearDrafts() {
     if (!window.confirm(`Alle ${draftCount} concept${draftCount === 1 ? "" : "en"} van deze week verwijderen?`)) return;
     startTransition(async () => {
@@ -285,6 +304,14 @@ export function Planbord({
                 Wis concepten
               </button>
             )}
+            <button
+              onClick={copyPrevWeek}
+              disabled={pending}
+              className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3.5 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-ink-700 hover:border-burgundy hover:text-burgundy disabled:opacity-40"
+            >
+              <Icon name="copy" className="h-3.5 w-3.5" />
+              Kopieer vorige week
+            </button>
             <button
               onClick={autofill}
               disabled={pending}

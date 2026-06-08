@@ -12,11 +12,12 @@
  * reviews and hits Publiceer. Deterministic today; the LLM/embedding scorer can
  * swap in behind findMatchesForShift later with NO change here.
  */
-import { and, asc, gte, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { shifts } from "@/lib/db/schema";
+import { placements, shifts } from "@/lib/db/schema";
 import { draftPlacement, findMatchesForShift } from "@/lib/domain/matching";
+import { amsterdamDayKey } from "@/lib/roster-format";
 
 export type AutofillResult = {
   /** Concepts created this pass. */
@@ -82,4 +83,108 @@ export async function autofillWeek(args: {
   }
 
   return { filled, openSlotsBefore, shiftsTouched: touched.size };
+}
+
+/* ----- "Kopieer vorige week" (PR-PLANBORD-9) ------------------------------- */
+
+/** Amsterdam weekday (0=Sun … 6=Sat) — same for a shift and its −7d twin. */
+function amsWeekday(d: Date | string): number {
+  return new Date(`${amsterdamDayKey(d)}T12:00:00Z`).getUTCDay();
+}
+
+export type CopyResult = {
+  /** Concepts created from last week. */
+  filled: number;
+  /** Distinct shifts that got at least one concept. */
+  matchedShifts: number;
+  /** Open slots in the period before the copy. */
+  openSlotsBefore: number;
+};
+
+/**
+ * Seed this week's open slots from LAST week's roster: for each open shift, find
+ * last week's placement(s) on the same (klant, weekday, rol) and draft that chef
+ * as a CONCEPT — the "same chef every Friday at Hotel X" pattern. Drafts only;
+ * publish re-validates (a chef now blocked / double-booked is skipped there).
+ */
+export async function copyLastWeek(args: {
+  startUtc: Date;
+  endUtc: Date;
+  actorUserId: string;
+}): Promise<CopyResult> {
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const prevStart = new Date(args.startUtc.getTime() - WEEK_MS);
+  const prevEnd = new Date(args.endUtc.getTime() - WEEK_MS);
+
+  // This week's shifts that still have open slots.
+  const thisRows = await db
+    .select({
+      id: shifts.id,
+      clientId: shifts.clientId,
+      startsAt: shifts.startsAt,
+      roleNeeded: shifts.roleNeeded,
+      headcount: shifts.headcount,
+      liveCount: sql<number>`(select count(*) from placements p where p.shift_id = ${shifts.id} and p.status in ('draft','proposed','accepted','confirmed'))::int`,
+    })
+    .from(shifts)
+    .where(
+      and(
+        gte(shifts.startsAt, args.startUtc),
+        lt(shifts.startsAt, args.endUtc),
+        sql`${shifts.status} not in ('cancelled','completed')`,
+      ),
+    )
+    .orderBy(asc(shifts.startsAt));
+
+  const openShifts = thisRows
+    .map((s) => ({
+      id: s.id,
+      key: `${s.clientId}|${amsWeekday(s.startsAt)}|${s.roleNeeded}`,
+      open: Math.max(0, s.headcount - s.liveCount),
+    }))
+    .filter((s) => s.open > 0);
+  const openSlotsBefore = openShifts.reduce((a, s) => a + s.open, 0);
+  if (openShifts.length === 0) return { filled: 0, matchedShifts: 0, openSlotsBefore: 0 };
+
+  // Last week: who worked what (klant, weekday, rol) → ordered chef list.
+  const prevRows = await db
+    .select({
+      chefId: placements.chefId,
+      clientId: shifts.clientId,
+      startsAt: shifts.startsAt,
+      roleNeeded: shifts.roleNeeded,
+    })
+    .from(placements)
+    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .where(
+      and(
+        gte(shifts.startsAt, prevStart),
+        lt(shifts.startsAt, prevEnd),
+        inArray(placements.status, ["proposed", "accepted", "confirmed", "completed"]),
+      ),
+    );
+
+  const byKey = new Map<string, string[]>();
+  for (const r of prevRows) {
+    const key = `${r.clientId}|${amsWeekday(r.startsAt)}|${r.roleNeeded}`;
+    const arr = byKey.get(key) ?? [];
+    if (!arr.includes(r.chefId)) arr.push(r.chefId);
+    byKey.set(key, arr);
+  }
+
+  let filled = 0;
+  const matched = new Set<string>();
+  for (const s of openShifts) {
+    let slotsLeft = s.open;
+    for (const chefId of byKey.get(s.key) ?? []) {
+      if (slotsLeft <= 0) break;
+      const res = await draftPlacement(s.id, chefId, { proposedBy: args.actorUserId });
+      if (res.status === "draft") {
+        filled++;
+        slotsLeft--;
+        matched.add(s.id);
+      }
+    }
+  }
+  return { filled, matchedShifts: matched.size, openSlotsBefore };
 }
