@@ -1,0 +1,1 @@
+ALTER TYPE "public"."placement_status" ADD VALUE 'draft';

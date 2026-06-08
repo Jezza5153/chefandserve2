@@ -161,6 +161,12 @@ export const placementStatusEnum = pgEnum("placement_status", [
   "cancelled", // either side cancelled before shift
   "no_show", // chef didn't turn up
   "completed", // shift happened, hours logged
+  // PR-PLANBORD-1: lifecycle-FIRST state despite array position. A private "concept"
+  // placement (planbord drag / AI draft) that is INVISIBLE to chef + klant and ignored
+  // by shift-status/fill counts until "Publiceer" flips it → proposed (which fires the
+  // existing proposal mails). Appended last because `ALTER TYPE ADD VALUE` appends — the
+  // array order must mirror the DB order, not the lifecycle order.
+  "draft",
 ]);
 
 /* ----- PR-FB-1: native onboarding form-builder + reminders enums ----------- */

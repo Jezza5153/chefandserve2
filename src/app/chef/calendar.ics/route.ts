@@ -9,7 +9,7 @@
  * remove the event from their calendar app.
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db/client";
@@ -65,7 +65,8 @@ export async function GET(req: Request) {
     .from(placements)
     .innerJoin(shifts, eq(shifts.id, placements.shiftId))
     .innerJoin(clients, eq(clients.id, shifts.clientId))
-    .where(eq(placements.chefId, chef.id));
+    // PR-PLANBORD-1: a draft concept must NEVER reach the chef's calendar feed.
+    .where(and(eq(placements.chefId, chef.id), ne(placements.status, "draft")));
 
   const ics = buildIcs({
     calendarName: `Chef & Serve — ${chef.name}`,

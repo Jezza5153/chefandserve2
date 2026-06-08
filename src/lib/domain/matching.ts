@@ -359,8 +359,8 @@ export async function findMatchesForShift(
     .where(
       and(
         eq(placements.shiftId, shift.id),
-        // anything except "rejected" or "cancelled" blocks re-proposal
-        inArray(placements.status, ["proposed", "accepted", "confirmed", "completed"]),
+        // a live status — OR a "draft" already placed onto this shift — blocks re-proposal
+        inArray(placements.status, ["draft", "proposed", "accepted", "confirmed", "completed"]),
       ),
     );
   const placedSet = new Set(alreadyPlaced.map((r) => r.chefId));
@@ -373,7 +373,9 @@ export async function findMatchesForShift(
     .where(
       and(
         ne(placements.shiftId, shift.id),
-        inArray(placements.status, ["accepted", "confirmed"]),
+        // PR-PLANBORD-1: a "draft" tentatively occupies the chef's time too, so an
+        // overlapping concept excludes them from suggestions (no self-double-booking).
+        inArray(placements.status, ["draft", "accepted", "confirmed"]),
         // shift overlap: not (other.endsAt <= this.startsAt OR other.startsAt >= this.endsAt)
         sql`NOT (${shifts.endsAt} <= ${shift.startsAt} OR ${shifts.startsAt} >= ${shift.endsAt})`,
       ),
@@ -505,96 +507,159 @@ export async function proposePlacement(
     .set({ status: "open", updatedAt: new Date() })
     .where(and(eq(shifts.id, shiftId), eq(shifts.status, "request")));
 
-  // Best-effort notifications: chef gets the proposal, klant gets a heads-up.
-  // Failure here doesn't abort the placement — admin sees the row regardless.
-  try {
-    const chef = await db.query.chefs.findFirst({ where: eq(chefs.id, chefId) });
-    const shift = await db.query.shifts.findFirst({ where: eq(shifts.id, shiftId) });
-    if (!shift) return { placementId: placement.id, status: "proposed" };
-
-    const client = await db.query.clients.findFirst({
-      where: eq(clients.id, shift.clientId),
-    });
-
-    // 1. Chef email
-    if (chef?.email) {
-      const placementUrl = `${env.NEXT_PUBLIC_APP_URL}/chef/shifts/${placement.id}`;
-      const send = await sendEmail({
-        to: chef.email,
-        subject: `Nieuwe shift bij ${client?.companyName ?? "een klant"} — ${shift.roleNeeded}`,
-        react: ShiftProposedEmail({
-          chefName: chef.fullName,
-          clientName: client?.companyName ?? "Onze klant",
-          shiftWhen: formatShiftWhen(shift.startsAt, shift.endsAt),
-          shiftRole: shift.roleNeeded,
-          shiftCity: shift.city,
-          shiftRateEur: shift.chefRateCents ? shift.chefRateCents / 100 : null,
-          shiftNotes: shift.notes,
-          placementUrl,
-        }),
-      });
-      // PR-AUDIT-4: track the chef-proposal send (parity with the klant email).
-      if (send.ok) {
-        await recordEmailMessage({
-          providerMessageId: send.id,
-          toEmail: chef.email,
-          template: "ShiftProposedEmail",
-          eventKey: "shift_proposed",
-          entityType: "placements",
-          entityId: placement.id,
-          userId: chef.userId ?? undefined,
-        });
-      }
-    }
-
-    // 2. Klant email + notification (PR-KLANT-3) — they see the proposed chef
-    //    on the hub and can send a comment before it's confirmed.
-    if (client) {
-      const hubUrl = `${env.NEXT_PUBLIC_APP_URL}/client/shifts/${shiftId}`;
-      const to = await recipientsForClient(client.id, "chef_proposed");
-      if (to.length > 0 && chef) {
-        const send = await sendEmail({
-          to,
-          subject: `Voorgestelde chef voor ${shift.roleNeeded} — ${formatShiftWhen(shift.startsAt, shift.endsAt)}`,
-          react: ChefProposedKlantEmail({
-            contactName: client.contactName,
-            companyName: client.companyName,
-            chefName: chef.fullName,
-            chefVakniveau: chef.vakniveau,
-            chefYears: chef.yearsExperience,
-            shiftWhen: formatShiftWhen(shift.startsAt, shift.endsAt),
-            shiftRole: shift.roleNeeded,
-            hubUrl,
-          }),
-        });
-        if (send.ok) {
-          for (const addr of to) {
-            await recordEmailMessage({
-              providerMessageId: send.id,
-              toEmail: addr,
-              template: "ChefProposedKlantEmail",
-              eventKey: "chef_proposed",
-              entityType: "placements",
-              entityId: placement.id,
-            });
-          }
-        }
-      }
-      if (client.userId) {
-        await createNotification({
-          userId: client.userId,
-          type: "chef_proposed",
-          title: `Voorgestelde chef voor ${shift.roleNeeded}`,
-          body: "Bekijk het voorstel en stuur eventueel een opmerking.",
-          actionUrl: `/client/shifts/${shiftId}`,
-          entityType: "placements",
-          entityId: placement.id,
-        });
-      }
-    }
-  } catch (e) {
-    console.error("[propose] notification(s) failed:", e);
-  }
+  // Best-effort notifications, extracted to sendProposalNotifications() so the
+  // planbord "Publiceer" path fires the EXACT same chef + klant mails on publish.
+  await sendProposalNotifications(placement.id).catch((e) =>
+    console.error("[propose] notification(s) failed:", e),
+  );
 
   return { placementId: placement.id, status: "proposed" };
+}
+
+/**
+ * Fire the proposal notifications for ONE placement: the chef's invitation mail,
+ * the klant's "voorgestelde chef" mail (via recipientsForClient), and the klant
+ * in-app notification — each tracked with recordEmailMessage. Extracted from
+ * proposePlacement so the planbord "Publiceer" path (publishDraftsForPeriod) sends
+ * the IDENTICAL mails when a draft flips → proposed. Best-effort: callers wrap in
+ * `.catch` — a mail failure must never roll back the placement.
+ */
+export async function sendProposalNotifications(placementId: string): Promise<void> {
+  const placement = await db.query.placements.findFirst({ where: eq(placements.id, placementId) });
+  if (!placement) return;
+  const chef = await db.query.chefs.findFirst({ where: eq(chefs.id, placement.chefId) });
+  const shift = await db.query.shifts.findFirst({ where: eq(shifts.id, placement.shiftId) });
+  if (!shift) return;
+  const client = await db.query.clients.findFirst({ where: eq(clients.id, shift.clientId) });
+
+  // 1. Chef email
+  if (chef?.email) {
+    const placementUrl = `${env.NEXT_PUBLIC_APP_URL}/chef/shifts/${placementId}`;
+    const send = await sendEmail({
+      to: chef.email,
+      subject: `Nieuwe shift bij ${client?.companyName ?? "een klant"} — ${shift.roleNeeded}`,
+      react: ShiftProposedEmail({
+        chefName: chef.fullName,
+        clientName: client?.companyName ?? "Onze klant",
+        shiftWhen: formatShiftWhen(shift.startsAt, shift.endsAt),
+        shiftRole: shift.roleNeeded,
+        shiftCity: shift.city,
+        shiftRateEur: shift.chefRateCents ? shift.chefRateCents / 100 : null,
+        shiftNotes: shift.notes,
+        placementUrl,
+      }),
+    });
+    // PR-AUDIT-4: track the chef-proposal send (parity with the klant email).
+    if (send.ok) {
+      await recordEmailMessage({
+        providerMessageId: send.id,
+        toEmail: chef.email,
+        template: "ShiftProposedEmail",
+        eventKey: "shift_proposed",
+        entityType: "placements",
+        entityId: placementId,
+        userId: chef.userId ?? undefined,
+      });
+    }
+  }
+
+  // 2. Klant email + notification (PR-KLANT-3) — they see the proposed chef on
+  //    the hub and can send a comment before it's confirmed.
+  if (client) {
+    const hubUrl = `${env.NEXT_PUBLIC_APP_URL}/client/shifts/${shift.id}`;
+    const to = await recipientsForClient(client.id, "chef_proposed");
+    if (to.length > 0 && chef) {
+      const send = await sendEmail({
+        to,
+        subject: `Voorgestelde chef voor ${shift.roleNeeded} — ${formatShiftWhen(shift.startsAt, shift.endsAt)}`,
+        react: ChefProposedKlantEmail({
+          contactName: client.contactName,
+          companyName: client.companyName,
+          chefName: chef.fullName,
+          chefVakniveau: chef.vakniveau,
+          chefYears: chef.yearsExperience,
+          shiftWhen: formatShiftWhen(shift.startsAt, shift.endsAt),
+          shiftRole: shift.roleNeeded,
+          hubUrl,
+        }),
+      });
+      if (send.ok) {
+        for (const addr of to) {
+          await recordEmailMessage({
+            providerMessageId: send.id,
+            toEmail: addr,
+            template: "ChefProposedKlantEmail",
+            eventKey: "chef_proposed",
+            entityType: "placements",
+            entityId: placementId,
+          });
+        }
+      }
+    }
+    if (client.userId) {
+      await createNotification({
+        userId: client.userId,
+        type: "chef_proposed",
+        title: `Voorgestelde chef voor ${shift.roleNeeded}`,
+        body: "Bekijk het voorstel en stuur eventueel een opmerking.",
+        actionUrl: `/client/shifts/${shift.id}`,
+        entityType: "placements",
+        entityId: placementId,
+      });
+    }
+  }
+}
+
+/**
+ * Planbord "concept" insert — place a chef onto a shift as a private DRAFT.
+ * Same idempotent conflict-safety as proposePlacement (the unique (chefId,
+ * shiftId) index) but: status = 'draft', NO notifications, NO shift recompute —
+ * a draft is invisible to chef + klant and to shift-status until "Publiceer".
+ * Refuses to overwrite a live (proposed/accepted/confirmed) row.
+ */
+export type DraftResult = { placementId: string; status: "draft" | "already_active" };
+
+export async function draftPlacement(
+  shiftId: string,
+  chefId: string,
+  options: { proposedBy: string; matchScore?: number; notes?: string },
+): Promise<DraftResult> {
+  const existing = await db
+    .select({ id: placements.id, status: placements.status })
+    .from(placements)
+    .where(and(eq(placements.shiftId, shiftId), eq(placements.chefId, chefId)))
+    .limit(1);
+  if (existing.length > 0 && ["proposed", "accepted", "confirmed"].includes(existing[0].status)) {
+    return { placementId: existing[0].id, status: "already_active" };
+  }
+
+  const now = new Date();
+  const [placement] = await db
+    .insert(placements)
+    .values({
+      shiftId,
+      chefId,
+      status: "draft",
+      proposedBy: options.proposedBy,
+      matchScore: options.matchScore ?? null,
+      notes: options.notes ?? null,
+    })
+    .onConflictDoUpdate({
+      target: [placements.chefId, placements.shiftId],
+      set: {
+        status: "draft",
+        proposedBy: options.proposedBy,
+        matchScore: options.matchScore ?? null,
+        notes: options.notes ?? null,
+        // Re-drafting a prior rejected/cancelled row clears its lifecycle stamps.
+        respondedAt: null,
+        confirmedAt: null,
+        cancelledAt: null,
+        completedAt: null,
+        updatedAt: now,
+      },
+    })
+    .returning({ id: placements.id });
+
+  return { placementId: placement.id, status: "draft" };
 }

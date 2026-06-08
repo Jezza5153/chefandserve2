@@ -6,7 +6,7 @@
  * STATUS:CANCELLED so calendar apps remove them.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db/client";
@@ -59,7 +59,8 @@ export async function GET(req: Request) {
     .from(placements)
     .innerJoin(shifts, eq(shifts.id, placements.shiftId))
     .innerJoin(chefs, eq(chefs.id, placements.chefId))
-    .where(and(eq(shifts.clientId, client.id)));
+    // PR-PLANBORD-1: a draft concept must NEVER reach the klant's calendar feed.
+    .where(and(eq(shifts.clientId, client.id), ne(placements.status, "draft")));
 
   const ics = buildIcs({
     calendarName: `Chef & Serve — ${client.name}`,

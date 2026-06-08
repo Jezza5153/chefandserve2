@@ -274,6 +274,13 @@
       "when": 1780708205586,
       "tag": "0038_user_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1780941456312,
+      "tag": "0039_planbord_draft_status",
+      "breakpoints": true
     }
   ]
 }

@@ -129,13 +129,12 @@ async function main() {
         AND s.ends_at <= now()
         AND EXISTS (
           SELECT 1 FROM placements p
-          WHERE p.shift_id = s.id AND p.status <> 'cancelled'
+          WHERE p.shift_id = s.id AND p.status NOT IN ('cancelled', 'draft')
         )
         AND NOT EXISTS (
           SELECT 1 FROM placements p
           WHERE p.shift_id = s.id
-            AND p.status <> 'cancelled'
-            AND p.status <> 'completed'
+            AND p.status NOT IN ('cancelled', 'draft', 'completed')
         )
       RETURNING s.id
     ` as Array<{ id: string }>;

@@ -74,7 +74,9 @@ export async function cancelShiftAndPlacements(
     .where(
       and(
         eq(placements.shiftId, shiftId),
-        inArray(placements.status, ["proposed", "accepted", "confirmed"]),
+        // PR-PLANBORD-1: include "draft" so cancelling a shift also clears its
+        // unpublished concepts (they'd otherwise dangle on a cancelled shift).
+        inArray(placements.status, ["draft", "proposed", "accepted", "confirmed"]),
       ),
     );
 
@@ -111,7 +113,13 @@ export async function recomputeShiftStatus(
     .select({ status: placements.status })
     .from(placements)
     .where(
-      and(eq(placements.shiftId, shiftId), ne(placements.status, "cancelled")),
+      and(
+        eq(placements.shiftId, shiftId),
+        ne(placements.status, "cancelled"),
+        // PR-PLANBORD-1: a draft is a private concept — it must NEVER move the
+        // shift's status (open/filled/completed). Excluded from the live count.
+        ne(placements.status, "draft"),
+      ),
     );
 
   const nonCancelledCount = live.length;

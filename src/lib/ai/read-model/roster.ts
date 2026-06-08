@@ -72,6 +72,7 @@ export async function loadRosterAiSummary(args: {
       acceptedCount: sql<number>`count(*) filter (where ${placements.status} = 'accepted')::int`,
       proposedCount: sql<number>`count(*) filter (where ${placements.status} = 'proposed')::int`,
       earliestProposedAt: sql<string | null>`min(${placements.proposedAt}) filter (where ${placements.status} = 'proposed')`,
+      draftCount: sql<number>`count(*) filter (where ${placements.status} = 'draft')::int`,
     })
     .from(shifts)
     .leftJoin(clients, eq(clients.id, shifts.clientId))
@@ -105,5 +106,16 @@ export async function loadRosterAiSummary(args: {
     settings: { criticalHours: rs.criticalHours, labels: rs.labels },
     now: args.now,
   });
-  return rosterAiSummary(vm);
+  const summary = rosterAiSummary(vm);
+
+  // PR-PLANBORD-1: surface unpublished concepts so the assistant can say "staat
+  // klaar, nog niet gepubliceerd" before the owner asks to publish.
+  const draftsPending = rows.reduce((a, r) => a + (r.draftCount ?? 0), 0);
+  return {
+    text:
+      draftsPending > 0
+        ? `${summary.text} Let op: ${draftsPending} concept${draftsPending === 1 ? "" : "en"} staan klaar maar zijn nog niet gepubliceerd.`
+        : summary.text,
+    facts: { ...summary.facts, draftsPending },
+  };
 }

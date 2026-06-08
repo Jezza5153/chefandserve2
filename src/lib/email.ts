@@ -14,12 +14,21 @@ import { env } from "@/lib/env";
 
 const resend = new Resend(env.RESEND_API_KEY);
 
+export type EmailAttachment = {
+  filename: string;
+  /** Raw bytes (Buffer) or base64 string — Resend accepts both. */
+  content: Buffer | string;
+  contentType?: string;
+};
+
 export type SendEmailArgs = {
   to: string | string[];
   subject: string;
   react: React.ReactElement;
   /** Optional reply-to (e.g. Maarten's email so chefs reply to him not noreply) */
   replyTo?: string;
+  /** Optional attachments (e.g. a week .ics so recipients add it to their calendar). */
+  attachments?: EmailAttachment[];
 };
 
 export type SendEmailResult =
@@ -34,6 +43,7 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
       subject: args.subject,
       react: args.react,
       replyTo: args.replyTo,
+      attachments: args.attachments,
     });
     if (result.error) {
       console.error("[email] Resend error:", result.error);
