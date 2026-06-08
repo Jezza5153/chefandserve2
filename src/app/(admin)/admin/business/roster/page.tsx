@@ -41,6 +41,7 @@ import {
   type RosterView,
 } from "@/lib/domain/roster-intel";
 import { getRosterSettings } from "@/lib/domain/user-settings";
+import { formatChefRole, formatSegment } from "@/lib/labels";
 import { requirePermission } from "@/lib/permissions";
 import {
   addDaysToKey,
@@ -65,7 +66,6 @@ export const dynamic = "force-dynamic";
 
 const KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-const humanize = (s: string) => cap(s.replace(/_/g, " "));
 
 function fmtDay(key: string, opts: Intl.DateTimeFormatOptions): string {
   return new Date(`${key}T12:00:00Z`).toLocaleDateString("nl-NL", { timeZone: "UTC", ...opts });
@@ -264,8 +264,8 @@ export default async function RosterPage({
     chefTableRows = free.map((c) => ({
       id: c.id,
       fullName: c.fullName,
-      niveau: c.vakniveau ? humanize(c.vakniveau) : null,
-      skills: c.segments ?? [],
+      niveau: c.vakniveau ? formatChefRole(c.vakniveau) : null,
+      skills: (c.segments ?? []).map(formatSegment),
       locatie: c.city,
     }));
   }

@@ -80,6 +80,8 @@ const serverSchema = z.object({
   //   actieve model. Beide gezet → de AI-tokenkaart toont echte kosten; leeg → alleen tokens.
   OPENAI_PRICE_INPUT_PER_1M: z.coerce.number().nonnegative().optional(),
   OPENAI_PRICE_OUTPUT_PER_1M: z.coerce.number().nonnegative().optional(),
+  //   OPENAI_PRICE_CURRENCY — display currency for the env-set prices (default USD).
+  OPENAI_PRICE_CURRENCY: z.string().optional(),
 
   // Phase 1 PR-S1A — rate-limit key derivation secret.
   // hmac_sha256(SECRET, scope+":"+identifier) becomes the row primary key.

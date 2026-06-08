@@ -34,6 +34,7 @@ import {
   type AttentionItem,
   type AttentionTone,
 } from "@/lib/domain/dashboard-intel";
+import { formatShiftRole } from "@/lib/labels";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { getRosterSettings } from "@/lib/domain/user-settings";
 import { getPlatformRollups } from "@/lib/domain/platform-rollups";
@@ -553,7 +554,7 @@ function DayTable({ title, shifts: dayShifts, countByShift, accent }: { title: s
             return (
               <tr key={s.id} className="hover:bg-bg-gray">
                 <td className="px-5 py-3 font-ui text-[13px] text-ink-900 whitespace-nowrap align-top">{hhmm(s.startsAt)}–{hhmm(s.endsAt)}</td>
-                <td className="px-2 py-3 align-top"><p className="text-ink-900">{s.companyName ?? "Onbekende klant"}</p><p className="text-xs text-ink-500">{s.roleNeeded}{s.city ? ` · ${s.city}` : ""}</p></td>
+                <td className="px-2 py-3 align-top"><p className="text-ink-900">{s.companyName ?? "Onbekende klant"}</p><p className="text-xs text-ink-500">{formatShiftRole(s.roleNeeded)}{s.city ? ` · ${s.city}` : ""}</p></td>
                 <td className="px-2 py-3 align-top"><span className={`inline-flex items-center gap-1.5 ${chip.text}`}><span className={`h-2 w-2 rounded-full ${chip.dot}`} />{chip.label}</span></td>
                 <td className={`px-2 py-3 align-top font-ui ${chip.text}`}>{cnt} / {s.headcount}</td>
                 <td className="px-3 py-3 align-top text-ink-500"><Link href={`/admin/business/shifts/${s.id}`}><Icon name="chevron-right" className="h-[18px] w-[18px]" /></Link></td>

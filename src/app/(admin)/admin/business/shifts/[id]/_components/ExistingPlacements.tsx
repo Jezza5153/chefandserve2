@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { fieldClass } from "@/components/forms/Fields";
 import { listVisibleComments } from "@/lib/domain/comments";
+import { formatChefRole } from "@/lib/labels";
 import type { Chef, Placement } from "@/lib/db/schema";
 
 type PlacementComment = Awaited<ReturnType<typeof listVisibleComments>>[number];
@@ -46,7 +47,7 @@ export function ExistingPlacements({
                   {chef.fullName}
                 </Link>
                 <p className="mt-0.5 text-xs text-ink-500">
-                  {chef.vakniveau ?? "—"} · {chef.city ?? "—"}
+                  {formatChefRole(chef.vakniveau)} · {chef.city ?? "—"}
                   {placement.matchScore && ` · match-score: ${placement.matchScore}`}
                 </p>
               </div>

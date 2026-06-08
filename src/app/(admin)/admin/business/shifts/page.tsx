@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { clients, shifts } from "@/lib/db/schema";
+import { formatShiftRole } from "@/lib/labels";
 import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Shifts" };
@@ -125,7 +126,7 @@ export default async function ShiftsListPage({
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-700">
-                    {r.roleNeeded}
+                    {formatShiftRole(r.roleNeeded)}
                     {r.segment && (
                       <span className="ml-1 text-ink-500">· {r.segment}</span>
                     )}

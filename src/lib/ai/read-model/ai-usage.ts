@@ -128,7 +128,8 @@ export async function getAiUsageSummary(args: { now: Date; windowDays?: number }
     .where(eq(businessSettings.key, KEY))
     .limit(1);
   const agg = aggregateUsage(readBag(row?.value), fromKey);
-  const amount = computeCost(agg.prompt, agg.completion, aiPricing());
+  const pricing = aiPricing();
+  const amount = computeCost(agg.prompt, agg.completion, pricing);
   return {
     windowDays,
     promptTokens: agg.prompt,
@@ -136,6 +137,6 @@ export async function getAiUsageSummary(args: { now: Date; windowDays?: number }
     totalTokens: agg.prompt + agg.completion,
     turns: agg.turns,
     models: [...agg.models],
-    cost: amount == null ? null : { amount, currency: "EUR" },
+    cost: amount == null || pricing == null ? null : { amount, currency: pricing.currency },
   };
 }
