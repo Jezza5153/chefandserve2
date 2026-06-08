@@ -545,6 +545,17 @@ Route `/admin/business/roster/planbord` (gate `shifts:write`; **Rooster** = over
 
 **AI (owner PA):** `roster.autofill` (confirm-gated) vult de week met concepten ("vul de week voor volgende week"); `roster.publish` (confirm-gated, `risk:outbound`) doet stap 3 ("publiceer maar"); `roster.overview` meldt `draftsPending` ("X concepten staan klaar, nog niet gepubliceerd"). Alle drie owner-only, smoke-gedekt (`smoke-ai-tools` 162/0). Engine: `domain/roster-publish.ts` + `domain/matching.ts` (`draftPlacement`/`sendProposalNotifications`). UI: `roster/planbord/{page,actions,_components/Planbord}.tsx` · dep `@dnd-kit/core`. Verified: `scripts/smoke-planbord.mts` **13/0** (draft onzichtbaar · recompute negeert draft · publish flipt + her-valideert conflict wég · removeDraft-guard).
 
+## 1.25 — Facturatie: factuur genereren → versturen → betaald (PR-OPS-4AREAS, migratie 0040/0041)
+
+De klant-kant van de uren-keten (payroll = de chef-uitbetaalkant, §2.1). Route `/admin/business/invoices` (gate `invoices.read`, owner-class). Domein `src/lib/domain/invoicing.ts`; tabellen `invoices` + `invoice_lines` (cents, 21% btw, billing-snapshot). Klantroute `/client/invoices`.
+
+1. **Genereer** (`generateInvoiceAction` → `generateInvoiceForPeriod({clientId, period})`): factureert élke `admin_approved` `shift_hours` waarvan de **dienst** (`shifts.startsAt`) in de periode valt en die nog **niet** op een factuur staat (géén dubbele facturatie via left-join-guard). Regelbedrag = `computeChefAmountCents(minuten, client_rate)`; 21% btw op de factuur. **Idempotent** per (klant, periode) via **partiële** unique index (`WHERE status≠void`); billing-gegevens (naam/adres/KVK/BTW) **gesnapshot** uit `clients`. Nummer `YYYY-NNNN` (sequentieel/jaar, race-veilig via retry op de unieke `number`). Header + regels + audit `invoices.generated` committen **atomair** (`withTx`). Geen uren → status `empty`.
+2. **Verstuur** (`sendInvoiceAction` → `sendInvoice`): **mail eerst, dan flippen** — pas "verstuurd" als Resend de mail accepteert (mislukt → blijft `draft`). Ontvanger via `recipientsForClient(clientId, 'invoice_sent')` (finance-contact / `billingEmail`, nooit hard-coded); `InvoiceKlantEmail` (regeloverzicht + btw + vervaldatum + portaal-knop) + `recordEmailMessage` + `createNotification`; daarna atomair `draft→sent` + `sentAt` + audit `invoices.sent`.
+3. **Betaald** (`markPaidAction` → `markInvoicePaid`): atomair `sent→paid` + `paidAt` + audit. **Annuleren** (`voidInvoiceAction` → `voidInvoice`): `draft|sent → void`, ontkoppelt de regels (`shiftHoursId=null`) zodat de uren weer factureerbaar zijn; een **betaalde** factuur kan niet ge-void (creditfactuur i.p.v.).
+4. **Klant ziet** `/client/invoices` (alleen `sent`/`paid`/`credit` — concept/void lekken nooit; eigendom via `clients.userId`). Status + "wat gebeurt er nu?" via `src/lib/invoice-labels.ts` (`invoiceStatusView`; hard rule: geen rauwe status).
+
+Verified: `scripts/smoke-invoicing.mts` **29/0** (btw-afronding · dubbel-factuur-guard · void-vrij-de-periode-én-uren · void-betaald geweigerd · send happy-path via Resend-simulator `delivered@resend.dev` · nummers uniek). Migraties 0040/0041 op prod (`ep-icy-scene`) vóór deploy.
+
 ---
 
 # Part 2 — Planned workflows (per active plan)
