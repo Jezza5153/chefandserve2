@@ -53,6 +53,8 @@ const SAMPLE: Record<string, unknown> = {
   "chefs.work_summary": { chefId: "x" },
   "chefs.feedback": { chefId: "x" },
   "chefs.trends": { chefId: "x" },
+  "clients.history": { clientId: "x" },
+  "shifts.suggest_chefs": { shiftId: "x" },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 

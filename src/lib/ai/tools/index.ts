@@ -26,6 +26,8 @@ import {
 import { chefsSendAvailabilityReminder } from "@/lib/ai/tools/availability";
 import { chefsWorkSummary, chefsFeedback, chefsTrends } from "@/lib/ai/tools/chef-profile";
 import { rosterOverview } from "@/lib/ai/tools/roster";
+import { clientsHistory } from "@/lib/ai/tools/clients";
+import { plannerCockpitTool, shiftsSuggestChefs } from "@/lib/ai/tools/staffing";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -42,6 +44,9 @@ export const ALL_TOOLS: AnyTool[] = [
   chefsWorkSummary,
   chefsFeedback,
   chefsTrends,
+  clientsHistory,
+  plannerCockpitTool,
+  shiftsSuggestChefs,
   // act — the hands
   hoursApprove,
   hoursReject,
