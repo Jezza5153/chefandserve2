@@ -78,6 +78,10 @@ const JOBS: Job[] = [
   // chefs to set next-week availability. GATED via business_settings
   // 'availability_reminders' (+ AVAILABILITY_REMINDERS_ENABLED kill-switch). Default OFF.
   { name: "availability-reminder", schedule: "0 9 * * 4", script: "availability-reminder.ts" },
+  // Owner "dagstart" ticker — runs HOURLY and only fires at the owner's chosen hour
+  // (business_settings 'daily_briefing'.hour, Amsterdam). Thin: it POSTs the app-side
+  // /api/cron/daily-briefing which builds + delivers (idempotent). Default OFF.
+  { name: "daily-briefing", schedule: "0 * * * *", script: "daily-briefing.ts" },
 ];
 
 function ts(): string {

@@ -22,6 +22,7 @@ const cache = new Map<string, CacheEntry>();
 /** Known setting keys — extend as new toggles are added. */
 export const SETTING_KEYS = {
   hoursReminders: "hours_reminders",
+  dailyBriefing: "daily_briefing",
 } as const;
 
 /** Raw jsonb value for a key (cached). Returns {} when no row exists. */
@@ -63,8 +64,52 @@ export async function setFlag(
   cache.delete(key);
 }
 
+/** Upsert an arbitrary jsonb value (richer than a boolean flag) + invalidate the cache. */
+export async function setSettingValue(
+  key: string,
+  value: Record<string, unknown>,
+  userId: string,
+): Promise<void> {
+  await db
+    .insert(businessSettings)
+    .values({ key, value, updatedBy: userId, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: businessSettings.key,
+      set: { value, updatedBy: userId, updatedAt: new Date() },
+    });
+  cache.delete(key);
+}
+
 /** Invalidate the cache for a key (or all). */
 export function invalidateSettingCache(key?: string): void {
   if (key) cache.delete(key);
   else cache.clear();
+}
+
+/* ---------- Daily briefing ("dagstart") config -------------------------- */
+
+export type DailyBriefingConfig = {
+  /** Master switch. Default OFF — Maarten opts in (so nothing emails him pre-launch). */
+  enabled: boolean;
+  /** Hour of day to send, 0–23, Europe/Amsterdam. The Railway ticker fires at this hour. */
+  hour: number;
+  /** Delivery channels. WhatsApp stays off until a Meta-approved template lands. */
+  channels: { app: boolean; email: boolean; whatsapp: boolean };
+  /** Optional WhatsApp recipient (E.164) — used once the template is approved. */
+  whatsappTo?: string;
+  /** Amsterdam day-key of the last successful send — the once-per-day dedup marker. */
+  lastSentDate?: string;
+};
+
+/** Normalised daily-briefing config (defaults applied). Read by the cron + the settings UI. */
+export async function getDailyBriefingConfig(): Promise<DailyBriefingConfig> {
+  const v = await getSetting(SETTING_KEYS.dailyBriefing);
+  const ch = (v.channels as Record<string, unknown> | undefined) ?? {};
+  return {
+    enabled: v.enabled === true,
+    hour: typeof v.hour === "number" && v.hour >= 0 && v.hour <= 23 ? v.hour : 7,
+    channels: { app: ch.app !== false, email: ch.email !== false, whatsapp: ch.whatsapp === true },
+    whatsappTo: typeof v.whatsappTo === "string" ? v.whatsappTo : undefined,
+    lastSentDate: typeof v.lastSentDate === "string" ? v.lastSentDate : undefined,
+  };
 }

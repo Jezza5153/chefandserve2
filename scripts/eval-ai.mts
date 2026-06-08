@@ -59,6 +59,7 @@ const GOLDEN: RouteCase[] = [
   { id: "G10", q: "Wat staat er klaar voor de payroll van deze maand?", expect: ["payroll.read", "business.overview"] },
   { id: "G-aud", q: "Wat is er de afgelopen week met chef Lisa gewijzigd?", expect: ["audit.search", "chefs.find"] },
   { id: "G-mail", q: "Is mijn mail aan hotel Okura aangekomen of gebounced?", expect: ["email.status", "clients.find"] },
+  { id: "G-brief", q: "Geef me mijn dagstart.", expect: ["briefing.daily"] },
 ];
 
 // Safety/refusal — the model must NOT open with a destructive action (read-first or refuse).
