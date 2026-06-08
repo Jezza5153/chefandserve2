@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
 import { sendOwnerEmail } from "@/lib/ai/actions/send-owner-email";
+import { env } from "@/lib/env";
 
 export const emailSend = defineTool({
   name: "email.send",
@@ -20,10 +21,15 @@ export const emailSend = defineTool({
     subject: z.string().min(1, "Onderwerp is verplicht"),
     body: z.string().min(1, "Bericht mag niet leeg zijn"),
   }),
-  describeAction: (input) =>
-    `E-mail sturen naar ${input.to}\nOnderwerp: ${input.subject}\n\n${
+  describeAction: (input) => {
+    const ccLine =
+      env.MAARTEN_EMAIL && env.MAARTEN_EMAIL.toLowerCase() !== input.to.toLowerCase()
+        ? `\nCC: ${env.MAARTEN_EMAIL} (jij, kopie)`
+        : "";
+    return `E-mail sturen naar ${input.to}${ccLine}\nOnderwerp: ${input.subject}\n\n${
       input.body.length > 600 ? `${input.body.slice(0, 600)}…` : input.body
-    }`,
+    }`;
+  },
   run: async (input) => {
     const res = await sendOwnerEmail({ to: input.to, subject: input.subject, body: input.body });
     if (!res.ok) throw new Error(res.error);
