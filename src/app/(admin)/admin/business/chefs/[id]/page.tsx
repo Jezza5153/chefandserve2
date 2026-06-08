@@ -1,18 +1,15 @@
-import { and, desc, eq, ne } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { recordAuditCore, recordAuditFromRequest, stampFromRequest } from "@/lib/audit";
-import { withTx } from "@/lib/db/tx";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
   chefSubmissions,
   chefs,
   profileChangeRequests,
   users,
-  vakniveauEnum,
 } from "@/lib/db/schema";
-import { isValidEmail } from "@/lib/forms/validation";
 import {
   listChefDocuments,
   requestChefDocumentUpload,
@@ -38,19 +35,14 @@ import {
   createProfileDataRequest,
   listProfileDataRequests,
 } from "@/lib/domain/profile-data-requests";
+import { decideChefProfileChange } from "@/lib/domain/chef-profile-changes";
 import { getChefAverageForAdmin } from "@/lib/domain/ratings";
-import { sendEmail } from "@/lib/email";
-import { recordEmailMessage } from "@/lib/integrations";
 import { requirePermission } from "@/lib/permissions";
 import { r2IsConfigured } from "@/lib/r2";
 import { DetailShell } from "@/components/ui/DetailShell";
 
 import { RatingSummary } from "./_components/RatingSummary";
-import {
-  ChangeRequests,
-  chefChangeFieldLabel,
-  formatChefChangeValue,
-} from "./_components/ChangeRequests";
+import { ChangeRequests } from "./_components/ChangeRequests";
 import { BasicsForm } from "./_components/BasicsForm";
 import { PortalAccess } from "./_components/PortalAccess";
 import { DocumentsSection } from "./_components/DocumentsSection";
@@ -390,175 +382,16 @@ export default async function ChefDetailPage({
       String(formData.get("decisionNotes") ?? "").trim() || null;
     if (!requestId) return;
 
-    const [req] = await db
-      .select()
-      .from(profileChangeRequests)
-      .where(eq(profileChangeRequests.id, requestId))
-      .limit(1);
-    if (!req || req.chefId !== id || req.status !== "pending") {
-      redirect(`/admin/business/chefs/${id}?err=request-gone`);
-    }
-
-    // Validate the proposed value BEFORE applying (no raw DB throw on bad input).
-    // Only relevant on approval — a rejection writes no master-table field.
-    const pv = req.proposedValue as unknown;
-    const proposedEmail =
-      decision === "approved" && req.field === "email"
-        ? String(pv ?? "").trim().toLowerCase()
-        : null;
-    if (decision === "approved") {
-      if (req.field === "vakniveau") {
-        // vakniveau is a pg enum — reject anything outside it (avoids a 22P02).
-        if (!(vakniveauEnum.enumValues as readonly string[]).includes(String(pv))) {
-          redirect(`/admin/business/chefs/${id}?err=ongeldig-vakniveau`);
-        }
-      } else if (req.field === "email" && proposedEmail) {
-        if (!isValidEmail(proposedEmail)) {
-          redirect(`/admin/business/chefs/${id}?err=ongeldig-emailadres`);
-        }
-        // Uniqueness against the login table (users.email is UNIQUE — a clash
-        // would 500 inside the tx). Exclude the chef's own linked user.
-        const clash = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(
-            chef!.userId
-              ? and(eq(users.email, proposedEmail), ne(users.id, chef!.userId))
-              : eq(users.email, proposedEmail),
-          )
-          .limit(1);
-        if (clash.length > 0) {
-          redirect(`/admin/business/chefs/${id}?err=emailadres-in-gebruik`);
-        }
-      }
-    }
-
-    // Atomic: apply the master-table field + flip the status in ONE tx (so a
-    // partial apply can't outlive a failed/stale transition). Audit commits in
-    // the same tx. redirect() stays OUTSIDE (it throws → would roll back).
-    const auditBase = await stampFromRequest({
-      userId: session.user.id,
-      action:
-        decision === "approved"
-          ? "chef.profile_change_approved"
-          : "chef.profile_change_rejected",
-      resource: "profile_change_requests",
-      resourceId: requestId,
-      after: { field: req.field, decision, decisionNotes },
+    const res = await decideChefProfileChange({
+      requestId,
+      decidedBy: session.user.id,
+      decision,
+      decisionNotes,
+      expectChefId: id,
     });
-    const result = await withTx(async (tx) => {
-      // Guard first: only a still-pending request flips. Zero rows → stale.
-      const flipped = await tx
-        .update(profileChangeRequests)
-        .set({
-          status: decision,
-          decidedAt: new Date(),
-          decidedBy: session.user.id,
-          decisionNotes,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(profileChangeRequests.id, requestId),
-            eq(profileChangeRequests.status, "pending"),
-          ),
-        )
-        .returning({ id: profileChangeRequests.id });
-      if (flipped.length === 0) return { ok: false as const };
-
-      // Apply the validated proposed value (only when approved).
-      if (decision === "approved") {
-        if (req.field === "hourlyRate" && pv && typeof pv === "object") {
-          const { min, max } = pv as { min?: number; max?: number };
-          await tx
-            .update(chefs)
-            .set({
-              hourlyRateMinCents: typeof min === "number" ? min : null,
-              hourlyRateMaxCents: typeof max === "number" ? max : null,
-              updatedAt: new Date(),
-            })
-            .where(eq(chefs.id, id));
-        } else if (req.field === "fullName") {
-          await tx
-            .update(chefs)
-            .set({ fullName: String(pv), updatedAt: new Date() })
-            .where(eq(chefs.id, id));
-        } else if (req.field === "email" && proposedEmail) {
-          await tx
-            .update(chefs)
-            .set({ email: proposedEmail, updatedAt: new Date() })
-            .where(eq(chefs.id, id));
-          // Keep the portal-login email in sync — chefs.email is the login
-          // address (mirrored to users.email at invite time), so an approved
-          // email change must follow through to users or login silently drifts.
-          if (chef!.userId) {
-            await tx
-              .update(users)
-              .set({ email: proposedEmail, updatedAt: new Date() })
-              .where(eq(users.id, chef!.userId));
-          }
-        } else if (req.field === "vakniveau") {
-          await tx
-            .update(chefs)
-            .set({ vakniveau: String(pv) as never, updatedAt: new Date() })
-            .where(eq(chefs.id, id));
-        }
-      }
-
-      await recordAuditCore(auditBase, tx);
-      return { ok: true as const };
-    });
-    if (!result.ok) redirect(`/admin/business/chefs/${id}?err=request-gone`);
-
-    // Outcome email to the chef (direct — chefs have no recipientsFor seam).
-    if (chef!.email) {
-      const fieldLabel = chefChangeFieldLabel(req.field);
-      const send = await sendEmail({
-        to: chef!.email,
-        subject:
-          decision === "approved"
-            ? `Wijziging doorgevoerd: ${fieldLabel}`
-            : `Wijzigingsverzoek niet doorgevoerd: ${fieldLabel}`,
-        react: (
-          <div>
-            <h1>
-              {decision === "approved"
-                ? "Je wijziging is doorgevoerd"
-                : "Je wijzigingsverzoek is niet doorgevoerd"}
-            </h1>
-            <p>
-              <strong>Onderdeel:</strong> {fieldLabel}
-              {decision === "approved" ? (
-                <>
-                  <br />
-                  <strong>Nieuwe waarde:</strong>{" "}
-                  {formatChefChangeValue(req.field, req.proposedValue)}
-                </>
-              ) : null}
-              {decisionNotes ? (
-                <>
-                  <br />
-                  <strong>Toelichting van Chef &amp; Serve:</strong> {decisionNotes}
-                </>
-              ) : null}
-            </p>
-            <p>Vragen? Mail of bel het kantoor — we helpen je graag.</p>
-          </div>
-        ),
-      });
-      if (send.ok) {
-        await recordEmailMessage({
-          providerMessageId: send.id,
-          toEmail: chef!.email,
-          template: "ChefProfileChangeOutcomeInline",
-          eventKey: "profile_change_request",
-          entityType: "profile_change_requests",
-          entityId: requestId,
-          userId: chef!.userId ?? undefined,
-        });
-      }
+    if (!res.ok) {
+      redirect(`/admin/business/chefs/${id}?err=${res.reason}`);
     }
-
     redirect(`/admin/business/chefs/${id}?ok=change-${decision}`);
   }
 

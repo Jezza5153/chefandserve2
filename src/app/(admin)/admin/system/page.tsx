@@ -32,6 +32,7 @@ import {
 } from "@/lib/domain/system-intel";
 import { env } from "@/lib/env";
 import { getIntegrationHealth } from "@/lib/integrations";
+import { getAiUsageSummary } from "@/lib/ai/read-model/ai-usage";
 import { requirePermission } from "@/lib/permissions";
 import { r2IsConfigured } from "@/lib/r2";
 
@@ -64,6 +65,7 @@ export default async function SystemDashboardPage() {
     [{ webhookFailures7d }],
     [latestBackup],
     [latestPayroll],
+    aiUsage,
   ] = await Promise.all([
     db.execute(sql`SELECT 1`).then(() => true).catch(() => false),
     getIntegrationHealth(),
@@ -82,6 +84,7 @@ export default async function SystemDashboardPage() {
     db.select({ webhookFailures7d: sql<number>`count(*)::int` }).from(webhooksReceived).where(and(gte(webhooksReceived.createdAt, since7d), sql`${webhooksReceived.processingError} IS NOT NULL`)),
     db.select().from(backupRuns).orderBy(desc(backupRuns.startedAt)).limit(1),
     db.select({ exportedAt: payrollBatches.exportedAt, createdAt: payrollBatches.createdAt }).from(payrollBatches).orderBy(desc(payrollBatches.createdAt)).limit(1),
+    getAiUsageSummary({ now }),
   ]);
 
   /* ---- health components (reuse /api/health primitives directly) ---- */
@@ -224,8 +227,17 @@ export default async function SystemDashboardPage() {
               lines={[emailDeliveredPct != null ? `${emailDeliveredPct}% bezorgd · ${emailBounced30} bounces · ${emailFailed} mislukt` : "nog geen verzonden e-mail"]} href="/admin/system/emails" linkLabel="E-mail log" />
             <VerbruikCard icon="message-circle" title="WhatsApp" badge={{ text: "Handmatig", tone: "amber" }} value={whatsapp30d.toLocaleString("nl-NL")} unit="berichten gestart"
               lines={["via deep-link · API binnenkort"]} href="/admin/business/chefs" linkLabel="Contactlog" />
-            <VerbruikCard icon="sparkles" title="AI-tokens" badge={{ text: "Concept", tone: "grey" }} value="—" unit="tokens" concept
-              lines={["nog geen tokenlog", "wordt gemeten zodra AI live is"]} />
+            <VerbruikCard icon="sparkles" title="AI-tokens"
+              badge={aiUsage.turns > 0 ? { text: "Live · 30d", tone: "green" } : { text: "Concept", tone: "grey" }}
+              value={aiUsage.totalTokens > 0 ? aiUsage.totalTokens.toLocaleString("nl-NL") : "—"} unit="tokens" concept={aiUsage.turns === 0}
+              lines={aiUsage.turns > 0
+                ? [`${aiUsage.turns} beurten · ${aiUsage.promptTokens.toLocaleString("nl-NL")} in / ${aiUsage.completionTokens.toLocaleString("nl-NL")} uit`]
+                : ["nog geen tokenlog", "wordt gemeten zodra de assistent draait"]}
+              cost={aiUsage.totalTokens === 0
+                ? "n.t.b."
+                : aiUsage.cost
+                  ? aiUsage.cost.amount.toLocaleString("nl-NL", { style: "currency", currency: aiUsage.cost.currency, maximumFractionDigits: 2 })
+                  : "stel tarief in (env)"} />
           </div>
         </section>
 
@@ -338,7 +350,7 @@ const TONE_ICON: Record<SystemTone, string> = {
 };
 
 function VerbruikCard({
-  icon, title, badge, value, unit, lines, href, linkLabel, concept,
+  icon, title, badge, value, unit, lines, href, linkLabel, concept, cost,
 }: {
   icon: IconName;
   title: string;
@@ -349,6 +361,7 @@ function VerbruikCard({
   href?: string;
   linkLabel?: string;
   concept?: boolean;
+  cost?: string;
 }) {
   const badgeCls = badge.tone === "green" ? "bg-emerald-100 text-emerald-700" : badge.tone === "amber" ? "bg-amber-100 text-amber-800" : "bg-bg-gray text-ink-500";
   return (
@@ -360,7 +373,7 @@ function VerbruikCard({
       <p className={`mt-2 font-serif text-3xl ${concept ? "text-ink-500" : "text-ink-900"}`}>{value} <span className="text-lg text-ink-500">{unit}</span></p>
       <div className="mt-1 space-y-0.5 text-[11px] text-ink-500">
         {lines.map((l, i) => <p key={i}>{l}</p>)}
-        <p className="flex items-center gap-1"><Icon name="banknote" className="h-3.5 w-3.5" /> Kosten: <span className="text-ink-700">n.t.b.</span></p>
+        <p className="flex items-center gap-1"><Icon name="banknote" className="h-3.5 w-3.5" /> Kosten: <span className="text-ink-700">{cost ?? "n.t.b."}</span></p>
       </div>
       {href && linkLabel && (
         <Link href={href} className="mt-3 flex items-center gap-1 font-ui text-[11px] font-medium text-burgundy hover:underline">{linkLabel} <Icon name="arrow-right" className="h-3.5 w-3.5" /></Link>

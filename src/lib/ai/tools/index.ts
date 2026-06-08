@@ -18,6 +18,12 @@ import { chefsFind, clientsFind, shiftsFind } from "@/lib/ai/tools/directory";
 import { emailSend } from "@/lib/ai/tools/comms";
 import { remindersCreate, remindersList, remindersComplete } from "@/lib/ai/tools/reminders";
 import { memoryRemember, memoryList, memoryForget } from "@/lib/ai/tools/memory";
+import {
+  chefsListProfileChanges,
+  chefsApproveProfileChange,
+  chefsRejectProfileChange,
+} from "@/lib/ai/tools/profile-changes";
+import { chefsSendAvailabilityReminder } from "@/lib/ai/tools/availability";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -29,6 +35,7 @@ export const ALL_TOOLS: AnyTool[] = [
   chefsFind,
   clientsFind,
   shiftsFind,
+  chefsListProfileChanges,
   // act — the hands
   hoursApprove,
   hoursReject,
@@ -37,6 +44,9 @@ export const ALL_TOOLS: AnyTool[] = [
   placementsConfirm,
   placementsCancel,
   emailSend,
+  chefsApproveProfileChange,
+  chefsRejectProfileChange,
+  chefsSendAvailabilityReminder,
   // personal — Maarten's own to-remember list
   remindersCreate,
   remindersList,

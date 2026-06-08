@@ -1,6 +1,10 @@
 import { DetailSection } from "@/components/ui/DetailShell";
 import { fieldClass } from "@/components/forms/Fields";
 import { profileChangeRequests } from "@/lib/db/schema";
+import {
+  chefChangeFieldLabel,
+  formatChefChangeValue,
+} from "@/lib/chef-profile-change-labels";
 
 type ChangeRequestRow = typeof profileChangeRequests.$inferSelect;
 
@@ -13,8 +17,9 @@ type ChangeRequestRow = typeof profileChangeRequests.$inferSelect;
  * the original `mt-6 rounded-lg border border-ink-200 bg-white p-5` section, and the
  * burgundy <h2> heading is kept inside `children`.
  *
- * `chefChangeFieldLabel` lives here (exported) because the markup AND the page's
- * decideProfileChange action both need it.
+ * `chefChangeFieldLabel` / `formatChefChangeValue` come from the shared
+ * `@/lib/chef-profile-change-labels` util — the admin markup, the page's decide
+ * action and the assistant's tools all speak about a change the same way.
  */
 export function ChangeRequests({
   pendingChanges,
@@ -134,27 +139,4 @@ export function ChangeRequests({
       {/* @verbatim-end */}
     </DetailSection>
   );
-}
-
-/* ----- PR-CHEF-4 admin review helpers (relocated verbatim from page.tsx) ----- */
-export function chefChangeFieldLabel(field: string): string {
-  return (
-    {
-      fullName: "Naam",
-      email: "E-mailadres",
-      vakniveau: "Vakniveau",
-      hourlyRate: "Uurtarief",
-    } as Record<string, string>
-  )[field] ?? field;
-}
-
-export function formatChefChangeValue(field: string, value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
-  if (field === "hourlyRate" && typeof value === "object") {
-    const { min, max } = value as { min?: number; max?: number };
-    const fmt = (c?: number) => (typeof c === "number" ? `€${(c / 100).toFixed(0)}` : "—");
-    return `${fmt(min)} – ${fmt(max)} per uur`;
-  }
-  if (typeof value === "string" || typeof value === "number") return String(value);
-  return JSON.stringify(value);
 }

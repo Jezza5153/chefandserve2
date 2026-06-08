@@ -25,6 +25,7 @@
  *
  *   - deliver-outbox           every 5 min   (drain integration_outbox: ack internal breadcrumbs, defer external)
  *   - hours-reminders          0 9 * * *     (09:00 — chef 24/72h nudge, klant 5d timeout, admin 10d force-approve)
+ *   - availability-reminder    0 9 * * THU   (Thu 09:00 — nudge active chefs for next-week availability; GATED off by default)
  *
  * Manual run for testing:
  *   npx tsx supervisor.ts --run-now=weekly-digest
@@ -73,6 +74,10 @@ const JOBS: Job[] = [
   // proposals, klant 5-day unsigned timeout, admin 10-day force-approve. Each
   // tier is idempotent (last_*_reminder_at markers) so it never double-sends.
   { name: "hours-reminders", schedule: "0 9 * * *", script: "hours-reminders.ts" },
+  // Weekly availability nudge (Thu 09:00 Amsterdam). Reminds active, portal-enabled
+  // chefs to set next-week availability. GATED via business_settings
+  // 'availability_reminders' (+ AVAILABILITY_REMINDERS_ENABLED kill-switch). Default OFF.
+  { name: "availability-reminder", schedule: "0 9 * * 4", script: "availability-reminder.ts" },
 ];
 
 function ts(): string {

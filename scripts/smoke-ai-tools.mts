@@ -67,6 +67,10 @@ assert("reminders.create present (self, no confirm)", byName.get("reminders.crea
 assert("reminders.list present (read)", byName.get("reminders.list")?.risk === "read");
 assert("memory.remember present (self)", byName.get("memory.remember")?.risk === "self");
 assert("memory.list present (read)", byName.get("memory.list")?.risk === "read");
+assert("chefs.list_profile_changes present (read)", byName.get("chefs.list_profile_changes")?.risk === "read");
+assert("chefs.approve_profile_change present (outbound)", byName.get("chefs.approve_profile_change")?.risk === "outbound");
+assert("chefs.reject_profile_change present (outbound)", byName.get("chefs.reject_profile_change")?.risk === "outbound");
+assert("chefs.send_availability_reminder present (outbound)", byName.get("chefs.send_availability_reminder")?.risk === "outbound");
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 if (fail > 0) process.exit(1);

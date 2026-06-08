@@ -17,6 +17,7 @@ export const DEFAULT_SYSTEM_PROMPT = [
   "",
   "Zo werk je:",
   "- WEES PROACTIEF. Vraagt Maarten iets, pak dan meteen zelf de juiste tool(s) erbij en geef antwoord. Vraag NOOIT 'zal ik dat opzoeken?' of 'wil je dat ik dat open?' om informatie op te halen — gewoon doen. Heb je meerdere tools nodig voor een compleet antwoord, gebruik ze allemaal in één beurt.",
+  "- GEBRUIK HET GESPREK. Bouw voort op de vorige beurten. Verwijst Maarten terug of laat hij het onderwerp weg ('en hun e-mail?', 'wie daarvan?', 'en in Rotterdam dan?'), neem dan de entiteit én het onderwerp van zojuist over — ging het net over chefs, dan gaat een vervolgvraag ook over chefs, tenzij Maarten duidelijk omschakelt. Vraag alleen om opheldering als het mét het gesprek erbij écht onduidelijk blijft, en stel dan één korte, gerichte vraag (geen algemene tegenvraag over iets dat al duidelijk was).",
   "- DENK MEE, dump geen cijfers. Begin met het antwoord of het inzicht in een zin of twee — niet een rij kale getallen. Valt je iets op (een knelpunt, een nul die ergens op wijst, een kans), benoem het kort. Sluit af met de logische volgende stap als die er is ('Zal ik …?').",
   "- WEES EERLIJK met data. Gebruik alleen cijfers, namen en statussen die uit een tool komen; verzin nooit iets. Staat iets op nul of ontbreken er gegevens, leg dan kort uit wat dat waarschijnlijk betekent (bv. 'er zijn deze maand nog geen uren geregistreerd, dus de loonkosten staan op €0').",
   "- ACTIES: voor iets versturen of iets dat geld/onomkeerbaar raakt roep je de tool aan; het systeem vraagt Maarten zelf om bevestiging. Doe nooit alsof iets al gebeurd is voordat het bevestigd is.",
@@ -26,6 +27,9 @@ export const DEFAULT_SYSTEM_PROMPT = [
   "",
   "Kort, menselijk, behulpzaam. Je bent z'n rechterhand, geen zoekmachine.",
 ].join("\n") + "\n\n---\n\n" + ASSISTANT_PLAYBOOK;
+
+/** Token usage for one model call (prompt = input, completion = output). */
+export type TokenUsage = { promptTokens: number; completionTokens: number; totalTokens: number };
 
 export type OpenAiTransport = (req: {
   url: string;
@@ -42,6 +46,8 @@ export type OpenAiBrainOptions = {
   /** Backoff (ms) per retry on transient errors (429 / 5xx). Default [400, 1200] → up to
    *  2 retries. Tests pass [0, 0] for instant retries. */
   retryDelaysMs?: number[];
+  /** Called with token usage after each successful model call (feeds the usage tally). */
+  onUsage?: (usage: TokenUsage) => void;
 };
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -83,6 +89,10 @@ export function createOpenAiBrain(opts: OpenAiBrainOptions): Brain {
       for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
         const res = await transport(req);
         if (res.status >= 200 && res.status < 300) {
+          if (opts.onUsage) {
+            const usage = parseUsage(res.json);
+            if (usage) opts.onUsage(usage);
+          }
           return parseChoice(res.json);
         }
         lastError = extractApiError(res.json) ?? `status ${res.status}`;
@@ -151,7 +161,19 @@ type OpenAiResponse = {
       tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
     };
   }>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 };
+
+/** Pull token usage out of a (non-streaming) Chat Completions response, or null if absent. */
+function parseUsage(json: unknown): TokenUsage | null {
+  const u = (json as OpenAiResponse).usage;
+  if (!u) return null;
+  const promptTokens = typeof u.prompt_tokens === "number" ? u.prompt_tokens : 0;
+  const completionTokens = typeof u.completion_tokens === "number" ? u.completion_tokens : 0;
+  const totalTokens = typeof u.total_tokens === "number" ? u.total_tokens : promptTokens + completionTokens;
+  if (promptTokens <= 0 && completionTokens <= 0 && totalTokens <= 0) return null;
+  return { promptTokens, completionTokens, totalTokens };
+}
 
 function parseChoice(json: unknown): BrainStep {
   const msg = (json as OpenAiResponse).choices?.[0]?.message;
