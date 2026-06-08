@@ -7,7 +7,7 @@
 import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
-import { chefWorkSummary, chefFeedback } from "@/lib/ai/read-model/chef-profile";
+import { chefWorkSummary, chefFeedback, chefTrends } from "@/lib/ai/read-model/chef-profile";
 
 export const chefsWorkSummary = defineTool({
   name: "chefs.work_summary",
@@ -47,5 +47,31 @@ export const chefsFeedback = defineTool({
             data.topTags.length ? ` — vaakst: ${data.topTags.slice(0, 3).map((t) => t.tag).join(", ")}` : ""
           }.`;
     return { data, summary };
+  },
+});
+
+export const chefsTrends = defineTool({
+  name: "chefs.trends",
+  title: "Trend & churn-risico van een chef",
+  description:
+    "Hoe een chef zich de laatste weken ontwikkelt: churn-risico (geen/laag/let-op/verhoogd) met concrete redenen, dagen sinds laatst gewerkt, acceptatiegraad + gemiddelde beoordeling (28d), en week-op-week verandering in uren/marge/diensten. Deterministisch en uitlegbaar — nooit een verzonnen score. Gebruik chefs.find voor het chefId.",
+  risk: "read",
+  permission: { resource: "chefs", action: "read" },
+  input: z.object({ chefId: z.string().min(1, "chefId is verplicht") }),
+  run: async (input) => {
+    const data = await chefTrends(input.chefId);
+    if (!data) throw new Error("deze chef bestaat niet (meer)");
+    const churnNl: Record<string, string> = {
+      none: "geen signaal",
+      low: "laag",
+      watch: "let op",
+      elevated: "verhoogd",
+    };
+    return {
+      data,
+      summary: `${data.chef.name}: churn-risico ${churnNl[data.churn.level] ?? data.churn.level}${
+        data.churn.reasons.length ? ` (${data.churn.reasons.join(", ")})` : ""
+      }.`,
+    };
   },
 });

@@ -52,6 +52,7 @@ const SAMPLE: Record<string, unknown> = {
   "chefs.reject_profile_change": { requestId: "x" },
   "chefs.work_summary": { chefId: "x" },
   "chefs.feedback": { chefId: "x" },
+  "chefs.trends": { chefId: "x" },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 

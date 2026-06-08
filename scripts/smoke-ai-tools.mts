@@ -73,6 +73,7 @@ assert("chefs.reject_profile_change present (outbound)", byName.get("chefs.rejec
 assert("chefs.send_availability_reminder present (outbound)", byName.get("chefs.send_availability_reminder")?.risk === "outbound");
 assert("chefs.work_summary present (read)", byName.get("chefs.work_summary")?.risk === "read");
 assert("chefs.feedback present (read)", byName.get("chefs.feedback")?.risk === "read");
+assert("chefs.trends present (read)", byName.get("chefs.trends")?.risk === "read");
 assert("roster.overview present (read)", byName.get("roster.overview")?.risk === "read");
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
