@@ -87,6 +87,13 @@ const serverSchema = z.object({
   //   refuse to run (so they can't be triggered publicly).
   CRON_SECRET: z.string().min(16, "CRON_SECRET must be ≥16 chars").optional(),
 
+  // sent.dm — WhatsApp/SMS SEND provider (messaging/notifications, NOT an AI channel).
+  //   SENT_DM_API_KEY  — secret, sent as the `x-api-key` header. Missing → sendWhatsApp() no-ops.
+  //   SENT_DM_BASE_URL — override the API base (default https://api.sent.dm).
+  // NB: sending requires a pre-approved WhatsApp template (Meta rule); we send template+params.
+  SENT_DM_API_KEY: z.string().optional(),
+  SENT_DM_BASE_URL: z.string().url().optional(),
+
   // Phase 1 PR-S1A — rate-limit key derivation secret.
   // hmac_sha256(SECRET, scope+":"+identifier) becomes the row primary key.
   // Optional during the deploy window where the env var hasn't been set yet;
