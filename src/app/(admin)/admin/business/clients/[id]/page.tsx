@@ -154,6 +154,15 @@ export default async function ClientDetailPage({
     await disablePortalUser(client!.userId, session.user.id);
     redirect(`/admin/business/clients/${id}`);
   }
+  // One-click: create + activate (+ welcome mail) so there's no invited-but-can't-login limbo.
+  async function doInviteAndActivate() {
+    "use server";
+    const session = await requirePermission("clients", "write");
+    const invited = await inviteClientToPortal(id, session.user.id);
+    if (!invited.ok) throw new Error(invited.error);
+    await activatePortalUser(invited.userId, session.user.id);
+    redirect(`/admin/business/clients/${id}`);
+  }
 
   async function updateBasics(formData: FormData) {
     "use server";
@@ -439,6 +448,7 @@ export default async function ClientDetailPage({
         client={client}
         portalUser={portalUser ?? null}
         doInviteToPortal={doInviteToPortal}
+        doInviteAndActivate={doInviteAndActivate}
         doActivatePortal={doActivatePortal}
         doDisablePortal={doDisablePortal}
       />

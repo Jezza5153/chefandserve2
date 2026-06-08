@@ -14,12 +14,14 @@ export function PortalAccess({
   chef,
   portalUser,
   doInviteToPortal,
+  doInviteAndActivate,
   doActivatePortal,
   doDisablePortal,
 }: {
   chef: ChefRow;
   portalUser: PortalUser | null | undefined;
   doInviteToPortal: () => Promise<void>;
+  doInviteAndActivate: () => Promise<void>;
   doActivatePortal: () => Promise<void>;
   doDisablePortal: () => Promise<void>;
 }) {
@@ -41,14 +43,24 @@ export function PortalAccess({
             Vul eerst een e-mailadres in.
           </p>
         ) : !portalUser ? (
-          <form action={doInviteToPortal}>
-            <button
-              type="submit"
-              className="rounded-full bg-burgundy px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
-            >
-              Nodig uit voor portaal
-            </button>
-          </form>
+          <div className="flex flex-col items-end gap-2">
+            <form action={doInviteAndActivate}>
+              <button
+                type="submit"
+                className="rounded-full bg-burgundy px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
+              >
+                Uitnodigen &amp; activeren
+              </button>
+            </form>
+            <form action={doInviteToPortal}>
+              <button
+                type="submit"
+                className="font-ui text-[10px] uppercase tracking-[0.15em] text-ink-500 underline-offset-2 hover:text-ink-800 hover:underline"
+              >
+                alleen uitnodigen (geen mail)
+              </button>
+            </form>
+          </div>
         ) : portalUser.status === "invited" ? (
           <form action={doActivatePortal}>
             <button
