@@ -7,7 +7,7 @@
 import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
-import { plannerCockpit, suggestChefsForShift } from "@/lib/ai/read-model/staffing";
+import { plannerCockpit, suggestChefsForShift, shiftMargin } from "@/lib/ai/read-model/staffing";
 
 export const plannerCockpitTool = defineTool({
   name: "planner.cockpit",
@@ -46,6 +46,28 @@ export const shiftsSuggestChefs = defineTool({
         matches.length === 0
           ? "Geen passende chefs gevonden voor deze dienst."
           : `${matches.length} chef(s) voorgesteld — beste: ${matches[0].chefName} (score ${matches[0].score}).`,
+    };
+  },
+});
+
+export const shiftsMargin = defineTool({
+  name: "shifts.margin",
+  title: "Marge van een dienst",
+  description:
+    "Is een dienst winstgevend? Omzet (klanttarief) − loonkosten (cheftarief) over de duur van de dienst — per chef én totaal (× aantal plekken), in EUR, met een tone (gezond/laag/negatief). Gebruik shifts.find voor het shiftId.",
+  risk: "read",
+  permission: { resource: "shifts", action: "read" },
+  input: z.object({ shiftId: z.string().min(1, "shiftId is verplicht") }),
+  run: async (input) => {
+    const data = await shiftMargin(input.shiftId);
+    if (!data) throw new Error("deze dienst bestaat niet (meer)");
+    if (!data.priced) {
+      return { data, summary: `${data.shift.client ?? "Dienst"} (${data.shift.role}): nog geen tarieven ingevuld — marge onbekend.` };
+    }
+    const toneNl: Record<string, string> = { ok: "gezond", low: "laag", negative: "negatief" };
+    return {
+      data,
+      summary: `${data.shift.client ?? "Dienst"} (${data.shift.role}): marge €${data.total.marginEur.toLocaleString("nl-NL")} totaal (€${data.perChef.marginEur}/chef) — ${toneNl[data.tone] ?? data.tone}.`,
     };
   },
 });

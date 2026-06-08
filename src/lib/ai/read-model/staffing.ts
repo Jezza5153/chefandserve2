@@ -7,9 +7,10 @@
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { shifts } from "@/lib/db/schema";
+import { clients, shifts } from "@/lib/db/schema";
 import { findMatchesForShift, type MatchResult } from "@/lib/domain/matching";
 import { getPlannerCockpit } from "@/lib/domain/planner-intel";
+import { estimateMargin } from "@/lib/domain/travel";
 import { formatChefRole, formatShiftRole } from "@/lib/labels";
 
 function shapeMatch(m: MatchResult) {
@@ -61,4 +62,64 @@ export async function suggestChefsForShift(shiftId: string, limit: number) {
   if (!shift) return null;
   const matches = await findMatchesForShift(shiftId, { limit });
   return matches.map(shapeMatch);
+}
+
+/** Shift profitability: revenue (client rate) − chef cost over the shift's duration, per
+ *  chef and × headcount. Reuses the shared estimateMargin (tone ok/low/negative). null if
+ *  the shift is gone; `priced:false` if rates aren't filled in. */
+export async function shiftMargin(shiftId: string) {
+  const [s] = await db
+    .select({
+      id: shifts.id,
+      roleNeeded: shifts.roleNeeded,
+      headcount: shifts.headcount,
+      startsAt: shifts.startsAt,
+      endsAt: shifts.endsAt,
+      clientRateCents: shifts.clientRateCents,
+      chefRateCents: shifts.chefRateCents,
+      companyName: clients.companyName,
+    })
+    .from(shifts)
+    .leftJoin(clients, eq(clients.id, shifts.clientId))
+    .where(eq(shifts.id, shiftId))
+    .limit(1);
+  if (!s) return null;
+
+  const hoursPerChef = Math.max(
+    0,
+    (new Date(s.endsAt).getTime() - new Date(s.startsAt).getTime()) / 3_600_000,
+  );
+  const headcount = s.headcount || 1;
+  const shift = {
+    id: s.id,
+    role: formatShiftRole(s.roleNeeded),
+    client: s.companyName,
+    headcount: s.headcount,
+    hoursPerChef: Math.round(hoursPerChef * 10) / 10,
+  };
+  if (s.clientRateCents == null || s.chefRateCents == null) {
+    return { shift, priced: false as const };
+  }
+  const per = estimateMargin({
+    clientRateCents: s.clientRateCents,
+    chefRateCents: s.chefRateCents,
+    hours: hoursPerChef,
+    travelCents: 0,
+  });
+  const toEur = (c: number) => Math.round(c / 100);
+  return {
+    shift,
+    priced: true as const,
+    tone: per.tone,
+    perChef: {
+      revenueEur: toEur(per.revenueCents),
+      chefCostEur: toEur(per.chefCostCents),
+      marginEur: toEur(per.marginCents),
+    },
+    total: {
+      revenueEur: toEur(per.revenueCents * headcount),
+      chefCostEur: toEur(per.chefCostCents * headcount),
+      marginEur: toEur(per.marginCents * headcount),
+    },
+  };
 }

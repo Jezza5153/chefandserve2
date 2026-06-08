@@ -32,7 +32,8 @@ import {
 } from "@/lib/ai/tools/chef-profile";
 import { rosterOverview } from "@/lib/ai/tools/roster";
 import { clientsHistory } from "@/lib/ai/tools/clients";
-import { plannerCockpitTool, shiftsSuggestChefs } from "@/lib/ai/tools/staffing";
+import { plannerCockpitTool, shiftsSuggestChefs, shiftsMargin } from "@/lib/ai/tools/staffing";
+import { contactsTimeline } from "@/lib/ai/tools/contacts";
 import { chefsSemanticSearch, clientsSemanticSearch } from "@/lib/ai/tools/semantic";
 
 export const ALL_TOOLS: AnyTool[] = [
@@ -56,6 +57,8 @@ export const ALL_TOOLS: AnyTool[] = [
   shiftsSuggestChefs,
   chefsSemanticSearch,
   clientsSemanticSearch,
+  shiftsMargin,
+  contactsTimeline,
   // act — the hands
   hoursApprove,
   hoursReject,

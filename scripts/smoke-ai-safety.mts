@@ -58,6 +58,8 @@ const SAMPLE: Record<string, unknown> = {
   "shifts.suggest_chefs": { shiftId: "x" },
   "chefs.semantic_search": { query: "test" },
   "clients.semantic_search": { query: "test" },
+  "shifts.margin": { shiftId: "x" },
+  "contacts.timeline": { targetType: "chef", targetId: "x" },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 
