@@ -506,6 +506,23 @@ Vocab source of truth: `src/lib/domain/client-taxonomy.ts` (shared by the admin 
 
 `recipientsForForm(slug, fallbackEvent)` reads a `form:<slug>` row in `notification_routes` (enabled+recipients = override · enabled+empty = fallback · disabled = mute), else the generic event. The chef-apply / client-request / contact handlers call it. Admin edits these in `/admin/system/notifications` "Per formulier" (the `saveRoute` action accepts `form:*` keys; cache-invalidation only for typed events). Registry: `FORM_ROUTES` in `notifications.ts`. The AI "Stel chefs voor" heuristic match (Phase 9A) is already live on `/admin/business/shifts/[id]` (`findMatchesForShift` → ranked candidates + `proposePlacement`).
 
+## 1.22 — Owner AI assistant (PA-V1 + 2026-06 expansion, no migration)
+
+Owner/super_admin chat on `/admin/assistant` + a floating widget on every `/admin` page. Stateless: the client posts the full message history to `POST /api/ai/chat`; the route resolves the actor (the owner's effective permissions ARE the assistant's ceiling — it can never exceed Maarten), assembles the system prompt (`DEFAULT_SYSTEM_PROMPT` + `ASSISTANT_PLAYBOOK` + page context + writable owner-memory) and runs the channel-agnostic agent loop (`runOwnerAssistant` → `runAgent`) against the OpenAI brain (`openai-brain.ts`, model `gpt-5.4`, native tool-call threading + conversation context across turns). Per-turn token usage is tallied (`recordAiUsage` → `business_settings['ai_usage']`) and shown with gpt-5.4 cost on the `/admin/system` AI-tokens card.
+
+**Gate (every tool call, `executeTool`):** permission check against the actor's set (else `denied`) → for `outbound`/`financial` tools, mint a signed confirm token and PAUSE (`needs_confirmation`); the human echoes it back via the confirm UI before the action runs. Reads run immediately. Every call emits an AI meta-audit row (`aiAuditSink`), paired with the domain's own business audit. Rate-limited `ai_chat_user` (30/min).
+
+**Tool registry (`src/lib/ai/tools/index.ts`) — 34 tools (18 read / 10 act / 6 personal):**
+- *read:* `business.overview` · `shifts.open_soon`/`find` · `chefs.find` · `clients.find` · `insights.leaderboards` · `integrations.health` · `hours.list_awaiting_approval` · `chefs.list_profile_changes` · `chefs.work_summary`/`feedback`/`trends` · `clients.history` · `roster.overview` · `planner.cockpit` · `shifts.suggest_chefs` · `chefs`/`clients.semantic_search`
+- *act (confirm-gated):* `hours.approve`/`reject`/`send_reminder` · `placements.propose`/`confirm`/`cancel` · `email.send` · `chefs.approve`/`reject_profile_change` · `chefs.send_availability_reminder`
+- *personal (self, no confirm):* `reminders.create`/`list`/`complete` · `memory.remember`/`list`/`forget`
+
+Read tools wrap the SAME tested domain logic the screens use (chef-history · client-history · roster-intel `rosterAiSummary` · planner-intel · matching) — never a re-implementation, so the AI can't disagree with the UI. Act tools share the domain mutation (e.g. `decideChefProfileChange` is used by both the admin chef page and `chefs.approve/reject_profile_change`). Enum codes are humanised via `src/lib/labels.ts` before the brain sees them.
+
+**RAG (Layer-2, v1):** `chefs`/`clients.semantic_search` embed the query (`src/lib/ai/embeddings.ts`, text-embedding-3-small) and cosine-search the per-row `embedding` vectors (`read-model/semantic.ts`, raw SQL `<=>`) that the `embedding-refresh` worker maintains. Degrades to "niet beschikbaar" without a key/vectors. Deeper chunked + PII-redacted notes-RAG (`docs/ai/rag-ingestion-contract.md`) is the planned next step (needs an `ai_embeddings` migration + redaction pipeline).
+
+Files: `src/lib/ai/{runtime,tools,read-model,actions}/**` · `src/lib/ai/{playbook,config,embeddings,types}.ts` · `src/app/api/ai/chat/route.ts` · `src/components/ai/Assistant{Widget,Chat}.tsx`. Smokes: `scripts/smoke-ai-{spine,brain,tools,safety,usage}.mts` + live `scripts/live-ai-{brain,loop,context}-check.mts`. ⚠ OpenAI key rotation pending; WhatsApp/voice channels ON HOLD.
+
 ---
 
 # Part 2 — Planned workflows (per active plan)
@@ -1189,12 +1206,15 @@ are covered by Parts 1–4 above.
 | Rating visibility | `src/lib/domain/ratings.ts` | admin (all) · chef (N≥5) · klant (none) |
 | Template date math | `src/lib/shift-template-format.ts` + worker `AT TIME ZONE` | admin preview + klant view + generation |
 
-## 7.3 — Tool contracts (for the future AI layer)
+## 7.3 — AI assistant tool layer (LIVE — see §1.22)
 
-`docs/ai/tool-contracts/`: client-tools.md · client-request-tools.md ·
-client-template-tools.md · rating-tools.md. Safety envelope:
-`docs/ai/ai-safety-rules.md`. RAG source rules: `docs/ai/rag-source-catalog.md`
-(NEVER read `placements.notes` for klant-facing answers).
+The owner AI assistant is **live** (PA-V1 + 2026-06 expansion): 34 tools in
+`src/lib/ai/tools/index.ts`, runtime in `src/lib/ai/runtime/**`, full flow in §1.22.
+Design contracts: `docs/ai/tool-contracts/` (client-tools · client-request-tools ·
+client-template-tools · rating-tools) · safety envelope `docs/ai/ai-safety-rules.md` ·
+RAG source rules `docs/ai/rag-source-catalog.md` (NEVER read `placements.notes` for
+klant-facing answers) · RAG ingestion spec `docs/ai/rag-ingestion-contract.md`
+(chunked notes-RAG — not yet built).
 
 ---
 
