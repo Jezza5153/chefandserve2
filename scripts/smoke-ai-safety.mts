@@ -43,6 +43,7 @@ const ctx = (actor: AiActor): ToolContext => ({ actor, channel: "dashboard" });
 const SAMPLE: Record<string, unknown> = {
   "hours.approve": { hoursId: "x" },
   "hours.detail": { hoursId: "x" },
+  "shifts.detail": { shiftId: "x" },
   "hours.reject": { hoursId: "x", reason: "test reden" },
   "hours.send_reminder": { hoursId: "x" },
   "placements.propose": { shiftId: "x", chefId: "y" },
