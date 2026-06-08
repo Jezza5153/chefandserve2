@@ -80,6 +80,8 @@ assert("planner.cockpit present (read)", byName.get("planner.cockpit")?.risk ===
 assert("shifts.suggest_chefs present (read)", byName.get("shifts.suggest_chefs")?.risk === "read");
 assert("chefs.semantic_search present (read)", byName.get("chefs.semantic_search")?.risk === "read");
 assert("clients.semantic_search present (read)", byName.get("clients.semantic_search")?.risk === "read");
+assert("shifts.margin present (read)", byName.get("shifts.margin")?.risk === "read");
+assert("contacts.timeline present (read)", byName.get("contacts.timeline")?.risk === "read");
 assert("roster.overview present (read)", byName.get("roster.overview")?.risk === "read");
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
