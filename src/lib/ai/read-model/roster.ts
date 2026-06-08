@@ -9,13 +9,14 @@
  * AI only needs week/month views (no day-board supply extras), so this is a subset of the
  * page's assembly.
  */
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { clients, placements, shifts } from "@/lib/db/schema";
+import { chefAvailability, chefs, clients, placements, shifts } from "@/lib/db/schema";
 import {
   buildRosterView,
   rosterAiSummary,
+  type AvailableChefRow,
   type RosterShiftRow,
   type RosterView,
 } from "@/lib/domain/roster-intel";
@@ -23,11 +24,43 @@ import { getRosterSettings } from "@/lib/domain/user-settings";
 import {
   addDaysToKey,
   amsterdamDayKey,
+  amsterdamMidnightUtc,
   getAmsterdamMonthGrid,
   getAmsterdamWeekRange,
 } from "@/lib/roster-format";
 
-export type RosterPeriod = "this_week" | "next_week" | "this_month";
+export type RosterPeriod = "today" | "this_week" | "next_week" | "this_month";
+
+/**
+ * Active chefs who are free on `dayKey` (available + not blocked + not already placed) — the
+ * day-board "supply" side. Mirrors roster/page.tsx's day-view query so the AI's "wie kan ik
+ * vandaag nog inzetten?" matches the screen. Day view only.
+ */
+async function loadAvailableChefsForDay(dayKey: string, dayShiftIds: string[]): Promise<AvailableChefRow[]> {
+  const placedRows = dayShiftIds.length
+    ? await db
+        .selectDistinct({ chefId: placements.chefId })
+        .from(placements)
+        .where(and(inArray(placements.shiftId, dayShiftIds), inArray(placements.status, ["proposed", "accepted", "confirmed", "completed"])))
+    : [];
+  const placedSet = new Set(placedRows.map((r) => r.chefId));
+
+  const dayDate = new Date(`${dayKey}T00:00:00Z`);
+  const blockedRows = await db
+    .select({ chefId: chefAvailability.chefId })
+    .from(chefAvailability)
+    .where(and(eq(chefAvailability.date, dayDate), eq(chefAvailability.available, false)));
+  const blockedSet = new Set(blockedRows.map((r) => r.chefId));
+
+  const activeChefs = await db
+    .select({ id: chefs.id, fullName: chefs.fullName, city: chefs.city, segments: chefs.segments })
+    .from(chefs)
+    .where(and(isNull(chefs.deletedAt), eq(chefs.status, "active")));
+
+  return activeChefs
+    .filter((c) => !placedSet.has(c.id) && !blockedSet.has(c.id))
+    .map((c) => ({ id: c.id, fullName: c.fullName, city: c.city, skills: c.segments ?? [] }));
+}
 
 export async function loadRosterAiSummary(args: {
   period: RosterPeriod;
@@ -40,7 +73,12 @@ export async function loadRosterAiSummary(args: {
   let dateKey: string;
   let startUtc: Date;
   let endUtc: Date;
-  if (args.period === "this_month") {
+  if (args.period === "today") {
+    view = "day";
+    dateKey = todayKey;
+    startUtc = amsterdamMidnightUtc(todayKey);
+    endUtc = amsterdamMidnightUtc(addDaysToKey(todayKey, 1));
+  } else if (args.period === "this_month") {
     const month = getAmsterdamMonthGrid(todayKey);
     view = "month";
     dateKey = `${month.monthKey}-01`;
@@ -98,11 +136,17 @@ export async function loadRosterAiSummary(args: {
     earliestProposedAt: r.earliestProposedAt,
   }));
 
+  // Day view also has a SUPPLY side (free chefs not yet placed) — load it so the AI can
+  // answer "wie kan ik vandaag nog inzetten?". Week/month don't use it.
+  const availableChefs =
+    view === "day" ? await loadAvailableChefsForDay(dateKey, shiftRows.map((r) => r.id)) : undefined;
+
   const rs = await getRosterSettings(args.userId);
   const vm = buildRosterView({
     view,
     dateKey,
     rows: shiftRows,
+    availableChefs,
     settings: { criticalHours: rs.criticalHours, labels: rs.labels },
     now: args.now,
   });
