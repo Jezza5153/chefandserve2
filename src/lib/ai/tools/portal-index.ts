@@ -7,11 +7,11 @@
 import { createRegistry, type ToolRegistry } from "@/lib/ai/tools/registry";
 import type { AnyTool } from "@/lib/ai/types";
 
-import { chefMyShiftsTool, chefMyHoursTool, chefMyProfileTool } from "@/lib/ai/tools/chef-self";
-import { clientMyShiftsTool, clientMyHoursTool, clientMyRequestsTool } from "@/lib/ai/tools/client-self";
+import { chefMyShiftsTool, chefMyHoursTool, chefMyProfileTool, chefMyAvailabilityTool } from "@/lib/ai/tools/chef-self";
+import { clientMyShiftsTool, clientMyHoursTool, clientMyRequestsTool, clientMyTemplatesTool } from "@/lib/ai/tools/client-self";
 
-export const CHEF_TOOLS: AnyTool[] = [chefMyShiftsTool, chefMyHoursTool, chefMyProfileTool];
-export const CLIENT_TOOLS: AnyTool[] = [clientMyShiftsTool, clientMyHoursTool, clientMyRequestsTool];
+export const CHEF_TOOLS: AnyTool[] = [chefMyShiftsTool, chefMyHoursTool, chefMyAvailabilityTool, chefMyProfileTool];
+export const CLIENT_TOOLS: AnyTool[] = [clientMyShiftsTool, clientMyHoursTool, clientMyTemplatesTool, clientMyRequestsTool];
 
 export function buildChefRegistry(): ToolRegistry {
   return createRegistry(CHEF_TOOLS);

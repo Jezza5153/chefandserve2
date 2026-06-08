@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
 import type { ToolContext } from "@/lib/ai/types";
-import { clientMyShifts, clientMyHours, clientMyRequests } from "@/lib/ai/read-model/client-self";
+import { clientMyShifts, clientMyHours, clientMyRequests, clientMyTemplates } from "@/lib/ai/read-model/client-self";
 
 function requireClientId(ctx: ToolContext): string {
   if (ctx.actor.subject?.kind !== "client" || !ctx.actor.subject.entityId) {
@@ -46,6 +46,26 @@ export const clientMyHoursTool = defineTool({
     return {
       data,
       summary: `${data.toSign.length} uurbriefje(s) te tekenen · besteed 30 dagen ${data.spend30dEur}.`,
+    };
+  },
+});
+
+export const clientMyTemplatesTool = defineTool({
+  name: "onze.vaste_diensten",
+  title: "Onze vaste diensten",
+  description:
+    "Jullie terugkerende/vaste diensten (templates): rol, aantal en patroon (bijv. 'Elke maandag · 18:00–23:00'). Read-only — alleen jullie eigen vaste diensten.",
+  risk: "read",
+  permission: null,
+  input: z.object({}),
+  run: async (_input, ctx) => {
+    const data = await clientMyTemplates(requireClientId(ctx));
+    return {
+      data,
+      summary:
+        data.templates.length === 0
+          ? "Jullie hebben geen vaste diensten lopen."
+          : `${data.templates.length} vaste dienst(en): ${data.templates.map((t) => `${t.role} (${t.pattern})`).join("; ")}.`,
     };
   },
 });

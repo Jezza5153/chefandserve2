@@ -6,8 +6,9 @@
 import { and, count, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { chefs, clientSubmissions, placements, ratings, shiftHours, shifts } from "@/lib/db/schema";
+import { chefs, clientSubmissions, placements, ratings, shiftHours, shiftTemplates, shifts } from "@/lib/db/schema";
 import { formatShiftRole } from "@/lib/labels";
+import { formatPattern } from "@/lib/shift-template-format";
 
 const dt = (d: Date | string) =>
   new Date(d).toLocaleString("nl-NL", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -72,6 +73,34 @@ export async function clientMyHours(clientId: string) {
   return {
     toSign: toSign.map((r) => ({ chef: r.chef, when: dt(r.when) })),
     spend30dEur: spendEur > 0 ? `€ ${spendEur.toLocaleString("nl-NL", { maximumFractionDigits: 0 })}` : "€ 0",
+  };
+}
+
+/** Active recurring shift templates ("vaste diensten") for this klant. */
+export async function clientMyTemplates(clientId: string) {
+  const rows = await db
+    .select({
+      role: shiftTemplates.roleNeeded,
+      headcount: shiftTemplates.headcount,
+      dayOfWeek: shiftTemplates.dayOfWeek,
+      startsAtTime: shiftTemplates.startsAtTime,
+      endsAtTime: shiftTemplates.endsAtTime,
+      endsNextDay: shiftTemplates.endsNextDay,
+    })
+    .from(shiftTemplates)
+    .where(and(eq(shiftTemplates.clientId, clientId), eq(shiftTemplates.active, true)));
+
+  return {
+    templates: rows.map((r) => ({
+      role: formatShiftRole(r.role),
+      headcount: r.headcount,
+      pattern: formatPattern({
+        dayOfWeek: r.dayOfWeek,
+        startsAtTime: r.startsAtTime,
+        endsAtTime: r.endsAtTime,
+        endsNextDay: r.endsNextDay,
+      }),
+    })),
   };
 }
 
