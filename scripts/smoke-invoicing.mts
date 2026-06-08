@@ -22,6 +22,7 @@ const {
   sendInvoice,
   markInvoicePaid,
   voidInvoice,
+  getUnbilledHoursByClient,
 } = await import("@/lib/domain/invoicing");
 const { chefs, clients, invoiceLines, invoices, placements, shiftHours, shifts, users } =
   await import("@/lib/db/schema");
@@ -118,6 +119,16 @@ try {
   await makeHours({ startsAt: d("2099-03-20"), workedMinutes: 600, clientRateCents: 9999 });
   await makeHours({ startsAt: d("2099-03-04"), workedMinutes: 600, clientRateCents: 9999, status: "client_signed" });
 
+  // Unbilled worklist (the fn is global → filter to our throwaway client).
+  const u0 = (await getUnbilledHoursByClient()).find((u) => u.clientId === clientId);
+  assert("unbilled: 3 approved hours waiting (client_signed excluded)", u0?.hoursCount === 3, JSON.stringify(u0));
+  assert("unbilled: total = 139990c", u0?.totalCents === 139990, `=${u0?.totalCents}`);
+  assert(
+    "unbilled: span 2099-03-03 … 2099-03-20",
+    u0?.oldestShiftDate === "2099-03-03" && u0?.newestShiftDate === "2099-03-20",
+    JSON.stringify(u0),
+  );
+
   const P1 = { periodStart: d("2099-03-02"), periodEnd: d("2099-03-08") };
 
   // 1. Generate P1.
@@ -144,6 +155,10 @@ try {
     g1b.ok && g1b.status === "exists" && g1b.invoiceId === g1.invoiceId,
     JSON.stringify(g1b),
   );
+
+  // Invoiced hours leave the worklist (only the out-of-period 03-20 remains).
+  const u1 = (await getUnbilledHoursByClient()).find((u) => u.clientId === clientId);
+  assert("unbilled drops to 1 after invoicing P1's 2 hours", u1?.hoursCount === 1, JSON.stringify(u1));
 
   // 3. Void frees the period AND its hours.
   const v1 = await voidInvoice({ invoiceId: g1.invoiceId, actorUserId, reason: "smoke void" });

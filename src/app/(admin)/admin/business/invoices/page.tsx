@@ -15,6 +15,8 @@ import { formatEuro } from "@/lib/hours-labels";
 import { invoiceStatusView, invoiceToneClasses } from "@/lib/invoice-labels";
 import { requirePermission } from "@/lib/permissions";
 
+import { getUnbilledHoursByClient } from "@/lib/domain/invoicing";
+
 import { generateInvoiceAction } from "./actions";
 
 export const metadata = { title: "Facturen", robots: { index: false } };
@@ -55,6 +57,10 @@ export default async function InvoicesPage({
     .from(invoices)
     .orderBy(desc(invoices.issueDate), desc(invoices.createdAt))
     .limit(100);
+
+  // Proactive worklist: approved hours not yet on any invoice, per klant.
+  const unbilled = await getUnbilledHoursByClient();
+  const unbilledTotal = unbilled.reduce((sum, u) => sum + u.totalCents, 0);
 
   const openCents = rows
     .filter((r) => r.status === "sent")
@@ -147,6 +153,48 @@ export default async function InvoicesPage({
           </button>
         </form>
       </section>
+
+      {/* Te factureren — proactive worklist */}
+      {unbilled.length > 0 ? (
+        <section className="mt-10">
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-serif text-xl text-ink-900">Te factureren</h2>
+            <p className="text-sm text-ink-500">
+              {formatEuro(unbilledTotal)} aan goedgekeurde uren wacht op een factuur
+            </p>
+          </div>
+          <ul className="mt-3 space-y-2">
+            {unbilled.map((u) => (
+              <li
+                key={u.clientId}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/40 p-4"
+              >
+                <div className="min-w-0">
+                  <p className="font-serif text-base text-ink-900">{u.companyName}</p>
+                  <p className="mt-0.5 text-xs text-ink-500">
+                    {u.hoursCount} {u.hoursCount === 1 ? "dienst" : "diensten"} ·{" "}
+                    {fmtDate(u.oldestShiftDate)} – {fmtDate(u.newestShiftDate)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-sm text-ink-900">{formatEuro(u.totalCents)}</span>
+                  <form action={generateInvoiceAction}>
+                    <input type="hidden" name="clientId" value={u.clientId} />
+                    <input type="hidden" name="periodStart" value={u.oldestShiftDate} />
+                    <input type="hidden" name="periodEnd" value={u.newestShiftDate} />
+                    <button
+                      type="submit"
+                      className="rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
+                    >
+                      Maak factuur
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {/* List */}
       <section className="mt-10">

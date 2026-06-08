@@ -291,6 +291,60 @@ export async function generateInvoiceForPeriod(args: {
   };
 }
 
+export type UnbilledClient = {
+  clientId: string;
+  companyName: string;
+  hoursCount: number;
+  /** Sum of client amounts, ex BTW. */
+  totalCents: number;
+  oldestShiftDate: string; // YYYY-MM-DD
+  newestShiftDate: string; // YYYY-MM-DD
+};
+
+/**
+ * Approved hours not yet on any invoice, grouped per klant — the "te factureren"
+ * worklist. Makes invoicing proactive: the operator sees who has billable hours
+ * waiting instead of having to remember + guess a period.
+ */
+export async function getUnbilledHoursByClient(): Promise<UnbilledClient[]> {
+  const rows = await db
+    .select({
+      clientId: shiftHours.clientId,
+      companyName: clients.companyName,
+      workedMinutes: shiftHours.workedMinutes,
+      clientRateCents: shiftHours.clientRateCents,
+      shiftStart: shifts.startsAt,
+    })
+    .from(shiftHours)
+    .innerJoin(shifts, eq(shifts.id, shiftHours.shiftId))
+    .innerJoin(clients, eq(clients.id, shiftHours.clientId))
+    .leftJoin(invoiceLines, eq(invoiceLines.shiftHoursId, shiftHours.id))
+    .where(and(eq(shiftHours.status, "admin_approved"), isNull(invoiceLines.id)));
+
+  const map = new Map<string, UnbilledClient>();
+  for (const r of rows) {
+    const amount = computeChefAmountCents(r.workedMinutes, r.clientRateCents);
+    const day = new Date(r.shiftStart).toISOString().slice(0, 10);
+    const cur = map.get(r.clientId);
+    if (cur) {
+      cur.hoursCount += 1;
+      cur.totalCents += amount;
+      if (day < cur.oldestShiftDate) cur.oldestShiftDate = day;
+      if (day > cur.newestShiftDate) cur.newestShiftDate = day;
+    } else {
+      map.set(r.clientId, {
+        clientId: r.clientId,
+        companyName: r.companyName,
+        hoursCount: 1,
+        totalCents: amount,
+        oldestShiftDate: day,
+        newestShiftDate: day,
+      });
+    }
+  }
+  return [...map.values()].sort((a, b) => b.totalCents - a.totalCents);
+}
+
 /**
  * Email an invoice to the klant + flip status draft→sent.
  *
