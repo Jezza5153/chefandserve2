@@ -17,8 +17,10 @@ import { estimateMargin, estimateTravel } from "@/lib/domain/travel";
 import { autofillWeek, copyLastWeek, type AutofillResult, type CopyResult } from "@/lib/domain/roster-autofill";
 import {
   clearDraftsForPeriod,
+  confirmAcceptedForPeriod,
   publishDraftsForPeriod,
   removeDraftPlacement,
+  type ConfirmResult,
   type PublishResult,
 } from "@/lib/domain/roster-publish";
 import { hasPermission, requirePermission } from "@/lib/permissions";
@@ -145,6 +147,19 @@ export async function copyLastWeekAction(anchorDateKey: string): Promise<CopyRes
   const session = await requirePermission("shifts", "write");
   const week = getAmsterdamWeekRange(anchorDateKey);
   const res = await copyLastWeek({
+    startUtc: week.startUtc,
+    endUtc: week.endUtc,
+    actorUserId: session.user.id,
+  });
+  revalidatePath(PLANBORD_PATH);
+  return res;
+}
+
+/** "Bevestig geaccepteerde" — confirm every accepted placement this week at once. */
+export async function confirmWeekAction(anchorDateKey: string): Promise<ConfirmResult> {
+  const session = await requirePermission("shifts", "write");
+  const week = getAmsterdamWeekRange(anchorDateKey);
+  const res = await confirmAcceptedForPeriod({
     startUtc: week.startUtc,
     endUtc: week.endUtc,
     actorUserId: session.user.id,

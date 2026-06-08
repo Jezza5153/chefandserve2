@@ -24,6 +24,7 @@ import { db } from "@/lib/db/client";
 import { chefAvailability, chefs, clients, placements, shifts } from "@/lib/db/schema";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { recomputeShiftStatus } from "@/lib/domain/shift-status";
+import { transitionPlacement } from "@/lib/domain/placement-transition";
 import { sendEmail, formatShiftWhen } from "@/lib/email";
 import { env } from "@/lib/env";
 import { createNotification, recordEmailMessage } from "@/lib/integrations";
@@ -190,6 +191,43 @@ export async function clearDraftsForPeriod(args: {
     ),
   );
   return { removed: ids.length };
+}
+
+/**
+ * Batch-confirm — flip every ACCEPTED placement in the period → confirmed (the
+ * planner's "bevestig alle geaccepteerde" once chefs have said yes). Reuses the
+ * tested transitionPlacement (atomic terminal guard + audit + shift recompute +
+ * the chef + klant confirmation mails). Sequential + best-effort; a stale row
+ * just no-ops (changed=false).
+ */
+export type ConfirmResult = { confirmed: number; total: number };
+
+export async function confirmAcceptedForPeriod(args: {
+  startUtc: Date;
+  endUtc: Date;
+  actorUserId: string;
+}): Promise<ConfirmResult> {
+  const accepted = await db
+    .select({ placementId: placements.id })
+    .from(placements)
+    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .where(
+      and(
+        eq(placements.status, "accepted"),
+        gte(shifts.startsAt, args.startUtc),
+        lt(shifts.startsAt, args.endUtc),
+      ),
+    );
+  let confirmed = 0;
+  for (const a of accepted) {
+    const res = await transitionPlacement({
+      placementId: a.placementId,
+      newStatus: "confirmed",
+      actorUserId: args.actorUserId,
+    });
+    if (res.ok && res.changed) confirmed++;
+  }
+  return { confirmed, total: accepted.length };
 }
 
 /* ----- weekly publish digests (PR-PLANBORD-2) ------------------------------ */

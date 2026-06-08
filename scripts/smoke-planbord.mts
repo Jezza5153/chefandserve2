@@ -15,7 +15,7 @@ config({ path: ".env.local" });
 const { db } = await import("@/lib/db/client");
 const { withTx } = await import("@/lib/db/tx");
 const { draftPlacement } = await import("@/lib/domain/matching");
-const { publishDraftsForPeriod, removeDraftPlacement, clearDraftsForPeriod } = await import("@/lib/domain/roster-publish");
+const { publishDraftsForPeriod, removeDraftPlacement, clearDraftsForPeriod, confirmAcceptedForPeriod } = await import("@/lib/domain/roster-publish");
 const { recomputeShiftStatus, cancelShiftAndPlacements } = await import("@/lib/domain/shift-status");
 const { autofillWeek, copyLastWeek } = await import("@/lib/domain/roster-autofill");
 const { chefAvailability, chefs, clients, placements, shifts, users } = await import("@/lib/db/schema");
@@ -219,6 +219,27 @@ try {
       .where(eq(placements.id, dC.placementId))
       .limit(1);
     assert("cancelling a shift cancels its draft", p?.status === "cancelled", String(p?.status));
+  }
+
+  // 13. batch-confirm — accepted placements in the week → confirmed (mail-safe: chef email null).
+  {
+    const sConf = await makeShift(364 * DAY, 1);
+    const [acc] = await db
+      .insert(placements)
+      .values({ shiftId: sConf, chefId, status: "accepted" })
+      .returning({ id: placements.id });
+    const res = await confirmAcceptedForPeriod({
+      startUtc: new Date(Date.now() + 364 * DAY - HOUR),
+      endUtc: new Date(Date.now() + 364 * DAY + DAY),
+      actorUserId,
+    });
+    assert("confirmAccepted confirmed the placement", res.confirmed >= 1, JSON.stringify(res));
+    const [p] = await db
+      .select({ status: placements.status })
+      .from(placements)
+      .where(eq(placements.id, acc.id))
+      .limit(1);
+    assert("accepted placement is now confirmed", p?.status === "confirmed", String(p?.status));
   }
 
   console.log(`\n  pass: ${pass}\n  fail: ${fail}`);

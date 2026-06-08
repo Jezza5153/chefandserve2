@@ -27,6 +27,7 @@ import { Icon } from "@/components/admin/icons";
 import {
   autofillWeekAction,
   clearDraftsAction,
+  confirmWeekAction,
   copyLastWeekAction,
   draftChefAction,
   matchesForShiftAction,
@@ -108,6 +109,9 @@ export function Planbord({
   chefPool,
   blockedByChef,
   draftCount,
+  proposedCount,
+  acceptedCount,
+  confirmedCount,
 }: {
   weekDays: string[];
   weekStartKey: string;
@@ -118,6 +122,9 @@ export function Planbord({
   chefPool: PlanbordChef[];
   blockedByChef: Record<string, string[]>;
   draftCount: number;
+  proposedCount: number;
+  acceptedCount: number;
+  confirmedCount: number;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -183,6 +190,24 @@ export function Planbord({
         res.total === 0
           ? "Geen concepten om te publiceren."
           : `${res.published} van ${res.total} gepubliceerd — chefs en klanten zijn bericht.${skip}`,
+      );
+      router.refresh();
+    });
+  }
+
+  function confirmWeek() {
+    if (
+      !window.confirm(
+        `${acceptedCount} geaccepteerde plaatsing${acceptedCount === 1 ? "" : "en"} bevestigen?\n\nChef én klant krijgen de bevestigingsmail.`,
+      )
+    )
+      return;
+    startTransition(async () => {
+      const res = await confirmWeekAction(weekStartKey);
+      setMsg(
+        res.confirmed === 0
+          ? "Geen geaccepteerde plaatsingen om te bevestigen."
+          : `${res.confirmed} plaatsing${res.confirmed === 1 ? "" : "en"} bevestigd — chefs en klanten zijn bericht.`,
       );
       router.refresh();
     });
@@ -328,6 +353,16 @@ export function Planbord({
               <Icon name="upload" className="h-3.5 w-3.5" />
               Publiceer{draftCount > 0 ? ` (${draftCount})` : ""}
             </button>
+            {acceptedCount > 0 && (
+              <button
+                onClick={confirmWeek}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-4 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-emerald-700 disabled:opacity-40"
+              >
+                <Icon name="check-circle" className="h-3.5 w-3.5" />
+                Bevestig {acceptedCount}
+              </button>
+            )}
           </div>
         </div>
 
@@ -338,6 +373,20 @@ export function Planbord({
             <button onClick={() => setMsg(null)} className="ml-auto shrink-0 text-ink-400 hover:text-ink-700">
               ✕
             </button>
+          </div>
+        )}
+
+        {proposedCount + acceptedCount + confirmedCount > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 font-ui text-[11px] text-ink-500">
+            <span>
+              <span className="font-medium text-blue-700">{proposedCount}</span> voorgesteld
+            </span>
+            <span>
+              <span className="font-medium text-indigo-700">{acceptedCount}</span> geaccepteerd
+            </span>
+            <span>
+              <span className="font-medium text-emerald-700">{confirmedCount}</span> bevestigd
+            </span>
           </div>
         )}
 

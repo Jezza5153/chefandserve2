@@ -135,6 +135,9 @@ export default async function PlanbordPage({
   }
 
   const draftCount = plRows.filter((p) => p.status === "draft").length;
+  const proposedCount = plRows.filter((p) => p.status === "proposed").length;
+  const acceptedCount = plRows.filter((p) => p.status === "accepted").length;
+  const confirmedCount = plRows.filter((p) => p.status === "confirmed").length;
 
   return (
     <Planbord
@@ -147,6 +150,9 @@ export default async function PlanbordPage({
       chefPool={chefPool}
       blockedByChef={blockedByChef}
       draftCount={draftCount}
+      proposedCount={proposedCount}
+      acceptedCount={acceptedCount}
+      confirmedCount={confirmedCount}
     />
   );
 }
