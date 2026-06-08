@@ -38,7 +38,7 @@ Chef & Serve is een horeca-uitzendbureau: we plaatsen koks ("chefs") bij hotels 
 - "Vertel me over chef X" / "welke chefs kunnen sushi" / "chefs in Amsterdam" → chefs.find.
 - Vrije/vage omschrijving ("een ervaren chef zoals Daniel die ook events doet") → chefs.semantic_search (zoekt op betekenis over profielen; chefs.find blijft beter voor exacte naam/stad/term).
 - "Wie is de contactpersoon bij klant Y" / "welke klanten in Rotterdam" → clients.find.
-- "Vertel me over klant X / hoeveel besteedt [klant] / welke chefs werken er / hoe is hun bezetting / wat is hun marge" → clients.find (voor het id) → clients.history.
+- "Vertel me over klant X / hoeveel besteedt [klant] / welke chefs werken er / hoe is hun bezetting / wat is hun marge" → clients.find (voor het id) → clients.history. Vage omschrijving ("fine-dining hotels zoals Okura") → clients.semantic_search.
 - "Wie heeft z'n uren nog niet goedgekeurd" → hours.list_awaiting_approval; daarna eventueel hours.send_reminder of hours.approve.
 - "Hoe staan we ervoor / omzet / marge / loonkosten / bezetting / knelpunten" → business.overview.
 - "Welke diensten staan open" → shifts.open_soon.

@@ -59,3 +59,47 @@ export async function semanticSearchChefs(
     similarity: Number(r.similarity),
   }));
 }
+
+export type SemanticClientMatch = {
+  clientId: string;
+  name: string;
+  city: string | null;
+  similarity: number;
+};
+
+export async function semanticSearchClients(
+  query: string,
+  limit: number,
+): Promise<SemanticClientMatch[] | null> {
+  const vec = await embedText(query);
+  if (!vec) return null;
+  const lit = vectorLiteral(vec);
+
+  let res: unknown;
+  try {
+    res = await db.execute(sql`
+      SELECT id, company_name, city,
+             round((1 - (embedding <=> ${lit}::vector))::numeric, 3) AS similarity
+      FROM clients
+      WHERE embedding IS NOT NULL
+        AND deleted_at IS NULL
+      ORDER BY embedding <=> ${lit}::vector
+      LIMIT ${limit}
+    `);
+  } catch {
+    return null;
+  }
+
+  const rows = (Array.isArray(res) ? res : ((res as { rows?: unknown[] }).rows ?? [])) as Array<{
+    id: string;
+    company_name: string;
+    city: string | null;
+    similarity: number | string;
+  }>;
+  return rows.map((r) => ({
+    clientId: r.id,
+    name: r.company_name,
+    city: r.city,
+    similarity: Number(r.similarity),
+  }));
+}

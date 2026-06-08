@@ -6,7 +6,7 @@
 import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
-import { semanticSearchChefs } from "@/lib/ai/read-model/semantic";
+import { semanticSearchChefs, semanticSearchClients } from "@/lib/ai/read-model/semantic";
 
 export const chefsSemanticSearch = defineTool({
   name: "chefs.semantic_search",
@@ -33,6 +33,35 @@ export const chefsSemanticSearch = defineTool({
         matches.length === 0
           ? "Geen semantische matches gevonden (profielen zijn mogelijk nog niet geïndexeerd)."
           : `${matches.length} chef(s) gevonden — beste match: ${matches[0].name} (${Math.round(matches[0].similarity * 100)}%).`,
+    };
+  },
+});
+
+export const clientsSemanticSearch = defineTool({
+  name: "clients.semantic_search",
+  title: "Klanten zoeken op betekenis",
+  description:
+    "Zoek klanten op een vrije omschrijving/betekenis — bijv. 'fine-dining hotels in Amsterdam' of 'klanten zoals Okura'. Vult clients.find (exacte zoektermen) aan met semantisch zoeken over klantprofielen. Read-only.",
+  risk: "read",
+  permission: { resource: "clients", action: "read" },
+  input: z.object({
+    query: z.string().min(2, "geef een korte omschrijving"),
+    limit: z.number().int().min(1).max(15).optional(),
+  }),
+  run: async (input) => {
+    const matches = await semanticSearchClients(input.query, input.limit ?? 8);
+    if (matches === null) {
+      return {
+        data: { available: false },
+        summary: "Semantisch zoeken is nu niet beschikbaar (embeddings staan uit of zijn nog niet gegenereerd).",
+      };
+    }
+    return {
+      data: { count: matches.length, matches },
+      summary:
+        matches.length === 0
+          ? "Geen semantische matches gevonden."
+          : `${matches.length} klant(en) gevonden — beste match: ${matches[0].name} (${Math.round(matches[0].similarity * 100)}%).`,
     };
   },
 });
