@@ -14,6 +14,7 @@ import { db } from "@/lib/db/client";
 import { chefs } from "@/lib/db/schema";
 import { getChefWorkSummary, getChefFeedbackSummary } from "@/lib/domain/chef-history";
 import { buildChefTrends } from "@/lib/domain/chef-trends";
+import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { getChefDailySeries } from "@/lib/domain/metrics-history";
 import { formatChefRole, formatSegment, formatClientType } from "@/lib/labels";
 
@@ -100,3 +101,46 @@ export async function chefTrends(chefId: string) {
 }
 
 export type ChefTrendsView = NonNullable<Awaited<ReturnType<typeof chefTrends>>>;
+
+/** Profile completeness — score + label + which critical/nice-to-have fields are missing.
+ *  Answers "waarom is deze chef nog niet goed te matchen/voorstellen". */
+export async function chefProfileCompleteness(chefId: string) {
+  const [chef] = await db
+    .select({
+      id: chefs.id,
+      fullName: chefs.fullName,
+      vakniveau: chefs.vakniveau,
+      city: chefs.city,
+      segments: chefs.segments,
+      yearsExperience: chefs.yearsExperience,
+      hourlyRateMinCents: chefs.hourlyRateMinCents,
+      hourlyRateMaxCents: chefs.hourlyRateMaxCents,
+      email: chefs.email,
+      phone: chefs.phone,
+      specialties: chefs.specialties,
+      languages: chefs.languages,
+      postcode: chefs.postcode,
+      transportMode: chefs.transportMode,
+      preferences: chefs.preferences,
+    })
+    .from(chefs)
+    .where(eq(chefs.id, chefId))
+    .limit(1);
+  if (!chef) return null;
+  const c = getProfileCompleteness({
+    vakniveau: chef.vakniveau,
+    city: chef.city,
+    segments: chef.segments,
+    yearsExperience: chef.yearsExperience,
+    hourlyRateMinCents: chef.hourlyRateMinCents,
+    hourlyRateMaxCents: chef.hourlyRateMaxCents,
+    email: chef.email,
+    phone: chef.phone,
+    specialties: chef.specialties,
+    languages: chef.languages,
+    postcode: chef.postcode,
+    transportMode: chef.transportMode,
+    preferences: chef.preferences,
+  });
+  return { chef: { id: chef.id, name: chef.fullName }, ...c };
+}

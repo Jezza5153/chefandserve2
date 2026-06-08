@@ -7,7 +7,12 @@
 import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
-import { chefWorkSummary, chefFeedback, chefTrends } from "@/lib/ai/read-model/chef-profile";
+import {
+  chefWorkSummary,
+  chefFeedback,
+  chefTrends,
+  chefProfileCompleteness,
+} from "@/lib/ai/read-model/chef-profile";
 
 export const chefsWorkSummary = defineTool({
   name: "chefs.work_summary",
@@ -73,5 +78,21 @@ export const chefsTrends = defineTool({
         data.churn.reasons.length ? ` (${data.churn.reasons.join(", ")})` : ""
       }.`,
     };
+  },
+});
+
+export const chefsProfileCompleteness = defineTool({
+  name: "chefs.profile_completeness",
+  title: "Profielvolledigheid van een chef",
+  description:
+    "Hoe compleet een chef-profiel is: score (0-100) + label (compleet/bruikbaar/mist data/onbruikbaar) + welke kritieke en optionele velden ontbreken (vakniveau, stad, tarief, contact, segmenten, ervaring, ...). Handig om te zien waarom een chef nog niet goed te matchen of voor te stellen is. Gebruik chefs.find voor het chefId.",
+  risk: "read",
+  permission: { resource: "chefs", action: "read" },
+  input: z.object({ chefId: z.string().min(1, "chefId is verplicht") }),
+  run: async (input) => {
+    const data = await chefProfileCompleteness(input.chefId);
+    if (!data) throw new Error("deze chef bestaat niet (meer)");
+    const miss = data.missingCritical.length ? ` Mist nog: ${data.missingCritical.join(", ")}.` : "";
+    return { data, summary: `${data.chef.name}: profiel ${data.score}% (${data.label}).${miss}` };
   },
 });
