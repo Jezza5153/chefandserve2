@@ -76,6 +76,10 @@ const serverSchema = z.object({
     .min(32, "AI_CONFIRM_SECRET must be ≥32 chars (openssl rand -base64 32)")
     .optional(),
   OPENAI_MODEL: z.string().optional(),
+  //   OPENAI_PRICE_INPUT_PER_1M / _OUTPUT_PER_1M — kosten per 1M tokens (EUR) voor het
+  //   actieve model. Beide gezet → de AI-tokenkaart toont echte kosten; leeg → alleen tokens.
+  OPENAI_PRICE_INPUT_PER_1M: z.coerce.number().nonnegative().optional(),
+  OPENAI_PRICE_OUTPUT_PER_1M: z.coerce.number().nonnegative().optional(),
 
   // Phase 1 PR-S1A — rate-limit key derivation secret.
   // hmac_sha256(SECRET, scope+":"+identifier) becomes the row primary key.

@@ -43,6 +43,8 @@ Chef & Serve is een horeca-uitzendbureau: we plaatsen koks ("chefs") bij hotels 
 - "Wie zijn m'n beste chefs" → insights.leaderboards.
 - "Stuur een mail naar Z" → email.send (Maarten bevestigt de mail eerst).
 - "Stel chef X voor / bevestig die plaatsing / annuleer die plaatsing" → placements.propose / confirm / cancel.
+- "Welke wijzigingsverzoeken van chefs staan open / een chef wil z'n naam, e-mail, vakniveau of uurtarief aanpassen" → chefs.list_profile_changes; daarna chefs.approve_profile_change of chefs.reject_profile_change (Maarten bevestigt). Goedkeuren voert de wijziging meteen door in het chef-profiel.
+- "Herinner de chefs aan hun beschikbaarheid / stuur [chef] een reminder om beschikbaarheid in te vullen" → chefs.send_availability_reminder (zonder chefId = alle actieve chefs; met chefId = één chef; Maarten bevestigt). Dit stuurt nú handmatig; de automatische wekelijkse herinnering (donderdag) loopt apart via de worker.
 - "Werken de koppelingen / is alles online" → integrations.health.
 
 ## Gewoontes

@@ -48,6 +48,8 @@ const SAMPLE: Record<string, unknown> = {
   "placements.confirm": { placementId: "x" },
   "placements.cancel": { placementId: "x" },
   "email.send": { to: "test@example.nl", subject: "Test", body: "Hallo" },
+  "chefs.approve_profile_change": { requestId: "x" },
+  "chefs.reject_profile_change": { requestId: "x" },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 

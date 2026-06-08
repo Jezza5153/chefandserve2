@@ -18,6 +18,7 @@ import { aiConfirmSecret, aiEnabled, aiModel } from "@/lib/ai/config";
 import { createOpenAiBrain, DEFAULT_SYSTEM_PROMPT } from "@/lib/ai/runtime/openai-brain";
 import { confirmOwnerAction, runOwnerAssistant } from "@/lib/ai/runtime/assistant";
 import { ownerMemoryPromptBlock } from "@/lib/ai/read-model/owner-memory";
+import { recordAiUsage } from "@/lib/ai/read-model/ai-usage";
 import type { Msg } from "@/lib/ai/runtime/agent";
 
 export const dynamic = "force-dynamic";
@@ -61,7 +62,19 @@ export async function POST(req: Request): Promise<Response> {
   // Inject what Maarten has had the assistant remember (memory.remember), so it uses it automatically.
   const memoryBlock = await ownerMemoryPromptBlock(userId);
   const systemPrompt = `${DEFAULT_SYSTEM_PROMPT}${pageBlock}${memoryBlock}`;
-  const brain = createOpenAiBrain({ apiKey: env.OPENAI_API_KEY, model: aiModel(), systemPrompt });
+  // Accumulate token usage across the turn's model calls; persisted after the run for the
+  // /admin/system AI-tokens card. A tally failure never breaks the chat (try/catch below).
+  let promptTokens = 0;
+  let completionTokens = 0;
+  const brain = createOpenAiBrain({
+    apiKey: env.OPENAI_API_KEY,
+    model: aiModel(),
+    systemPrompt,
+    onUsage: (u) => {
+      promptTokens += u.promptTokens;
+      completionTokens += u.completionTokens;
+    },
+  });
 
   try {
     const confirm = (body as { confirm?: { tool: string; input: unknown; token: string } }).confirm;
@@ -79,6 +92,13 @@ export async function POST(req: Request): Promise<Response> {
 
     const messages = (body as { messages?: Msg[] }).messages ?? [];
     const outcome = await runOwnerAssistant({ userId, channel: "dashboard", messages, brain, confirmSecret });
+    if (promptTokens > 0 || completionTokens > 0) {
+      try {
+        await recordAiUsage({ model: aiModel(), promptTokens, completionTokens, now: new Date() });
+      } catch (e) {
+        console.error("[ai/chat] usage tally failed:", e instanceof Error ? e.message : e);
+      }
+    }
     return NextResponse.json({ outcome });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Onbekende fout";

@@ -83,6 +83,35 @@ console.log("\n── brain: tool_call response ──");
   assert("request set tool_choice", capturedBody.includes("tool_choice"));
 }
 
+console.log("\n── brain: threads prior turns + carries context guidance ──");
+{
+  let capturedBody = "";
+  const transport: OpenAiTransport = async (req) => {
+    capturedBody = req.body;
+    return { status: 200, json: { choices: [{ message: { content: "ok" } }] } };
+  };
+  const brain = createOpenAiBrain({ apiKey: "sk-test", model: "gpt-4o", transport });
+  await brain.plan({
+    messages: [
+      { role: "user", content: "hoeveel chefs heb ik" },
+      { role: "assistant", content: "Je hebt nu 8 actieve chefs op de rol." },
+      { role: "user", content: "wie heeft er een email adres" },
+    ],
+    tools: [],
+  });
+  const body = JSON.parse(capturedBody) as { messages: Array<{ role: string; content: string | null }> };
+  // Regression guard for "the assistant forgot the context": every prior turn — including
+  // the previous assistant answer — must reach the model, and the system prompt must tell
+  // it to build on the conversation.
+  assert("prior user turn reaches the model", body.messages.some((m) => m.role === "user" && m.content === "hoeveel chefs heb ik"));
+  assert(
+    "prior assistant answer reaches the model (context kept)",
+    body.messages.some((m) => m.role === "assistant" && typeof m.content === "string" && m.content.includes("8 actieve chefs")),
+  );
+  assert("follow-up question reaches the model", body.messages.some((m) => m.role === "user" && m.content === "wie heeft er een email adres"));
+  assert("system prompt instructs using the conversation", capturedBody.includes("GEBRUIK HET GESPREK"));
+}
+
 console.log("\n── brain: final-answer response ──");
 {
   const transport: OpenAiTransport = async () => ({

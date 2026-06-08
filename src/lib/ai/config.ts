@@ -21,6 +21,18 @@ export function aiModel(): string {
 }
 
 /**
+ * Per-1M-token prices (EUR) for the active model, or null when not configured. BOTH
+ * OPENAI_PRICE_INPUT_PER_1M and _OUTPUT_PER_1M must be set; otherwise the AI-tokens card
+ * shows tokens only (we never guess a model's rate).
+ */
+export function aiPricing(): { inputPer1M: number; outputPer1M: number } | null {
+  const inputPer1M = env.OPENAI_PRICE_INPUT_PER_1M;
+  const outputPer1M = env.OPENAI_PRICE_OUTPUT_PER_1M;
+  if (inputPer1M == null || outputPer1M == null) return null;
+  return { inputPer1M, outputPer1M };
+}
+
+/**
  * The HMAC secret that signs action-confirmation tokens. Throws at call time if unset
  * (mirrors RATE_LIMIT_HASH_SECRET / TOTP_ENCRYPTION_KEY): confirm-gated tools must never
  * silently run without a verifiable human "yes".
