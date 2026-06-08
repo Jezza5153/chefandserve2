@@ -54,7 +54,7 @@ const GOLDEN: RouteCase[] = [
   { id: "G1", q: "Welke uren wachten nog op goedkeuring?", expect: ["hours.list_awaiting_approval"] },
   { id: "G3", q: "Stuur Daniel een herinnering om zijn uren in te dienen.", expect: ["chefs.find", "hours.send_reminder", "hours.list_awaiting_approval"] },
   { id: "G4", q: "Waarom is Bart nog niet betaald?", expect: ["chefs.find", "payroll.read", "hours.list_awaiting_approval"] },
-  { id: "G5", q: "Welke documenten van mijn chefs verlopen binnenkort?", expect: ["documents.list_for_chef", "chefs.find"] },
+  { id: "G5", q: "Welke documenten van mijn chefs verlopen binnenkort?", expect: ["documents.expiring", "documents.list_for_chef", "chefs.find"] },
   { id: "G9", q: "Wie kan ik voorstellen voor de sous-chef dienst bij Lute volgende week?", expect: ["shifts.find", "shifts.suggest_chefs", "clients.find"] },
   { id: "G10", q: "Wat staat er klaar voor de payroll van deze maand?", expect: ["payroll.read", "business.overview"] },
   { id: "G-aud", q: "Wat is er de afgelopen week met chef Lisa gewijzigd?", expect: ["audit.search", "chefs.find"] },

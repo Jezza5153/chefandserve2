@@ -7,7 +7,7 @@
 import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
-import { searchAudit, chefDocumentsForAi, listPrivacyRequestsForAi, emailStatusForAi, payrollBatchesForAi } from "@/lib/ai/read-model/oversight";
+import { searchAudit, chefDocumentsForAi, expiringDocumentsForAi, listPrivacyRequestsForAi, emailStatusForAi, payrollBatchesForAi } from "@/lib/ai/read-model/oversight";
 
 export const auditSearch = defineTool({
   name: "audit.search",
@@ -52,6 +52,31 @@ export const documentsListForChef = defineTool({
         data.documents.length === 0
           ? `${data.chef} heeft nog geen documenten.`
           : `${data.chef}: ${data.documents.length} document(en)${data.expiringOrExpired > 0 ? ` — ⚠ ${data.expiringOrExpired} verlopen/verloopt binnenkort` : ""}.`,
+    };
+  },
+});
+
+export const documentsExpiring = defineTool({
+  name: "documents.expiring",
+  title: "Verlopende documenten",
+  description:
+    "Alle chef-documenten die binnenkort verlopen of al verlopen zijn — over álle chefs heen, gesorteerd op verloopdatum (eerst de meest urgente). Standaard 30 dagen vooruit; pas 'days' aan voor een andere horizon. Geeft chef · soort (CV/ID/certificaat/…) · status · verloopdatum + dagen resterend. Alléén metadata, nooit de bestandsinhoud. Voor 'welke documenten/certificaten verlopen er binnenkort?'. Read-only.",
+  risk: "read",
+  permission: { resource: "chefs", action: "read" },
+  input: z.object({
+    days: z.number().int().min(1).max(365).optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  }),
+  run: async (input) => {
+    const days = input.days ?? 30;
+    const rows = await expiringDocumentsForAi({ days, limit: input.limit ?? 30 });
+    const expired = rows.filter((r) => r.verlopen).length;
+    return {
+      data: { count: rows.length, days, documents: rows },
+      summary:
+        rows.length === 0
+          ? `Geen documenten die binnen ${days} dagen verlopen. 👍`
+          : `${rows.length} document(en) verlopen binnen ${days} dagen${expired > 0 ? ` — ⚠ waarvan ${expired} al verlopen` : ""}.`,
     };
   },
 });
