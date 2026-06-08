@@ -32,6 +32,7 @@ import {
 import { getChefDailySeries } from "@/lib/domain/metrics-history";
 import { buildChefTrends } from "@/lib/domain/chef-trends";
 import { getOnboardingReadiness, getProfileCompleteness } from "@/lib/domain/profile-completeness";
+import { computeChefInzetbaarheid } from "@/lib/domain/chef-inzetbaarheid";
 import { getChefReliability } from "@/lib/chef-events";
 import {
   createProfileDataRequest,
@@ -54,6 +55,7 @@ import { BasicsForm } from "./_components/BasicsForm";
 import { PortalAccess } from "./_components/PortalAccess";
 import { DocumentsSection } from "./_components/DocumentsSection";
 import { Chef360 } from "./_components/Chef360";
+import { InzetbaarheidCard } from "./_components/InzetbaarheidCard";
 
 export const metadata = { title: "Chef" };
 
@@ -202,6 +204,26 @@ export default async function ChefDetailPage({
     hasIdBack,
   });
   const r2Ready = r2IsConfigured();
+
+  // Inzetbaarheid (deployability) verdict — the top-of-page "kan deze chef de vloer
+  // op?" answer. Pure re-presentation of the onboarding/completeness/reliability
+  // signals already computed above (no extra query).
+  const inzetbaarheid = computeChefInzetbaarheid({
+    status: chef.status,
+    onboardingMissingCritical: onboarding.missingCritical,
+    idExpired: onboarding.idExpired,
+    idExpiringSoon: onboarding.idExpiringSoon,
+    profileScore: completeness.score,
+    noShowCount: workSummary.noShowCount,
+    churnLevel: trends.churn.level,
+  });
+  const portalStatus: "none" | "invited" | "active" | "other" = !portalUser
+    ? "none"
+    : portalUser.status === "active"
+      ? "active"
+      : portalUser.status === "invited"
+        ? "invited"
+        : "other";
 
   /* ---------- document server actions ----------------------- */
   async function uploadRequest(args: {
@@ -601,45 +623,26 @@ export default async function ChefDetailPage({
         </div>
       )}
 
-      {/* PR-KLANT-5: rating summary (internal — admin only) */}
-      <RatingSummary rating={rating} />
-
-      {/* PR-CHEF-4 admin review: chef-submitted change requests */}
-      <ChangeRequests
-        pendingChanges={pendingChanges}
-        decidedChanges={decidedChanges}
-        approveProfileChange={approveProfileChange}
-        rejectProfileChange={rejectProfileChange}
-      />
-
-      <BasicsForm
-        chef={chef}
-        updateBasics={updateBasics}
-        VAKNIVEAU_OPTIONS={VAKNIVEAU_OPTIONS}
-        SEGMENT_OPTIONS={SEGMENT_OPTIONS}
-      />
-
-      {/* Portal access */}
-      <PortalAccess
-        chef={chef}
-        portalUser={portalUser}
-        doInviteToPortal={doInviteToPortal}
+      {/* Inzetbaarheid — top-of-page "kan deze chef de vloer op?" verdict + the
+          consolidated actions (portal invite/activate, mail, bel, spring-naar-bewerken).
+          Answers the operator's #1 question before any editing chrome. */}
+      <InzetbaarheidCard
+        verdict={inzetbaarheid}
+        rating={workSummary.averageRating}
+        ratingCount={workSummary.ratingCount}
+        noShowCount={workSummary.noShowCount}
+        cancelledCount={workSummary.cancelledCount}
+        lastWorkedAt={workSummary.lastWorkedAt}
+        upcomingShifts={workSummary.upcomingShifts}
+        email={chef.email}
+        phone={chef.phone}
+        portalStatus={portalStatus}
         doInviteAndActivate={doInviteAndActivate}
         doActivatePortal={doActivatePortal}
-        doDisablePortal={doDisablePortal}
       />
 
-      {/* Documents */}
-      <DocumentsSection
-        chef={chef}
-        documents={documents}
-        DOC_TYPE_LABELS={DOC_TYPE_LABELS}
-        deleteDocument={deleteDocument}
-        uploadRequest={uploadRequest}
-        r2Ready={r2Ready}
-      />
-
-      {/* PR-1.6: Chef 360 — track record at a glance */}
+      {/* PR-1.6: Chef 360 — full track record, moved directly under the verdict so
+          opening a chef shows WHO they are first, before the editing chrome. */}
       <Chef360
         chef={chef}
         onboarding={onboarding}
@@ -653,6 +656,49 @@ export default async function ChefDetailPage({
         reliability={reliability}
         trends={trends}
         doRequestData={doRequestData}
+      />
+
+      {/* PR-KLANT-5: rating breakdown (internal — admin only) */}
+      <RatingSummary rating={rating} />
+
+      {/* Documents */}
+      <DocumentsSection
+        chef={chef}
+        documents={documents}
+        DOC_TYPE_LABELS={DOC_TYPE_LABELS}
+        deleteDocument={deleteDocument}
+        uploadRequest={uploadRequest}
+        r2Ready={r2Ready}
+      />
+
+      {/* Bewerken — pushed below the overview; anchor target for the verdict card's
+          "Gegevens bewerken ↓" link. */}
+      <div id="bewerken" className="scroll-mt-6">
+        <BasicsForm
+          chef={chef}
+          updateBasics={updateBasics}
+          VAKNIVEAU_OPTIONS={VAKNIVEAU_OPTIONS}
+          SEGMENT_OPTIONS={SEGMENT_OPTIONS}
+        />
+      </div>
+
+      {/* PR-CHEF-4 admin review: chef-submitted change requests */}
+      <ChangeRequests
+        pendingChanges={pendingChanges}
+        decidedChanges={decidedChanges}
+        approveProfileChange={approveProfileChange}
+        rejectProfileChange={rejectProfileChange}
+      />
+
+      {/* Portal access — full controls (the primary invite/activate action is also
+          surfaced in the verdict card above). */}
+      <PortalAccess
+        chef={chef}
+        portalUser={portalUser}
+        doInviteToPortal={doInviteToPortal}
+        doInviteAndActivate={doInviteAndActivate}
+        doActivatePortal={doActivatePortal}
+        doDisablePortal={doDisablePortal}
       />
     </DetailShell>
   );
