@@ -184,6 +184,55 @@ console.log("\n── agent loop: pauses for confirmation ──");
   assert("read ran ok before the pause", outcome.steps.length === 2 && outcome.steps[0]?.result.status === "ok");
 }
 
+console.log("\n── agent loop: PARALLEL tool calls (one batched turn) ──");
+{
+  const script: BrainStep[] = [
+    {
+      kind: "tool_calls",
+      calls: [
+        { tool: "fake.read", input: { q: "open shifts" } },
+        { tool: "fake.read", input: { q: "uren te keuren" } },
+      ],
+    },
+    { kind: "final", text: "samengevat" },
+  ];
+  const brain: Brain = { plan: async () => script.shift() ?? { kind: "final", text: "(leeg)" } };
+  const outcome = await runAgent({
+    brain,
+    registry,
+    messages: [{ role: "user", content: "open shifts én uren te keuren?" }],
+    ctx: ctx(owner),
+    executeOptions: opts(makeSink().sink),
+  });
+  assert("batched step ran BOTH calls in one turn", outcome.kind === "final" && outcome.steps.length === 2);
+  assert("both batched reads succeeded", outcome.steps.every((s) => s.result.status === "ok"));
+  assert("final answer follows the batch", outcome.kind === "final" && outcome.text === "samengevat");
+}
+
+console.log("\n── agent loop: mixed batch (read + action) pauses on the action ──");
+{
+  const script: BrainStep[] = [
+    {
+      kind: "tool_calls",
+      calls: [
+        { tool: "fake.read", input: { q: "wie mist uren" } },
+        { tool: "fake.notify", input: { to: "x@y.nl", text: "herinnering" } },
+      ],
+    },
+    { kind: "final", text: "klaar" },
+  ];
+  const brain: Brain = { plan: async () => script.shift() ?? { kind: "final", text: "(leeg)" } };
+  const outcome = await runAgent({
+    brain,
+    registry,
+    messages: [{ role: "user", content: "check + stuur" }],
+    ctx: ctx(owner),
+    executeOptions: opts(makeSink().sink),
+  });
+  assert("mixed batch pauses on the action", outcome.kind === "awaiting_confirmation" && outcome.confirmation.tool === "fake.notify");
+  assert("the read in the batch still ran ok", outcome.steps.some((s) => s.tool === "fake.read" && s.result.status === "ok"));
+}
+
 console.log("\n── agent loop: resumes when pre-confirmed ──");
 {
   const notifyInput = { to: "daniel@example.nl", text: "vriendelijke herinnering" };

@@ -121,18 +121,17 @@ function toOpenAiMessages(system: string, messages: Msg[]): OpenAiMessage[] {
     if (m.role === "tool") {
       // a proper tool-result turn, tied to the assistant's tool_call by id
       out.push({ role: "tool", content: m.content, tool_call_id: m.toolCallId ?? "call_0" });
-    } else if (m.role === "assistant" && m.toolCall) {
-      // the assistant's own tool-call turn (no text content)
+    } else if (m.role === "assistant" && (m.toolCalls?.length || m.toolCall)) {
+      // the assistant's own tool-call turn (no text content) — one OR many calls (parallel)
+      const refs = m.toolCalls?.length ? m.toolCalls : m.toolCall ? [m.toolCall] : [];
       out.push({
         role: "assistant",
         content: null,
-        tool_calls: [
-          {
-            id: m.toolCall.id,
-            type: "function",
-            function: { name: toOpenAiName(m.toolCall.name), arguments: m.toolCall.arguments },
-          },
-        ],
+        tool_calls: refs.map((r) => ({
+          id: r.id,
+          type: "function" as const,
+          function: { name: toOpenAiName(r.name), arguments: r.arguments },
+        })),
       });
     } else {
       out.push({ role: m.role, content: m.content });
@@ -179,17 +178,21 @@ function parseChoice(json: unknown): BrainStep {
   const msg = (json as OpenAiResponse).choices?.[0]?.message;
   const toolCalls = msg?.tool_calls;
   if (Array.isArray(toolCalls) && toolCalls.length > 0) {
-    const tc = toolCalls[0];
-    const fn = tc?.function;
-    const rawArgs = typeof fn?.arguments === "string" && fn.arguments.trim() ? fn.arguments : "{}";
-    let input: unknown = {};
-    try {
-      input = JSON.parse(rawArgs);
-    } catch {
-      input = {};
-    }
-    const dotted = fromOpenAiName(String(fn?.name ?? ""));
-    return { kind: "tool_call", tool: dotted, input, call: { id: String(tc?.id ?? "call_0"), name: dotted, arguments: rawArgs } };
+    // Return EVERY tool call the model batched this turn (not just the first) — the agent
+    // loop runs them concurrently, saving a model round-trip per extra tool.
+    const calls = toolCalls.map((tc, j) => {
+      const fn = tc?.function;
+      const rawArgs = typeof fn?.arguments === "string" && fn.arguments.trim() ? fn.arguments : "{}";
+      let input: unknown = {};
+      try {
+        input = JSON.parse(rawArgs);
+      } catch {
+        input = {};
+      }
+      const dotted = fromOpenAiName(String(fn?.name ?? ""));
+      return { tool: dotted, input, call: { id: String(tc?.id ?? `call_${j}`), name: dotted, arguments: rawArgs } };
+    });
+    return { kind: "tool_calls", calls };
   }
   return { kind: "final", text: typeof msg?.content === "string" ? msg.content : "" };
 }

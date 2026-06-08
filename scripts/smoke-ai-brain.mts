@@ -73,14 +73,39 @@ console.log("\n── brain: tool_call response ──");
     },
   ];
   const step = await brain.plan({ messages: [{ role: "user", content: "keur h1 goed" }], tools });
-  assert("returns tool_call", step.kind === "tool_call");
-  assert("tool name un-mapped back to dotted id", step.kind === "tool_call" && step.tool === "hours.approve");
-  assert("arguments parsed", step.kind === "tool_call" && (step.input as { hoursId?: string }).hoursId === "h1");
+  assert("returns tool_calls (parallel-capable)", step.kind === "tool_calls");
+  assert("tool name un-mapped back to dotted id", step.kind === "tool_calls" && step.calls[0].tool === "hours.approve");
+  assert("arguments parsed", step.kind === "tool_calls" && (step.calls[0].input as { hoursId?: string }).hoursId === "h1");
   assert("request carried the DOTLESS tool name (OpenAI rejects dots)", capturedBody.includes("hours__approve"));
   assert("request did NOT send a dotted name", !capturedBody.includes('"hours.approve"'));
   assert("request carried the system prompt", capturedBody.includes("Maarten"));
   assert("request carried the playbook (domain knowledge)", capturedBody.includes("vakniveau"));
   assert("request set tool_choice", capturedBody.includes("tool_choice"));
+}
+
+console.log("\n── brain: PARALLEL tool calls (batched in one response) ──");
+{
+  const transport: OpenAiTransport = async () => ({
+    status: 200,
+    json: {
+      choices: [
+        {
+          message: {
+            content: null,
+            tool_calls: [
+              { id: "c1", function: { name: "business__overview", arguments: "{}" } },
+              { id: "c2", function: { name: "roster__overview", arguments: JSON.stringify({ period: "today" }) } },
+            ],
+          },
+        },
+      ],
+    },
+  });
+  const brain = createOpenAiBrain({ apiKey: "sk-test", model: "gpt-4o", transport });
+  const step = await brain.plan({ messages: [{ role: "user", content: "overzicht + rooster vandaag" }], tools: [] });
+  assert("batched response → both calls returned", step.kind === "tool_calls" && step.calls.length === 2);
+  assert("both tool names un-mapped", step.kind === "tool_calls" && step.calls[1].tool === "roster.overview");
+  assert("each call keeps its own id", step.kind === "tool_calls" && step.calls[0].call?.id === "c1" && step.calls[1].call?.id === "c2");
 }
 
 console.log("\n── brain: threads prior turns + carries context guidance ──");
