@@ -17,7 +17,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { embedText, vectorLiteral, aiEmbeddingsEnabled } from "@/lib/ai/embeddings";
 import { redact, isPiiDense, REDACTION_VERSION } from "@/lib/ai/rag/redact";
-import { chunkText } from "@/lib/ai/rag/chunk";
+import { chunkText, chunkMarkdown } from "@/lib/ai/rag/chunk";
 import { RAG_SOURCES, type RagSourceDef } from "@/lib/ai/rag/sources";
 
 function rowsOf(res: unknown): Record<string, unknown>[] {
@@ -180,6 +180,81 @@ async function ingestSource(def: RagSourceDef, opts: Opts): Promise<SourceCounts
   log(
     `  ${def.id}: rows=${counts.rows} indexed=${counts.indexed} superseded=${counts.superseded} unchanged=${counts.unchanged} pii_dense=${counts.skippedPiiDense}`,
   );
+  return counts;
+}
+
+/**
+ * Ingest project docs (Broad-index per rag-source-catalog.md, but tagged tenant_scope=internal
+ * + visibility=admin_only in V1 so chef/klant PAs never get architecture docs). Heading-aware
+ * chunking. fs-free: the caller
+ * (scripts/rag-ingest.mts) reads the files and passes {path, content} — the Vercel cron can't
+ * reliably read repo files, so docs are re-indexed by the script on doc changes, not nightly.
+ */
+export async function ingestDocs(
+  docs: Array<{ path: string; content: string }>,
+  opts: Opts = {},
+): Promise<SourceCounts> {
+  const log = opts.onLog ?? (() => {});
+  const delay = opts.requestDelayMs ?? 50;
+  const counts: SourceCounts = {
+    id: "docs",
+    rows: docs.length,
+    indexed: 0,
+    superseded: 0,
+    unchanged: 0,
+    skippedPiiDense: 0,
+    skippedEmpty: 0,
+  };
+
+  for (const doc of docs) {
+    const sections = chunkMarkdown(doc.content);
+    if (sections.length === 0) {
+      counts.skippedEmpty++;
+      continue;
+    }
+    // redact for safety (docs shouldn't carry PII, but never trust that) + hash the whole doc
+    const redacted = sections.map((s) => ({ heading: s.heading, text: redact(s.text).text }));
+    const newHash = hashOf(redacted.map((s) => s.text).join("\n"));
+    const existing = await liveHash("docs", doc.path, "doc");
+    if (existing === newHash) {
+      counts.unchanged++;
+      continue;
+    }
+
+    const vectors: number[][] = [];
+    let embedFailed = false;
+    for (const s of redacted) {
+      const vec = await embedText(s.text);
+      if (!vec) {
+        embedFailed = true;
+        break;
+      }
+      vectors.push(vec);
+      if (delay) await sleep(delay);
+    }
+    if (embedFailed) {
+      log(`  ! embed failed for doc ${doc.path} — left existing chunks intact`);
+      continue;
+    }
+
+    if (existing) counts.superseded += await supersede("docs", doc.path, "doc");
+    for (let i = 0; i < redacted.length; i++) {
+      await insertChunk({
+        table: "docs",
+        pk: doc.path,
+        field: "doc",
+        chunkIndex: i,
+        text: redacted[i].text,
+        vec: vectors[i],
+        tenantScope: "internal",
+        visibility: "admin_only", // owner-only; 'internal' is a tenant_scope, NOT a visibility tier
+        contentHash: newHash,
+      });
+      counts.indexed++;
+    }
+  }
+
+  log(`  docs: files=${counts.rows} indexed=${counts.indexed} superseded=${counts.superseded} unchanged=${counts.unchanged}`);
   return counts;
 }
 

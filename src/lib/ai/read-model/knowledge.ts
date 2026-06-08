@@ -83,6 +83,7 @@ function labelFor(
     return c ? `Dienst bij ${c}` : "Dienst";
   }
   if (h.sourceTable === "contact_logs") return "Contactnotitie";
+  if (h.sourceTable === "docs") return `Documentatie: ${h.sourcePk}`;
   return h.sourceTable;
 }
 

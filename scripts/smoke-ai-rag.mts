@@ -4,7 +4,7 @@
  *   npx tsx scripts/smoke-ai-rag.mts
  */
 const { redact, isPiiDense, REDACTION_VERSION } = await import("@/lib/ai/rag/redact");
-const { chunkText } = await import("@/lib/ai/rag/chunk");
+const { chunkText, chunkMarkdown } = await import("@/lib/ai/rag/chunk");
 const { accessFilterFor, tenantScopesForSubject } = await import("@/lib/ai/rag/access");
 
 let pass = 0;
@@ -49,6 +49,16 @@ assert("short → 1 chunk", chunkText("kort stukje tekst").length === 1);
   assert("long text → multiple chunks", chunks.length > 1, `got ${chunks.length}`);
   assert("every chunk under hard cap", chunks.every((c) => c.length <= 4200));
   assert("chunks are non-empty", chunks.every((c) => c.trim().length > 0));
+}
+
+console.log("\n── markdown chunking (project docs) ──");
+{
+  const md = "# Titel\n\nIntro.\n\n## Sectie A\n\nInhoud A.\n\n### Sub A1\n\nDetail A1.\n\n## Sectie B\n\nInhoud B.";
+  const secs = chunkMarkdown(md);
+  assert("markdown → multiple sections", secs.length >= 3, `got ${secs.length}`);
+  assert("heading breadcrumb carries parent", secs.some((s) => s.heading === "Titel › Sectie A › Sub A1"));
+  assert("section text is heading-prefixed", secs.some((s) => s.text.startsWith("Titel › Sectie A: ")));
+  assert("empty markdown → 0 sections", chunkMarkdown("   ").length === 0);
 }
 
 console.log("\n── access filter: tenant_scope + visibility (the no-cross-tenant-leak guarantee) ──");
