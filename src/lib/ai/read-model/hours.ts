@@ -6,10 +6,11 @@ import { asc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { chefs, clients, shiftHours, shifts } from "@/lib/db/schema";
+import { humanStatus } from "@/lib/hours-labels";
 
 /** Rows the klant has signed and that now await the owner's (admin) approval. */
 export async function listHoursAwaitingApproval() {
-  return db
+  const rows = await db
     .select({
       hoursId: shiftHours.id,
       workedMinutes: shiftHours.workedMinutes,
@@ -24,6 +25,9 @@ export async function listHoursAwaitingApproval() {
     .where(eq(shiftHours.status, "client_signed"))
     .orderBy(asc(shifts.startsAt))
     .limit(200);
+  // Every row here is 'client_signed' by the filter — stamp the human Dutch label so the
+  // assistant reports "Door klant akkoord" and can NEVER echo the raw enum (the no-raw-status rule).
+  return rows.map((r) => ({ ...r, status: humanStatus("client_signed") }));
 }
 
 export type HoursAwaitingApproval = Awaited<ReturnType<typeof listHoursAwaitingApproval>>[number];
