@@ -512,9 +512,9 @@ Owner/super_admin chat on `/admin/assistant` + a floating widget on every `/admi
 
 **Gate (every tool call, `executeTool`):** permission check against the actor's set (else `denied`) → for `outbound`/`financial` tools, mint a signed confirm token and PAUSE (`needs_confirmation`); the human echoes it back via the confirm UI before the action runs. Reads run immediately. Every call emits an AI meta-audit row (`aiAuditSink`), paired with the domain's own business audit. Rate-limited `ai_chat_user` (30/min).
 
-**Tool registry (`src/lib/ai/tools/index.ts`) — 39 tools (23 read / 10 act / 6 personal):**
-- *read:* `business.overview` · `shifts.open_soon`/`find` · `chefs.find` · `clients.find` · `insights.leaderboards` · `integrations.health` · `hours.list_awaiting_approval` · `chefs.list_profile_changes` · `chefs.work_summary`/`feedback`/`trends` · `clients.history` · `clients.health` (Klant 360 verdict) · `roster.overview` · `planner.cockpit` · `shifts.suggest_chefs` · `shifts.margin` · `contacts.timeline` · `chefs`/`clients.semantic_search` · `knowledge.search`
-- *act (confirm-gated):* `hours.approve`/`reject`/`send_reminder` · `placements.propose`/`confirm`/`cancel` · `email.send` · `chefs.approve`/`reject_profile_change` · `chefs.send_availability_reminder`
+**Tool registry (`src/lib/ai/tools/index.ts`) — 45 tools (26 read / 13 act / 6 personal):**
+- *read:* `business.overview` · `shifts.open_soon`/`find` · `chefs.find` · `clients.find` · `insights.leaderboards` · `integrations.health` · `hours.list_awaiting_approval` · `chefs.list_profile_changes` · `chefs.work_summary`/`feedback`/`trends` · `clients.history` · `clients.health` (Klant 360 verdict) · `roster.overview` · `planner.cockpit` · `shifts.suggest_chefs` · `shifts.margin` · `contacts.timeline` · `chefs`/`clients.semantic_search` · `knowledge.search` · `audit.search` · `documents.list_for_chef` · `privacy.list_requests` (the last three = Restricted tool-only data, metadata-only)
+- *act (confirm-gated):* `hours.approve`/`reject`/`send_reminder` · `placements.propose`/`confirm`/`cancel` · `roster.publish`/`autofill`/`copy_last_week` · `email.send` · `chefs.approve`/`reject_profile_change` · `chefs.send_availability_reminder`
 - *personal (self, no confirm):* `reminders.create`/`list`/`complete` · `memory.remember`/`list`/`forget`
 
 Read tools wrap the SAME tested domain logic the screens use (chef-history · client-history · roster-intel `rosterAiSummary` · planner-intel · matching) — never a re-implementation, so the AI can't disagree with the UI. Act tools share the domain mutation (e.g. `decideChefProfileChange` is used by both the admin chef page and `chefs.approve/reject_profile_change`). Enum codes are humanised via `src/lib/labels.ts` before the brain sees them.
@@ -1230,7 +1230,7 @@ are covered by Parts 1–4 above.
 
 ## 7.3 — AI assistant tool layer (LIVE — see §1.22)
 
-The owner AI assistant is **live** (PA-V1 + 2026-06 expansion + notes-RAG + Klant 360): 39 tools in
+The owner AI assistant is **live** (PA-V1 + 2026-06 expansion + notes-RAG + Klant 360 + oversight): 45 tools in
 `src/lib/ai/tools/index.ts`, runtime in `src/lib/ai/runtime/**`, full flow in §1.22.
 Design contracts: `docs/ai/tool-contracts/` (client-tools · client-request-tools ·
 client-template-tools · rating-tools) · safety envelope `docs/ai/ai-safety-rules.md` ·
