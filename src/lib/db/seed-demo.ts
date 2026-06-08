@@ -14,13 +14,13 @@
  */
 
 import { config } from "dotenv";
-import { eq, like } from "drizzle-orm";
+import { eq, inArray, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 
 config({ path: ".env.local" });
 
-import { chefs, clients, shifts } from "./schema";
+import { chefs, clients, placements, ratings, shiftHourCorrections, shiftHours, shifts } from "./schema";
 
 const DB_URL = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
 if (!DB_URL) throw new Error("DATABASE_URL_UNPOOLED or DATABASE_URL required");
@@ -37,6 +37,27 @@ if (!force && !/dev|preview|branch|localhost/i.test(DB_URL)) {
 const dbClient = drizzle(neon(DB_URL));
 
 const DEMO_MARKER = "[demo-fixture]";
+
+/* ----- Amsterdam date helpers (for the rich roster spread) --------------- */
+const AMS_OFFSET = 2; // CEST (summer); demo data only, exactness not critical
+const todayKey = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Amsterdam",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+}).format(new Date());
+const monthPrefix = todayKey.slice(0, 7);
+function addDays(key: string, n: number): string {
+  const [y, mo, d] = key.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, mo - 1, d, 12) + n * 86_400_000);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+}
+/** A Date at the given Amsterdam wall-clock hour on `dayKey`. */
+function at(dayKey: string, h: number, m = 0): Date {
+  const [y, mo, d] = dayKey.split("-").map(Number);
+  return new Date(Date.UTC(y, mo - 1, d, h - AMS_OFFSET, m));
+}
+const monthDay = (d: number) => `${monthPrefix}-${String(d).padStart(2, "0")}`;
 
 /* ----- fixtures ---------------------------------------------------------- */
 
@@ -174,20 +195,22 @@ const DEMO_CLIENTS = [
 
 /* ----- seed -------------------------------------------------------------- */
 
-function daysFromNow(days: number, hour = 18): Date {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  d.setHours(hour, 0, 0, 0);
-  return d;
-}
-
 async function clearDemoData() {
-  // shifts → clients (FK cascade) so delete shifts first
-  await dbClient.delete(shifts).where(like(shifts.notes, `%${DEMO_MARKER}%`));
+  // Demo shifts now carry placements (which may have advanced to shift_hours via the
+  // complete-placements worker). placements CASCADE on shift-delete, but shift_hours,
+  // shift_hour_corrections and ratings are RESTRICT — so clear that chain first, in FK order:
+  //   corrections → shift_hours → shifts   and   ratings → placements → shifts.
+  const demoShiftIds = (await dbClient.select({ id: shifts.id }).from(shifts).where(like(shifts.notes, `%${DEMO_MARKER}%`))).map((r) => r.id);
+  if (demoShiftIds.length) {
+    const demoPlacementIds = (await dbClient.select({ id: placements.id }).from(placements).where(inArray(placements.shiftId, demoShiftIds))).map((r) => r.id);
+    const demoHoursIds = (await dbClient.select({ id: shiftHours.id }).from(shiftHours).where(inArray(shiftHours.shiftId, demoShiftIds))).map((r) => r.id);
+    if (demoHoursIds.length) await dbClient.delete(shiftHourCorrections).where(inArray(shiftHourCorrections.originalShiftHoursId, demoHoursIds));
+    await dbClient.delete(shiftHours).where(inArray(shiftHours.shiftId, demoShiftIds));
+    if (demoPlacementIds.length) await dbClient.delete(ratings).where(inArray(ratings.placementId, demoPlacementIds));
+  }
+  await dbClient.delete(shifts).where(like(shifts.notes, `%${DEMO_MARKER}%`)); // cascades placements
   await dbClient.delete(chefs).where(like(chefs.notes, `%${DEMO_MARKER}%`));
-  await dbClient
-    .delete(clients)
-    .where(like(clients.notes, `%${DEMO_MARKER}%`));
+  await dbClient.delete(clients).where(like(clients.notes, `%${DEMO_MARKER}%`));
 }
 
 async function seedDemo() {
@@ -212,84 +235,95 @@ async function seedDemo() {
     )
     .returning({ id: clients.id, companyName: clients.companyName });
 
-  console.log("  → inserting demo shifts...");
+  console.log("  → inserting demo shifts + placements (rich roster spread)...");
 
-  const restoVoorbeeld = insertedClients.find((c) =>
-    c.companyName?.includes("Voorbeeld"),
-  );
-  const hotelPlaza = insertedClients.find((c) =>
-    c.companyName?.includes("Plaza"),
-  );
-  const brasserie = insertedClients.find((c) =>
-    c.companyName?.includes("Brasserie"),
-  );
-  const catering = insertedClients.find((c) =>
-    c.companyName?.includes("Catering"),
-  );
-
-  if (restoVoorbeeld && hotelPlaza && brasserie && catering) {
-    await dbClient.insert(shifts).values([
-      {
-        clientId: restoVoorbeeld.id,
-        startsAt: daysFromNow(2, 17),
-        endsAt: daysFromNow(2, 23),
-        roleNeeded: "sous_chef",
-        segment: "fine_dining",
-        headcount: 1,
-        city: "Amsterdam",
-        location: "Voorbeeldstraat 12",
-        clientRateCents: 4500,
-        chefRateCents: 3250,
-        status: "open",
-        notes: DEMO_MARKER,
-      },
-      {
-        clientId: hotelPlaza.id,
-        startsAt: daysFromNow(3, 16),
-        endsAt: daysFromNow(3, 23),
-        roleNeeded: "chef_de_partie",
-        segment: "hotel",
-        headcount: 2,
-        city: "Amsterdam",
-        location: "Hotelboulevard 1",
-        clientRateCents: 4000,
-        chefRateCents: 2900,
-        status: "open",
-        notes: DEMO_MARKER,
-      },
-      {
-        clientId: brasserie.id,
-        startsAt: daysFromNow(5, 17),
-        endsAt: daysFromNow(5, 23),
-        roleNeeded: "chef_de_partie",
-        segment: "casual",
-        headcount: 1,
-        city: "Rotterdam",
-        clientRateCents: 3500,
-        chefRateCents: 2500,
-        status: "request",
-        notes: DEMO_MARKER,
-      },
-      {
-        clientId: catering.id,
-        startsAt: daysFromNow(6, 11),
-        endsAt: daysFromNow(6, 17),
-        roleNeeded: "chef_de_cuisine",
-        segment: "catering",
-        headcount: 1,
-        city: "Utrecht",
-        clientRateCents: 5500,
-        chefRateCents: 4000,
-        status: "filled",
-        notes: DEMO_MARKER,
-      },
-    ]);
+  // Reuse the seeded chefs/clients by insertion-order index. The spread covers TODAY
+  // (the day-board showcase: gevuld / onderbezet / kritiek / te-bevestigen + a double-book),
+  // the rest of THIS WEEK (dense week grid), and across THIS MONTH (heatmap) — in mixed
+  // placement states so every roster colour + the attention rail + the supply rail show.
+  const ch = insertedChefs; // 8
+  const cl = insertedClients; // 4
+  type Fill = { conf?: number[]; acc?: number[]; prop?: number[] };
+  type Spec = { c: number; day: string; sh: number; eh: number; role: string; hc: number; segment?: string; fill?: Fill };
+  const t = todayKey;
+  const specs: Spec[] = [
+    { c: 0, day: t, sh: 7, eh: 11, role: "chef_de_partie", hc: 2, segment: "hotel", fill: { conf: [0, 1] } },
+    { c: 0, day: t, sh: 17, eh: 23, role: "sous_chef", hc: 3, segment: "hotel", fill: { conf: [2], acc: [3] } },
+    { c: 1, day: t, sh: 11, eh: 15, role: "chef_de_partie", hc: 1, segment: "hotel", fill: { prop: [4] } },
+    { c: 1, day: t, sh: 18, eh: 23, role: "sous_chef", hc: 2, segment: "hotel", fill: { conf: [2], acc: [5] } },
+    { c: 2, day: t, sh: 20, eh: 23, role: "patissier", hc: 1, segment: "fine_dining", fill: { conf: [3] } },
+    { c: 0, day: addDays(t, -2), sh: 17, eh: 23, role: "sous_chef", hc: 2, fill: { conf: [0, 1] } },
+    { c: 1, day: addDays(t, -1), sh: 8, eh: 12, role: "chef_de_partie", hc: 2, fill: { conf: [6] } },
+    { c: 3, day: addDays(t, -1), sh: 18, eh: 23, role: "chef_de_cuisine", hc: 2, fill: { conf: [2, 7] } },
+    { c: 2, day: addDays(t, 1), sh: 17, eh: 23, role: "sous_chef", hc: 2, fill: { conf: [3], acc: [4] } },
+    { c: 3, day: addDays(t, 1), sh: 11, eh: 15, role: "chef_de_partie", hc: 1, fill: {} },
+  ];
+  const monthPlan: Array<[number, number, number, number, number]> = [
+    [3, 0, 2, 2, 0], [5, 1, 2, 1, 0], [7, 2, 1, 1, 0], [9, 3, 3, 2, 1],
+    [12, 0, 2, 0, 0], [14, 1, 1, 1, 0], [16, 2, 2, 2, 0], [19, 3, 2, 1, 0],
+    [21, 0, 1, 0, 0], [23, 1, 2, 2, 0], [26, 2, 2, 1, 1], [27, 3, 1, 1, 0],
+  ];
+  let cur = 0;
+  const pick = (n: number) => Array.from({ length: n }, () => cur++ % ch.length);
+  for (const [d, c, hc, conf, acc] of monthPlan) {
+    const dk = monthDay(d);
+    if (dk === t) continue;
+    specs.push({ c, day: dk, sh: 17, eh: 23, role: "sous_chef", hc, fill: { conf: pick(conf), acc: pick(acc) } });
   }
 
+  const RATES: Record<string, [number, number]> = {
+    commis: [3200, 2200],
+    chef_de_partie: [4000, 2900],
+    sous_chef: [4500, 3250],
+    patissier: [4200, 3000],
+    chef_de_cuisine: [5500, 4000],
+  };
+  const shiftRows = specs.map((s) => {
+    const [clientRateCents, chefRateCents] = RATES[s.role] ?? [4000, 2900];
+    return {
+      clientId: cl[s.c].id,
+      startsAt: at(s.day, s.sh),
+      endsAt: at(s.day, s.eh),
+      roleNeeded: s.role as (typeof shifts.$inferInsert)["roleNeeded"],
+      segment: (s.segment ?? "hotel") as (typeof shifts.$inferInsert)["segment"],
+      headcount: s.hc,
+      city: "Amsterdam",
+      location: cl[s.c].companyName ?? "Amsterdam",
+      clientRateCents,
+      chefRateCents,
+      status: ((s.fill?.conf?.length ?? 0) >= s.hc ? "filled" : "open") as (typeof shifts.$inferInsert)["status"],
+      notes: DEMO_MARKER,
+    };
+  });
+  const insertedShifts = await dbClient.insert(shifts).values(shiftRows).returning({ id: shifts.id });
+
+  const now = new Date();
+  const threeHoursAgo = new Date(now.getTime() - 3 * 3_600_000);
+  const placeRows: (typeof placements.$inferInsert)[] = [];
+  specs.forEach((s, i) => {
+    const shiftId = insertedShifts[i].id;
+    for (const k of s.fill?.conf ?? [])
+      placeRows.push({ shiftId, chefId: ch[k].id, status: "confirmed", proposedAt: threeHoursAgo, respondedAt: threeHoursAgo, confirmedAt: now, notes: DEMO_MARKER });
+    for (const k of s.fill?.acc ?? [])
+      placeRows.push({ shiftId, chefId: ch[k].id, status: "accepted", proposedAt: threeHoursAgo, respondedAt: now, notes: DEMO_MARKER });
+    for (const k of s.fill?.prop ?? [])
+      placeRows.push({ shiftId, chefId: ch[k].id, status: "proposed", proposedAt: threeHoursAgo, notes: DEMO_MARKER });
+  });
+  // de-dupe (chef,shift) — a chef can hold only one placement per shift
+  const seenPlace = new Set<string>();
+  const dedupPlace = placeRows.filter((p) => {
+    const key = `${p.shiftId}:${p.chefId}`;
+    if (seenPlace.has(key)) return false;
+    seenPlace.add(key);
+    return true;
+  });
+  if (dedupPlace.length) await dbClient.insert(placements).values(dedupPlace);
+
   console.log("\n✓ Demo seed complete.");
-  console.log(`  chefs:   ${insertedChefs.length}`);
-  console.log(`  clients: ${insertedClients.length}`);
-  console.log(`  shifts:  4`);
+  console.log(`  chefs:      ${insertedChefs.length}`);
+  console.log(`  clients:    ${insertedClients.length}`);
+  console.log(`  shifts:     ${insertedShifts.length} (today + week + month)`);
+  console.log(`  placements: ${dedupPlace.length} (confirmed/accepted/proposed)`);
   console.log("\nVisit /admin/business to see the populated cockpit.");
   console.log("\nTo remove: re-run this script (it clears demo rows first),");
   console.log("or run in psql:");
