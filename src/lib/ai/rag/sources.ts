@@ -11,9 +11,12 @@
  *
  * Visibility choices (conservative — the assistant is owner-only in V1, so admin sees all;
  * these tags make the FUTURE chef/klant PAs safe-by-construction):
- *   - chefs.notes / clients.notes / shifts / contact_logs → admin_only
- *     (notes blobs mix Maarten's tribal knowledge — "pairs poorly with Wim" — so treat as
- *      internal; never surface to a chef/klant PA. Reclassify if we ever split authorship.)
+ *   - chefs.notes / clients.notes / shifts / contact_logs / placements.outcome /
+ *     placement_comments → admin_only
+ *     (notes blobs + comment threads mix Maarten's tribal knowledge — "pairs poorly with Wim" —
+ *      and ratings/operational signals, so treat as internal; never surface to a chef/klant PA.
+ *      placement_comments are also read via listVisibleComments in-app, so RAG must not be a
+ *      backdoor. Reclassify if we ever split authorship.)
  *   - chefs.profile (specialties/languages/segments/city) → chef_own_and_admin
  *     (descriptive bio the chef themselves may eventually search; carries no tribal notes).
  */
@@ -176,6 +179,37 @@ export const RAG_SOURCES: RagSourceDef[] = [
       }
       const body = parts.join(", ");
       return s(r.comment) ? `${body}: ${s(r.comment)}` : body;
+    },
+  },
+  {
+    // "Wat speelde er bij klant X / welke signalen kregen we over chef Y?" — the multi-actor
+    // comment threads on a placement (the operational signal: late arrivals, hotel praise,
+    // concerns). admin_only on purpose: comments are read via listVisibleComments (ownership-
+    // checked) in the app, so RAG must NOT be a backdoor — only the owner assistant retrieves
+    // them. System/automated comments are skipped (noise). Grouped per klant via tenant_scope.
+    id: "placement_comments.thread",
+    sourceTable: "placement_comments",
+    field: "comment",
+    visibility: "admin_only",
+    select: `
+      SELECT pc.id, pc.body, pc.author_kind, pc.created_at,
+             ch.full_name AS chef_name, c.company_name AS client_name, c.id AS client_id,
+             sh.starts_at
+      FROM placement_comments pc
+      JOIN placements p ON p.id = pc.placement_id
+      JOIN shifts sh ON sh.id = p.shift_id
+      JOIN clients c ON c.id = sh.client_id
+      JOIN chefs ch ON ch.id = p.chef_id
+      WHERE pc.body IS NOT NULL AND length(trim(pc.body)) > 0
+        AND pc.author_kind != 'system'
+        AND ch.deleted_at IS NULL AND c.deleted_at IS NULL`,
+    tenantScope: (r) => (s(r.client_id) ? `clientId:${s(r.client_id)}` : "internal"),
+    buildText: (r) => {
+      const authorNl: Record<string, string> = { client: "de klant", admin: "Chef & Serve", chef: "de chef" };
+      const who = authorNl[s(r.author_kind)] ?? "iemand";
+      const when = dateNl(r.created_at);
+      const head = `Opmerking van ${who} bij de plaatsing van chef ${s(r.chef_name)} bij ${s(r.client_name)}${when ? ` (${when})` : ""}`;
+      return `${head}: ${s(r.body)}`.trim();
     },
   },
 ];
