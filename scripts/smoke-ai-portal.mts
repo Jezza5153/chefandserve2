@@ -1,11 +1,11 @@
 /**
- * Portal-assistant smoke — the safety invariants for the chef (+ later klant) assistant.
+ * Portal-assistant smoke — safety invariants for the CHEF + KLANT assistants.
  *   npx tsx --env-file=.env.local scripts/smoke-ai-portal.mts
  *
- * Static (key-free): every chef tool is read-only (`risk:'read'`, `permission:null`) and takes
- * NO entity-id input — so the model can never steer it to another chef (the attack vector).
- * Live (needs DB): build a chef actor for a REAL chef and run each tool through the executor;
- * the read-model keys off the actor subject, so results are that chef's own data.
+ * Static (key-free): every portal tool is read-only (`risk:'read'`, `permission:null`) and
+ * takes NO entity-id input — so the model can never steer it to another tenant (the attack
+ * vector). Live (needs DB): build an actor for a REAL chef/klant and run each tool through the
+ * executor; the read-model keys off the actor subject, so results are that tenant's own data.
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
@@ -25,51 +25,48 @@ function assert(name: string, cond: boolean, detail?: string) {
 
 console.log("=== Portal assistant smoke ===\n");
 
-const { buildChefRegistry } = await import("@/lib/ai/tools/portal-index");
-const reg = buildChefRegistry();
-const tools = reg.list();
+const { buildChefRegistry, buildClientRegistry } = await import("@/lib/ai/tools/portal-index");
+const { executeTool } = await import("@/lib/ai/runtime/execute");
 
-console.log("── chef tools: read-only + own-scoped ──");
-assert("chef registry has tools", tools.length >= 3, `${tools.length}`);
-for (const t of tools) {
-  assert(`${t.name}: risk=read`, t.risk === "read");
-  assert(`${t.name}: permission=null (no RBAC gate)`, t.permission === null);
-  // the attack vector: can the model pass an id to reach another chef? Empty object schema
-  // strips unknown keys, so an injected id never reaches the handler.
-  const parsed = t.input.safeParse({ chefId: "evil", clientId: "evil", entityId: "evil" });
-  assert(`${t.name}: rejects/ignores injected ids`, parsed.success && !("chefId" in (parsed.data as object)) && !("clientId" in (parsed.data as object)));
-}
-
-console.log("\n── live: scoped execution for a real chef ──");
 const dbUrl = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
-if (!dbUrl) {
-  console.log("  ⊘ no DATABASE_URL — skipping live execution.");
-  skip++;
-} else {
-  const { neon } = await import("@neondatabase/serverless");
-  const sql = neon(dbUrl);
-  const rows = (await sql`SELECT id FROM chefs WHERE deleted_at IS NULL LIMIT 1`) as Array<{ id: string }>;
-  if (rows.length === 0) {
-    console.log("  ⊘ no chefs in DB — skipping.");
-    skip++;
-  } else {
-    const chefId = rows[0].id;
-    const { executeTool } = await import("@/lib/ai/runtime/execute");
-    const ctx = {
-      actor: { requestedByUserId: "smoke", requestedByRole: "chef", paServiceUserId: "smoke", effectivePerms: new Set<string>(), subject: { kind: "chef" as const, entityId: chefId } },
-      channel: "dashboard" as const,
-    };
-    const opts = { auditSink: async () => {}, confirmSecret: "x".repeat(32) };
-    for (const t of tools) {
-      const res = await executeTool(t, {}, ctx, opts);
-      assert(`${t.name}: runs ok for a real chef`, res.status === "ok", res.status === "ok" ? "" : JSON.stringify(res).slice(0, 120));
-    }
-    // a chef tool with NO subject must refuse (defense in depth)
-    const noSubjectCtx = { ...ctx, actor: { ...ctx.actor, subject: undefined } };
-    const res = await executeTool(tools[0], {}, noSubjectCtx, opts);
-    assert("tool errors cleanly when actor has no chef subject", res.status === "error");
+const neonSql = dbUrl ? (await import("@neondatabase/serverless")).neon(dbUrl) : null;
+
+async function checkPersona(label: string, kind: "chef" | "client", reg: ReturnType<typeof buildChefRegistry>, entityId: string | null) {
+  const tools = reg.list();
+  console.log(`\n── ${label} tools: read-only + own-scoped ──`);
+  assert(`${label} registry has tools`, tools.length >= 3, `${tools.length}`);
+  for (const t of tools) {
+    assert(`${t.name}: risk=read`, t.risk === "read");
+    assert(`${t.name}: permission=null`, t.permission === null);
+    const parsed = t.input.safeParse({ chefId: "evil", clientId: "evil", entityId: "evil" });
+    assert(`${t.name}: ignores injected ids`, parsed.success && !("chefId" in (parsed.data as object)) && !("clientId" in (parsed.data as object)));
   }
+
+  console.log(`\n── ${label} live: scoped execution ──`);
+  if (!entityId) {
+    console.log(`  ⊘ no DATABASE_URL / no ${label} in DB — skipping live.`);
+    skip++;
+    return;
+  }
+  const ctx = {
+    actor: { requestedByUserId: "smoke", requestedByRole: kind, paServiceUserId: "smoke", effectivePerms: new Set<string>(), subject: { kind, entityId } },
+    channel: "dashboard" as const,
+  };
+  const opts = { auditSink: async () => {}, confirmSecret: "x".repeat(32) };
+  for (const t of tools) {
+    const res = await executeTool(t, {}, ctx, opts);
+    assert(`${t.name}: runs ok for a real ${label}`, res.status === "ok", res.status === "ok" ? "" : JSON.stringify(res).slice(0, 120));
+  }
+  const noSubject = { ...ctx, actor: { ...ctx.actor, subject: undefined } };
+  const res = await executeTool(tools[0], {}, noSubject, opts);
+  assert(`${label}: tool errors cleanly with no subject`, res.status === "error");
 }
+
+const chefId = neonSql ? ((await neonSql`SELECT id FROM chefs WHERE deleted_at IS NULL LIMIT 1`) as Array<{ id: string }>)[0]?.id ?? null : null;
+const clientId = neonSql ? ((await neonSql`SELECT id FROM clients WHERE deleted_at IS NULL LIMIT 1`) as Array<{ id: string }>)[0]?.id ?? null : null;
+
+await checkPersona("chef", "chef", buildChefRegistry(), chefId);
+await checkPersona("klant", "client", buildClientRegistry(), clientId);
 
 console.log(`\n=== ${pass} passed, ${fail} failed, ${skip} skipped ===`);
 if (fail > 0) process.exit(1);

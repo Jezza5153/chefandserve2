@@ -5,12 +5,12 @@
  * passed in by the channel so this stays independent of any specific LLM.
  */
 import type { AiChannel, ToolContext, ToolResult } from "@/lib/ai/types";
-import { resolveAiActor, resolveChefActor } from "@/lib/ai/runtime/actor";
+import { resolveAiActor, resolveChefActor, resolveClientActor } from "@/lib/ai/runtime/actor";
 import { aiAuditSink } from "@/lib/ai/runtime/audit-sink";
 import { executeTool } from "@/lib/ai/runtime/execute";
 import { runAgent, type AgentOutcome, type Brain, type Msg } from "@/lib/ai/runtime/agent";
 import { buildRegistry } from "@/lib/ai/tools/index";
-import { buildChefRegistry } from "@/lib/ai/tools/portal-index";
+import { buildChefRegistry, buildClientRegistry } from "@/lib/ai/tools/portal-index";
 
 export async function runOwnerAssistant(args: {
   userId: string;
@@ -52,6 +52,27 @@ export async function runChefAssistant(args: {
   const actor = await resolveChefActor(args.userId);
   if (!actor) return null;
   const registry = buildChefRegistry();
+  const ctx: ToolContext = { actor, channel: args.channel };
+  return runAgent({
+    brain: args.brain,
+    registry,
+    messages: args.messages,
+    ctx,
+    executeOptions: { auditSink: aiAuditSink, confirmSecret: args.confirmSecret },
+  });
+}
+
+/** KLANT portal assistant — read-only, own-scoped. Mirror of {@link runChefAssistant}. */
+export async function runClientAssistant(args: {
+  userId: string;
+  channel: AiChannel;
+  messages: Msg[];
+  brain: Brain;
+  confirmSecret: string;
+}): Promise<AgentOutcome | null> {
+  const actor = await resolveClientActor(args.userId);
+  if (!actor) return null;
+  const registry = buildClientRegistry();
   const ctx: ToolContext = { actor, channel: args.channel };
   return runAgent({
     brain: args.brain,
