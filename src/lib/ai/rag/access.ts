@@ -86,3 +86,16 @@ export function accessFilterFor(actor: RagActor): AccessFilter {
     visibilities: CLIENT_VISIBILITIES,
   };
 }
+
+/**
+ * The tenant_scopes whose chunks belong to an erased subject — what the AVG synchronous purge
+ * (rag/purge.ts) + the retention sweep delete. PURE so it's unit-tested key-free. A chef scope
+ * covers their notes/profile/contact chunks; a klant scope covers their notes + every shift
+ * chunk (shifts are scoped `clientId:<id>`) + contact chunks.
+ */
+export function tenantScopesForSubject(subject: { chefId?: string | null; clientId?: string | null }): string[] {
+  const scopes: string[] = [];
+  if (subject.chefId) scopes.push(`chefId:${subject.chefId}`);
+  if (subject.clientId) scopes.push(`clientId:${subject.clientId}`);
+  return scopes;
+}

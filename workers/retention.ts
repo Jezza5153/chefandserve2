@@ -192,6 +192,60 @@ async function main() {
     }
   }
 
+  // ===== strategy 5: ai_embeddings (superseded chunks + chunks of erased sources) =====
+  // Pure housekeeping/privacy — embeddings are DERIVED (never the system of record), so no
+  // legal hold attaches. Contract: docs/ai/rag-ingestion-contract.md §Refresh + retention.
+  //   (a) superseded chunks (replaced on reindex) older than 30 days.
+  //   (b) chunks whose chef/client SOURCE row was soft-deleted >30 days ago — the AVG erasure
+  //       flow purges synchronously (src/lib/ai/rag/purge.ts); this is the backstop for
+  //       non-AVG soft-deletes. Fixed 30d window per the contract (independent of the
+  //       retention_policies hard-delete periods, which govern the source rows themselves).
+  {
+    const exists = (await sql`SELECT to_regclass('public.ai_embeddings') IS NOT NULL AS ok`) as Array<{ ok: boolean }>;
+    if (!exists[0]?.ok) {
+      log("retention: ai_embeddings table absent → skipping");
+    } else {
+      const supersededCt = (await sql`
+        SELECT count(*)::int AS n FROM ai_embeddings
+        WHERE superseded_at IS NOT NULL AND superseded_at < now() - interval '30 days'
+      `) as Array<{ n: number }>;
+      const erasedCt = (await sql`
+        SELECT count(*)::int AS n FROM ai_embeddings
+        WHERE tenant_scope IN (
+          SELECT 'chefId:' || id FROM chefs WHERE deleted_at IS NOT NULL AND deleted_at < now() - interval '30 days'
+          UNION ALL
+          SELECT 'clientId:' || id FROM clients WHERE deleted_at IS NOT NULL AND deleted_at < now() - interval '30 days'
+        )
+      `) as Array<{ n: number }>;
+      const nSup = Number(supersededCt[0]?.n ?? 0);
+      const nEr = Number(erasedCt[0]?.n ?? 0);
+      totalCandidates += nSup + nEr;
+      log(`retention: ai_embeddings — ${nSup} superseded >30d + ${nEr} erased-source chunk(s)`);
+
+      if (!DRY_RUN && nSup + nEr > 0) {
+        const delSup = (await sql`
+          DELETE FROM ai_embeddings
+          WHERE superseded_at IS NOT NULL AND superseded_at < now() - interval '30 days'
+          RETURNING id
+        `) as Array<{ id: string }>;
+        const delEr = (await sql`
+          DELETE FROM ai_embeddings
+          WHERE tenant_scope IN (
+            SELECT 'chefId:' || id FROM chefs WHERE deleted_at IS NOT NULL AND deleted_at < now() - interval '30 days'
+            UNION ALL
+            SELECT 'clientId:' || id FROM clients WHERE deleted_at IS NOT NULL AND deleted_at < now() - interval '30 days'
+          )
+          RETURNING id
+        `) as Array<{ id: string }>;
+        await audit("retention.ai_embeddings_pruned", "ai_embeddings", null, {
+          superseded: delSup.length,
+          erasedSource: delEr.length,
+        });
+        totalPurged += delSup.length + delEr.length;
+      }
+    }
+  }
+
   log(
     `retention: done — ${totalCandidates} candidate(s); ${DRY_RUN ? "0 purged (dry-run)" : `${totalPurged} purged`}`,
   );

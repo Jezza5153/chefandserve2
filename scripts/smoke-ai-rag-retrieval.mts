@@ -92,6 +92,49 @@ const badVis = rowsOf(await sql`
 `).filter((r) => !(VISIBILITIES as readonly string[]).includes(String(r.visibility)));
 assert("every visibility value is a known enum tier", badVis.length === 0, badVis.map((b) => b.visibility).join(", "));
 
+// ── AVG synchronous purge: real delete round-trip (no key needed) ──
+console.log("\n── AVG purge: synchronous delete round-trip ──");
+{
+  const { purgeAiEmbeddingsForSubject } = await import("@/lib/ai/rag/purge");
+  const sentinelChef = "__rag_smoke_sentinel__";
+  const scope = `chefId:${sentinelChef}`;
+  const zeroVec = `[${Array(1536).fill(0).join(",")}]`;
+  await sql`DELETE FROM ai_embeddings WHERE tenant_scope = ${scope}`; // clean any leftover
+  await sql`
+    INSERT INTO ai_embeddings
+      (chunk_text, embedding, source_table, source_pk, field, chunk_index, tenant_scope, visibility, redaction_version, content_hash)
+    VALUES ('smoke sentinel', ${zeroVec}::vector, 'chefs', ${sentinelChef}, 'notes', 0, ${scope}, 'admin_only', 1, 'smoke')
+  `;
+  const before = rowsOf(await sql`SELECT count(*)::int AS n FROM ai_embeddings WHERE tenant_scope = ${scope}`);
+  assert("sentinel chunk inserted", Number(before[0]?.n) === 1);
+  const purged = await purgeAiEmbeddingsForSubject({ chefId: sentinelChef });
+  assert("purgeAiEmbeddingsForSubject deletes the chunk", purged === 1, `purged=${purged}`);
+  const after = rowsOf(await sql`SELECT count(*)::int AS n FROM ai_embeddings WHERE tenant_scope = ${scope}`);
+  assert("no sentinel chunk remains after purge", Number(after[0]?.n) === 0);
+}
+
+// ── retention: the worker's purge SQL is valid against the live schema ──
+console.log("\n── retention: ai_embeddings purge SQL is valid ──");
+{
+  const sup = rowsOf(await sql`
+    SELECT count(*)::int AS n FROM ai_embeddings
+    WHERE superseded_at IS NOT NULL AND superseded_at < now() - interval '30 days'
+  `);
+  const er = rowsOf(await sql`
+    SELECT count(*)::int AS n FROM ai_embeddings
+    WHERE tenant_scope IN (
+      SELECT 'chefId:' || id FROM chefs WHERE deleted_at IS NOT NULL AND deleted_at < now() - interval '30 days'
+      UNION ALL
+      SELECT 'clientId:' || id FROM clients WHERE deleted_at IS NOT NULL AND deleted_at < now() - interval '30 days'
+    )
+  `);
+  assert(
+    "retention count SQL runs (superseded + erased-source)",
+    Number.isFinite(Number(sup[0]?.n)) && Number.isFinite(Number(er[0]?.n)),
+  );
+  console.log(`  retention candidates today: ${Number(sup[0]?.n ?? 0)} superseded, ${Number(er[0]?.n ?? 0)} erased-source`);
+}
+
 // ── 4 + 5. retrieval (needs OPENAI_API_KEY) ──
 console.log("\n── retrieval: tenant isolation + owner span ──");
 if (!process.env.OPENAI_API_KEY) {
