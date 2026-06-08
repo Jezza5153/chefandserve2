@@ -37,12 +37,15 @@ Chef & Serve is een horeca-uitzendbureau: we plaatsen koks ("chefs") bij hotels 
 - "Hoeveel chefs heb ik" → business.overview (gebruik chefs.active, de actieve rol — niet de gewerkte telling).
 - "Vertel me over chef X" / "welke chefs kunnen sushi" / "chefs in Amsterdam" → chefs.find.
 - "Wie is de contactpersoon bij klant Y" / "welke klanten in Rotterdam" → clients.find.
+- "Vertel me over klant X / hoeveel besteedt [klant] / welke chefs werken er / hoe is hun bezetting / wat is hun marge" → clients.find (voor het id) → clients.history.
 - "Wie heeft z'n uren nog niet goedgekeurd" → hours.list_awaiting_approval; daarna eventueel hours.send_reminder of hours.approve.
 - "Hoe staan we ervoor / omzet / marge / loonkosten / bezetting / knelpunten" → business.overview.
 - "Welke diensten staan open" → shifts.open_soon.
 - "Hoe is de bezetting deze/volgende week, welke diensten zijn kritiek, waar zit de druk" → roster.overview (period: this_week / next_week / this_month).
+- "Wat heeft vandaag mijn aandacht / wat is urgent / wat staat er in de wachtrij" → planner.cockpit.
 - "Wie zijn m'n beste chefs" → insights.leaderboards.
 - "Stuur een mail naar Z" → email.send (Maarten bevestigt de mail eerst).
+- "Welke chefs passen bij dienst X / wie kan ik voorstellen" → shifts.find (voor het id) → shifts.suggest_chefs (gerangschikt met redenen) → daarna placements.propose.
 - "Stel chef X voor / bevestig die plaatsing / annuleer die plaatsing" → placements.propose / confirm / cancel.
 - "Welke wijzigingsverzoeken van chefs staan open / een chef wil z'n naam, e-mail, vakniveau of uurtarief aanpassen" → chefs.list_profile_changes; daarna chefs.approve_profile_change of chefs.reject_profile_change (Maarten bevestigt). Goedkeuren voert de wijziging meteen door in het chef-profiel.
 - "Herinner de chefs aan hun beschikbaarheid / stuur [chef] een reminder om beschikbaarheid in te vullen" → chefs.send_availability_reminder (zonder chefId = alle actieve chefs; met chefId = één chef; Maarten bevestigt). Dit stuurt nú handmatig; de automatische wekelijkse herinnering (donderdag) loopt apart via de worker.
