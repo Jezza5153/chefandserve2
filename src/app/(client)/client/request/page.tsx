@@ -31,6 +31,7 @@ import { clients, clientSubmissions } from "@/lib/db/schema";
 import { env } from "@/lib/env";
 import { recipientsFor } from "@/lib/notifications";
 import { requireAuth } from "@/lib/permissions";
+import { expandOccurrences } from "@/lib/recurrence";
 
 export const metadata = { title: "Nieuwe aanvraag" };
 export const dynamic = "force-dynamic";
@@ -108,6 +109,10 @@ async function submitPortalRequest(formData: FormData) {
   const headcountStr = String(formData.get("headcount") ?? "1").trim();
   const notes = String(formData.get("notes") ?? "").trim();
   const rateHint = String(formData.get("rateHint") ?? "").trim();
+  const repeat = String(formData.get("repeat") ?? "") === "on";
+  const repeatFreq =
+    String(formData.get("repeatFreq") ?? "weekly") === "biweekly" ? "biweekly" : "weekly";
+  const repeatUntil = String(formData.get("repeatUntil") ?? "").trim();
 
   // Light server-side validation. Client-side `required` handles most.
   if (!roleNeeded) redirect("/client/request?error=missing-role");
@@ -115,48 +120,68 @@ async function submitPortalRequest(formData: FormData) {
   if (endDate && endDate < startDate) {
     redirect("/client/request?error=bad-dates");
   }
+  if (repeat && !repeatUntil) redirect("/client/request?error=missing-repeat-until");
+  if (repeat && repeatUntil < startDate) redirect("/client/request?error=bad-repeat");
   const headcount = Math.max(1, Math.min(99, Number(headcountStr) || 1));
 
-  const dateNeededDisplay = endDate && endDate !== startDate
-    ? `${startDate} t/m ${endDate}`
-    : startDate;
+  // Recurring → one submission per occurrence (single-day, same weekday), capped.
+  const occurrences =
+    repeat && repeatUntil ? expandOccurrences(startDate, repeatFreq, repeatUntil) : [startDate];
+  const recurring = repeat && occurrences.length > 1;
 
-  const externalId = `portal-${me.clientId}-${Date.now()}`;
-
-  const submission = {
-    externalId,
-    source: "client_portal",
-    // PR-AUDIT-1: authoritative owner FK (scopes retract + klant reads).
-    clientId: me.clientId,
-    rawPayload: {
-      via: "client_portal",
-      submittedByClientId: me.clientId,
-      roleNeeded,
-      segment,
-      startDate,
-      endDate,
+  const stamp = Date.now();
+  const rows = occurrences.map((occ, i) => {
+    const dateNeededDisplay = recurring
+      ? occ
+      : endDate && endDate !== startDate
+        ? `${startDate} t/m ${endDate}`
+        : startDate;
+    return {
+      externalId: `portal-${me.clientId}-${stamp}-${i}`,
+      source: "client_portal",
+      // PR-AUDIT-1: authoritative owner FK (scopes retract + klant reads).
+      clientId: me.clientId,
+      rawPayload: {
+        via: "client_portal",
+        submittedByClientId: me.clientId,
+        roleNeeded,
+        segment,
+        startDate: recurring ? occ : startDate,
+        endDate: recurring ? null : endDate,
+        headcount,
+        notes,
+        rateHint,
+        ...(recurring
+          ? {
+              recurrence: {
+                freq: repeatFreq,
+                until: repeatUntil,
+                index: i + 1,
+                total: occurrences.length,
+              },
+            }
+          : {}),
+      },
+      companyName: me.companyName,
+      contactName: me.contactName,
+      email: me.email,
+      phone: me.phone,
+      roleRequested: roleNeeded,
+      segment: segment || me.segment,
+      dateNeeded: dateNeededDisplay,
       headcount,
+      location: me.city,
       notes,
-      rateHint,
-    },
-    companyName: me.companyName,
-    contactName: me.contactName,
-    email: me.email,
-    phone: me.phone,
-    roleRequested: roleNeeded,
-    segment: segment || me.segment,
-    dateNeeded: dateNeededDisplay,
-    headcount,
-    location: me.city,
-    notes,
-    // Known-client request — skip "new" triage step
-    status: "triaged" as const,
-  };
+      // Known-client request — skip "new" triage step
+      status: "triaged" as const,
+    };
+  });
 
-  const [row] = await db
+  const inserted = await db
     .insert(clientSubmissions)
-    .values(submission)
+    .values(rows)
     .returning({ id: clientSubmissions.id });
+  const row = inserted[0];
 
   await recordAuditFromRequest({
     action: "client.portal_request_submitted",
@@ -169,19 +194,29 @@ async function submitPortalRequest(formData: FormData) {
       headcount,
       startDate,
       endDate,
+      recurring,
+      occurrences: rows.length,
     },
   });
+
+  const whenDisplay = recurring
+    ? `${occurrences.length}× ${repeatFreq === "biweekly" ? "om de week" : "wekelijks"} vanaf ${startDate} t/m ${repeatUntil}`
+    : endDate && endDate !== startDate
+      ? `${startDate} t/m ${endDate}`
+      : startDate;
 
   // Fire notification (best-effort — PR-F1 routes).
   const to = await recipientsFor("client_portal_request");
   if (to.length > 0) {
-    const subject = `🏨 Portaal-aanvraag: ${me.companyName} — ${roleNeeded}`;
+    const subject = recurring
+      ? `🏨 Portaal-aanvraag (${rows.length}×): ${me.companyName} — ${roleNeeded}`
+      : `🏨 Portaal-aanvraag: ${me.companyName} — ${roleNeeded}`;
     const text = [
       `Klant: ${me.companyName}`,
       `Contactpersoon: ${me.contactName ?? "—"}`,
       `Rol: ${roleNeeded}`,
       `Segment: ${segment || me.segment || "—"}`,
-      `Wanneer: ${dateNeededDisplay}`,
+      `Wanneer: ${whenDisplay}`,
       `Aantal: ${headcount}`,
       `Tarief-hint: ${rateHint || "—"}`,
       `Locatie: ${me.city ?? "—"}`,
@@ -192,18 +227,13 @@ async function submitPortalRequest(formData: FormData) {
     ].join("\n");
     try {
       const resend = new Resend(env.RESEND_API_KEY);
-      await resend.emails.send({
-        from: env.RESEND_FROM_EMAIL,
-        to,
-        subject,
-        text,
-      });
+      await resend.emails.send({ from: env.RESEND_FROM_EMAIL, to, subject, text });
     } catch {
       // notifications are best-effort; submission already saved
     }
   }
 
-  redirect("/client/request?ok=1");
+  redirect(`/client/request?ok=${rows.length}`);
 }
 
 export default async function ClientRequestPage({
@@ -223,9 +253,14 @@ export default async function ClientRequestPage({
         ? "Vul een startdatum in."
         : params.error === "bad-dates"
           ? "Einddatum kan niet vóór de startdatum liggen."
-          : null;
+          : params.error === "missing-repeat-until"
+            ? "Kies tot wanneer de aanvraag wekelijks herhaald moet worden."
+            : params.error === "bad-repeat"
+              ? "De herhaaldatum kan niet vóór de startdatum liggen."
+              : null;
 
-  if (params.ok === "1") {
+  const okCount = params.ok ? Math.max(0, Number(params.ok) || 0) : 0;
+  if (okCount >= 1) {
     return (
       <div className="max-w-2xl">
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-8 md:p-10">
@@ -241,7 +276,7 @@ export default async function ClientRequestPage({
                 Aanvraag ontvangen
               </p>
               <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
-                Bedankt — we hebben je aanvraag binnen
+                Bedankt — we hebben je {okCount > 1 ? `${okCount} aanvragen` : "aanvraag"} binnen
               </h1>
               <p className="mt-4 max-w-prose text-sm leading-relaxed text-ink-700">
                 Maarten of Gina kijkt er binnen <strong>4 werkuren</strong>
@@ -371,6 +406,37 @@ export default async function ClientRequestPage({
             />
           </label>
         </div>
+
+        {/* Recurrence — vaste shift (B4) */}
+        <fieldset className="rounded-lg border border-ink-200 p-4">
+          <label className="flex items-center gap-2.5">
+            <input type="checkbox" name="repeat" className="h-4 w-4 accent-burgundy" />
+            <span className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+              Wekelijks herhalen
+            </span>
+          </label>
+          <p className="mt-1.5 text-xs text-ink-500">
+            Voor een vaste shift — we maken één aanvraag per keer (max 12). Vul de frequentie
+            en tot wanneer; alleen actief als je hierboven aanvinkt.
+          </p>
+          <div className="mt-3 grid gap-4 md:grid-cols-2">
+            <label>
+              <span className="mb-1 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+                Frequentie
+              </span>
+              <select name="repeatFreq" defaultValue="weekly" className={fieldClass}>
+                <option value="weekly">Elke week</option>
+                <option value="biweekly">Om de week</option>
+              </select>
+            </label>
+            <label>
+              <span className="mb-1 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+                Herhaal tot
+              </span>
+              <input type="date" name="repeatUntil" min={todayIso} className={fieldClass} />
+            </label>
+          </div>
+        </fieldset>
 
         <label className="block">
           <span className="mb-1 block font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
