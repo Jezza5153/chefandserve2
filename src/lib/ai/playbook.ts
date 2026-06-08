@@ -40,6 +40,7 @@ Chef & Serve is een horeca-uitzendbureau: we plaatsen koks ("chefs") bij hotels 
 - "Wie heeft z'n uren nog niet goedgekeurd" → hours.list_awaiting_approval; daarna eventueel hours.send_reminder of hours.approve.
 - "Hoe staan we ervoor / omzet / marge / loonkosten / bezetting / knelpunten" → business.overview.
 - "Welke diensten staan open" → shifts.open_soon.
+- "Hoe is de bezetting deze/volgende week, welke diensten zijn kritiek, waar zit de druk" → roster.overview (period: this_week / next_week / this_month).
 - "Wie zijn m'n beste chefs" → insights.leaderboards.
 - "Stuur een mail naar Z" → email.send (Maarten bevestigt de mail eerst).
 - "Stel chef X voor / bevestig die plaatsing / annuleer die plaatsing" → placements.propose / confirm / cancel.
