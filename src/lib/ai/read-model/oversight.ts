@@ -9,7 +9,7 @@
 import { and, desc, eq, gte, ilike, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { auditLog, chefDocuments, chefs, privacyRequests, users } from "@/lib/db/schema";
+import { auditLog, chefDocuments, chefs, emailMessages, payrollBatches, privacyRequests, users } from "@/lib/db/schema";
 
 const DOC_TYPE_NL: Record<string, string> = {
   cv: "CV",
@@ -38,6 +38,12 @@ const PRIVACY_STATUS_NL: Record<string, string> = {
 };
 const dt = (d: Date | string) => new Date(d).toLocaleString("nl-NL", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const day = (d: Date | string) => new Date(d).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" });
+const eur = (cents: number | null) => `€${Math.round((cents ?? 0) / 100).toLocaleString("nl-NL")}`;
+
+const EMAIL_STATUS_NL: Record<string, string> = {
+  queued: "in wachtrij", sent: "verzonden", delivered: "afgeleverd", delivery_delayed: "vertraagd",
+  bounced: "gebounced", complained: "spam-klacht", opened: "geopend", clicked: "geklikt", failed: "mislukt",
+};
 
 /** Recent audit entries, optionally filtered. Metadata only — NEVER the before/after payloads. */
 export async function searchAudit(args: { resource?: string; resourceId?: string; action?: string; sinceDays?: number; limit: number }) {
@@ -139,5 +145,62 @@ export async function listPrivacyRequestsForAi(args: { status?: string; limit: n
     identity: r.identityStatus === "verified" ? "geverifieerd" : "nog niet geverifieerd",
     due: r.dueDate ? `${day(r.dueDate)}${new Date(r.dueDate).getTime() < now ? " (verlopen!)" : ""}` : null,
     aangevraagd: day(r.createdAt),
+  }));
+}
+
+/** Email delivery status — "is mijn mail aan X aangekomen / gebounced?". No bodies (we don't store them). */
+export async function emailStatusForAi(args: { toEmail?: string; limit: number }) {
+  const rows = await db
+    .select({
+      to: emailMessages.toEmail,
+      template: emailMessages.template,
+      eventKey: emailMessages.eventKey,
+      status: emailMessages.status,
+      error: emailMessages.error,
+      lastEventAt: emailMessages.lastEventAt,
+      at: emailMessages.createdAt,
+    })
+    .from(emailMessages)
+    .where(args.toEmail ? ilike(emailMessages.toEmail, args.toEmail) : undefined)
+    .orderBy(desc(emailMessages.createdAt))
+    .limit(args.limit);
+
+  return rows.map((r) => ({
+    to: r.to,
+    soort: r.template ?? r.eventKey ?? "e-mail",
+    status: EMAIL_STATUS_NL[r.status] ?? r.status,
+    probleem: r.status === "bounced" || r.status === "complained" || r.status === "failed" ? (r.error ?? "ja") : null,
+    laatst: dt(r.lastEventAt ?? r.at),
+  }));
+}
+
+/** Recent payroll batches — period, status, totals, margin (EUR). Financial; read-only. */
+export async function payrollBatchesForAi(limit: number) {
+  const rows = await db
+    .select({
+      periodStart: payrollBatches.periodStart,
+      periodEnd: payrollBatches.periodEnd,
+      provider: payrollBatches.provider,
+      status: payrollBatches.status,
+      rowCount: payrollBatches.rowCount,
+      chefCost: payrollBatches.totalChefCostCents,
+      clientRevenue: payrollBatches.totalClientRevenueCents,
+      margin: payrollBatches.totalMarginCents,
+      exportedAt: payrollBatches.exportedAt,
+      createdAt: payrollBatches.createdAt,
+    })
+    .from(payrollBatches)
+    .orderBy(desc(payrollBatches.createdAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    periode: `${day(r.periodStart)} – ${day(r.periodEnd)}`,
+    status: r.status,
+    provider: r.provider,
+    regels: r.rowCount,
+    omzet: eur(r.clientRevenue),
+    loonkosten: eur(r.chefCost),
+    marge: eur(r.margin),
+    geexporteerd: r.exportedAt ? day(r.exportedAt) : null,
   }));
 }

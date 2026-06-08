@@ -7,7 +7,7 @@
 import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
-import { searchAudit, chefDocumentsForAi, listPrivacyRequestsForAi } from "@/lib/ai/read-model/oversight";
+import { searchAudit, chefDocumentsForAi, listPrivacyRequestsForAi, emailStatusForAi, payrollBatchesForAi } from "@/lib/ai/read-model/oversight";
 
 export const auditSearch = defineTool({
   name: "audit.search",
@@ -52,6 +52,52 @@ export const documentsListForChef = defineTool({
         data.documents.length === 0
           ? `${data.chef} heeft nog geen documenten.`
           : `${data.chef}: ${data.documents.length} document(en)${data.expiringOrExpired > 0 ? ` — ⚠ ${data.expiringOrExpired} verlopen/verloopt binnenkort` : ""}.`,
+    };
+  },
+});
+
+export const emailStatus = defineTool({
+  name: "email.status",
+  title: "E-mail-aflevering",
+  description:
+    "De afleverstatus van verstuurde e-mails: verzonden/afgeleverd/gebounced/spam-klacht + eventueel de foutmelding. Filter optioneel op ontvanger (e-mailadres) — bijv. 'is mijn mail aan jan@hotel.nl aangekomen?'. Geeft soort + status + tijdstip; NOOIT de inhoud van de mail. Read-only.",
+  risk: "read",
+  permission: { resource: "emails", action: "read" },
+  input: z.object({
+    toEmail: z.string().optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  }),
+  run: async (input) => {
+    const rows = await emailStatusForAi({ toEmail: input.toEmail, limit: input.limit ?? 15 });
+    const problems = rows.filter((r) => r.probleem).length;
+    return {
+      data: { count: rows.length, messages: rows },
+      summary:
+        rows.length === 0
+          ? input.toEmail
+            ? `Geen e-mails gevonden naar ${input.toEmail}.`
+            : "Geen recente e-mails gevonden."
+          : `${rows.length} e-mail(s)${problems > 0 ? ` — ⚠ ${problems} met een afleverprobleem (bounce/klacht)` : " — allemaal goed afgeleverd"}.`,
+    };
+  },
+});
+
+export const payrollRead = defineTool({
+  name: "payroll.read",
+  title: "Payroll-batches",
+  description:
+    "De recente payroll-batches: periode, status, aantal regels, omzet, loonkosten en marge (EUR), en of ze geëxporteerd zijn. Voor 'wat staat er klaar voor uitbetaling / wat was de marge vorige periode?'. Read-only — financieel.",
+  risk: "read",
+  permission: { resource: "payroll", action: "read" },
+  input: z.object({ limit: z.number().int().min(1).max(24).optional() }),
+  run: async (input) => {
+    const rows = await payrollBatchesForAi(input.limit ?? 6);
+    return {
+      data: { count: rows.length, batches: rows },
+      summary:
+        rows.length === 0
+          ? "Nog geen payroll-batches."
+          : `${rows.length} batch(es) — laatste: ${rows[0].periode} (${rows[0].status}), marge ${rows[0].marge}.`,
     };
   },
 });
