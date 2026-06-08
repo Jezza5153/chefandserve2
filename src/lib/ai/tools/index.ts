@@ -24,6 +24,7 @@ import {
   chefsRejectProfileChange,
 } from "@/lib/ai/tools/profile-changes";
 import { chefsSendAvailabilityReminder } from "@/lib/ai/tools/availability";
+import { chefsWorkSummary, chefsFeedback } from "@/lib/ai/tools/chef-profile";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -36,6 +37,8 @@ export const ALL_TOOLS: AnyTool[] = [
   clientsFind,
   shiftsFind,
   chefsListProfileChanges,
+  chefsWorkSummary,
+  chefsFeedback,
   // act — the hands
   hoursApprove,
   hoursReject,
