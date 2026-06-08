@@ -10,7 +10,15 @@ import { AssistantChat } from "@/components/ai/AssistantChat";
  * gate; this is purely a second UI surface. The layout only mounts it for owner /
  * super_admin when AI is enabled, so here we always render the live chat.
  */
-export function AssistantWidget() {
+export function AssistantWidget({
+  endpoint = "/api/ai/chat",
+  subtitle = "Je rechterhand",
+  placeholder = "Stel een vraag, bijvoorbeeld: “wie heeft z’n uren nog niet goedgekeurd?”",
+}: {
+  endpoint?: string;
+  subtitle?: string;
+  placeholder?: string;
+} = {}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -27,7 +35,7 @@ export function AssistantWidget() {
               <div>
                 <p className="text-[13px] font-medium leading-tight text-ink-900">Assistent</p>
                 <p className="font-ui text-[10px] uppercase leading-tight tracking-[0.16em] text-ink-500">
-                  Je rechterhand
+                  {subtitle}
                 </p>
               </div>
             </div>
@@ -43,7 +51,7 @@ export function AssistantWidget() {
             </button>
           </div>
           <div className="flex-1 overflow-hidden p-3">
-            <AssistantChat enabled variant="widget" />
+            <AssistantChat enabled variant="widget" endpoint={endpoint} placeholder={placeholder} />
           </div>
         </div>
       )}

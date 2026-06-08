@@ -527,6 +527,13 @@ Both layers degrade to "niet beschikbaar" without a key/vectors. **Refresh + lif
 
 Files: `src/lib/ai/{runtime,tools,read-model,actions,rag}/**` · `src/lib/ai/{playbook,config,embeddings,types}.ts` · `src/app/api/ai/chat/route.ts` · `src/app/api/cron/rag-ingest/route.ts` · `src/components/ai/Assistant{Widget,Chat}.tsx`. Smokes (key-free gate): `scripts/smoke-ai-{spine,brain,tools,safety,usage,rag}.mts` (rag covers redaction + chunking + the access-filter logic + the AVG purge-scope builder) + LIVE `scripts/smoke-ai-rag-retrieval.mts` (NEVER-source allowlist · redaction-in-corpus · chef-A-never-sees-chef-B · synchronous-purge round-trip · retention purge-SQL) + live `scripts/live-ai-{brain,loop,context}-check.mts`. ⚠ OpenAI key rotation pending; WhatsApp/voice channels ON HOLD.
 
+## 1.23 — Chef portal assistant (read-only, own-data-only)
+
+A SECOND assistant persona, for chefs (klant persona is the mirror, next). Reuses the SAME agent loop + executor + audit as the owner, with three differences that make it safe for a non-staff user:
+- **Ownership scope, not RBAC.** `AiActor` gained a `subject: {kind, entityId}`. `resolveChefActor(userId)` resolves the chef from `chefs.userId` (the "auth IS the lookup" rule) and stamps it as the subject. The chef tools (`mijn.diensten`/`mijn.uren`/`mijn.profiel`, `src/lib/ai/tools/chef-self.ts`) are `permission:null` + `risk:'read'` and key EVERY query off `ctx.actor.subject.entityId` — the model never supplies an id, and the tool input schemas accept none, so a chef can't be steered to another chef's data.
+- **Separate registry.** `buildChefRegistry()` (`tools/portal-index.ts`) holds ONLY the chef tools — no owner tools leak in.
+- **Separate channel + persona.** `POST /api/ai/portal/chat` gates on `session.user.kind` (chef/klant only), runs `runChefAssistant` with `CHEF_SYSTEM_PROMPT` (`runtime/portal-prompts.ts`). The floating widget on the chef portal reuses `AssistantChat`/`AssistantWidget` (now take an `endpoint` prop). Read-only V1 — the prompt steers concrete actions (accept a proposal, fill hours) back to the portal UI. Smoke: `scripts/smoke-ai-portal.mts` (read-only + no-id-injection + live scoped execution + clean no-subject error).
+
 ---
 
 # Part 2 — Planned workflows (per active plan)

@@ -5,11 +5,12 @@
  * passed in by the channel so this stays independent of any specific LLM.
  */
 import type { AiChannel, ToolContext, ToolResult } from "@/lib/ai/types";
-import { resolveAiActor } from "@/lib/ai/runtime/actor";
+import { resolveAiActor, resolveChefActor } from "@/lib/ai/runtime/actor";
 import { aiAuditSink } from "@/lib/ai/runtime/audit-sink";
 import { executeTool } from "@/lib/ai/runtime/execute";
 import { runAgent, type AgentOutcome, type Brain, type Msg } from "@/lib/ai/runtime/agent";
 import { buildRegistry } from "@/lib/ai/tools/index";
+import { buildChefRegistry } from "@/lib/ai/tools/portal-index";
 
 export async function runOwnerAssistant(args: {
   userId: string;
@@ -26,6 +27,32 @@ export async function runOwnerAssistant(args: {
     channel: args.channel,
     ...(args.reason ? { reason: args.reason } : {}),
   };
+  return runAgent({
+    brain: args.brain,
+    registry,
+    messages: args.messages,
+    ctx,
+    executeOptions: { auditSink: aiAuditSink, confirmSecret: args.confirmSecret },
+  });
+}
+
+/**
+ * CHEF portal assistant — read-only, own-scoped. Resolves the chef from the session user id
+ * (the subject), runs the agent against the chef-only registry. Returns null when the account
+ * has no chef profile (the route maps that to a friendly message). No confirm path needed (all
+ * chef tools are reads), but the executor still audits every call.
+ */
+export async function runChefAssistant(args: {
+  userId: string;
+  channel: AiChannel;
+  messages: Msg[];
+  brain: Brain;
+  confirmSecret: string;
+}): Promise<AgentOutcome | null> {
+  const actor = await resolveChefActor(args.userId);
+  if (!actor) return null;
+  const registry = buildChefRegistry();
+  const ctx: ToolContext = { actor, channel: args.channel };
   return runAgent({
     brain: args.brain,
     registry,

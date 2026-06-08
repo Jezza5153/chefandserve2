@@ -31,6 +31,12 @@ export type AiActor = {
   paServiceUserId: string;
   /** The human's effective permission keys ("resource.action"). This is the assistant's ceiling. */
   effectivePerms: ReadonlySet<string>;
+  /**
+   * For the chef/klant portal assistants: the entity the caller IS. Their scoped tools read
+   * ONLY this entity's data (the "auth IS the lookup" rule) — the model never supplies an id.
+   * Undefined for the owner assistant (which is RBAC-permission-scoped instead).
+   */
+  subject?: { kind: "chef" | "client"; entityId: string };
 };
 
 export type ToolPermission = { resource: string; action: string };

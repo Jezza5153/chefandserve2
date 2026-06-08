@@ -5,9 +5,11 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import { SignOutLink } from "@/app/(admin)/_components/SignOutLink";
+import { AssistantWidget } from "@/components/ai/AssistantWidget";
 import { ConsentGate } from "@/components/ConsentGate";
 import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 import { NotificationBell } from "@/components/NotificationBell";
+import { aiEnabled } from "@/lib/ai/config";
 import { hasCurrentConsent, isConsentEnforced, recordConsent } from "@/lib/consent";
 import { requireAuth } from "@/lib/permissions";
 
@@ -102,6 +104,14 @@ export default async function ChefLayout({
           enforce={isConsentEnforced()}
           privacyHref="/privacy-chef"
           acceptAction={acceptChefConsent}
+        />
+      ) : null}
+
+      {aiEnabled() && session.user.kind === "chef" ? (
+        <AssistantWidget
+          endpoint="/api/ai/portal/chat"
+          subtitle="Je hulp"
+          placeholder="Stel een vraag, bijvoorbeeld: “wanneer werk ik?” of “welke uren moet ik nog invullen?”"
         />
       ) : null}
     </div>
