@@ -5,7 +5,7 @@
  */
 const { redact, isPiiDense, REDACTION_VERSION } = await import("@/lib/ai/rag/redact");
 const { chunkText } = await import("@/lib/ai/rag/chunk");
-const { accessFilterFor } = await import("@/lib/ai/rag/access");
+const { accessFilterFor, tenantScopesForSubject } = await import("@/lib/ai/rag/access");
 
 let pass = 0;
 let fail = 0;
@@ -74,6 +74,14 @@ console.log("\n── access filter: tenant_scope + visibility (the no-cross-ten
   assert("klant does NOT see admin_only", !client.visibilities.includes("admin_only"));
   assert("klant does NOT see chef chunks", !client.visibilities.includes("chef_own_and_admin"));
   assert("klant sees own + bridge", client.visibilities.includes("klant_own_and_admin") && client.visibilities.includes("placement_bridge"));
+}
+
+console.log("\n── AVG purge: tenant_scopes for an erased subject ──");
+{
+  assert("chef erasure → chefId scope", JSON.stringify(tenantScopesForSubject({ chefId: "A" })) === '["chefId:A"]');
+  assert("klant erasure → clientId scope", JSON.stringify(tenantScopesForSubject({ clientId: "C" })) === '["clientId:C"]');
+  assert("both ids → both scopes", tenantScopesForSubject({ chefId: "A", clientId: "C" }).length === 2);
+  assert("no ids → no scopes (no-op purge)", tenantScopesForSubject({}).length === 0);
 }
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);

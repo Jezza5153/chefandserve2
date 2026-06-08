@@ -1,6 +1,13 @@
 /**
  * Embedding refresh — runs daily on Railway.
  *
+ * SCOPE: this worker maintains the PER-ROW `embedding` columns on chefs/clients/shifts
+ * (whole-profile vectors that power `*.semantic_search`). It does NOT touch the chunked
+ * notes-RAG store `ai_embeddings` (knowledge.search) — that's re-indexed app-side by the
+ * Vercel cron `GET /api/cron/rag-ingest` (→ `ingestAll()` in src/lib/ai/rag/ingest.ts),
+ * because the ingestion reuses the shared redact/chunk modules that this standalone Railway
+ * worker can't import. See docs/ai/rag-ingestion-contract.md + that route's header.
+ *
  * What it does:
  *   - Computes a content hash for each chef / client / shift
  *   - For rows where `embedded_text_hash != current hash` → re-embed

@@ -82,6 +82,10 @@ const serverSchema = z.object({
   OPENAI_PRICE_OUTPUT_PER_1M: z.coerce.number().nonnegative().optional(),
   //   OPENAI_PRICE_CURRENCY — display currency for the env-set prices (default USD).
   OPENAI_PRICE_CURRENCY: z.string().optional(),
+  //   CRON_SECRET — bearer secret Vercel Cron sends as `Authorization: Bearer <secret>`.
+  //   Gates /api/cron/* (e.g. the nightly RAG re-index). Missing → the cron routes
+  //   refuse to run (so they can't be triggered publicly).
+  CRON_SECRET: z.string().min(16, "CRON_SECRET must be ≥16 chars").optional(),
 
   // Phase 1 PR-S1A — rate-limit key derivation secret.
   // hmac_sha256(SECRET, scope+":"+identifier) becomes the row primary key.

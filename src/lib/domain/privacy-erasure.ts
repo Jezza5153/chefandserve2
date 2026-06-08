@@ -45,6 +45,7 @@ import {
 } from "@/lib/db/schema";
 import { createNotification } from "@/lib/integrations";
 import { recipientsFor } from "@/lib/notifications";
+import { purgeAiEmbeddingsForSubject } from "@/lib/ai/rag/purge";
 import { deleteObject, r2IsConfigured } from "@/lib/r2";
 
 import { redactRawPayloadForSubject } from "./privacy-erasure-submissions";
@@ -569,6 +570,32 @@ export async function eraseUserData(args: {
 
     return tomb.id;
   });
+
+  // ----- synchronous RAG purge (AVG art. 17, contract §Reindex triggers).
+  // The erased subject's ai_embeddings chunks still carry their name-bearing
+  // profile/notes/contact text — delete them NOW, not 30 days later via retention.
+  // Best-effort (never throws): the legally-required erasure already committed above,
+  // and workers/retention.ts is the backstop. Runs AFTER the tx so an embeddings-store
+  // hiccup can't roll back the erasure.
+  if (subject.chefId || subject.clientId) {
+    try {
+      const purged = await purgeAiEmbeddingsForSubject({
+        chefId: subject.chefId,
+        clientId: subject.clientId,
+      });
+      if (purged > 0) {
+        await recordAuditFromRequest({
+          userId: args.actorId,
+          action: "ai.embeddings_purged",
+          resource: "ai_embeddings",
+          resourceId: args.requestId,
+          after: { purged, chefId: subject.chefId, clientId: subject.clientId, trigger: "avg_erasure" },
+        });
+      }
+    } catch {
+      // swallow — retention sweep cleans up chunks for soft-deleted sources >30d later
+    }
+  }
 
   // R2 cleanup failure — alert admins (in-app + the dedicated event).
   if (failedDocuments > 0) {
