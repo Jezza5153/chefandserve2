@@ -7,7 +7,8 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-const { sendWhatsApp } = await import("@/lib/whatsapp");
+const { sendWhatsApp, sendWhatsAppTemplate } = await import("@/lib/whatsapp");
+const { WA_TEMPLATE_KEYS, WA_TEMPLATES } = await import("@/lib/whatsapp-templates");
 
 let pass = 0;
 let fail = 0;
@@ -75,6 +76,34 @@ const errRes = await sendWhatsApp({
 });
 assert("error path returns !ok", !errRes.ok);
 assert("error code surfaced", !errRes.ok && errRes.code === "VALIDATION_004");
+
+console.log("\n── template catalog ──");
+assert("27 templates in catalog", WA_TEMPLATE_KEYS.length === 27, `got ${WA_TEMPLATE_KEYS.length}`);
+assert("every template has ≥1 param + a valid audience", WA_TEMPLATE_KEYS.every((k) => {
+  const d = WA_TEMPLATES[k];
+  return d.params.length >= 1 && ["chef", "klant", "intern"].includes(d.audience);
+}));
+
+console.log("\n── sendWhatsAppTemplate (catalog-validated) ──");
+assert("unknown template key → error", !(await sendWhatsAppTemplate({ key: "nope" as never, to: ["+31612345678"], params: {} })).ok);
+assert("missing param → error (before network)", !(await sendWhatsAppTemplate({ key: "chef_uren_herinnering", to: ["+31612345678"], params: { voornaam: "Lisa" } })).ok);
+{
+  let cap: { body: string } | null = null;
+  const res = await sendWhatsAppTemplate({
+    key: "chef_uren_herinnering",
+    to: ["+31612345678"],
+    params: { voornaam: "Lisa", klant: "Hotel Okura" },
+    sandbox: true,
+    transport: async (req) => {
+      cap = req;
+      return { status: 202, json: { success: true, data: { status: "QUEUED", recipients: [{ message_id: "m1", to: "+31612345678", channel: "whatsapp" }] } } };
+    },
+  });
+  assert("complete params → ok", res.ok);
+  const b = cap ? JSON.parse((cap as { body: string }).body) : {};
+  assert("sends template name = key", b.template?.name === "chef_uren_herinnering");
+  assert("sends both named params", b.template?.parameters?.voornaam === "Lisa" && b.template?.parameters?.klant === "Hotel Okura");
+}
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 if (fail > 0) process.exit(1);

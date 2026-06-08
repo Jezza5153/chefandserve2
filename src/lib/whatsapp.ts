@@ -14,6 +14,7 @@
  *   body: { to: ["+E164"], channel: ["whatsapp"], template: { name, parameters }, sandbox }
  */
 import { env } from "@/lib/env";
+import { missingParams, WA_TEMPLATES, type WaTemplateKey } from "@/lib/whatsapp-templates";
 
 const DEFAULT_BASE_URL = "https://api.sent.dm";
 
@@ -115,4 +116,32 @@ export async function sendWhatsApp(args: SendWhatsAppArgs): Promise<SendWhatsApp
     code: j?.error?.code,
     details: j?.error?.details,
   };
+}
+
+/**
+ * Send one of the catalog templates (src/lib/whatsapp-templates.ts) by key. Validates every
+ * required param is present BEFORE calling sent.dm, so a missing variable surfaces as a clear
+ * error in our code rather than a Meta send-time failure. The template name sent to sent.dm is
+ * the key itself (we keep them identical).
+ */
+export async function sendWhatsAppTemplate(args: {
+  key: WaTemplateKey;
+  to: string[];
+  params: Record<string, string | number>;
+  channel?: WhatsAppChannel[];
+  sandbox?: boolean;
+  transport?: WhatsAppTransport;
+}): Promise<SendWhatsAppResult> {
+  if (!(args.key in WA_TEMPLATES)) return { ok: false, error: `Onbekende WhatsApp-template: ${args.key}` };
+  const missing = missingParams(args.key, args.params);
+  if (missing.length > 0) {
+    return { ok: false, error: `Ontbrekende template-variabele(n) voor ${args.key}: ${missing.join(", ")}` };
+  }
+  return sendWhatsApp({
+    to: args.to,
+    template: { name: args.key, parameters: args.params },
+    channel: args.channel,
+    sandbox: args.sandbox,
+    transport: args.transport,
+  });
 }
