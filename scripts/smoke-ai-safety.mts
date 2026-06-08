@@ -65,6 +65,7 @@ const SAMPLE: Record<string, unknown> = {
   "contacts.timeline": { targetType: "chef", targetId: "x" },
   "knowledge.search": { query: "test" },
   "documents.list_for_chef": { chefId: "x" },
+  "chefs.history_at_client": { chefId: "x", clientId: "y" },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 
