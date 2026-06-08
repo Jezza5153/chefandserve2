@@ -14,7 +14,7 @@ import { db } from "@/lib/db/client";
 import { shifts } from "@/lib/db/schema";
 import { draftPlacement, findMatchesForShift } from "@/lib/domain/matching";
 import { estimateMargin, estimateTravel } from "@/lib/domain/travel";
-import { autofillWeek, type AutofillResult } from "@/lib/domain/roster-autofill";
+import { autofillWeek, copyLastWeek, type AutofillResult, type CopyResult } from "@/lib/domain/roster-autofill";
 import {
   clearDraftsForPeriod,
   publishDraftsForPeriod,
@@ -132,6 +132,19 @@ export async function autofillWeekAction(anchorDateKey: string): Promise<Autofil
   const session = await requirePermission("shifts", "write");
   const week = getAmsterdamWeekRange(anchorDateKey);
   const res = await autofillWeek({
+    startUtc: week.startUtc,
+    endUtc: week.endUtc,
+    actorUserId: session.user.id,
+  });
+  revalidatePath(PLANBORD_PATH);
+  return res;
+}
+
+/** "Kopieer vorige week" — seed open slots from last week's same klant/weekday/role chefs. */
+export async function copyLastWeekAction(anchorDateKey: string): Promise<CopyResult> {
+  const session = await requirePermission("shifts", "write");
+  const week = getAmsterdamWeekRange(anchorDateKey);
+  const res = await copyLastWeek({
     startUtc: week.startUtc,
     endUtc: week.endUtc,
     actorUserId: session.user.id,

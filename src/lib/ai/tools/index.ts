@@ -30,7 +30,7 @@ import {
   chefsTrends,
   chefsProfileCompleteness,
 } from "@/lib/ai/tools/chef-profile";
-import { rosterOverview, rosterPublish, rosterAutofill } from "@/lib/ai/tools/roster";
+import { rosterOverview, rosterPublish, rosterAutofill, rosterCopyLastWeek } from "@/lib/ai/tools/roster";
 import { clientsHistory, clientsHealth } from "@/lib/ai/tools/clients";
 import { plannerCockpitTool, shiftsSuggestChefs, shiftsMargin } from "@/lib/ai/tools/staffing";
 import { contactsTimeline } from "@/lib/ai/tools/contacts";
@@ -71,6 +71,7 @@ export const ALL_TOOLS: AnyTool[] = [
   placementsCancel,
   rosterPublish,
   rosterAutofill,
+  rosterCopyLastWeek,
   emailSend,
   chefsApproveProfileChange,
   chefsRejectProfileChange,

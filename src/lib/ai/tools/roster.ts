@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
 import { loadRosterAiSummary } from "@/lib/ai/read-model/roster";
-import { autofillWeek } from "@/lib/domain/roster-autofill";
+import { autofillWeek, copyLastWeek } from "@/lib/domain/roster-autofill";
 import { publishDraftsForPeriod } from "@/lib/domain/roster-publish";
 import {
   addDaysToKey,
@@ -94,6 +94,34 @@ export const rosterPublish = defineTool({
         res.total === 0
           ? `Geen concepten om te publiceren voor ${label}.`
           : `${res.published} van ${res.total} concept(en) gepubliceerd voor ${label} — chefs en klanten zijn bericht.${skippedLine}`,
+    };
+  },
+});
+
+export const rosterCopyLastWeek = defineTool({
+  name: "roster.copy_last_week",
+  title: "Kopieer vorige week (concepten)",
+  description:
+    "Vult de open plekken met de chefs van VORIGE week: voor elke open dienst komt de chef die vorige week op dezelfde klant/weekdag/rol stond als CONCEPT terug — het 'elke vrijdag dezelfde chef bij hotel X'-patroon. Concepten zijn nog NIET gepubliceerd; controleer ze op het planbord en publiceer daarna met roster.publish. Alleen per week.",
+  risk: "outbound",
+  permission: { resource: "shifts", action: "write" },
+  input: z.object({
+    period: z.enum(["this_week", "next_week"]).optional(),
+  }),
+  describeAction: (input) => {
+    const nl = (input.period ?? "this_week") === "next_week" ? "volgende week" : "deze week";
+    return `Rooster van ${nl} vullen met de chefs van de week ervoor (concepten) — nog NIET publiceren; jij controleert ze op het planbord.`;
+  },
+  run: async (input, ctx) => {
+    const period = input.period ?? "this_week";
+    const { startUtc, endUtc, label } = periodRange(period, new Date());
+    const res = await copyLastWeek({ startUtc, endUtc, actorUserId: ctx.actor.requestedByUserId });
+    return {
+      data: { period, ...res },
+      summary:
+        res.filled === 0
+          ? `Niets gekopieerd voor ${label} — geen open plekken of vorige week was er niets ingepland.`
+          : `${res.filled} concept(en) gekopieerd van vorige week op ${res.matchedShifts} dienst(en) voor ${label} (van ${res.openSlotsBefore} open plekken). Controleer op het planbord en publiceer daarna.`,
     };
   },
 });
