@@ -7,7 +7,7 @@
 import { and, desc, eq, gte, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { chefs, clients, placements, shiftHours, shifts } from "@/lib/db/schema";
+import { chefAvailability, chefs, clients, placements, shiftHours, shifts } from "@/lib/db/schema";
 import { computeChefAmountCents, formatEuro, humanStatus } from "@/lib/hours-labels";
 import { formatShiftRole } from "@/lib/labels";
 
@@ -70,6 +70,31 @@ export async function chefMyHours(chefId: string) {
     toLog: toLog.map(shape),
     rejected: rejected.map(shape),
     money: { teOntvangen: eur(approved), inControle: eur(inControle), afgekeurd: eur(rejected) },
+  };
+}
+
+/** Availability the chef has submitted going forward — "heb ik m'n beschikbaarheid door?". */
+export async function chefMyAvailability(chefId: string) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const in14 = new Date(today);
+  in14.setDate(in14.getDate() + 14);
+
+  const rows = await db
+    .select({ date: chefAvailability.date, available: chefAvailability.available })
+    .from(chefAvailability)
+    .where(and(eq(chefAvailability.chefId, chefId), gte(chefAvailability.date, today)))
+    .orderBy(chefAvailability.date);
+
+  const availableDates = rows.filter((r) => r.available);
+  const next = availableDates[0]?.date ?? null;
+  const dayNl = (d: Date | string) => new Date(d).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
+  return {
+    futureEntries: rows.length,
+    availableCount: availableDates.length,
+    blockedCount: rows.length - availableDates.length,
+    nextAvailable: next ? dayNl(next) : null,
+    hasUpcomingTwoWeeks: rows.some((r) => new Date(r.date) <= in14),
   };
 }
 

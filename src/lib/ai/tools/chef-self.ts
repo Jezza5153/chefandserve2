@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
 import type { ToolContext } from "@/lib/ai/types";
-import { chefMyShifts, chefMyHours, chefMyProfile } from "@/lib/ai/read-model/chef-self";
+import { chefMyShifts, chefMyHours, chefMyProfile, chefMyAvailability } from "@/lib/ai/read-model/chef-self";
 
 function requireChefId(ctx: ToolContext): string {
   if (ctx.actor.subject?.kind !== "chef" || !ctx.actor.subject.entityId) {
@@ -51,6 +51,25 @@ export const chefMyHoursTool = defineTool({
       data,
       summary:
         `${data.toLog.length} uurbriefje(s) in te vullen · ${data.rejected.length} afgekeurd · te ontvangen ${data.money.teOntvangen}.`,
+    };
+  },
+});
+
+export const chefMyAvailabilityTool = defineTool({
+  name: "mijn.beschikbaarheid",
+  title: "Mijn beschikbaarheid",
+  description:
+    "Jouw doorgegeven beschikbaarheid: hoeveel dagen je vooruit hebt ingevuld, je eerstvolgende beschikbare dag, en of je de komende 2 weken al hebt doorgegeven. Read-only — alleen jouw eigen beschikbaarheid.",
+  risk: "read",
+  permission: null,
+  input: z.object({}),
+  run: async (_input, ctx) => {
+    const data = await chefMyAvailability(requireChefId(ctx));
+    return {
+      data,
+      summary: data.hasUpcomingTwoWeeks
+        ? `Je hebt ${data.availableCount} beschikbare dag(en) doorgegeven${data.nextAvailable ? `; eerstvolgende: ${data.nextAvailable}` : ""}.`
+        : "Je hebt nog geen beschikbaarheid voor de komende 2 weken doorgegeven — geef die door onder 'Beschikbaarheid'.",
     };
   },
 });
