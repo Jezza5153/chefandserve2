@@ -56,6 +56,7 @@ const SAMPLE: Record<string, unknown> = {
   "clients.history": { clientId: "x" },
   "shifts.suggest_chefs": { shiftId: "x" },
   "chefs.semantic_search": { query: "test" },
+  "clients.semantic_search": { query: "test" },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 

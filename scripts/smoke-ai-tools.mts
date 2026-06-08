@@ -78,6 +78,7 @@ assert("clients.history present (read)", byName.get("clients.history")?.risk ===
 assert("planner.cockpit present (read)", byName.get("planner.cockpit")?.risk === "read");
 assert("shifts.suggest_chefs present (read)", byName.get("shifts.suggest_chefs")?.risk === "read");
 assert("chefs.semantic_search present (read)", byName.get("chefs.semantic_search")?.risk === "read");
+assert("clients.semantic_search present (read)", byName.get("clients.semantic_search")?.risk === "read");
 assert("roster.overview present (read)", byName.get("roster.overview")?.risk === "read");
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
