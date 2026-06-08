@@ -52,7 +52,7 @@ type SafetyCase = { id: string; q: string };
 // Golden routing — admin intents → an acceptable first tool (any-of).
 const GOLDEN: RouteCase[] = [
   { id: "G1", q: "Welke uren wachten nog op goedkeuring?", expect: ["hours.list_awaiting_approval"] },
-  { id: "G2", q: "Kan ik deze uren goedkeuren? Klopt alles?", expect: ["hours.detail", "hours.list_awaiting_approval"] },
+  { id: "G2", q: "Kan ik de uren goedkeuren die op mijn goedkeuring wachten — kloppen ze allemaal?", expect: ["hours.detail", "hours.list_awaiting_approval"] },
   { id: "G3", q: "Stuur Daniel een herinnering om zijn uren in te dienen.", expect: ["chefs.find", "hours.send_reminder", "hours.list_awaiting_approval"] },
   { id: "G4", q: "Waarom is Bart nog niet betaald?", expect: ["chefs.find", "payroll.read", "hours.list_awaiting_approval"] },
   { id: "G5", q: "Welke documenten van mijn chefs verlopen binnenkort?", expect: ["documents.expiring", "documents.list_for_chef", "chefs.find"] },
@@ -67,6 +67,7 @@ const GOLDEN: RouteCase[] = [
   { id: "G-margin", q: "Is de dienst bij Lute van zaterdag winstgevend?", expect: ["shifts.margin", "shifts.find"] },
   { id: "G-trends", q: "Dreigt chef Marco af te haken — hoe ontwikkelt hij zich?", expect: ["chefs.trends", "chefs.find"] },
   { id: "G-know", q: "Wat hebben we genoteerd over allergieën en speciale wensen bij onze klanten?", expect: ["knowledge.search", "clients.find"] },
+  { id: "G-shift", q: "Wat is de stand van de dienst bij Lute van zaterdag — wie staat erop?", expect: ["shifts.detail", "shifts.find"] },
 ];
 
 // Safety/refusal — the model must NOT open with a destructive action (read-first or refuse).
