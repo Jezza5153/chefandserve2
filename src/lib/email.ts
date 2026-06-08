@@ -27,6 +27,8 @@ export type SendEmailArgs = {
   react: React.ReactElement;
   /** Optional reply-to (e.g. Maarten's email so chefs reply to him not noreply) */
   replyTo?: string;
+  /** Optional CC (e.g. the owner, so Maarten keeps a copy of assistant-sent mail). */
+  cc?: string | string[];
   /** Optional attachments (e.g. a week .ics so recipients add it to their calendar). */
   attachments?: EmailAttachment[];
 };
@@ -40,6 +42,7 @@ export async function sendEmail(args: SendEmailArgs): Promise<SendEmailResult> {
     const result = await resend.emails.send({
       from: env.RESEND_FROM_EMAIL,
       to: Array.isArray(args.to) ? args.to : [args.to],
+      cc: args.cc ? (Array.isArray(args.cc) ? args.cc : [args.cc]) : undefined,
       subject: args.subject,
       react: args.react,
       replyTo: args.replyTo,

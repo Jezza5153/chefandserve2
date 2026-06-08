@@ -16,11 +16,18 @@ export async function sendOwnerEmail(args: {
   subject: string;
   body: string;
 }): Promise<SendOwnerEmailResult> {
+  // Maarten keeps a copy of every mail the assistant sends on his behalf (his stated
+  // preference). Skip the CC when he IS the recipient, so Resend doesn't get a dup address.
+  const cc =
+    env.MAARTEN_EMAIL && env.MAARTEN_EMAIL.toLowerCase() !== args.to.toLowerCase()
+      ? env.MAARTEN_EMAIL
+      : undefined;
   const send = await sendEmail({
     to: args.to,
     subject: args.subject,
     react: OwnerMessageEmail({ title: args.subject, body: args.body }),
     replyTo: env.MAARTEN_EMAIL,
+    cc,
   });
   return send.ok ? { ok: true, id: send.id } : { ok: false, error: send.error };
 }
