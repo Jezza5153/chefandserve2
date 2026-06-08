@@ -20,6 +20,7 @@ import { chefs, clients, placements, shifts } from "@/lib/db/schema";
 import { recomputeShiftStatus } from "@/lib/domain/shift-status";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { sendEmail, formatShiftWhen } from "@/lib/email";
+import { env } from "@/lib/env";
 import { createNotification, recordEmailMessage } from "@/lib/integrations";
 import { ShiftConfirmedClientEmail } from "@/emails/ShiftConfirmedClientEmail";
 import { ShiftConfirmedChefEmail } from "@/emails/ShiftConfirmedChefEmail";
@@ -105,6 +106,7 @@ export async function sendPlacementConfirmedEmails(placementId: string): Promise
           shiftWhen,
           shiftLocation: shift.location ?? shift.city,
           shiftRole: shift.roleNeeded,
+          hubUrl: `${env.NEXT_PUBLIC_APP_URL}/client/shifts/${shift.id}`,
         }),
       });
       if (send.ok) {
@@ -135,6 +137,7 @@ export async function sendPlacementConfirmedEmails(placementId: string): Promise
         shiftRole: shift.roleNeeded,
         clientContactName: clientRow?.contactName,
         clientContactPhone: clientRow?.phone,
+        placementUrl: `${env.NEXT_PUBLIC_APP_URL}/chef/shifts/${placementId}`,
       }),
     });
     if (send.ok) {

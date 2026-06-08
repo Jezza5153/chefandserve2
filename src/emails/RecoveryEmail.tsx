@@ -17,21 +17,21 @@ export function RecoveryEmail({
   intent: "password" | "totp";
   recoveryUrl: string;
 }) {
-  const firstName = recipientName.split(" ")[0] || "daar";
   const title =
     intent === "password" ? "Wachtwoord opnieuw instellen" : "2FA herstellen";
   const preview =
     intent === "password"
       ? "Klik op de link om je wachtwoord opnieuw in te stellen."
       : "Klik op de link om opnieuw 2FA in te stellen.";
-  const lead =
+  const lead = `Hallo ${recipientName},`;
+  const reason =
     intent === "password"
-      ? `Hoi ${firstName}, je hebt aangegeven dat je je wachtwoord wilt herstellen.`
-      : `Hoi ${firstName}, je hebt aangegeven dat je geen toegang meer hebt tot je authenticator-app.`;
+      ? "Er is een verzoek gedaan om je wachtwoord voor Chef & Serve te herstellen."
+      : "Er is een verzoek gedaan om je tweestapsverificatie voor Chef & Serve te herstellen.";
   const followup =
     intent === "password"
-      ? "Klik op de knop hieronder. Je hebt je huidige 2FA-code uit je authenticator-app nodig om een nieuw wachtwoord in te stellen."
-      : "Klik op de knop hieronder. Je hebt één van je recovery codes nodig (formaat ABCD-EFGH-IJKL). Daarna richt je via de wizard opnieuw 2FA in.";
+      ? "Gebruik de knop hieronder om een nieuw wachtwoord in te stellen. De link is eenmalig en 15 minuten geldig."
+      : "Gebruik de knop hieronder om je herstelproces te starten. De link is eenmalig en 15 minuten geldig.";
 
   return (
     <EmailLayout preview={preview}>
@@ -40,11 +40,17 @@ export function RecoveryEmail({
       </Heading>
       <Text style={styles.lead}>{lead}</Text>
 
+      <Text style={styles.para}>{reason}</Text>
+
       <Text style={styles.para}>{followup}</Text>
+
+      <Text style={styles.para}>
+        Heb je dit niet aangevraagd? Dan kun je deze mail negeren.
+      </Text>
 
       <Section style={{ textAlign: "center", margin: "32px 0" }}>
         <Link href={recoveryUrl} style={styles.button}>
-          {intent === "password" ? "Wachtwoord herstellen" : "2FA herstellen"}
+          {intent === "password" ? "Wachtwoord herstellen" : "Herstel starten"}
         </Link>
       </Section>
 
@@ -57,12 +63,6 @@ export function RecoveryEmail({
         >
           {recoveryUrl}
         </Link>
-      </Text>
-
-      <Text style={styles.small}>
-        De link is 15 minuten geldig en kan maar één keer gebruikt worden. Heb
-        je deze herstelmail niet zelf aangevraagd? Negeer dit bericht — er
-        verandert dan niets aan je account.
       </Text>
     </EmailLayout>
   );

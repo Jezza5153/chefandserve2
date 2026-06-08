@@ -35,12 +35,17 @@ export function ChefWeekPlanningEmail({
   return (
     <EmailLayout preview={`Je planning — ${weekLabel} (${n} ${n === 1 ? "dienst" : "diensten"})`}>
       <Heading as="h1" style={styles.h1}>
-        Je planning · {weekLabel}
+        Je weekplanning staat klaar
       </Heading>
       <Text style={styles.lead}>Hoi {firstName},</Text>
       <Text style={styles.para}>
-        Je bent ingepland voor {n} {n === 1 ? "dienst" : "diensten"}. Hieronder de details —
-        adres en contactpersoon staan erbij. Bevestig je diensten in het portaal.
+        Je planning voor {weekLabel} staat klaar. Hieronder vind je je diensten
+        met adres, contactpersoon, telefoonnummer en de details die je nodig
+        hebt.
+      </Text>
+      <Text style={styles.para}>
+        De agenda-bijlage zit ook bij deze mail. Check voor de zekerheid altijd
+        je portaal voor de laatste stand.
       </Text>
 
       {shifts.map((s, i) => (
@@ -76,7 +81,7 @@ export function ChefWeekPlanningEmail({
 
       <Section style={{ textAlign: "center", margin: "28px 0 8px" }}>
         <Link href={portalUrl} style={styles.button}>
-          Bevestig in portaal
+          Open portaal
         </Link>
       </Section>
       <Text style={styles.small}>

@@ -25,12 +25,11 @@ export function BillingEmailChangedKlantEmail({
       footerNote="Je ontvangt deze melding omdat dit het vorige facturatie-e-mailadres was."
     >
       <Heading as="h1" style={styles.h1}>
-        Je facturatie-e-mail is gewijzigd
+        Facturatie-e-mail gewijzigd
       </Heading>
-      <Text style={styles.lead}>Beste relatie van {companyName},</Text>
+      <Text style={styles.lead}>Hallo,</Text>
       <Text style={styles.para}>
-        Het facturatie-e-mailadres voor {companyName} is zojuist aangepast in
-        het Chef &amp; Serve portaal.
+        Het facturatie-e-mailadres van {companyName} is gewijzigd.
       </Text>
 
       <Section
@@ -42,17 +41,16 @@ export function BillingEmailChangedKlantEmail({
         }}
       >
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Was</span> {oldEmail}
+          <span style={styles.detailLabel}>Oud e-mailadres</span> {oldEmail}
         </Text>
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Nu</span> {newEmail}
+          <span style={styles.detailLabel}>Nieuw e-mailadres</span> {newEmail}
         </Text>
       </Section>
 
       <Text style={styles.para}>
-        <strong>Heb jij dit niet gedaan?</strong> Mail of bel Chef &amp; Serve
-        binnen 7 dagen, dan draaien we de wijziging terug. Tot die tijd
-        versturen we facturen naar het nieuwe adres.
+        Was dit niet de bedoeling? Neem dan binnen 7 dagen contact met ons op,
+        dan kunnen we dit controleren en waar nodig terugdraaien.
       </Text>
 
       <Text style={styles.para}>

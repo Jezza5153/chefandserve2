@@ -28,13 +28,14 @@ export function ClientChangeRequestAdminEmail({
   return (
     <EmailLayout preview={`${kindLabel} van ${companyName} — ${shiftWhen}`}>
       <Heading as="h1" style={styles.h1}>
-        {kindLabel} van {companyName}
+        Nieuw klantverzoek
       </Heading>
       <Text style={styles.lead}>
-        {companyName} heeft via het portaal een {kind === "cancel" ? "annulering" : "wijziging"}{" "}
-        aangevraagd voor een ingeplande shift.
+        {companyName} heeft een {kind === "cancel" ? "annulering" : "wijziging"}
+        -verzoek ingediend.
       </Text>
 
+      <Text style={styles.detailLabel}>Dienst</Text>
       <Section
         style={{
           margin: "24px 0",
@@ -44,28 +45,22 @@ export function ClientChangeRequestAdminEmail({
         }}
       >
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Type</span> {kindLabel}
+          <span style={styles.detailLabel}>Rol</span> {shiftRole}
         </Text>
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Shift</span> {shiftRole}
-        </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Wanneer</span> {shiftWhen}
-        </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Reden</span> {reason}
+          <span style={styles.detailLabel}>Moment</span> {shiftWhen}
         </Text>
       </Section>
 
+      <Text style={styles.para}>Reden: {reason}</Text>
+
       <Text style={styles.para}>
-        {kind === "cancel"
-          ? "Neem contact op met de klant én de ingeplande chef voordat je de shift annuleert."
-          : "Beoordeel de gewenste wijziging en koppel terug naar de klant."}
+        Bekijk het verzoek in het portaal en neem een beslissing.
       </Text>
 
       <Text style={styles.para}>
         <a href={adminUrl} style={styles.button}>
-          Open in admin
+          Verzoek bekijken
         </a>
       </Text>
     </EmailLayout>

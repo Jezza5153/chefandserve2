@@ -33,12 +33,12 @@ export function HoursApprovedChefEmail({
       preview={`Uren goedgekeurd — wordt uitbetaald`}
     >
       <Heading as="h1" style={styles.h1}>
-        Uren goedgekeurd
+        Je uren zijn goedgekeurd
       </Heading>
       <Text style={styles.lead}>Hoi {firstName},</Text>
       <Text style={styles.para}>
-        Je uren voor {clientName} op {dateLabel} zijn definitief goedgekeurd.
-        Wij sturen ze door naar de payroll-uitbetaling.
+        Je uren voor je dienst bij {clientName} op {dateLabel} zijn definitief
+        goedgekeurd.
       </Text>
 
       <Section
@@ -50,20 +50,17 @@ export function HoursApprovedChefEmail({
         }}
       >
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Klant</span> {clientName}
+          <span style={styles.detailLabel}>Gewerkte uren</span>{" "}
+          {workedHoursLabel}
         </Text>
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Datum</span> {dateLabel}
-        </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Totaal</span> {workedHoursLabel}
-        </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Bedrag</span> {amountLabel}
+          <span style={styles.detailLabel}>Vergoeding</span> {amountLabel}
         </Text>
       </Section>
 
-      <Text style={styles.small}>Vragen? Bel het kantoor.</Text>
+      <Text style={styles.para}>
+        We zetten dit klaar voor uitbetaling volgens de normale betaalronde.
+      </Text>
     </EmailLayout>
   );
 }

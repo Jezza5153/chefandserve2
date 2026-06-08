@@ -25,7 +25,6 @@ export function HoursRejectedByAdminEmail({
   adminNote: string;
   editUrl?: string;
 }): React.ReactElement {
-  const firstName = recipientName.split(" ")[0] || "daar";
   const dateLabel = new Date(shiftDate).toLocaleDateString("nl-NL", {
     weekday: "long",
     day: "numeric",
@@ -37,21 +36,25 @@ export function HoursRejectedByAdminEmail({
     ? "Chef & Serve heeft je uren teruggezet"
     : `Uren-correctie voor ${chefName} op ${dateLabel}`;
   const title = isChef
-    ? "Je uren zijn teruggezet"
-    : "Uren-correctie nodig";
+    ? "Je uren moeten aangepast worden"
+    : "Uren teruggezet voor correctie";
+  const greeting = isChef
+    ? `Hoi ${recipientName},`
+    : `Hallo ${recipientName},`;
   const lead = isChef
-    ? `Hoi ${firstName}, Chef & Serve heeft je uren voor ${clientName} op ${dateLabel} teruggezet met deze opmerking:`
-    : `Hoi ${firstName}, Chef & Serve heeft de uren van ${chefName} voor ${dateLabel} teruggezet met deze opmerking:`;
+    ? `We hebben de ondertekende uren voor je dienst bij ${clientName} op ${dateLabel} teruggezet voor correctie.`
+    : `We hebben de uren van ${chefName} voor ${dateLabel} bij ${clientName} teruggezet voor correctie.`;
   const followup = isChef
-    ? "Pas je uren aan en dien opnieuw in. De klant tekent daarna opnieuw."
-    : "Je hoeft niets te doen — wij coördineren met de chef. Zodra de uren zijn aangepast en opnieuw zijn ondertekend, krijg je weer bericht.";
+    ? "Pas je uren aan in het portaal en dien ze opnieuw in."
+    : "U hoeft nu niets te doen. Zodra de aangepaste uren opnieuw klaarstaan, krijgt u bericht.";
 
   return (
     <EmailLayout preview={preview}>
       <Heading as="h1" style={styles.h1}>
         {title}
       </Heading>
-      <Text style={styles.lead}>{lead}</Text>
+      <Text style={styles.lead}>{greeting}</Text>
+      <Text style={styles.para}>{lead}</Text>
 
       <Section
         style={{
@@ -70,7 +73,7 @@ export function HoursRejectedByAdminEmail({
             color: styles.ink,
           }}
         >
-          {adminNote}
+          Reden: {adminNote}
         </Text>
       </Section>
 

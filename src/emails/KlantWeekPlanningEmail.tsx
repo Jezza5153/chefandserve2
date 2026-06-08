@@ -33,12 +33,16 @@ export function KlantWeekPlanningEmail({
   return (
     <EmailLayout preview={`Jullie planning — ${weekLabel} (${n} ${n === 1 ? "dienst" : "diensten"})`}>
       <Heading as="h1" style={styles.h1}>
-        Jullie planning · {weekLabel}
+        Jullie weekplanning staat klaar
       </Heading>
-      <Text style={styles.lead}>Beste {contactName ?? companyName},</Text>
+      <Text style={styles.lead}>Hallo {contactName ?? companyName},</Text>
       <Text style={styles.para}>
-        Dit is de planning voor {companyName} deze week. Bij elke dienst staat de voorgestelde
-        chef met telefoonnummer, voor het geval je iemand direct nodig hebt.
+        De planning voor {companyName} in {weekLabel} staat klaar. Hieronder
+        ziet u de diensten met de gekoppelde chef en het telefoonnummer.
+      </Text>
+      <Text style={styles.para}>
+        De agenda-bijlage zit ook bij deze mail. Check het portaal voor de
+        laatste stand.
       </Text>
 
       {shifts.map((s, i) => (
@@ -59,7 +63,7 @@ export function KlantWeekPlanningEmail({
 
       <Section style={{ textAlign: "center", margin: "28px 0 8px" }}>
         <Link href={hubUrl} style={styles.button}>
-          Bekijk in portaal
+          Open portaal
         </Link>
       </Section>
       <Text style={styles.small}>

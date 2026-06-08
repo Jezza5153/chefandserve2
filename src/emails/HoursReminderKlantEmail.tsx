@@ -30,17 +30,21 @@ export function HoursReminderKlantEmail({
       preview={`Ondertekening uren wacht — ${chefName}`}
     >
       <Heading as="h1" style={styles.h1}>
-        Ondertekening uren wacht
+        Uren wachten op bevestiging
       </Heading>
-      <Text style={styles.lead}>Hoi {firstName},</Text>
+      <Text style={styles.lead}>Hallo {firstName},</Text>
       <Text style={styles.para}>
-        De uren van {chefName} voor {dateLabel} wachten al enkele dagen op
-        jouw akkoord. Even 1 klik en het gaat door.
+        De uren van {chefName} voor {dateLabel} staan nog klaar om te
+        bevestigen.
+      </Text>
+      <Text style={styles.para}>
+        Wilt u ze controleren en tekenen in het portaal? Dan kunnen we de
+        dienst netjes afronden.
       </Text>
 
       <Section style={{ textAlign: "center", margin: "32px 0" }}>
         <Link href={signUrl} style={styles.button}>
-          Akkoord geven
+          Uren bevestigen
         </Link>
       </Section>
 

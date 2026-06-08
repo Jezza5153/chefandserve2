@@ -1,4 +1,4 @@
-import { Heading, Section, Text } from "@react-email/components";
+import { Heading, Link, Section, Text } from "@react-email/components";
 import * as React from "react";
 
 import { EmailLayout, styles } from "./_layout";
@@ -17,6 +17,7 @@ export function ShiftConfirmedChefEmail({
   shiftRole,
   clientContactName,
   clientContactPhone,
+  placementUrl,
 }: {
   chefName: string;
   clientName: string;
@@ -25,17 +26,18 @@ export function ShiftConfirmedChefEmail({
   shiftRole: string;
   clientContactName?: string | null;
   clientContactPhone?: string | null;
+  placementUrl?: string;
 }) {
   const firstName = chefName.split(" ")[0];
   return (
     <EmailLayout preview={`Shift bevestigd bij ${clientName} — ${shiftWhen}`}>
       <Heading as="h1" style={styles.h1}>
-        Shift bevestigd
+        Je shift is bevestigd
       </Heading>
       <Text style={styles.lead}>Hoi {firstName},</Text>
       <Text style={styles.para}>
-        Chef &amp; Serve heeft je shift bij <strong>{clientName}</strong> op{" "}
-        {shiftWhen} bevestigd. Je staat in het rooster.
+        Je shift bij {clientName} is bevestigd. Je staat ingepland als{" "}
+        {shiftRole} op {shiftWhen}.
       </Text>
 
       <Section
@@ -46,15 +48,6 @@ export function ShiftConfirmedChefEmail({
           borderRadius: "6px",
         }}
       >
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Klant</span> {clientName}
-        </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Rol</span> {shiftRole}
-        </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Wanneer</span> {shiftWhen}
-        </Text>
         {shiftLocation && (
           <Text style={styles.detailRow}>
             <span style={styles.detailLabel}>Locatie</span> {shiftLocation}
@@ -62,19 +55,29 @@ export function ShiftConfirmedChefEmail({
         )}
         {clientContactName && (
           <Text style={styles.detailRow}>
-            <span style={styles.detailLabel}>Contact</span> {clientContactName}
-            {clientContactPhone ? ` · ${clientContactPhone}` : ""}
+            <span style={styles.detailLabel}>Contactpersoon</span>{" "}
+            {clientContactName}
+          </Text>
+        )}
+        {clientContactPhone && (
+          <Text style={styles.detailRow}>
+            <span style={styles.detailLabel}>Telefoon</span>{" "}
+            {clientContactPhone}
           </Text>
         )}
       </Section>
 
-      <Text style={styles.para}>
-        Onverwacht verhinderd? Annuleer in het portaal én bel het kantoor
-        direct als het minder dan 24 uur duurt.
-      </Text>
+      {placementUrl && (
+        <Section style={{ textAlign: "center", margin: "28px 0 8px" }}>
+          <Link href={placementUrl} style={styles.button}>
+            Bekijk shift
+          </Link>
+        </Section>
+      )}
 
-      <Text style={styles.small}>
-        Succes op je shift. Na afloop dien je je uren in via het portaal.
+      <Text style={styles.para}>
+        Ben je verhinderd of klopt er iets niet? Laat het direct weten via je
+        portaal, zodat we snel kunnen schakelen.
       </Text>
     </EmailLayout>
   );

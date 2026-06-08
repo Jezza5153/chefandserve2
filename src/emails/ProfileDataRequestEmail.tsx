@@ -17,25 +17,27 @@ export function ProfileDataRequestEmail({
   missingLabels: string[];
   formUrl: string;
 }) {
-  const greeting = chefName ? `Beste ${chefName.split(" ")[0]},` : "Beste,";
+  const greeting = chefName ? `Hoi ${chefName.split(" ")[0]},` : "Hoi,";
   return (
     <EmailLayout preview="We missen nog een paar gegevens van je">
       <Heading as="h1" style={styles.h1}>
-        We missen nog een paar gegevens
+        Vul je gegevens aan
       </Heading>
       <Text style={styles.lead}>{greeting}</Text>
       <Text style={styles.para}>
-        Om je goed te kunnen inplannen missen we nog wat informatie
-        {missingLabels.length > 0 ? ":" : "."}
+        We missen nog een paar gegevens in je profiel. Zonder deze gegevens
+        kunnen we je minder goed inplannen of uitbetalen.
       </Text>
       {missingLabels.length > 0 && (
-        <Text style={styles.para}>
-          <strong>{missingLabels.join(" · ")}</strong>
-        </Text>
+        <>
+          <Text style={styles.para}>
+            <strong>Nog nodig</strong>
+          </Text>
+          <Text style={styles.para}>{missingLabels.join(" · ")}</Text>
+        </>
       )}
       <Text style={styles.para}>
-        Vul je gegevens (opnieuw) in via onderstaand formulier — duurt een paar
-        minuten.
+        Vul ze even aan via het formulier. Dan staat alles netjes klaar.
       </Text>
       <Button href={formUrl} style={styles.button}>
         Gegevens aanvullen

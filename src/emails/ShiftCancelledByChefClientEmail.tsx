@@ -1,4 +1,4 @@
-import { Heading, Section, Text } from "@react-email/components";
+import { Heading, Link, Section, Text } from "@react-email/components";
 import * as React from "react";
 
 import { EmailLayout, styles } from "./_layout";
@@ -15,6 +15,7 @@ export function ShiftCancelledByChefClientEmail({
   shiftWhen,
   reason,
   hoursUntilShift,
+  hubUrl,
 }: {
   clientContactName?: string | null;
   companyName: string;
@@ -22,42 +23,52 @@ export function ShiftCancelledByChefClientEmail({
   shiftWhen: string;
   reason: string;
   hoursUntilShift: number;
+  hubUrl?: string;
 }) {
   const greeting = clientContactName
-    ? `Beste ${clientContactName.split(" ")[0]},`
-    : `Beste ${companyName},`;
+    ? `Hallo ${clientContactName.split(" ")[0]},`
+    : `Hallo ${companyName},`;
   const urgencyLine =
     hoursUntilShift < 24
-      ? "Wij zoeken nu direct vervanging en bellen je vandaag terug met een update."
+      ? "We zoeken direct naar een passende oplossing en houden u vandaag op de hoogte via het portaal."
       : hoursUntilShift < 48
-        ? "Wij zoeken een vervanger en koppelen vandaag of morgen terug."
-        : "Wij zoeken vervanging en koppelen ruim op tijd terug.";
+        ? "We zoeken direct naar een passende oplossing en houden u via het portaal op de hoogte."
+        : "We zoeken direct naar een passende oplossing en houden u ruim op tijd op de hoogte via het portaal.";
   return (
     <EmailLayout preview={`Annulering: ${chefName} op ${shiftWhen}`}>
       <Heading as="h1" style={styles.h1}>
-        Chef heeft geannuleerd
+        Een chef heeft geannuleerd
       </Heading>
       <Text style={styles.lead}>{greeting}</Text>
       <Text style={styles.para}>
-        Helaas heeft <strong>{chefName}</strong> de shift op {shiftWhen}{" "}
-        moeten annuleren.
+        <strong>{chefName}</strong> heeft de dienst bij {companyName} op{" "}
+        {shiftWhen} geannuleerd.
       </Text>
 
       <Section
         style={{
-          margin: "20px 0",
+          margin: "24px 0",
           padding: "16px",
           backgroundColor: "#F7F8FA",
-          borderLeft: `4px solid ${styles.burgundy}`,
-          borderRadius: "4px",
+          borderRadius: "6px",
         }}
       >
-        <Text style={{ ...styles.para, fontStyle: "italic", margin: 0 }}>
-          Reden van chef: &ldquo;{reason}&rdquo;
+        <Text style={styles.detailRow}>
+          <span style={styles.detailLabel}>Reden</span> {reason}
         </Text>
       </Section>
 
-      <Text style={styles.para}>{urgencyLine}</Text>
+      <Text style={styles.para}>
+        De dienst start over {hoursUntilShift} uur. {urgencyLine}
+      </Text>
+
+      {hubUrl && (
+        <Section style={{ textAlign: "center", margin: "28px 0 8px" }}>
+          <Link href={hubUrl} style={styles.button}>
+            Bekijk dienst
+          </Link>
+        </Section>
+      )}
 
       <Text style={styles.small}>
         Vragen? Bel Chef &amp; Serve direct. Onze excuses voor het ongemak.

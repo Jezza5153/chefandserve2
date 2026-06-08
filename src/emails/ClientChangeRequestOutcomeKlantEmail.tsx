@@ -27,9 +27,10 @@ export function ClientChangeRequestOutcomeKlantEmail({
   shiftUrl: string;
 }) {
   const greeting = contactName
-    ? `Beste ${contactName.split(" ")[0]},`
+    ? `Hallo ${contactName},`
     : "Geachte heer/mevrouw,";
   const kindWord = kind === "cancel" ? "annulering" : "wijziging";
+  const outcomeWord = outcome === "approved" ? "goedgekeurd" : "afgewezen";
   const headline =
     outcome === "approved"
       ? `Je ${kindWord} is doorgevoerd`
@@ -38,13 +39,14 @@ export function ClientChangeRequestOutcomeKlantEmail({
   return (
     <EmailLayout preview={`${headline} — ${shiftWhen}`}>
       <Heading as="h1" style={styles.h1}>
-        {headline}
+        Uitkomst van uw verzoek
       </Heading>
       <Text style={styles.lead}>{greeting}</Text>
       <Text style={styles.para}>
-        We hebben je {kindWord}sverzoek voor de shift bij {companyName} bekeken.
+        Uw {kindWord}-verzoek voor {companyName} is {outcomeWord}.
       </Text>
 
+      <Text style={styles.detailLabel}>Dienst</Text>
       <Section
         style={{
           margin: "24px 0",
@@ -54,31 +56,25 @@ export function ClientChangeRequestOutcomeKlantEmail({
         }}
       >
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Shift</span> {shiftRole}
+          <span style={styles.detailLabel}>Rol</span> {shiftRole}
         </Text>
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Wanneer</span> {shiftWhen}
+          <span style={styles.detailLabel}>Moment</span> {shiftWhen}
         </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Uitkomst</span>{" "}
-          {outcome === "approved" ? "Doorgevoerd" : "Niet doorgevoerd"}
-        </Text>
-        {decisionNotes ? (
-          <Text style={styles.detailRow}>
-            <span style={styles.detailLabel}>Toelichting</span> {decisionNotes}
-          </Text>
-        ) : null}
       </Section>
 
+      {decisionNotes ? (
+        <Text style={styles.para}>Toelichting: {decisionNotes}</Text>
+      ) : null}
+
       <Text style={styles.para}>
-        {outcome === "approved"
-          ? "We hebben dit verwerkt. Bekijk de shift voor de actuele status."
-          : "De shift blijft zoals gepland. Bel of mail ons gerust als je hierover wilt overleggen."}
+        Bekijk de details in het portaal. Daar ziet u ook wat dit betekent voor
+        de planning.
       </Text>
 
       <Text style={styles.para}>
         <a href={shiftUrl} style={styles.button}>
-          Bekijk shift
+          Bekijk dienst
         </a>
       </Text>
 

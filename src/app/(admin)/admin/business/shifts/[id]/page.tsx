@@ -417,6 +417,7 @@ export default async function ShiftDetailPage({
                     shiftWhen,
                     shiftLocation: shift.location ?? shift.city,
                     shiftRole: shift.roleNeeded,
+                    hubUrl: `${process.env.NEXT_PUBLIC_APP_URL}/client/shifts/${shift.id}`,
                   }),
                 });
                 if (send.ok) {
@@ -448,6 +449,7 @@ export default async function ShiftDetailPage({
                   shiftRole: shift.roleNeeded,
                   clientContactName: clientRow?.contactName,
                   clientContactPhone: clientRow?.phone,
+                  placementUrl: `${process.env.NEXT_PUBLIC_APP_URL}/chef/shifts/${placementId}`,
                 }),
               });
               if (send.ok) {

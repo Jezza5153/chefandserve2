@@ -31,22 +31,17 @@ export function ShiftProposedEmail({
       preview={`Nieuwe shift-aanbieding bij ${clientName}`}
     >
       <Heading as="h1" style={styles.h1}>
-        Hoi {chefName.split(" ")[0]}, een nieuwe shift voor je
+        Nieuwe shift voor je klaar
       </Heading>
-      <Text style={styles.lead}>
-        Maarten heeft je voorgesteld voor onderstaande shift. Reageer zo
-        snel mogelijk — andere chefs staan ook in de wachtrij.
+      <Text style={styles.lead}>Hoi {chefName.split(" ")[0]},</Text>
+      <Text style={styles.para}>
+        We hebben een nieuwe shift voor je klaarstaan bij {clientName}. Het
+        gaat om {shiftRole} op {shiftWhen} in {shiftCity}.
       </Text>
 
       <Section style={{ margin: "24px 0", padding: "16px", backgroundColor: "#F7F8FA", borderRadius: "6px" }}>
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Klant</span> {clientName}
-        </Text>
-        <Text style={styles.detailRow}>
           <span style={styles.detailLabel}>Rol</span> {shiftRole}
-        </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Wanneer</span> {shiftWhen}
         </Text>
         {shiftCity && (
           <Text style={styles.detailRow}>
@@ -59,17 +54,21 @@ export function ShiftProposedEmail({
             {shiftRateEur.toFixed(2)}/uur
           </Text>
         )}
+        {shiftNotes && (
+          <Text style={styles.detailRow}>
+            <span style={styles.detailLabel}>Notitie</span> {shiftNotes}
+          </Text>
+        )}
       </Section>
 
-      {shiftNotes && (
-        <Text style={styles.para}>
-          <strong>Notitie van Maarten:</strong> {shiftNotes}
-        </Text>
-      )}
+      <Text style={styles.para}>
+        Bekijk de shift in je portaal en laat weten of je 'm aanneemt of
+        afwijst. Dan houden we de planning strak.
+      </Text>
 
       <Section style={{ textAlign: "center", margin: "32px 0" }}>
         <Link href={placementUrl} style={styles.button}>
-          Bekijk &amp; reageer
+          Bekijk shift
         </Link>
       </Section>
 

@@ -22,18 +22,20 @@ export function RatingPendingKlantEmail({
   return (
     <EmailLayout preview={`Geef feedback over ${chefName}`}>
       <Heading as="h1" style={styles.h1}>
-        Hoe ging het met {chefName}?
+        Geef feedback over de dienst
       </Heading>
-      <Text style={styles.lead}>Beste relatie van {companyName},</Text>
+      <Text style={styles.lead}>Hallo,</Text>
       <Text style={styles.para}>
-        De shift van {shiftDate} is afgerond. Je feedback helpt ons om volgende
-        matches nog beter te maken — het kost je minder dan een minuut en is
-        alleen zichtbaar voor Chef &amp; Serve.
+        Hoe ging de dienst met {chefName} op {shiftDate} bij {companyName}?
+      </Text>
+      <Text style={styles.para}>
+        Geef kort feedback in het portaal. Dit gebruiken we intern om de
+        kwaliteit en de match met uw team scherp te houden.
       </Text>
 
       <Text style={styles.para}>
         <a href={rateUrl} style={styles.button}>
-          Geef feedback
+          Feedback geven
         </a>
       </Text>
 

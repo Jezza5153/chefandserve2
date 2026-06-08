@@ -32,30 +32,22 @@ export function HoursReminderChefEmail({
     stage === "24h"
       ? "Vergeet je je uren niet?"
       : `Laatste herinnering — uren voor ${clientName}`;
-  const title =
-    stage === "24h"
-      ? "Vergeet je je uren niet?"
-      : "Laatste herinnering";
-  const lead =
-    stage === "24h"
-      ? `Hoi ${firstName}, je shift bij ${clientName} op ${dateLabel} staat als afgerond, maar we hebben je uren nog niet binnen. Even 2 minuutjes en het is geregeld.`
-      : `Hoi ${firstName}, het is alweer drie dagen na je shift bij ${clientName} op ${dateLabel} en je uren staan nog open. Dien ze vandaag in — anders neemt het kantoor contact op om het samen door te lopen.`;
-  const followup =
-    stage === "24h"
-      ? "Hoe sneller jij je uren indient, hoe sneller de klant tekent en wij de uitbetaling kunnen plannen."
-      : "Zonder ingediende uren kunnen we de uitbetaling niet plannen.";
 
   return (
     <EmailLayout preview={preview}>
       <Heading as="h1" style={styles.h1}>
-        {title}
+        Vul je uren even in
       </Heading>
-      <Text style={styles.lead}>{lead}</Text>
-      <Text style={styles.para}>{followup}</Text>
+      <Text style={styles.lead}>Hoi {firstName},</Text>
+      <Text style={styles.para}>
+        Je dienst bij {clientName} op {dateLabel} is afgerond, maar je uren
+        staan nog open. Vul ze even in, dan houden we de afhandeling en betaling
+        netjes op gang.
+      </Text>
 
       <Section style={{ textAlign: "center", margin: "32px 0" }}>
         <Link href={submitUrl} style={styles.button}>
-          Uren indienen
+          Uren invullen
         </Link>
       </Section>
 

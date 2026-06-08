@@ -38,8 +38,8 @@ export function HoursSignedChefEmail({
       </Heading>
       <Text style={styles.lead}>Hoi {firstName},</Text>
       <Text style={styles.para}>
-        Je uren voor {clientName} op {dateLabel} zijn akkoord. Chef &amp;
-        Serve controleert nu en zet daarna de uitbetaling in gang.
+        {clientName} heeft je uren voor {dateLabel} ondertekend. Je hoeft nu
+        niets te doen, wij controleren ze verder.
       </Text>
 
       <Section
@@ -51,22 +51,17 @@ export function HoursSignedChefEmail({
         }}
       >
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Klant</span> {clientName}
+          <span style={styles.detailLabel}>Gewerkte uren</span>{" "}
+          {workedHoursLabel}
         </Text>
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Datum</span> {dateLabel}
-        </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Totaal</span> {workedHoursLabel}
-        </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Bedrag</span> {amountLabel}
+          <span style={styles.detailLabel}>Verwachte vergoeding</span>{" "}
+          {amountLabel}
         </Text>
       </Section>
 
-      <Text style={styles.small}>
-        Je hoeft niets te doen — we laten je weten zodra de uitbetaling is
-        ingepland.
+      <Text style={styles.para}>
+        Zodra alles definitief is goedgekeurd, krijg je opnieuw bericht.
       </Text>
     </EmailLayout>
   );

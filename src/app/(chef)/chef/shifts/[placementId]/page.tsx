@@ -239,6 +239,7 @@ async function cancel(formData: FormData) {
           shiftWhen: shiftDate,
           reason,
           hoursUntilShift: hoursUntil,
+          hubUrl: `${process.env.NEXT_PUBLIC_APP_URL}/client/shifts/${updated[0].shiftId}`,
         }),
       });
       if (send.ok) {

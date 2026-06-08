@@ -21,7 +21,7 @@ export function PrivacyRequestOutcomeEmail({
   decisionNotes?: string | null;
   retainedExplanation?: string | null;
 }) {
-  const greeting = requesterName ? `Beste ${requesterName.split(" ")[0]},` : "Beste,";
+  const greeting = requesterName ? `Hallo ${requesterName},` : "Hallo,";
   const headline =
     outcome === "rejected"
       ? "Je verzoek is afgewezen"
@@ -31,10 +31,10 @@ export function PrivacyRequestOutcomeEmail({
 
   return (
     <EmailLayout preview={`Privacyverzoek (${type}) — ${headline}`}>
-      <Heading as="h1" style={styles.h1}>{headline}</Heading>
+      <Heading as="h1" style={styles.h1}>Uitkomst van uw privacyverzoek</Heading>
       <Text style={styles.lead}>{greeting}</Text>
       <Text style={styles.para}>
-        We hebben je AVG-verzoek ({type}) behandeld. Uitkomst:{" "}
+        Uw privacyverzoek over {type} is afgehandeld met de volgende uitkomst:{" "}
         <strong>
           {outcome === "fulfilled"
             ? "afgehandeld"
@@ -46,21 +46,16 @@ export function PrivacyRequestOutcomeEmail({
       </Text>
       {decisionNotes ? (
         <Section style={{ margin: "16px 0", padding: "16px", backgroundColor: "#F7F8FA", borderRadius: "6px" }}>
-          <Text style={styles.para}>{decisionNotes}</Text>
+          <Text style={styles.para}>Toelichting: {decisionNotes}</Text>
         </Section>
       ) : null}
       {retainedExplanation ? (
         <Text style={styles.small}>
-          <strong>Wat we moeten bewaren:</strong> {retainedExplanation}
+          <strong>Wat we bewaren:</strong> {retainedExplanation}
         </Text>
       ) : null}
       <Text style={styles.para}>
-        Vragen over deze afhandeling? Reageer op deze mail of bel het kantoor.
-      </Text>
-      <Text style={styles.para}>
-        Met vriendelijke groet,
-        <br />
-        Chef &amp; Serve
+        Heeft u hierover vragen, dan kunt u contact opnemen met Chef &amp; Serve.
       </Text>
     </EmailLayout>
   );

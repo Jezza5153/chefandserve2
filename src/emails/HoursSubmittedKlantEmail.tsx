@@ -38,21 +38,19 @@ export function HoursSubmittedKlantEmail({
     day: "numeric",
     month: "long",
   });
-  const chefFirst = chefName.split(" ")[0];
   const amountLabel = `€${expectedAmountEur.toFixed(2).replace(".", ",")}`;
-  const breakLabel = `${breakMinutes} min`;
 
   return (
     <EmailLayout
       preview={`Uren te ondertekenen — ${chefName} op ${dateLabel}`}
     >
       <Heading as="h1" style={styles.h1}>
-        Uren te ondertekenen
+        Uren staan klaar om te bevestigen
       </Heading>
-      <Text style={styles.lead}>Hoi {firstName},</Text>
+      <Text style={styles.lead}>Hallo {firstName},</Text>
       <Text style={styles.para}>
-        {chefFirst} heeft zijn uren ingediend voor de shift op {dateLabel}.
-        Even controleren en akkoord geven (of niet).
+        {chefName} heeft de uren voor {dateLabel} ingediend. Controleer de
+        tijden en bevestig ze in het portaal.
       </Text>
 
       <Section
@@ -64,21 +62,15 @@ export function HoursSubmittedKlantEmail({
         }}
       >
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Chef</span> {chefName}
-        </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Datum</span> {dateLabel}
-        </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Gepland</span> {scheduledStart}–
+          <span style={styles.detailLabel}>Gepland</span> {scheduledStart} tot{" "}
           {scheduledEnd}
         </Text>
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Ingevuld</span> {actualStart}–
+          <span style={styles.detailLabel}>Ingediend</span> {actualStart} tot{" "}
           {actualEnd}
         </Text>
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Pauze</span> {breakLabel}
+          <span style={styles.detailLabel}>Pauze</span> {breakMinutes} minuten
         </Text>
         <Text style={styles.detailRow}>
           <span style={styles.detailLabel}>Totaal</span> {workedHoursLabel}
@@ -88,9 +80,14 @@ export function HoursSubmittedKlantEmail({
         </Text>
       </Section>
 
+      <Text style={styles.para}>
+        Klopt alles? Dan kunt u de uren direct tekenen. Klopt er iets niet? Zet
+        ze dan terug met een korte opmerking.
+      </Text>
+
       <Section style={{ textAlign: "center", margin: "32px 0" }}>
         <Link href={signUrl} style={styles.button}>
-          Akkoord geven
+          Uren controleren
         </Link>
       </Section>
 

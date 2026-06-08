@@ -1,4 +1,4 @@
-import { Heading, Section, Text } from "@react-email/components";
+import { Heading, Link, Section, Text } from "@react-email/components";
 import * as React from "react";
 
 import { EmailLayout, styles } from "./_layout";
@@ -13,6 +13,7 @@ export function ShiftConfirmedClientEmail({
   shiftWhen,
   shiftLocation,
   shiftRole,
+  hubUrl,
 }: {
   clientContactName?: string | null;
   companyName: string;
@@ -22,9 +23,10 @@ export function ShiftConfirmedClientEmail({
   shiftWhen: string;
   shiftLocation?: string | null;
   shiftRole: string;
+  hubUrl?: string;
 }) {
   const greeting = clientContactName
-    ? `Beste ${clientContactName.split(" ")[0]},`
+    ? `Hallo ${clientContactName.split(" ")[0]},`
     : "Geachte heer/mevrouw,";
 
   return (
@@ -32,12 +34,12 @@ export function ShiftConfirmedClientEmail({
       preview={`Chef bevestigd voor ${companyName} — ${shiftWhen}`}
     >
       <Heading as="h1" style={styles.h1}>
-        Uw chef is bevestigd
+        De chef is bevestigd
       </Heading>
       <Text style={styles.lead}>{greeting}</Text>
       <Text style={styles.para}>
-        Goed nieuws — <strong>{chefName}</strong> komt bij {companyName} op{" "}
-        {shiftWhen}.
+        <strong>{chefName}</strong> is bevestigd voor {companyName}. De dienst
+        staat ingepland als {shiftRole} op {shiftWhen}.
       </Text>
 
       <Section style={{ margin: "24px 0", padding: "16px", backgroundColor: "#F7F8FA", borderRadius: "6px" }}>
@@ -54,12 +56,6 @@ export function ShiftConfirmedClientEmail({
             <span style={styles.detailLabel}>Ervaring</span> {chefYears} jaar
           </Text>
         )}
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Wanneer</span> {shiftWhen}
-        </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Rol</span> {shiftRole}
-        </Text>
         {shiftLocation && (
           <Text style={styles.detailRow}>
             <span style={styles.detailLabel}>Locatie</span> {shiftLocation}
@@ -68,9 +64,17 @@ export function ShiftConfirmedClientEmail({
       </Section>
 
       <Text style={styles.para}>
-        Bij vragen of wijzigingen — bel of mail het kantoor. Wij zijn 7
-        dagen per week bereikbaar tijdens kantooruren.
+        Alles staat klaar in het portaal. Als er nog iets verandert, ziet u dat
+        daar terug.
       </Text>
+
+      {hubUrl && (
+        <Section style={{ textAlign: "center", margin: "28px 0 8px" }}>
+          <Link href={hubUrl} style={styles.button}>
+            Bekijk dienst
+          </Link>
+        </Section>
+      )}
 
       <Text style={styles.para}>
         Met vriendelijke groet,

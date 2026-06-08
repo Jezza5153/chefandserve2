@@ -16,7 +16,7 @@ export function OwnerMessageEmail({ title, body }: { title?: string; body: strin
   const preview = (paragraphs[0] ?? title ?? "Bericht van Chef & Serve").slice(0, 120);
 
   return (
-    <EmailLayout preview={preview} footerNote="Verzonden via Chef & Serve">
+    <EmailLayout preview={preview} footerNote="Met vriendelijke groet, Chef & Serve">
       {title ? (
         <Heading as="h1" style={styles.h1}>
           {title}

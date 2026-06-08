@@ -26,27 +26,20 @@ export function PortalInviteEmail({
         ? "klant-portaal"
         : "medewerker-portaal van Chef & Serve";
 
-  const bullets: string[] =
+  const greeting =
+    recipientKind === "chef" ? `Hoi ${firstName},` : `Hallo ${firstName},`;
+  const intro =
     recipientKind === "chef"
-      ? [
-          "Shift-voorstellen van Maarten zien en accepteren of afwijzen",
-          "Je komende shifts bekijken",
-          "Je beschikbaarheid beheren",
-          "Je profiel bekijken",
-        ]
+      ? "Je toegang tot het Chef & Serve-portaal staat klaar. Hier vind je je diensten, planning, gegevens en uren."
       : recipientKind === "client"
-        ? [
-            "Je geplande shifts en bevestigde chefs zien",
-            "Nieuwe aanvragen indienen vanuit het portaal",
-            "Je bedrijfsprofiel bekijken",
-            "Facturen + betalingsstatus bekijken (binnenkort)",
-          ]
-        : [
-            "Aanmeldingen converteren naar chefs en klanten",
-            "Roosters samenstellen en chef-voorstellen versturen",
-            "Volledige toegang tot alle inkomende aanvragen",
-            "Eerste login: wachtwoord + 2FA setup verplicht (~90 sec)",
-          ];
+        ? "Uw toegang tot het Chef & Serve-portaal staat klaar. Hier vindt u de planning, diensten, chef-voorstellen en uren die bevestigd moeten worden."
+        : "Je toegang tot het interne Chef & Serve-portaal staat klaar.";
+  const followup =
+    recipientKind === "chef"
+      ? "Log in via de knop hieronder en controleer meteen of je profiel compleet is."
+      : recipientKind === "client"
+        ? "Log in via de knop hieronder om het portaal te openen."
+        : "Log in via de knop hieronder en controleer je toegang.";
 
   return (
     <EmailLayout
@@ -55,28 +48,15 @@ export function PortalInviteEmail({
       <Heading as="h1" style={styles.h1}>
         Welkom bij Chef &amp; Serve
       </Heading>
-      <Text style={styles.lead}>
-        Hoi {firstName}, je hebt nu toegang tot het {portalLabel}.
-      </Text>
+      <Text style={styles.lead}>{greeting}</Text>
 
-      <Text style={styles.para}>
-        In het portaal kun je:
-      </Text>
-      <ul style={{ fontSize: "14px", lineHeight: "1.8", color: styles.ink, paddingLeft: "20px" }}>
-        {bullets.map((b) => (
-          <li key={b}>{b}</li>
-        ))}
-      </ul>
+      <Text style={styles.para}>{intro}</Text>
 
-      <Text style={styles.para}>
-        {recipientKind === "internal"
-          ? "Klik op de knop hieronder om in te loggen. Bij je eerste login richt je je wachtwoord en 2FA in — dit duurt ~90 seconden."
-          : "Klik op de knop hieronder om in te loggen. Wij sturen je een eenmalige link per e-mail — geen wachtwoord nodig."}
-      </Text>
+      <Text style={styles.para}>{followup}</Text>
 
       <Section style={{ textAlign: "center", margin: "32px 0" }}>
         <Link href={loginUrl} style={styles.button}>
-          Inloggen
+          Open portaal
         </Link>
       </Section>
 

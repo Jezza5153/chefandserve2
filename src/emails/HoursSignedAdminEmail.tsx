@@ -41,11 +41,11 @@ export function HoursSignedAdminEmail({
       preview={`Uren goedgekeurd door ${clientName} — keuren?`}
     >
       <Heading as="h1" style={styles.h1}>
-        Uren wachten op je goedkeuring
+        Uren klaar voor finale check
       </Heading>
       <Text style={styles.lead}>
-        {clientName} heeft de uren van {chefName} ondertekend voor {dateLabel}.
-        Even controleren en goedkeuren, daarna gaat het naar de payroll.
+        Uren zijn ondertekend door {clientName} en staan klaar voor finale
+        goedkeuring.
       </Text>
 
       <Section
@@ -66,10 +66,10 @@ export function HoursSignedAdminEmail({
           <span style={styles.detailLabel}>Datum</span> {dateLabel}
         </Text>
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Totaal</span> {workedHoursLabel}
+          <span style={styles.detailLabel}>Uren</span> {workedHoursLabel}
         </Text>
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Chef-kost</span> {chefAmountLabel}
+          <span style={styles.detailLabel}>Chef-kosten</span> {chefAmountLabel}
         </Text>
         <Text style={styles.detailRow}>
           <span style={styles.detailLabel}>Klant-omzet</span>{" "}
@@ -80,9 +80,13 @@ export function HoursSignedAdminEmail({
         </Text>
       </Section>
 
+      <Text style={styles.para}>
+        Controleer de uren en keur ze goed als alles klopt.
+      </Text>
+
       <Section style={{ textAlign: "center", margin: "32px 0" }}>
         <Link href={approveUrl} style={styles.button}>
-          Keur uren
+          Uren keuren
         </Link>
       </Section>
 

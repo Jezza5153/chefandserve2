@@ -28,7 +28,7 @@ export function ChefProposedKlantEmail({
   hubUrl: string;
 }) {
   const greeting = contactName
-    ? `Beste ${contactName.split(" ")[0]},`
+    ? `Hallo ${contactName.split(" ")[0]},`
     : "Geachte heer/mevrouw,";
 
   return (
@@ -38,10 +38,8 @@ export function ChefProposedKlantEmail({
       </Heading>
       <Text style={styles.lead}>{greeting}</Text>
       <Text style={styles.para}>
-        Voor je shift bij {companyName} hebben we{" "}
-        <strong>{chefName}</strong> voorgesteld. Je kunt het voorstel bekijken
-        en een opmerking meesturen. Chef &amp; Serve bevestigt de shift daarna
-        definitief.
+        We hebben <strong>{chefName}</strong> voorgesteld voor de dienst als{" "}
+        {shiftRole} op {shiftWhen}.
       </Text>
 
       <Section
@@ -53,11 +51,14 @@ export function ChefProposedKlantEmail({
         }}
       >
         <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Chef</span> {chefName}
+          <span style={styles.detailLabel}>Chef-profiel</span>
+        </Text>
+        <Text style={styles.detailRow}>
+          <span style={styles.detailLabel}>Naam</span> {chefName}
         </Text>
         {chefVakniveau ? (
           <Text style={styles.detailRow}>
-            <span style={styles.detailLabel}>Niveau</span> {chefVakniveau}
+            <span style={styles.detailLabel}>Vakniveau</span> {chefVakniveau}
           </Text>
         ) : null}
         {chefYears ? (
@@ -65,13 +66,12 @@ export function ChefProposedKlantEmail({
             <span style={styles.detailLabel}>Ervaring</span> {chefYears} jaar
           </Text>
         ) : null}
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Shift</span> {shiftRole}
-        </Text>
-        <Text style={styles.detailRow}>
-          <span style={styles.detailLabel}>Wanneer</span> {shiftWhen}
-        </Text>
       </Section>
+
+      <Text style={styles.para}>
+        Bekijk het voorstel in uw portaal. Heeft u iets dat belangrijk is voor
+        deze dienst? Laat daar dan een opmerking achter, dan nemen we dat mee.
+      </Text>
 
       <Text style={styles.para}>
         <a href={hubUrl} style={styles.button}>

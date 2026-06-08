@@ -17,28 +17,22 @@ export function PrivacyRequestExtensionEmail({
   newDueDate: string;
   reason: string;
 }) {
-  const greeting = requesterName ? `Beste ${requesterName.split(" ")[0]},` : "Beste,";
+  const greeting = requesterName ? `Hallo ${requesterName},` : "Hallo,";
   return (
     <EmailLayout preview="Verlenging behandeltermijn privacyverzoek">
       <Heading as="h1" style={styles.h1}>
-        We hebben iets meer tijd nodig
+        Behandeltermijn verlengd
       </Heading>
       <Text style={styles.lead}>{greeting}</Text>
       <Text style={styles.para}>
-        We hebben je privacyverzoek in behandeling. Vanwege de aard van het
-        verzoek verlengen we de behandeltermijn. Je hoort uiterlijk{" "}
-        <strong>{newDueDate}</strong> van ons.
+        We hebben meer tijd nodig om uw privacyverzoek zorgvuldig te behandelen.
+        Daarom verlengen we de behandeltermijn tot <strong>{newDueDate}</strong>.
       </Text>
       <Text style={styles.para}>
-        <strong>Reden:</strong> {reason}
+        Reden: {reason}
       </Text>
       <Text style={styles.para}>
-        Heb je vragen? Reageer gerust op deze mail.
-        <br />
-        <br />
-        Met vriendelijke groet,
-        <br />
-        Chef &amp; Serve
+        U hoeft nu niets te doen. We houden u op de hoogte van de uitkomst.
       </Text>
     </EmailLayout>
   );

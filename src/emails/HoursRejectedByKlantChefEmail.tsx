@@ -32,41 +32,29 @@ export function HoursRejectedByKlantChefEmail({
       preview={`Uren-correctie nodig — ${clientName}`}
     >
       <Heading as="h1" style={styles.h1}>
-        Uren-correctie nodig
+        Je uren moeten aangepast worden
       </Heading>
-      <Text style={styles.lead}>
-        Hoi {firstName}, {clientName} heeft je uren teruggegeven met deze
-        opmerking:
+      <Text style={styles.lead}>Hoi {firstName},</Text>
+      <Text style={styles.para}>
+        {clientName} heeft je uren voor {dateLabel} teruggezet voor correctie.
       </Text>
 
       <Section
         style={{
           margin: "24px 0",
-          padding: "16px 20px",
+          padding: "16px",
           backgroundColor: "#F7F8FA",
-          borderLeft: `3px solid ${styles.burgundy}`,
-          borderRadius: "4px",
+          borderRadius: "6px",
         }}
       >
-        <Text
-          style={{
-            ...styles.para,
-            margin: 0,
-            fontStyle: "italic",
-            color: styles.ink,
-          }}
-        >
+        <Text style={styles.detailRow}>
+          <span style={styles.detailLabel}>Opmerking van de klant</span>{" "}
           {klantNote}
         </Text>
       </Section>
 
       <Text style={styles.para}>
-        Pas je uren aan en dien opnieuw in. Daarna gaat het automatisch terug
-        naar de klant.
-      </Text>
-
-      <Text style={styles.small}>
-        <span style={styles.detailLabel}>Datum</span> {dateLabel}
+        Bekijk je uren in het portaal, pas ze aan en dien ze opnieuw in.
       </Text>
 
       <Section style={{ textAlign: "center", margin: "32px 0" }}>

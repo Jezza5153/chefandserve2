@@ -41,11 +41,14 @@ export function MagicLinkEmail({
 
           <Section style={card}>
             <Heading as="h1" style={h1}>
-              Welkom terug
+              Je inloglink voor Chef &amp; Serve
             </Heading>
             <Text style={lead}>
-              Klik op de knop hieronder om in te loggen bij {host}. De link is
-              <strong> 15 minuten geldig</strong> en kan maar één keer worden gebruikt.
+              Er is een inloglink aangevraagd voor {recipientEmail} op {host}.
+            </Text>
+            <Text style={lead}>
+              Gebruik de knop hieronder om in te loggen. De link is eenmalig en
+              15 minuten geldig.
             </Text>
 
             <Section style={{ textAlign: "center", margin: "32px 0" }}>
@@ -65,8 +68,7 @@ export function MagicLinkEmail({
 
           <Section style={footer}>
             <Text style={footerText}>
-              Verstuurd naar <strong>{recipientEmail}</strong>. Heb je dit niet
-              aangevraagd? Negeer dan deze mail — er gebeurt niets.
+              Heeft u deze link niet aangevraagd? Dan kunt u deze mail negeren.
             </Text>
             <Text style={footerText}>
               © {new Date().getFullYear()} {host} · Closed-system operations
