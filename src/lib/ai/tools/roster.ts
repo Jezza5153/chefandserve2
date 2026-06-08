@@ -20,11 +20,11 @@ export const rosterOverview = defineTool({
   name: "roster.overview",
   title: "Bezetting / staffing-overzicht",
   description:
-    "Het rooster-/bezettingsoverzicht voor deze week, volgende week of deze maand: open plekken, kritieke diensten, het drukste dagdeel, hotels die aandacht vragen, en open-binnen-48u. Dezelfde cijfers als het cockpit-scherm. Read-only.",
+    "Het rooster-/bezettingsoverzicht voor vandaag, deze week, volgende week of deze maand: open plekken, kritieke diensten, het drukste dagdeel, hotels die aandacht vragen, en open-binnen-48u. Bij 'today' ook hoeveel passende chefs vandaag nog beschikbaar (niet ingepland) zijn — handig voor 'wie kan ik vandaag nog inzetten?'. Dezelfde cijfers als het cockpit-scherm. Read-only.",
   risk: "read",
   permission: { resource: "roster", action: "read" },
   input: z.object({
-    period: z.enum(["this_week", "next_week", "this_month"]).optional(),
+    period: z.enum(["today", "this_week", "next_week", "this_month"]).optional(),
   }),
   run: async (input, ctx) => {
     const period = input.period ?? "this_week";
