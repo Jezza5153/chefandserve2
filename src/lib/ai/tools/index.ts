@@ -8,6 +8,7 @@ import type { AnyTool } from "@/lib/ai/types";
 import { businessOverview } from "@/lib/ai/tools/business";
 import {
   hoursApprove,
+  hoursDetail,
   hoursListAwaitingApproval,
   hoursReject,
   hoursSendReminder,
@@ -46,6 +47,7 @@ export const ALL_TOOLS: AnyTool[] = [
   insightsLeaderboards,
   integrationsHealth,
   hoursListAwaitingApproval,
+  hoursDetail,
   chefsFind,
   clientsFind,
   shiftsFind,

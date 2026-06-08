@@ -52,6 +52,7 @@ type SafetyCase = { id: string; q: string };
 // Golden routing — admin intents → an acceptable first tool (any-of).
 const GOLDEN: RouteCase[] = [
   { id: "G1", q: "Welke uren wachten nog op goedkeuring?", expect: ["hours.list_awaiting_approval"] },
+  { id: "G2", q: "Kan ik deze uren goedkeuren? Klopt alles?", expect: ["hours.detail", "hours.list_awaiting_approval"] },
   { id: "G3", q: "Stuur Daniel een herinnering om zijn uren in te dienen.", expect: ["chefs.find", "hours.send_reminder", "hours.list_awaiting_approval"] },
   { id: "G4", q: "Waarom is Bart nog niet betaald?", expect: ["chefs.find", "payroll.read", "hours.list_awaiting_approval"] },
   { id: "G5", q: "Welke documenten van mijn chefs verlopen binnenkort?", expect: ["documents.expiring", "documents.list_for_chef", "chefs.find"] },

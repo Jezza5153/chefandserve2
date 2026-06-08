@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
 import { approveHoursRow, rejectHoursRow } from "@/lib/domain/hours";
-import { listHoursAwaitingApproval } from "@/lib/ai/read-model/hours";
+import { hoursDetailForAi, listHoursAwaitingApproval } from "@/lib/ai/read-model/hours";
 import { sendHoursReminder } from "@/lib/ai/actions/send-hours-reminder";
 
 export const hoursListAwaitingApproval = defineTool({
@@ -25,6 +25,25 @@ export const hoursListAwaitingApproval = defineTool({
         ? "Er wachten geen uren op goedkeuring."
         : `${rows.length} urenregel(s) wachten op je goedkeuring.`;
     return { data: { count: rows.length, rows }, summary };
+  },
+});
+
+export const hoursDetail = defineTool({
+  name: "hours.detail",
+  title: "Urenregel in detail",
+  description:
+    "Eén urenregel volledig uitgelicht: chef · klant · dienst · gepland vs werkelijk gewerkt · pauze · tarieven met omzet/loonkosten/marge · status · tijdstip van klant-akkoord — met de afwijkingen/markeringen PROMINENT (rooster-afwijking > ±30 min, notities van chef of klant, ontbrekend tarief) plus een advies of de regel schoon is om goed te keuren. Voor 'kan ik deze uren goedkeuren / wat is er met deze regel?'. Read-only. Gebruik hours.list_awaiting_approval voor het hoursId.",
+  risk: "read",
+  permission: { resource: "hours", action: "read" },
+  input: z.object({ hoursId: z.string().min(1, "hoursId is verplicht") }),
+  run: async (input) => {
+    const d = await hoursDetailForAi(input.hoursId);
+    if (!d) throw new Error("deze urenregel bestaat niet (meer)");
+    const summary =
+      d.flags.length === 0
+        ? `${d.chef} bij ${d.klant} — ${d.werkelijk}, marge ${d.marge}. ${d.advies}`
+        : `⚠ ${d.flags.length} aandachtspunt(en) — ${d.flags.join("; ")}. ${d.advies}`;
+    return { data: d, summary };
   },
 });
 
