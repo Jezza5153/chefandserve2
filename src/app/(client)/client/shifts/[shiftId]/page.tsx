@@ -36,6 +36,7 @@ import {
   shifts,
 } from "@/lib/db/schema";
 import { actionAllowed, getClientShiftLabel } from "@/lib/client-shift-labels";
+import { formatChefRole } from "@/lib/labels";
 import { addPlacementComment, listVisibleComments } from "@/lib/domain/comments";
 import { getMatchReasonsForPlacement } from "@/lib/domain/matching";
 import { createShiftChangeRequest } from "@/lib/domain/shift-change-requests";
@@ -355,7 +356,7 @@ export default async function ClientShiftHubPage({
                     <div>
                       <h3 className="font-serif text-lg text-ink-900">{chefName}</h3>
                       <p className="mt-0.5 text-sm text-ink-500">
-                        {chefVakniveau ?? "—"}
+                        {formatChefRole(chefVakniveau)}
                         {chefYears ? ` · ${chefYears} jaar ervaring` : ""}
                       </p>
                     </div>

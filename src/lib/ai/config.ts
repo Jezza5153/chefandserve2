@@ -20,16 +20,31 @@ export function aiModel(): string {
   return env.OPENAI_MODEL ?? "gpt-4o";
 }
 
+export type AiPrice = { inputPer1M: number; outputPer1M: number; currency: string };
+
 /**
- * Per-1M-token prices (EUR) for the active model, or null when not configured. BOTH
- * OPENAI_PRICE_INPUT_PER_1M and _OUTPUT_PER_1M must be set; otherwise the AI-tokens card
- * shows tokens only (we never guess a model's rate).
+ * Built-in per-1M-token rates (USD) for the models we run, from the OpenAI pricing docs.
+ * STANDARD (uncached) input rate; OpenAI prompt-caching makes the real bill a bit lower, so
+ * the card's cost is a slight upper bound. Update here if OpenAI changes pricing, or override
+ * per-account with OPENAI_PRICE_*_PER_1M.
+ *   gpt-5.4: $2.50 in / $15.00 out (cached input $0.25) — developers.openai.com, 2026-06.
  */
-export function aiPricing(): { inputPer1M: number; outputPer1M: number } | null {
+const MODEL_PRICING: Record<string, AiPrice> = {
+  "gpt-5.4": { inputPer1M: 2.5, outputPer1M: 15, currency: "USD" },
+};
+
+/**
+ * Prices for the active model. Env (OPENAI_PRICE_*_PER_1M, optional currency) wins so an
+ * account-specific or EUR rate can override; else the built-in rate for the model id; null
+ * if neither is known (the AI-tokens card then shows tokens only, no cost).
+ */
+export function aiPricing(): AiPrice | null {
   const inputPer1M = env.OPENAI_PRICE_INPUT_PER_1M;
   const outputPer1M = env.OPENAI_PRICE_OUTPUT_PER_1M;
-  if (inputPer1M == null || outputPer1M == null) return null;
-  return { inputPer1M, outputPer1M };
+  if (inputPer1M != null && outputPer1M != null) {
+    return { inputPer1M, outputPer1M, currency: env.OPENAI_PRICE_CURRENCY ?? "USD" };
+  }
+  return MODEL_PRICING[aiModel()] ?? null;
 }
 
 /**

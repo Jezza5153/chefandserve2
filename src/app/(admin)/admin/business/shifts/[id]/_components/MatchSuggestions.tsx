@@ -10,6 +10,7 @@ import {
 } from "@/lib/domain/staffing-intelligence";
 import type { MatchResult } from "@/lib/domain/matching";
 import type { Chef, Shift } from "@/lib/db/schema";
+import { formatChefRole } from "@/lib/labels";
 
 type TravelMargin = { t: TravelEstimate; margin: MarginEstimate } | null;
 
@@ -105,7 +106,7 @@ export function MatchSuggestions({
                     )}
                   </div>
                   <p className="mt-1 text-xs text-ink-500">
-                    {m.chef.vakniveau ?? "—"} · {m.chef.city ?? "—"}
+                    {formatChefRole(m.chef.vakniveau)} · {m.chef.city ?? "—"}
                     {m.chef.yearsExperience ? ` · ${m.chef.yearsExperience}j ervaring` : ""}
                   </p>
                   {badges.length > 0 && (

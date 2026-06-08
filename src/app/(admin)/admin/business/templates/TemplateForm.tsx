@@ -18,6 +18,7 @@ import {
   isOvernight,
   previewDates,
 } from "@/lib/shift-template-format";
+import { formatShiftRole } from "@/lib/labels";
 
 const VAKNIVEAU_OPTIONS = [
   { value: "keukenhulp", label: "Keukenhulp" },
@@ -251,7 +252,7 @@ export function TemplateForm({
             {dates.slice(0, 8).map((iso) => (
               <li key={iso} className="font-mono text-xs">
                 ✓ {formatIsoDate(iso)} · {formatTimeRange(startsAtTime, endsAtTime, endsNextDay)} ·{" "}
-                {roleNeeded} · {headcount} chef{headcount === 1 ? "" : "s"}
+                {formatShiftRole(roleNeeded)} · {headcount} chef{headcount === 1 ? "" : "s"}
               </li>
             ))}
             {dates.length > 8 ? (

@@ -1,5 +1,6 @@
 import { fieldClass } from "@/components/forms/Fields";
 import { chefs } from "@/lib/db/schema";
+import { formatChefRole, formatSegment } from "@/lib/labels";
 
 type ChefRow = typeof chefs.$inferSelect;
 
@@ -61,7 +62,7 @@ export function BasicsForm({
         defaultValue={chef.vakniveau ?? ""}
         options={[
           { value: "", label: "— Geen —" },
-          ...VAKNIVEAU_OPTIONS.map((v) => ({ value: v, label: v })),
+          ...VAKNIVEAU_OPTIONS.map((v) => ({ value: v, label: formatChefRole(v) })),
         ]}
       />
 
@@ -89,7 +90,7 @@ export function BasicsForm({
                     defaultChecked={checked}
                     className="sr-only"
                   />
-                  {s}
+                  {formatSegment(s)}
                 </label>
               );
             })}

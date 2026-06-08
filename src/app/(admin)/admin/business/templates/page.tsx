@@ -8,6 +8,7 @@ import Link from "next/link";
 import { db } from "@/lib/db/client";
 import { clients, shiftTemplates } from "@/lib/db/schema";
 import { formatPattern } from "@/lib/shift-template-format";
+import { formatShiftRole } from "@/lib/labels";
 import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Templates" };
@@ -73,7 +74,7 @@ export default async function TemplatesPage() {
                         endsAtTime: t.endsAtTime,
                         endsNextDay: t.endsNextDay,
                       })}{" "}
-                      · {t.roleNeeded} · {t.headcount} chef{t.headcount === 1 ? "" : "s"}
+                      · {formatShiftRole(t.roleNeeded)} · {t.headcount} chef{t.headcount === 1 ? "" : "s"}
                     </p>
                   </div>
                   <span

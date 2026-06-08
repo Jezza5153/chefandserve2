@@ -16,6 +16,7 @@ import {
   getProfileCompleteness,
 } from "@/lib/domain/profile-completeness";
 import { RATING_TAG_LABELS, type RatingTag } from "@/lib/rating-tags";
+import { formatShiftRole } from "@/lib/labels";
 
 type ChefRow = typeof chefs.$inferSelect;
 
@@ -452,7 +453,7 @@ export function Chef360({
                 >
                   <span className="text-ink-500">{fmtNlDate(s.startsAt)}</span>
                   <span className="text-ink-900">{s.clientName ?? "Onbekende klant"}</span>
-                  <span className="text-ink-500">· {s.roleNeeded}{s.city ? ` · ${s.city}` : ""}</span>
+                  <span className="text-ink-500">· {formatShiftRole(s.roleNeeded)}{s.city ? ` · ${s.city}` : ""}</span>
                   <span className="ml-auto rounded-full bg-bg-gray px-2 py-0.5 text-[10px] uppercase tracking-wider text-ink-500">
                     {s.placementStatus}
                   </span>
