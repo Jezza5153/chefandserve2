@@ -44,3 +44,41 @@ export function chunkText(input: string): string[] {
   flush();
   return chunks;
 }
+
+/**
+ * Markdown heading-aware chunking for project docs (contract §Per source: "each H2/H3 section
+ * becomes a chunk; prepend the section path"). Splits on H1–H3, carries a `Heading › Sub`
+ * breadcrumb, and falls back to chunkText() for oversized sections. Returns {heading, text}
+ * so the indexer can cite the section.
+ */
+export function chunkMarkdown(input: string): Array<{ heading: string; text: string }> {
+  const text = input.replace(/\r\n/g, "\n");
+  const lines = text.split("\n");
+
+  const sections: Array<{ heading: string; body: string[] }> = [];
+  let cur: { heading: string; body: string[] } = { heading: "", body: [] };
+  const stack: string[] = [];
+
+  for (const line of lines) {
+    const m = /^(#{1,3})\s+(.*)$/.exec(line);
+    if (m) {
+      if (cur.body.join("").trim()) sections.push(cur);
+      const level = m[1].length;
+      stack.length = level - 1; // drop deeper headings
+      stack[level - 1] = m[2].trim();
+      cur = { heading: stack.filter(Boolean).join(" › "), body: [] };
+    } else {
+      cur.body.push(line);
+    }
+  }
+  if (cur.body.join("").trim()) sections.push(cur);
+
+  const out: Array<{ heading: string; text: string }> = [];
+  for (const s of sections) {
+    const body = s.body.join("\n").trim();
+    if (!body) continue;
+    const prefix = s.heading ? `${s.heading}: ` : "";
+    for (const c of chunkText(body)) out.push({ heading: s.heading, text: `${prefix}${c}` });
+  }
+  return out;
+}
