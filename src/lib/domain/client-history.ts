@@ -11,7 +11,8 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { chefs, placements, ratings, shiftHours, shifts } from "@/lib/db/schema";
+import { chefs, clients, placements, ratings, shiftHours, shifts } from "@/lib/db/schema";
+import { computeClientHealth, type ClientHealthVerdict } from "@/lib/domain/client-health";
 import {
   bucketByWeek,
   periodDelta,
@@ -141,6 +142,31 @@ export async function getClientSummary(clientId: string): Promise<ClientSummary>
     signoffAvgHours: avgMin != null ? Math.round((avgMin / 60) * 10) / 10 : null,
     pendingSignoff: pending?.n ?? 0,
   };
+}
+
+/**
+ * Klant 360 verdict — getClientSummary() signals + clients.status → the "goede klant?" verdict
+ * (computeClientHealth). Returns null when the client doesn't exist. Used by the admin client
+ * detail card + the owner `clients.health` AI tool.
+ */
+export async function getClientHealth(
+  clientId: string,
+): Promise<{ summary: ClientSummary; verdict: ClientHealthVerdict } | null> {
+  const [c] = await db.select({ status: clients.status }).from(clients).where(eq(clients.id, clientId)).limit(1);
+  if (!c) return null;
+  const summary = await getClientSummary(clientId);
+  const verdict = computeClientHealth({
+    status: c.status,
+    completedShifts: summary.completedShifts,
+    upcomingShifts: summary.upcomingShifts,
+    marginCents: summary.marginCents,
+    spendCents: summary.spendCents,
+    repeatChefs: summary.repeatChefs,
+    ratingsGiven: summary.ratingsGiven,
+    pendingSignoff: summary.pendingSignoff,
+    signoffAvgHours: summary.signoffAvgHours,
+  });
+  return { summary, verdict };
 }
 
 /* ----- trends over the snapshot (pure) ------------------------------------ */
