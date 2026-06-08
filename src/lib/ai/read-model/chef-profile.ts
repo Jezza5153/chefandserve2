@@ -13,6 +13,8 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { chefs } from "@/lib/db/schema";
 import { getChefWorkSummary, getChefFeedbackSummary } from "@/lib/domain/chef-history";
+import { buildChefTrends } from "@/lib/domain/chef-trends";
+import { getChefDailySeries } from "@/lib/domain/metrics-history";
 import { formatChefRole, formatSegment, formatClientType } from "@/lib/labels";
 
 /** id → name/role/status, or null if the chef doesn't exist. */
@@ -76,3 +78,25 @@ export async function chefFeedback(chefId: string) {
 }
 
 export type ChefFeedback = NonNullable<Awaited<ReturnType<typeof chefFeedback>>>;
+
+/**
+ * Trend + churn-risk signals (last ~13 weeks of snapshots). Drops the raw sparkline
+ * arrays — the brain reasons over the churn label, week-over-week deltas and rates, not
+ * the visual. Churn level + reasons are deterministic + explainable (never a magic score).
+ */
+export async function chefTrends(chefId: string) {
+  const chef = await loadChef(chefId);
+  if (!chef) return null;
+  const t = buildChefTrends(await getChefDailySeries(chefId, 90));
+  return {
+    chef: { id: chef.id, name: chef.fullName },
+    churn: t.churn,
+    daysSinceLastWorked: t.daysSinceLastWorked,
+    ratingAvg28d: t.ratingAvg28d,
+    acceptanceRate28d: t.acceptanceRate28d,
+    hasEnoughHistory: t.hasEnoughHistory,
+    deltas7d: { hours: t.hoursDelta, marginEur: t.marginDelta, completedShifts: t.shiftsDelta },
+  };
+}
+
+export type ChefTrendsView = NonNullable<Awaited<ReturnType<typeof chefTrends>>>;
