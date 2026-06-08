@@ -40,6 +40,7 @@ import { knowledgeSearch } from "@/lib/ai/tools/knowledge";
 import { auditSearch, documentsListForChef, documentsExpiring, privacyListRequests, emailStatus, payrollRead } from "@/lib/ai/tools/oversight";
 import { briefingDaily } from "@/lib/ai/tools/briefing";
 import { shiftsDetail } from "@/lib/ai/tools/shift-detail";
+import { chefsHistoryAtClient } from "@/lib/ai/tools/chef-client-history";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -61,6 +62,7 @@ export const ALL_TOOLS: AnyTool[] = [
   chefsProfileCompleteness,
   clientsHistory,
   clientsHealth,
+  chefsHistoryAtClient,
   plannerCockpitTool,
   shiftsSuggestChefs,
   chefsSemanticSearch,
