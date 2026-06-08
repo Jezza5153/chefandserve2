@@ -37,6 +37,7 @@ import { contactsTimeline } from "@/lib/ai/tools/contacts";
 import { chefsSemanticSearch, clientsSemanticSearch } from "@/lib/ai/tools/semantic";
 import { knowledgeSearch } from "@/lib/ai/tools/knowledge";
 import { auditSearch, documentsListForChef, documentsExpiring, privacyListRequests, emailStatus, payrollRead } from "@/lib/ai/tools/oversight";
+import { briefingDaily } from "@/lib/ai/tools/briefing";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -69,6 +70,7 @@ export const ALL_TOOLS: AnyTool[] = [
   privacyListRequests,
   emailStatus,
   payrollRead,
+  briefingDaily,
   // act — the hands
   hoursApprove,
   hoursReject,
