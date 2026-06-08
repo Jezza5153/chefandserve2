@@ -15,6 +15,7 @@ import {
 import { isValidEmail } from "@/lib/forms/validation";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { buildClientTrends, getClientSummary } from "@/lib/domain/client-history";
+import { computeClientHealth } from "@/lib/domain/client-health";
 import { getClientDailySeries } from "@/lib/domain/metrics-history";
 import {
   activatePortalUser,
@@ -29,6 +30,7 @@ import { BasicsForm } from "./_components/BasicsForm";
 import { Binnenkort } from "./_components/Binnenkort";
 import { ChangeRequestsSection } from "./_components/ChangeRequestsSection";
 import { ClientTypeSection } from "./_components/ClientTypeSection";
+import { ClientHealthCard } from "./_components/ClientHealthCard";
 import { Klant360 } from "./_components/Klant360";
 import { PortalAccessSection } from "./_components/PortalAccessSection";
 
@@ -84,6 +86,18 @@ export default async function ClientDetailPage({
     getClientDailySeries(id, 90),
   ]);
   const clientTrends = buildClientTrends(clientSeries);
+  // Klant 360 verdict — "goede klant?" (computed inline; summary + status already loaded).
+  const clientHealth = computeClientHealth({
+    status: client.status,
+    completedShifts: clientSummary.completedShifts,
+    upcomingShifts: clientSummary.upcomingShifts,
+    marginCents: clientSummary.marginCents,
+    spendCents: clientSummary.spendCents,
+    repeatChefs: clientSummary.repeatChefs,
+    ratingsGiven: clientSummary.ratingsGiven,
+    pendingSignoff: clientSummary.pendingSignoff,
+    signoffAvgHours: clientSummary.signoffAvgHours,
+  });
 
   // PR-2B: set client_type + client_tags (the "wat voor klant" signal).
   async function updateClientType(formData: FormData) {
@@ -429,6 +443,8 @@ export default async function ClientDetailPage({
           </>
         )}
       </p>
+
+      <ClientHealthCard verdict={clientHealth} />
 
       <BasicsForm client={client} updateBasics={updateBasics} />
 
