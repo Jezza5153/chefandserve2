@@ -38,6 +38,8 @@ import { formatShiftRole } from "@/lib/labels";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { getRosterSettings } from "@/lib/domain/user-settings";
 import { getPlatformRollups } from "@/lib/domain/platform-rollups";
+import { getUnbilledHoursByClient } from "@/lib/domain/invoicing";
+import { formatEuro } from "@/lib/hours-labels";
 import { requirePermission } from "@/lib/permissions";
 import {
   addDaysToKey,
@@ -172,6 +174,9 @@ export default async function BusinessDashboardPage() {
 
   // KPI-5: owner money overview (week/maand/YTD FINAL-hours rollups).
   const roll = await getPlatformRollups();
+  // Proactive billing nudge: approved hours not yet on any invoice.
+  const unbilledList = await getUnbilledHoursByClient();
+  const unbilledCents = unbilledList.reduce((sum, u) => sum + u.totalCents, 0);
 
   /* ---- derive per-shift intel + day metrics ---- */
   const countByShift = new Map<string, number>();
@@ -467,6 +472,20 @@ export default async function BusinessDashboardPage() {
         <div className="mt-6">
           <h2 className="mb-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-500">Omzet &amp; marge</h2>
           <MoneyStrip week={roll.week} month={roll.month} ytd={roll.ytd} />
+          {unbilledCents > 0 ? (
+            <Link
+              href="/admin/business/invoices"
+              className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-2.5 hover:border-burgundy/40"
+            >
+              <span className="text-sm text-ink-700">
+                <strong className="text-ink-900">{formatEuro(unbilledCents)}</strong> aan
+                goedgekeurde uren te factureren
+              </span>
+              <span className="shrink-0 font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
+                Maak facturen →
+              </span>
+            </Link>
+          ) : null}
         </div>
 
         {/* Operational footer — system/integration health lives on the

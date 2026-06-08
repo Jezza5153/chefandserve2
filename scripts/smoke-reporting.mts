@@ -16,7 +16,9 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 const { db } = await import("@/lib/db/client");
-const { getPlatformTimeSeries } = await import("@/lib/domain/reporting");
+const { getPlatformTimeSeries, getClientRevenueBreakdown, detectSwing } = await import(
+  "@/lib/domain/reporting"
+);
 const { clientMetricsDaily, clients } = await import("@/lib/db/schema");
 const { eq, inArray } = await import("drizzle-orm");
 
@@ -87,6 +89,20 @@ try {
   const dead = await getPlatformTimeSeries({ bucket: "week", now: new Date(Date.UTC(2099, 11, 15)) });
   assert("empty window → 13 zero buckets", dead.points.length === 13 && dead.points.every((p) => p.revenueCents === 0));
   assert("empty window → totals 0 + null fill", dead.totals.revenueCents === 0 && dead.totals.fillRate === null, JSON.stringify(dead.totals));
+
+  // Per-klant revenue breakdown (global → filter to our throwaway clients).
+  const bd = await getClientRevenueBreakdown(90, { now });
+  const c1bd = bd.find((e) => e.id === c1.id);
+  const c2bd = bd.find((e) => e.id === c2.id);
+  assert("breakdown: client A revenue = 38000 (June + April)", c1bd?.revenueCents === 38000, JSON.stringify(c1bd));
+  assert("breakdown: client B revenue = 5000", c2bd?.revenueCents === 5000, JSON.stringify(c2bd));
+
+  // detectSwing — pure + noise-guarded.
+  const pt = (rev: number) => ({ key: "x", label: "x", revenueCents: rev, marginCents: 0, slots: 0, filled: 0, fillRate: null });
+  const down = detectSwing([pt(100000), pt(60000)], "revenueCents");
+  assert("swing: -40% down detected", down?.direction === "down" && down.pct === 40, JSON.stringify(down));
+  assert("swing: immaterial base (<€250) → null", detectSwing([pt(1000), pt(60000)], "revenueCents") === null);
+  assert("swing: <30% move → null", detectSwing([pt(100000), pt(90000)], "revenueCents") === null);
 } finally {
   if (clientIds.length) {
     await db.delete(clientMetricsDaily).where(inArray(clientMetricsDaily.clientId, clientIds));

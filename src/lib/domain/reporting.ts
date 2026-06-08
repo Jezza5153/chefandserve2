@@ -11,10 +11,10 @@
  * (≈13 weeks) or monthly (12 months). Empty buckets are filled with zeros so the
  * x-axis is continuous (a quiet week reads as a dip, not a gap).
  */
-import { gte, sql } from "drizzle-orm";
+import { desc, eq, gte, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { clientMetricsDaily } from "@/lib/db/schema";
+import { chefMetricsDaily, chefs, clientMetricsDaily, clients } from "@/lib/db/schema";
 
 export type TimeBucket = "week" | "month";
 
@@ -149,4 +149,109 @@ export async function getPlatformTimeSeries(opts: {
       fillRate: totals.slots > 0 ? totals.filled / totals.slots : null,
     },
   };
+}
+
+function cutoffISO(rangeDays: number, now: Date): string {
+  const c = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - rangeDays));
+  return c.toISOString().slice(0, 10);
+}
+
+export type EntityRevenue = {
+  id: string;
+  name: string;
+  revenueCents: number;
+  marginCents: number;
+  /** Short supporting metric, e.g. "84% bezet" or "112 u · 14 diensten". */
+  detail: string;
+};
+
+/** Revenue + margin per klant over the window (top N by revenue). */
+export async function getClientRevenueBreakdown(
+  rangeDays: number,
+  opts?: { now?: Date; limit?: number },
+): Promise<EntityRevenue[]> {
+  const cutoff = cutoffISO(rangeDays, opts?.now ?? new Date());
+  const rows = await db
+    .select({
+      id: clientMetricsDaily.clientId,
+      name: clients.companyName,
+      revenue: sql<number>`coalesce(sum(${clientMetricsDaily.spendCents}), 0)`,
+      margin: sql<number>`coalesce(sum(${clientMetricsDaily.marginCents}), 0)`,
+      slots: sql<number>`coalesce(sum(${clientMetricsDaily.slotsCount}), 0)`,
+      filled: sql<number>`coalesce(sum(${clientMetricsDaily.filledSlots}), 0)`,
+    })
+    .from(clientMetricsDaily)
+    .innerJoin(clients, eq(clients.id, clientMetricsDaily.clientId))
+    .where(gte(clientMetricsDaily.snapshotDate, cutoff))
+    .groupBy(clientMetricsDaily.clientId, clients.companyName)
+    .orderBy(desc(sql`coalesce(sum(${clientMetricsDaily.spendCents}), 0)`))
+    .limit(opts?.limit ?? 20);
+  return rows
+    .filter((r) => Number(r.revenue) > 0)
+    .map((r) => {
+      const slots = Number(r.slots);
+      const filled = Number(r.filled);
+      const fill = slots > 0 ? Math.round((filled / slots) * 100) : null;
+      return {
+        id: r.id,
+        name: r.name,
+        revenueCents: Number(r.revenue),
+        marginCents: Number(r.margin),
+        detail: fill != null ? `${fill}% bezet` : `${filled} plekken`,
+      };
+    });
+}
+
+/** Revenue + margin per chef over the window (top N by revenue). */
+export async function getChefRevenueBreakdown(
+  rangeDays: number,
+  opts?: { now?: Date; limit?: number },
+): Promise<EntityRevenue[]> {
+  const cutoff = cutoffISO(rangeDays, opts?.now ?? new Date());
+  const rows = await db
+    .select({
+      id: chefMetricsDaily.chefId,
+      name: chefs.fullName,
+      revenue: sql<number>`coalesce(sum(${chefMetricsDaily.revenueCents}), 0)`,
+      margin: sql<number>`coalesce(sum(${chefMetricsDaily.marginCents}), 0)`,
+      minutes: sql<number>`coalesce(sum(${chefMetricsDaily.hoursWorkedMinutes}), 0)`,
+      shifts: sql<number>`coalesce(sum(${chefMetricsDaily.completedShifts}), 0)`,
+    })
+    .from(chefMetricsDaily)
+    .innerJoin(chefs, eq(chefs.id, chefMetricsDaily.chefId))
+    .where(gte(chefMetricsDaily.snapshotDate, cutoff))
+    .groupBy(chefMetricsDaily.chefId, chefs.fullName)
+    .orderBy(desc(sql`coalesce(sum(${chefMetricsDaily.revenueCents}), 0)`))
+    .limit(opts?.limit ?? 20);
+  return rows
+    .filter((r) => Number(r.revenue) > 0)
+    .map((r) => {
+      const hours = Math.round(Number(r.minutes) / 60);
+      const shifts = Number(r.shifts);
+      return {
+        id: r.id,
+        name: r.name,
+        revenueCents: Number(r.revenue),
+        marginCents: Number(r.margin),
+        detail: `${hours} u · ${shifts} ${shifts === 1 ? "dienst" : "diensten"}`,
+      };
+    });
+}
+
+/**
+ * Noise-guarded week-over-week swing on a metric — for an anomaly nudge. Compares
+ * the last COMPLETE bucket to the one before it; null unless the prior bucket is
+ * material (≥ €250) AND the swing is ≥ 30%, so 1→2 never trips a "confident" alert.
+ */
+export function detectSwing(
+  points: PlatformSeriesPoint[],
+  metric: "revenueCents" | "marginCents",
+): { pct: number; direction: "up" | "down"; prevCents: number; lastCents: number } | null {
+  if (points.length < 2) return null;
+  const last = points[points.length - 1][metric];
+  const prev = points[points.length - 2][metric];
+  if (prev < 25_000) return null; // immaterial base — don't cry wolf
+  const pct = Math.round(((last - prev) / Math.abs(prev)) * 100);
+  if (Math.abs(pct) < 30) return null;
+  return { pct: Math.abs(pct), direction: pct >= 0 ? "up" : "down", prevCents: prev, lastCents: last };
 }

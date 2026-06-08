@@ -13,7 +13,14 @@ import { TrendChart } from "@/components/dashboard/TrendChart";
 import { getLeaderboards } from "@/lib/domain/leaderboards";
 import { getPlatformRollups } from "@/lib/domain/platform-rollups";
 import { getPlannerReport } from "@/lib/domain/planner-intel";
-import { getPlatformTimeSeries } from "@/lib/domain/reporting";
+import { getUnbilledHoursByClient } from "@/lib/domain/invoicing";
+import {
+  detectSwing,
+  getChefRevenueBreakdown,
+  getClientRevenueBreakdown,
+  getPlatformTimeSeries,
+  type EntityRevenue,
+} from "@/lib/domain/reporting";
 import { formatEuro } from "@/lib/hours-labels";
 import { requirePermission } from "@/lib/permissions";
 
@@ -31,12 +38,21 @@ export default async function ReportingPage({
   const sp = await searchParams;
   const bucket: "week" | "month" = sp.range === "month" ? "month" : "week";
 
-  const [rollups, series, planner, leaders] = await Promise.all([
-    getPlatformRollups(),
-    getPlatformTimeSeries({ bucket }),
-    getPlannerReport(),
-    getLeaderboards(bucket === "month" ? 365 : 90, 5),
-  ]);
+  const rangeDays = bucket === "month" ? 365 : 90;
+  const [rollups, series, planner, leaders, clientBreakdown, chefBreakdown, unbilled] =
+    await Promise.all([
+      getPlatformRollups(),
+      getPlatformTimeSeries({ bucket }),
+      getPlannerReport(),
+      getLeaderboards(rangeDays, 5),
+      getClientRevenueBreakdown(rangeDays, { limit: 10 }),
+      getChefRevenueBreakdown(rangeDays, { limit: 10 }),
+      getUnbilledHoursByClient(),
+    ]);
+
+  const unbilledTotal = unbilled.reduce((sum, u) => sum + u.totalCents, 0);
+  const revenueSwing = detectSwing(series.points, "revenueCents");
+  const bucketWord = bucket === "week" ? "week" : "maand";
 
   const windowLabel = bucket === "week" ? "laatste 13 weken" : "laatste 12 maanden";
   const revenuePoints = series.points.map((p) => ({ label: p.label, value: p.revenueCents }));
@@ -54,6 +70,41 @@ export default async function ReportingPage({
         Het bedrijf over tijd: omzet, marge en bezetting per periode, plus de
         ranglijsten. Cijfers komen uit afgeronde uren — concepten tellen nooit mee.
       </p>
+
+      {/* Anomaly nudge — noise-guarded week/maand swing */}
+      {revenueSwing ? (
+        <p
+          className={`mt-4 rounded border px-4 py-2 text-sm ${
+            revenueSwing.direction === "down"
+              ? "border-amber-200 bg-amber-50 text-amber-800"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
+          {revenueSwing.direction === "down" ? "↓" : "↑"} Omzet deze {bucketWord} is{" "}
+          <strong>
+            {revenueSwing.pct}% {revenueSwing.direction === "down" ? "lager" : "hoger"}
+          </strong>{" "}
+          dan de vorige {bucketWord} ({formatEuro(revenueSwing.prevCents)} →{" "}
+          {formatEuro(revenueSwing.lastCents)}).
+        </p>
+      ) : null}
+
+      {/* Insight → action: approved hours waiting to be invoiced */}
+      {unbilledTotal > 0 ? (
+        <Link
+          href="/admin/business/invoices"
+          className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/50 px-4 py-3 hover:border-burgundy/40"
+        >
+          <span className="text-sm text-ink-700">
+            <strong className="text-ink-900">{formatEuro(unbilledTotal)}</strong> aan goedgekeurde
+            uren wacht op een factuur ({unbilled.length}{" "}
+            {unbilled.length === 1 ? "klant" : "klanten"}).
+          </span>
+          <span className="shrink-0 font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
+            Te factureren →
+          </span>
+        </Link>
+      ) : null}
 
       {/* Headline money */}
       <div className="mt-8">
@@ -132,6 +183,55 @@ export default async function ReportingPage({
           emptyHint="Nog geen omzet in deze periode."
         />
       </section>
+
+      {/* Omzet per klant / per chef over de gekozen periode */}
+      <section className="mt-8 grid gap-4 md:grid-cols-2">
+        <BreakdownTable
+          title="Omzet per klant"
+          rows={clientBreakdown}
+          empty="Nog geen omzet in deze periode."
+        />
+        <BreakdownTable
+          title="Omzet per chef"
+          rows={chefBreakdown}
+          empty="Nog geen afgeronde uren in deze periode."
+        />
+      </section>
+    </div>
+  );
+}
+
+function BreakdownTable({
+  title,
+  rows,
+  empty,
+}: {
+  title: string;
+  rows: EntityRevenue[];
+  empty: string;
+}) {
+  return (
+    <div className="rounded-lg border border-ink-200 bg-white p-5">
+      <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">{title}</p>
+      {rows.length === 0 ? (
+        <p className="mt-3 text-sm text-ink-500">{empty}</p>
+      ) : (
+        <ul className="mt-3 divide-y divide-ink-100">
+          {rows.map((r) => (
+            <li key={r.id} className="flex items-center justify-between gap-3 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm text-ink-900">{r.name}</p>
+                <p className="text-[11px] text-ink-500">
+                  {r.detail} · marge {formatEuro(r.marginCents)}
+                </p>
+              </div>
+              <span className="shrink-0 font-mono text-sm text-ink-900">
+                {formatEuro(r.revenueCents)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
