@@ -13,10 +13,11 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 const { db } = await import("@/lib/db/client");
+const { withTx } = await import("@/lib/db/tx");
 const { draftPlacement } = await import("@/lib/domain/matching");
 const { publishDraftsForPeriod, removeDraftPlacement, clearDraftsForPeriod } = await import("@/lib/domain/roster-publish");
-const { recomputeShiftStatus } = await import("@/lib/domain/shift-status");
-const { autofillWeek } = await import("@/lib/domain/roster-autofill");
+const { recomputeShiftStatus, cancelShiftAndPlacements } = await import("@/lib/domain/shift-status");
+const { autofillWeek, copyLastWeek } = await import("@/lib/domain/roster-autofill");
 const { chefAvailability, chefs, clients, placements, shifts, users } = await import("@/lib/db/schema");
 const { and, eq, inArray, ne } = await import("drizzle-orm");
 
@@ -186,6 +187,38 @@ try {
       .from(placements)
       .where(and(eq(placements.shiftId, sC), eq(placements.status, "draft")));
     assert("no concept remains after clear", left.length === 0, `${left.length}`);
+  }
+
+  // 11. "Kopieer vorige week" — last week's chef on (klant, weekday, rol) → this week's open slot.
+  {
+    const FUT4 = 360 * DAY;
+    const thisShift = await makeShift(FUT4, 1);
+    const lastShift = await makeShift(FUT4 - 7 * DAY, 1); // same klant + rol + weekday (−7d)
+    await db.insert(placements).values({ shiftId: lastShift, chefId, status: "confirmed" });
+    const res = await copyLastWeek({
+      startUtc: new Date(Date.now() + FUT4 - HOUR),
+      endUtc: new Date(Date.now() + FUT4 + DAY),
+      actorUserId,
+    });
+    assert("copyLastWeek filled this week's slot", res.filled >= 1, JSON.stringify(res));
+    const drafts = await db
+      .select({ chefId: placements.chefId })
+      .from(placements)
+      .where(and(eq(placements.shiftId, thisShift), eq(placements.status, "draft")));
+    assert("copied chef is a concept this week", drafts.some((d) => d.chefId === chefId), `${drafts.length} drafts`);
+  }
+
+  // 12. Cancelling a shift also cancels its concepts (no dangling drafts).
+  {
+    const sCancel = await makeShift(362 * DAY, 1);
+    const dC = await draftPlacement(sCancel, chefId, { proposedBy: actorUserId });
+    await withTx((tx) => cancelShiftAndPlacements(sCancel, "smoke", tx));
+    const [p] = await db
+      .select({ status: placements.status })
+      .from(placements)
+      .where(eq(placements.id, dC.placementId))
+      .limit(1);
+    assert("cancelling a shift cancels its draft", p?.status === "cancelled", String(p?.status));
   }
 
   console.log(`\n  pass: ${pass}\n  fail: ${fail}`);
