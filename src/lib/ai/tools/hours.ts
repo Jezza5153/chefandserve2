@@ -14,7 +14,7 @@ export const hoursListAwaitingApproval = defineTool({
   name: "hours.list_awaiting_approval",
   title: "Uren die op goedkeuring wachten",
   description:
-    "Lijst van urenregels die de klant heeft getekend en die nu op jouw goedkeuring wachten (status client_signed).",
+    "Lijst van urenregels die de klant heeft getekend ('Door klant akkoord') en die nu op jouw goedkeuring wachten. Elke regel heeft een Nederlandse statuslabel — gebruik die, nooit een technische code.",
   risk: "read",
   permission: { resource: "hours", action: "read" },
   input: z.object({}),
@@ -32,7 +32,7 @@ export const hoursApprove = defineTool({
   name: "hours.approve",
   title: "Uren goedkeuren",
   description:
-    "Keurt één getekende urenregel goed (client_signed → admin_approved). Daarna gaat de regel mee in de eerstvolgende payroll-batch.",
+    "Keurt één getekende urenregel definitief goed (van 'Door klant akkoord' naar 'Goedgekeurd voor uitbetaling'). Daarna gaat de regel mee in de eerstvolgende payroll-batch.",
   risk: "financial",
   permission: { resource: "hours", action: "approve" },
   input: z.object({ hoursId: z.string().min(1, "hoursId is verplicht") }),
