@@ -58,8 +58,14 @@ type ShiftMatch = {
   score: number;
   reason: string | null;
   warning: string | null;
+  travelKm: number | null;
 };
-type RailChef = PlanbordChef & { score?: number; reason?: string | null; warning?: string | null };
+type RailChef = PlanbordChef & {
+  score?: number;
+  reason?: string | null;
+  warning?: string | null;
+  travelKm?: number | null;
+};
 
 const SLOT_META: Record<string, { label: string; cls: string }> = {
   draft: { label: "Concept", cls: "border border-dashed border-amber-400 bg-amber-50 text-amber-800" },
@@ -214,6 +220,7 @@ export function Planbord({
             score: m.score,
             reason: m.reason,
             warning: m.warning,
+            travelKm: m.travelKm,
           };
         })
       : chefPool;
@@ -528,7 +535,9 @@ function ChefCard({ chef }: { chef: RailChef }) {
         )}
       </div>
       <p className="truncate text-[10px] text-ink-500">
-        {[chef.niveau, chef.city].filter(Boolean).join(" · ") || "—"}
+        {[chef.niveau, chef.city, chef.travelKm != null ? `${chef.travelKm} km` : null]
+          .filter(Boolean)
+          .join(" · ") || "—"}
       </p>
       {chef.reason && <p className="truncate text-[10px] text-emerald-700">✓ {chef.reason}</p>}
       {chef.warning && <p className="truncate text-[10px] text-amber-700">⚠ {chef.warning}</p>}

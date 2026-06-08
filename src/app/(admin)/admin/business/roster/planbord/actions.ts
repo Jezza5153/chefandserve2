@@ -7,9 +7,13 @@
  * from client input. Drafting + removing are silent (no chef/klant contact);
  * publishing is the single moment everyone is notified.
  */
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
+import { db } from "@/lib/db/client";
+import { shifts } from "@/lib/db/schema";
 import { draftPlacement, findMatchesForShift } from "@/lib/domain/matching";
+import { estimateTravel } from "@/lib/domain/travel";
 import { autofillWeek, type AutofillResult } from "@/lib/domain/roster-autofill";
 import {
   clearDraftsForPeriod,
@@ -60,17 +64,37 @@ export async function publishWeekAction(anchorDateKey: string): Promise<PublishR
 
 /** Ranked candidates for ONE shift — feeds the planbord focus rail (score + the "why"). */
 export async function matchesForShiftAction(shiftId: string): Promise<
-  Array<{ chefId: string; fullName: string; score: number; reason: string | null; warning: string | null }>
+  Array<{
+    chefId: string;
+    fullName: string;
+    score: number;
+    reason: string | null;
+    warning: string | null;
+    travelKm: number | null;
+  }>
 > {
   await requirePermission("shifts", "write");
+  const shift = await db.query.shifts.findFirst({ where: eq(shifts.id, shiftId) });
+  const to =
+    shift?.latitude != null && shift?.longitude != null
+      ? { lat: Number(shift.latitude), lng: Number(shift.longitude) }
+      : null;
   const matches = await findMatchesForShift(shiftId, { limit: 8 });
-  return matches.map((m) => ({
-    chefId: m.chef.id,
-    fullName: m.chef.fullName,
-    score: m.score,
-    reason: m.reasons[0] ?? null,
-    warning: m.warnings[0] ?? null,
-  }));
+  return matches.map((m) => {
+    const from =
+      m.chef.latitude != null && m.chef.longitude != null
+        ? { lat: Number(m.chef.latitude), lng: Number(m.chef.longitude) }
+        : null;
+    const travelKm = to && from ? estimateTravel({ from, to, mode: m.chef.transportMode }).km : null;
+    return {
+      chefId: m.chef.id,
+      fullName: m.chef.fullName,
+      score: m.score,
+      reason: m.reasons[0] ?? null,
+      warning: m.warnings[0] ?? null,
+      travelKm,
+    };
+  });
 }
 
 /** "Wis concepten" — remove all the week's draft placements (redo after an autofill). */
