@@ -20,7 +20,8 @@ import { notFound, redirect } from "next/navigation";
 import { fieldClass } from "@/components/forms/Fields";
 import { db } from "@/lib/db/client";
 import { roles, userPermissions, userRoles, users } from "@/lib/db/schema";
-import { resetInternalUser2FA } from "@/lib/domain/auth-admin";
+import { changeUserLoginEmail, resetInternalUser2FA } from "@/lib/domain/auth-admin";
+import { activatePortalUser, disablePortalUser } from "@/lib/domain/portal-invites";
 import { effectivePermissionKeys, requirePermission } from "@/lib/permissions";
 import { CATALOG } from "@/lib/rbac/catalog";
 import { assignRoles, setUserPermission } from "@/lib/rbac/manage";
@@ -57,6 +58,69 @@ async function reset2FA(formData: FormData) {
   }
 
   redirect(`/admin/system/users/${targetUserId}?reset=1`);
+}
+
+async function activateAccount(formData: FormData) {
+  "use server";
+  const session = await requirePermission("users", "write", "/admin/system/users");
+  const targetUserId = String(formData.get("targetUserId") ?? "");
+  const res = await activatePortalUser(targetUserId, session.user.id);
+  redirect(
+    res.ok
+      ? `/admin/system/users/${targetUserId}?act=1`
+      : `/admin/system/users/${targetUserId}?error=${encodeURIComponent(res.error)}`,
+  );
+}
+
+async function disableAccount(formData: FormData) {
+  "use server";
+  const session = await requirePermission("users", "write", "/admin/system/users");
+  const targetUserId = String(formData.get("targetUserId") ?? "");
+
+  // Lock-out guards: never let an admin disable their own account or the last
+  // remaining super_admin (the "locked out of your own system" trap).
+  if (targetUserId === session.user.id) {
+    redirect(
+      `/admin/system/users/${targetUserId}?error=${encodeURIComponent("Je kunt je eigen account niet uitschakelen.")}`,
+    );
+  }
+  const targetRoles = await db
+    .select({ key: roles.key })
+    .from(userRoles)
+    .innerJoin(roles, eq(roles.id, userRoles.roleId))
+    .where(eq(userRoles.userId, targetUserId));
+  if (targetRoles.some((r) => r.key === "super_admin")) {
+    const supers = await db
+      .select({ userId: userRoles.userId })
+      .from(userRoles)
+      .innerJoin(roles, eq(roles.id, userRoles.roleId))
+      .where(eq(roles.key, "super_admin"));
+    if (supers.length <= 1) {
+      redirect(
+        `/admin/system/users/${targetUserId}?error=${encodeURIComponent("Kan de enige super-admin niet uitschakelen.")}`,
+      );
+    }
+  }
+
+  await disablePortalUser(targetUserId, session.user.id);
+  redirect(`/admin/system/users/${targetUserId}?dis=1`);
+}
+
+async function changeEmail(formData: FormData) {
+  "use server";
+  const session = await requirePermission("users", "write", "/admin/system/users");
+  const targetUserId = String(formData.get("targetUserId") ?? "");
+  const newEmail = String(formData.get("newEmail") ?? "");
+  const res = await changeUserLoginEmail({
+    targetUserId,
+    newEmail,
+    actingUserId: session.user.id,
+  });
+  redirect(
+    res.ok
+      ? `/admin/system/users/${targetUserId}?email=1`
+      : `/admin/system/users/${targetUserId}?error=${encodeURIComponent(res.error)}`,
+  );
 }
 
 async function manageRoles(formData: FormData) {
@@ -109,7 +173,15 @@ export default async function UserDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ reset?: string; error?: string; roles?: string; ovr?: string }>;
+  searchParams: Promise<{
+    reset?: string;
+    error?: string;
+    roles?: string;
+    ovr?: string;
+    act?: string;
+    dis?: string;
+    email?: string;
+  }>;
 }) {
   const session = await requirePermission("users", "read");
   const { id } = await params;
@@ -155,6 +227,11 @@ export default async function UserDetailPage({
   const businessPerms = CATALOG.filter((p) => p.class === "business");
 
   const isSelfReset = session.user.id === user.id;
+  const isActive = user.status === "active";
+  const isSuperAdminTarget = userRoleRows.some((r) => r.key === "super_admin");
+  // "Bekijk als" only works for an active, non-super_admin account (mirrors the
+  // guard in applyImpersonation + the users-list button).
+  const canImpersonate = isActive && !isSuperAdminTarget;
 
   const flashMsg = sp.reset === "1"
     ? `✓ 2FA gereset voor ${user.email}. Bij hun volgende request worden ze uitgelogd en moeten ze opnieuw een wachtwoord + 2FA instellen.`
@@ -162,7 +239,13 @@ export default async function UserDetailPage({
       ? `✓ Rollen bijgewerkt voor ${user.email}. De sessie wordt bij hun volgende request vernieuwd.`
       : sp.ovr === "1"
         ? `✓ Individuele rechten bijgewerkt voor ${user.email}.`
-        : null;
+        : sp.act === "1"
+          ? `✓ Account geactiveerd. ${user.email} kan nu inloggen — en "Bekijk als" is hieronder beschikbaar.`
+          : sp.dis === "1"
+            ? `✓ Toegang ingetrokken voor ${user.email}. Ze worden bij hun volgende request uitgelogd.`
+            : sp.email === "1"
+              ? `✓ Login-e-mailadres gewijzigd naar ${user.email}. Een eventuele lopende sessie wordt uitgelogd.`
+              : null;
 
   const errorMsg =
     sp.error === "confirmation-mismatch"
@@ -226,6 +309,95 @@ export default async function UserDetailPage({
             : "Nog niet ingesteld"}
         </DetailCard>
       </div>
+
+      {/* Toegang — activeer / Bekijk als / intrekken, all in one place. */}
+      <section className="mt-12 rounded-lg border border-ink-200 bg-white p-6">
+        <h2 className="font-serif text-xl text-ink-900">Toegang</h2>
+        <p className="mt-2 text-sm leading-relaxed text-ink-700">
+          {isActive
+            ? "Dit account kan inloggen."
+            : "Dit account is nog niet geactiveerd en kan niet inloggen of via “Bekijk als” bekeken worden. Activeer het hieronder."}
+        </p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          {!isActive ? (
+            <form action={activateAccount}>
+              <input type="hidden" name="targetUserId" value={user.id} />
+              <button
+                type="submit"
+                className="rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
+              >
+                Activeer account
+              </button>
+            </form>
+          ) : (
+            <>
+              {canImpersonate ? (
+                <form method="POST" action={`/api/impersonate/${user.id}`}>
+                  <button
+                    type="submit"
+                    className="rounded-full border border-burgundy/40 px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy transition-colors hover:bg-burgundy/5"
+                  >
+                    Bekijk als
+                  </button>
+                </form>
+              ) : null}
+              {!isSelfReset && !isSuperAdminTarget ? (
+                <form action={disableAccount}>
+                  <input type="hidden" name="targetUserId" value={user.id} />
+                  <button
+                    type="submit"
+                    className="rounded-full border border-ink-300 px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-600 transition-colors hover:border-burgundy/40 hover:text-burgundy"
+                  >
+                    Toegang intrekken
+                  </button>
+                </form>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        {isActive && isSuperAdminTarget ? (
+          <p className="mt-3 text-xs text-ink-500">
+            Super-admins kun je niet &ldquo;bekijken als&rdquo; of uitschakelen
+            &mdash; dat is bewust geblokkeerd.
+          </p>
+        ) : null}
+      </section>
+
+      {/* Login-e-mailadres — changes users.email (the login identity). */}
+      <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
+        <h2 className="font-serif text-xl text-ink-900">Login-e-mailadres</h2>
+        <p className="mt-2 text-sm leading-relaxed text-ink-700">
+          Het adres waarmee deze gebruiker inlogt. Wijzigen logt een eventuele
+          lopende sessie uit; daarna logt de gebruiker in met het nieuwe adres.
+          {user.kind !== "internal"
+            ? ` Dit staat los van het contact-e-mailadres op het ${user.kind}-profiel.`
+            : null}
+        </p>
+        <form action={changeEmail} className="mt-4 flex flex-wrap items-end gap-3">
+          <input type="hidden" name="targetUserId" value={user.id} />
+          <label className="block">
+            <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
+              Nieuw e-mailadres
+            </span>
+            <input
+              type="email"
+              name="newEmail"
+              required
+              placeholder={user.email}
+              autoComplete="off"
+              className={`${fieldClass} min-w-[18rem] font-mono`}
+            />
+          </label>
+          <button
+            type="submit"
+            className="rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
+          >
+            E-mail wijzigen
+          </button>
+        </form>
+      </section>
 
       {/* Reset 2FA — only for internal users who have 2FA enabled */}
       {user.kind === "internal" && user.totpEnabled ? (

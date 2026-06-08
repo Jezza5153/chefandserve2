@@ -76,3 +76,77 @@ export async function resetInternalUser2FA(args: {
 
   return { ok: true, affectedUserId: target.id };
 }
+
+export type ChangeEmailResult =
+  | { ok: true; affectedUserId: string; oldEmail: string; newEmail: string }
+  | { ok: false; error: string };
+
+/**
+ * Change a user's LOGIN e-mail (the `users.email` identity used for magic-link /
+ * password login) — admin-initiated, super_admin only (caller gates it).
+ *
+ * Normalizes to lowercase (the `users_email_lowercase` CHECK enforces it),
+ * rejects a clash with another account (the column is UNIQUE), then:
+ *   - sets the new e-mail + clears `email_verified` (the new address is
+ *     unproven until they next use it)
+ *   - bumps `permissions_version` → invalidates the target's JWT on their next
+ *     request, so any live session is logged out and re-authenticates with the
+ *     new address (no stale e-mail claim left in a token)
+ *   - audits before/after so the identity change is traceable
+ *
+ * Note: this changes the LOGIN identity only. For chefs/clients the contact
+ * e-mail on `chefs`/`clients` is a separate field, edited on their detail page.
+ * `seed_key` keeps seeded rows identifiable after the e-mail changes.
+ */
+export async function changeUserLoginEmail(args: {
+  targetUserId: string;
+  newEmail: string;
+  actingUserId: string;
+}): Promise<ChangeEmailResult> {
+  const email = args.newEmail.trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { ok: false, error: "Ongeldig e-mailadres" };
+  }
+
+  const target = await db.query.users.findFirst({
+    where: eq(users.id, args.targetUserId),
+  });
+  if (!target) return { ok: false, error: "Doel-gebruiker niet gevonden" };
+  if (target.email === email) {
+    return { ok: false, error: "Dit is al het huidige e-mailadres" };
+  }
+
+  // UNIQUE column — reject a clash with a different account before we try (so
+  // the user sees a friendly message, not a Postgres constraint error).
+  const clash = await db.query.users.findFirst({
+    where: eq(users.email, email),
+  });
+  if (clash && clash.id !== target.id) {
+    return {
+      ok: false,
+      error: `E-mail ${email} is al in gebruik door een ander account.`,
+    };
+  }
+
+  const oldEmail = target.email;
+  await db
+    .update(users)
+    .set({
+      email,
+      emailVerified: null,
+      permissionsVersion: target.permissionsVersion + 1,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, target.id));
+
+  await recordAuditFromRequest({
+    userId: args.actingUserId,
+    action: "users.email_changed_by_admin",
+    resource: "users",
+    resourceId: target.id,
+    before: { email: oldEmail },
+    after: { email, selfChange: args.actingUserId === target.id },
+  });
+
+  return { ok: true, affectedUserId: target.id, oldEmail, newEmail: email };
+}
