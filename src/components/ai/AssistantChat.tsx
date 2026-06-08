@@ -46,10 +46,51 @@ export function AssistantChat({
   const scrollRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
+  // Persist the conversation per channel so closing the widget or navigating pages
+  // (both unmount this component) doesn't wipe the chat. sessionStorage = survives within
+  // the tab/session, resets on a fresh tab — the right lifetime for a chat.
+  const storageKey = `ai-chat:${endpoint}`;
+  const skipFirstSave = useRef(true);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      if (raw) {
+        const saved = JSON.parse(raw) as { msgs?: ChatMsg[]; pending?: Pending | null };
+        if (Array.isArray(saved.msgs)) setMsgs(saved.msgs);
+        if (saved.pending) setPending(saved.pending);
+      }
+    } catch {
+      // ignore corrupt/blocked storage
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+  useEffect(() => {
+    if (skipFirstSave.current) {
+      skipFirstSave.current = false; // don't overwrite saved data with the empty mount state
+      return;
+    }
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify({ msgs, pending }));
+    } catch {
+      // ignore
+    }
+  }, [msgs, pending, storageKey]);
+
   // keep the newest message in view (matters most in the compact widget)
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [msgs, pending, busy]);
+
+  function clearConversation() {
+    setMsgs([]);
+    setPending(null);
+    setError(null);
+    try {
+      sessionStorage.removeItem(storageKey);
+    } catch {
+      // ignore
+    }
+  }
 
   const pushAssistant = (content: string) =>
     setMsgs((m) => [...m, { role: "assistant", content }]);
@@ -140,6 +181,17 @@ export function AssistantChat({
 
   return (
     <div className={isWidget ? "flex h-full flex-col gap-3" : "space-y-3"}>
+      {msgs.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={clearConversation}
+            className="font-ui text-[10px] uppercase tracking-[0.15em] text-ink-400 transition hover:text-ink-700"
+          >
+            Gesprek wissen
+          </button>
+        </div>
+      )}
       <div
         ref={scrollRef}
         className={`space-y-2 rounded-lg border border-ink-200 bg-white p-4 ${
