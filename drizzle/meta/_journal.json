@@ -281,6 +281,20 @@
       "when": 1780941456312,
       "tag": "0039_planbord_draft_status",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1780953942180,
+      "tag": "0040_invoices_facturatie",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780954638500,
+      "tag": "0041_invoices_partial_unique_index",
+      "breakpoints": true
     }
   ]
 }

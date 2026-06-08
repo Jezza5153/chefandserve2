@@ -21,6 +21,7 @@ export type ClientEmailEvent =
   | "chef_proposed"
   | "hours_ready_to_sign"
   | "billing_email_changed"
+  | "invoice_sent"
   | "client_shift_change_requested"
   | "rating_pending"
   | "generic";
@@ -30,6 +31,7 @@ const EVENT_ROLE_MAP: Record<ClientEmailEvent, Array<typeof clientContacts.$infe
   chef_proposed: ["planning", "onsite"],
   hours_ready_to_sign: ["hours_approval"],
   billing_email_changed: ["finance"],
+  invoice_sent: ["finance"],
   client_shift_change_requested: ["planning", "emergency"],
   rating_pending: ["planning"],
   generic: [],
@@ -126,10 +128,11 @@ export async function recipientsForClient(
 
   // V1 fallback — main email, or billingEmail for finance-flavored events.
   if (collected.length === 0) {
-    const fallback =
-      event === "billing_email_changed"
-        ? client.billingEmail ?? client.email
-        : client.email ?? client.billingEmail;
+    // Finance-flavored mail (billing change, invoices) prefers the billing inbox.
+    const financeEvent = event === "billing_email_changed" || event === "invoice_sent";
+    const fallback = financeEvent
+      ? client.billingEmail ?? client.email
+      : client.email ?? client.billingEmail;
     if (fallback) collected.push(fallback);
   }
 

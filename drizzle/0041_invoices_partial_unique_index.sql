@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS "invoices_client_period_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "invoices_client_period_unique" ON "invoices" USING btree ("client_id","period_start","period_end") WHERE "invoices"."status" <> 'void';

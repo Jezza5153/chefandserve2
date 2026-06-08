@@ -2700,12 +2700,103 @@ export const shiftHourCorrections = pgTable("shift_hour_corrections", {
     .defaultNow(),
 });
 
+/* =============================================================================
+ * Invoicing (facturatie) — PR-INVOICE-A. The klant-billing side of the hours
+ * chain (payroll = the chef-payout side, already shipped in PR-CHEF-7). The
+ * approval email already promises "de factuur volgt"; this produces + tracks it.
+ * An invoice is a SELF-CONTAINED financial record: billing details are snapshot
+ * at issue time (never re-derived), and each line links to the admin_approved
+ * shift_hours that justify its amount. Cents; lines are ex-BTW, BTW on the invoice.
+ * =========================================================================== */
+export const invoiceStatusEnum = pgEnum("invoice_status", [
+  "draft", // generated, not yet sent
+  "sent", // emailed to the klant
+  "paid", // marked paid
+  "void", // cancelled before payment
+  "credit", // credit note (negative) for a cross-period correction
+]);
+
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Sequential human number, e.g. "2026-0001". */
+    number: text("number").notNull().unique(),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "restrict" }), // never orphan a financial record
+    status: invoiceStatusEnum("status").notNull().default("draft"),
+
+    /* ----- billing snapshot (immutable once issued) ----- */
+    billToName: text("bill_to_name").notNull(),
+    billToEmail: text("bill_to_email"),
+    billToAddress: text("bill_to_address"),
+    billToKvk: text("bill_to_kvk"),
+    billToBtw: text("bill_to_btw"),
+
+    /* ----- period + dates ----- */
+    periodStart: timestamp("period_start", { withTimezone: false, mode: "date" }).notNull(),
+    periodEnd: timestamp("period_end", { withTimezone: false, mode: "date" }).notNull(),
+    issueDate: timestamp("issue_date", { withTimezone: false, mode: "date" }).notNull(),
+    dueDate: timestamp("due_date", { withTimezone: false, mode: "date" }).notNull(),
+
+    /* ----- money (cents) ----- */
+    subtotalCents: integer("subtotal_cents").notNull().default(0), // ex BTW
+    vatRateBps: integer("vat_rate_bps").notNull().default(2100), // 21% in basis points
+    vatCents: integer("vat_cents").notNull().default(0),
+    totalCents: integer("total_cents").notNull().default(0), // incl BTW
+
+    /* ----- lifecycle ----- */
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    pdfR2Key: text("pdf_r2_key"),
+    externalRef: text("external_ref"), // accounting-system id
+    notes: text("notes"),
+
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    /**
+     * One LIVE invoice per (client, period) — generation is idempotent. Partial
+     * so a voided invoice frees its period to be re-billed on a corrected one.
+     */
+    clientPeriodUnique: uniqueIndex("invoices_client_period_unique")
+      .on(t.clientId, t.periodStart, t.periodEnd)
+      .where(sql`${t.status} <> 'void'`),
+    statusIdx: index("invoices_status_idx").on(t.status),
+  }),
+);
+
+export const invoiceLines = pgTable("invoice_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  invoiceId: uuid("invoice_id")
+    .notNull()
+    .references(() => invoices.id, { onDelete: "cascade" }),
+  /** The approved hours this line bills (set null if the hours row is ever purged). */
+  shiftHoursId: uuid("shift_hours_id").references(() => shiftHours.id, {
+    onDelete: "set null",
+  }),
+  description: text("description").notNull(),
+  chefName: text("chef_name"),
+  shiftDate: timestamp("shift_date", { withTimezone: false, mode: "date" }),
+  workedMinutes: integer("worked_minutes"),
+  rateCents: integer("rate_cents"), // client rate per hour
+  amountCents: integer("amount_cents").notNull(), // line total, ex BTW
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type PayrollBatch = typeof payrollBatches.$inferSelect;
 export type NewPayrollBatch = typeof payrollBatches.$inferInsert;
 export type PayrollBatchLine = typeof payrollBatchLines.$inferSelect;
 export type NewPayrollBatchLine = typeof payrollBatchLines.$inferInsert;
 export type ShiftHourCorrection = typeof shiftHourCorrections.$inferSelect;
 export type NewShiftHourCorrection = typeof shiftHourCorrections.$inferInsert;
+export type Invoice = typeof invoices.$inferSelect;
+export type NewInvoice = typeof invoices.$inferInsert;
+export type InvoiceLine = typeof invoiceLines.$inferSelect;
+export type NewInvoiceLine = typeof invoiceLines.$inferInsert;
 
 /* =============================================================================
  * Klant workflow foundations (PR-KLANT-0) — the keystone before klant features.

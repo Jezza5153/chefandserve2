@@ -45,6 +45,7 @@ export type PlanbordShift = {
   headcount: number;
   status: string;
   city: string | null;
+  rejectedCount: number;
   slots: PlanbordSlot[];
 };
 export type PlanbordChef = {
@@ -719,6 +720,14 @@ function ShiftCard({
             + sleep chef
           </div>
         ))}
+        {shift.rejectedCount > 0 ? (
+          <p
+            className="rounded bg-amber-50 px-1.5 py-0.5 text-center text-[9px] font-medium text-amber-700"
+            title="Een eerder voorgestelde chef heeft afgewezen — sleep een nieuwe chef op de open plek."
+          >
+            ↩ {shift.rejectedCount} afgewezen
+          </p>
+        ) : null}
       </div>
     </div>
   );

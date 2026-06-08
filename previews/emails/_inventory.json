@@ -1,30 +1,501 @@
 [
-  { "name": "BillingEmailChangedKlantEmail", "purpose": "Beveiligingsmelding naar het OUDE facturatie-e-mailadres wanneer een klant zijn factuuradres in het portaal wijzigt, zodat een ongewenste wijziging binnen 7 dagen kan worden teruggedraaid.", "audience": "klant (oude facturatie-adres)", "trigger": "Klant past billingEmail aan in /client/profile — save-action in src/app/(client)/client/profile/page.tsx", "recipients": "het OUDE billing-adres rechtstreeks (bewust NIET via recipientsForClient)", "subjectExample": "Facturatie-e-mail gewijzigd — Hotel Okura Amsterdam", "sampleProps": { "companyName": "Hotel Okura Amsterdam", "oldEmail": "facturen@okura-amsterdam.nl", "newEmail": "boekhouding@okura-amsterdam.nl" } },
-  { "name": "ChefProposedKlantEmail", "purpose": "Bericht aan de klant dat Chef & Serve een chef heeft voorgesteld voor hun shift; de klant kan het voorstel bekijken en een opmerking meesturen, maar heeft geen vetorecht.", "audience": "klant", "trigger": "Admin stelt een chef voor (of draft → proposed) — sendProposalNotifications() in src/lib/domain/matching.ts", "recipients": "recipientsForClient(client.id, 'chef_proposed')", "subjectExample": "Voorgestelde chef voor Souschef — maandag 15 juni 2026, 18:00–23:00", "sampleProps": { "contactName": "Eva van Dijk", "companyName": "Hotel Okura Amsterdam", "chefName": "Sander Bakker", "chefVakniveau": "Zelfstandig werkend kok", "chefYears": 8, "shiftWhen": "maandag 15 juni 2026, 18:00–23:00", "shiftRole": "Souschef", "hubUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21" } },
-  { "name": "ChefWeekPlanningEmail", "purpose": "Wekelijkse planningsmail naar een chef wanneer de planner een week publiceert; één mail met al hun diensten inclusief adres, contactpersoon en telefoon, plus een .ics-agendabijlage.", "audience": "chef", "trigger": "Planner publiceert een week (PR-PLANBORD-2) — publishDraftsForPeriod() in src/lib/domain/roster-publish.ts", "recipients": "chef.email", "subjectExample": "Je planning — week 25 (2 diensten)", "sampleProps": { "chefName": "Sander Bakker", "weekLabel": "week 25 · 15–21 juni 2026", "shifts": [ { "when": "maandag 15 juni 2026, 18:00–23:00", "klant": "Hotel Okura Amsterdam", "role": "Souschef", "location": "Ferdinand Bolstraat 333, 1072 LH Amsterdam", "contactName": "Eva van Dijk", "contactPhone": "020 678 7111", "details": "Witte koksbuis meenemen, melden bij de personeelsingang" }, { "when": "zaterdag 20 juni 2026, 16:00–23:30", "klant": "Restaurant De Kas", "role": "Chef de partie", "location": "Kamerlingh Onneslaan 3, 1097 DE Amsterdam", "contactName": "Thomas Visser", "contactPhone": "020 462 4562", "details": "Tasting menu van 7 gangen, mise en place vanaf 16:00" } ], "portalUrl": "https://chefandserve2.vercel.app/chef" } },
-  { "name": "ClientChangeRequestAdminEmail", "purpose": "Interne melding aan de admins dat een klant via het portaal een wijzigings- of annuleringsverzoek voor een ingeplande shift heeft ingediend.", "audience": "admin/owner", "trigger": "Klant dient wijzigings-/annuleringsverzoek in (PR-KLANT-2) — createClientShiftChangeRequest() in src/lib/domain/shift-change-requests.tsx", "recipients": "recipientsFor('client_portal_request') (admin-groep)", "subjectExample": "Annuleringsverzoek van Restaurant De Kas", "sampleProps": { "companyName": "Restaurant De Kas", "kind": "cancel", "shiftWhen": "zaterdag 20 juni 2026, 16:00–23:30", "shiftRole": "Chef de partie", "reason": "Het besloten diner van 40 gasten is door de gastheer afgezegd, we hebben de chef deze avond niet meer nodig.", "adminUrl": "https://chefandserve2.vercel.app/admin/business/shifts/sh_8f3a21" } },
-  { "name": "ClientChangeRequestOutcomeKlantEmail", "purpose": "Terugkoppeling aan de klant of hun wijzigings- of annuleringsverzoek wel of niet is doorgevoerd, in gewoon Nederlands met een duidelijke vervolgstap.", "audience": "klant", "trigger": "Chef & Serve beslist op een klant-verzoek (PR-KLANT-2) — decideClientShiftChangeRequest() in src/lib/domain/shift-change-requests.tsx", "recipients": "recipientsForClient(req.clientId, 'client_shift_change_requested')", "subjectExample": "Annulering doorgevoerd", "sampleProps": { "contactName": "Eva van Dijk", "companyName": "Hotel Okura Amsterdam", "kind": "change", "outcome": "approved", "shiftWhen": "maandag 15 juni 2026, 18:00–23:00", "shiftRole": "Souschef", "decisionNotes": "We hebben de starttijd verzet naar 19:00 en dit met de ingeplande chef afgestemd.", "shiftUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21" } },
-  { "name": "HoursApprovedChefEmail", "purpose": "Bevestiging aan de chef dat Chef & Serve hun uren definitief heeft goedgekeurd en dat het bedrag via de payroll wordt uitbetaald.", "audience": "chef", "trigger": "Admin keurt uren definitief goed — approveHours() in src/lib/domain/hours.ts", "recipients": "chef.email", "subjectExample": "Uren goedgekeurd — wordt uitbetaald", "sampleProps": { "recipientName": "Sander Bakker", "clientName": "Hotel Okura Amsterdam", "shiftDate": "2026-06-15", "workedHoursLabel": "4 uur 30 min", "expectedAmountEur": 157.5 } },
-  { "name": "HoursApprovedKlantEmail", "purpose": "Melding aan de klant dat de uren van de chef definitief zijn afgerond en dat de factuur binnen 5 werkdagen volgt.", "audience": "klant", "trigger": "Admin keurt uren definitief goed — approveHours() in src/lib/domain/hours.ts", "recipients": "klant-contact", "subjectExample": "Uren afgerond voor maandag 15 juni — factuur volgt", "sampleProps": { "recipientName": "Eva van Dijk", "chefName": "Sander Bakker", "shiftDate": "2026-06-15", "workedHoursLabel": "4 uur 30 min", "clientAmountEur": 247.5 } },
-  { "name": "HoursRejectedByAdminEmail", "purpose": "Bericht dat Chef & Serve al-ondertekende uren heeft teruggezet; één template voor twee ontvangers — de chef (met knop om aan te passen) en de klant (ter info).", "audience": "chef én klant", "trigger": "Admin keurt ondertekende uren af — rejectSignedHours() in src/lib/domain/hours.ts (twee sends, role chef/klant)", "recipients": "chef.email of klant-contact (afhankelijk van recipientRole)", "subjectExample": "Chef & Serve heeft je uren teruggezet", "sampleProps": { "recipientName": "Sander Bakker", "recipientRole": "chef", "chefName": "Sander Bakker", "clientName": "Hotel Okura Amsterdam", "shiftDate": "2026-06-15", "adminNote": "De pauze van 30 minuten ontbreekt in je opgave — voeg die toe en dien opnieuw in.", "editUrl": "https://chefandserve2.vercel.app/chef/hours/pl_4d9c12" } },
-  { "name": "HoursRejectedByKlantChefEmail", "purpose": "Bericht aan de chef dat de klant hun ingediende uren heeft teruggegeven, met de opmerking van de klant erbij.", "audience": "chef", "trigger": "Klant keurt ingediende uren af — reject()-action in src/app/(client)/client/shifts/[shiftId]/hours/page.tsx", "recipients": "chef.email", "subjectExample": "Uren-correctie nodig — Hotel Okura Amsterdam", "sampleProps": { "recipientName": "Sander Bakker", "clientName": "Hotel Okura Amsterdam", "shiftDate": "2026-06-15", "klantNote": "Je bent om 18:15 begonnen in plaats van 18:00, kun je de starttijd aanpassen?", "editUrl": "https://chefandserve2.vercel.app/chef/hours/pl_4d9c12" } },
-  { "name": "HoursReminderChefEmail", "purpose": "Geautomatiseerde herinnering aan de chef die zijn uren na een afgeronde dienst nog niet heeft ingediend; fases 24u en 72u.", "audience": "chef", "trigger": "Cron/AI wanneer uren openstaan — sendHoursReminder() in src/lib/ai/actions/send-hours-reminder.ts", "recipients": "chef.email", "subjectExample": "Herinnering: vul je uren in", "sampleProps": { "recipientName": "Sander Bakker", "clientName": "Hotel Okura Amsterdam", "shiftDate": "2026-06-15", "stage": "72h", "submitUrl": "https://chefandserve2.vercel.app/chef/hours/pl_4d9c12" } },
-  { "name": "HoursReminderKlantEmail", "purpose": "Geautomatiseerde herinnering aan de klant die de uren van de chef nog niet heeft ondertekend, met één knop om akkoord te geven.", "audience": "klant", "trigger": "Cron/AI wanneer uren wachten op handtekening — sendHoursReminder() in src/lib/ai/actions/send-hours-reminder.ts", "recipients": "recipientsForClient(row.clientId, 'hours_ready_to_sign')", "subjectExample": "Herinnering: keur de uren goed", "sampleProps": { "recipientName": "Eva van Dijk", "chefName": "Sander Bakker", "shiftDate": "2026-06-15", "signUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21/hours" } },
-  { "name": "HoursSignedAdminEmail", "purpose": "Melding aan de admins dat een klant de uren van een chef heeft ondertekend; bevat chef-kosten, klant-omzet en marge, en vraagt om de finale goedkeuring.", "audience": "admin/owner", "trigger": "Klant ondertekent uren — sign()-action in src/app/(client)/client/shifts/[shiftId]/hours/page.tsx", "recipients": "recipientsFor('hours_signed') (admin-groep)", "subjectExample": "Uren goedgekeurd door Hotel Okura Amsterdam — keuren?", "sampleProps": { "chefName": "Sander Bakker", "clientName": "Hotel Okura Amsterdam", "shiftDate": "2026-06-15", "workedHoursLabel": "4 uur 30 min", "chefAmountEur": 157.5, "clientAmountEur": 247.5, "marginEur": 90.0, "approveUrl": "https://chefandserve2.vercel.app/admin/business/hours/h_7b2e44" } },
-  { "name": "HoursSignedChefEmail", "purpose": "Informatieve melding aan de chef dat de klant hun uren heeft ondertekend; geen actie nodig, Chef & Serve geeft de finale goedkeuring.", "audience": "chef", "trigger": "Klant ondertekent uren — sign()-action in src/app/(client)/client/shifts/[shiftId]/hours/page.tsx", "recipients": "chef.email", "subjectExample": "Je uren zijn ondertekend door Hotel Okura Amsterdam", "sampleProps": { "recipientName": "Sander Bakker", "clientName": "Hotel Okura Amsterdam", "shiftDate": "2026-06-15", "workedHoursLabel": "4 uur 30 min", "expectedAmountEur": 157.5 } },
-  { "name": "HoursSubmittedKlantEmail", "purpose": "Bericht aan de klant dat een chef zijn uren heeft ingediend, met geplande versus ingevulde tijden, zodat de klant kan controleren en akkoord geven of afkeuren.", "audience": "klant", "trigger": "Chef dient uren in — submit-action in src/app/(chef)/chef/hours/[placementId]/page.tsx", "recipients": "klant-contact", "subjectExample": "Uren te ondertekenen — Sander Bakker op 15 juni", "sampleProps": { "recipientName": "Eva van Dijk", "chefName": "Sander Bakker", "shiftDate": "2026-06-15", "scheduledStart": "18:00", "scheduledEnd": "23:00", "actualStart": "18:00", "actualEnd": "23:30", "breakMinutes": 30, "workedHoursLabel": "5 uur 00 min", "expectedAmountEur": 175.0, "signUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21/hours" } },
-  { "name": "KlantWeekPlanningEmail", "purpose": "Wekelijkse planningsmail naar een klant wanneer de planner een week publiceert; de diensten met de voorgestelde chef + telefoonnummer, plus een .ics-agendabijlage (alleen klant-veilige velden, AVG-bewust).", "audience": "klant", "trigger": "Planner publiceert een week (PR-PLANBORD-2) — publishDraftsForPeriod() in src/lib/domain/roster-publish.ts", "recipients": "recipientsForClient(clientId, 'chef_proposed')", "subjectExample": "Jullie planning — week 25 (2 diensten)", "sampleProps": { "contactName": "Eva van Dijk", "companyName": "Hotel Okura Amsterdam", "weekLabel": "week 25 · 15–21 juni 2026", "shifts": [ { "when": "maandag 15 juni 2026, 18:00–23:00", "role": "Souschef", "chefName": "Sander Bakker", "chefPhone": "06 24 81 99 03" }, { "when": "zaterdag 20 juni 2026, 16:00–23:30", "role": "Chef de partie", "chefName": "Lotte Jansen", "chefPhone": "06 18 42 55 71" } ], "hubUrl": "https://chefandserve2.vercel.app/client" } },
-  { "name": "MagicLinkEmail", "purpose": "Inlogmail met een eenmalige magic link waarmee de ontvanger zonder wachtwoord inlogt; 15 minuten geldig, eenmalig bruikbaar.", "audience": "elke gebruiker die inlogt", "trigger": "Iemand vraagt magic-link login aan — Auth.js sendVerificationRequest in src/lib/auth.ts", "recipients": "het ingevoerde e-mailadres", "subjectExample": "Je inloglink voor Chef & Serve", "sampleProps": { "url": "https://chefandserve2.vercel.app/api/auth/callback/resend?token=8f3a21b7c9d4e6&email=sander.bakker%40gmail.com", "host": "Chef & Serve", "recipientEmail": "sander.bakker@gmail.com" } },
-  { "name": "OwnerMessageEmail", "purpose": "Vrije-tekst mail die de eigenaar via de AI-assistent verstuurt; de inhoud is vooraf goedgekeurd en wordt als alinea's weergegeven.", "audience": "vrije ontvanger", "trigger": "Eigenaar laat via de assistent een mail versturen (confirm-gated) — sendOwnerEmail() in src/lib/ai/actions/send-owner-email.ts", "recipients": "het door de eigenaar opgegeven adres (replyTo = MAARTEN_EMAIL)", "subjectExample": "Bedankt voor de fijne samenwerking afgelopen weekend", "sampleProps": { "title": "Bedankt voor de fijne samenwerking", "body": "Beste Eva,\n\nWat was het weer een topweekend bij Hotel Okura. Sander vertelde dat alles op rolletjes liep en dat het team enthousiast was.\n\nMochten jullie volgende maand opnieuw versterking nodig hebben, laat het gerust weten — we denken graag mee.\n\nHartelijke groet,\nMaarten" } },
-  { "name": "PortalInviteEmail", "purpose": "Welkomstmail wanneer een chef, klant of medewerker toegang krijgt tot zijn portaal; legt uit wat het portaal biedt en verwijst naar de inlogpagina.", "audience": "chef, klant of medewerker", "trigger": "Gebruiker wordt geactiveerd/uitgenodigd — activateUser() / invite in src/lib/domain/portal-invites.ts", "recipients": "user.email", "subjectExample": "Welkom bij Chef & Serve — toegang tot je chef-portaal", "sampleProps": { "recipientName": "Sander Bakker", "recipientKind": "chef", "loginUrl": "https://chefandserve2.vercel.app/login" } },
-  { "name": "PrivacyRequestExtensionEmail", "purpose": "Bericht aan de betrokkene dat Chef & Serve de behandeltermijn van zijn privacyverzoek verlengt, met de nieuwe uiterste datum en de reden (AVG art. 12(3)).", "audience": "betrokkene (data subject)", "trigger": "Behandeltermijn privacyverzoek verlengd (PR-AVG-1) — extendPrivacyRequest() in src/lib/domain/privacy.ts", "recipients": "e-mailadres van de aanvrager", "subjectExample": "Verlenging behandeltermijn privacyverzoek", "sampleProps": { "requesterName": "Lotte Jansen", "newDueDate": "15 augustus 2026", "reason": "Je verzoek raakt gegevens uit meerdere systemen die we zorgvuldig moeten controleren voordat we ze verstrekken." } },
-  { "name": "PrivacyRequestOutcomeEmail", "purpose": "Eindbericht aan de betrokkene over de uitkomst van zijn privacyverzoek (afgehandeld, deels, of afgewezen), eventueel met toelichting en uitleg over wat bewaard blijft.", "audience": "betrokkene (data subject)", "trigger": "Privacyverzoek afgehandeld (PR-AVG-1/2) — fulfill/rejectPrivacyRequest() in src/lib/domain/privacy.ts", "recipients": "e-mailadres van de aanvrager", "subjectExample": "Privacyverzoek (inzage) — uitkomst", "sampleProps": { "requesterName": "Lotte Jansen", "type": "inzage", "outcome": "partially_fulfilled", "decisionNotes": "We hebben je persoonsgegevens uit het chef-profiel meegestuurd in een apart, beveiligd bestand.", "retainedExplanation": "De urenregistratie en facturen van afgeronde diensten bewaren we 7 jaar vanwege de fiscale bewaarplicht." } },
-  { "name": "PrivacyRequestReceivedAdminEmail", "purpose": "Interne melding aan de privacy-verantwoordelijke admins dat er een AVG-verzoek is binnengekomen, met type, kanaal en de wettelijke uiterste reactiedatum.", "audience": "admin/owner", "trigger": "AVG-verzoek binnengekomen (PR-AVG-1) — createPrivacyRequest() in src/lib/domain/privacy.ts", "recipients": "recipientsFor('privacy_request') (admin-groep)", "subjectExample": "Privacyverzoek (inzage) — Lotte Jansen", "sampleProps": { "requesterLabel": "Lotte Jansen", "type": "inzage", "channel": "portaal", "dueDate": "8 juli 2026", "adminUrl": "https://chefandserve2.vercel.app/admin/system/privacy-requests/pr_3c8a90" } },
-  { "name": "ProfileDataRequestEmail", "purpose": "Verzoek aan een chef met een onvolledig profiel om de ontbrekende gegevens aan te vullen via het intakeformulier, zodat we hem goed kunnen inplannen.", "audience": "chef", "trigger": "Admin vraagt ontbrekende profielgegevens op (Cockpit PR-2.1) — createProfileDataRequest() in src/lib/domain/profile-data-requests.ts", "recipients": "chef.email", "subjectExample": "Vul je gegevens aan — Chef & Serve", "sampleProps": { "chefName": "Sander Bakker", "missingLabels": ["Woonadres", "Telefoonnummer", "Kopie ID-bewijs"], "formUrl": "https://form.jotform.com/chefandserve/chef-intake" } },
-  { "name": "RatingPendingKlantEmail", "purpose": "Uitnodiging aan de klant om na een afgeronde shift feedback over de chef te geven; bewust 'feedback' en niet 'review', alleen intern zichtbaar om matches te verbeteren.", "audience": "klant", "trigger": "Uren admin-goedgekeurd (PR-KLANT-5) — approveHours() in src/lib/domain/hours.ts", "recipients": "recipientsForClient(row.clientId, 'rating_pending')", "subjectExample": "Geef feedback over Sander Bakker", "sampleProps": { "companyName": "Hotel Okura Amsterdam", "chefName": "Sander Bakker", "shiftDate": "maandag 15 juni 2026", "rateUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21/rate" } },
-  { "name": "RecoveryEmail", "purpose": "Herstelmail voor interne medewerkers die hun wachtwoord vergeten zijn of hun authenticator kwijt zijn; eenmalige, intent-gebonden link (15 min geldig).", "audience": "interne medewerker", "trigger": "Interne gebruiker vraagt accountherstel aan — requestRecovery() in src/lib/domain/recovery.ts", "recipients": "user.email", "subjectExample": "Herstel je wachtwoord voor Chef & Serve", "sampleProps": { "recipientName": "Maarten de Groot", "intent": "password", "recoveryUrl": "https://chefandserve2.vercel.app/recover/password?token=8f3a21b7c9d4e6a5" } },
-  { "name": "ShiftCancelledByChefClientEmail", "purpose": "Bericht aan de klant dat een chef een bevestigde shift heeft moeten annuleren, met de reden en geruststelling dat Chef & Serve vervanging zoekt.", "audience": "klant", "trigger": "Chef annuleert een geaccepteerde/bevestigde plaatsing — cancel-action in src/app/(chef)/chef/shifts/[placementId]/page.tsx", "recipients": "recipientsForClient(ctx.clientId, 'generic')", "subjectExample": "Chef heeft geannuleerd — maandag 15 juni", "sampleProps": { "clientContactName": "Eva van Dijk", "companyName": "Hotel Okura Amsterdam", "chefName": "Sander Bakker", "shiftWhen": "maandag 15 juni 2026", "reason": "Ik ben vanochtend ziek geworden en kan vanavond helaas niet werken.", "hoursUntilShift": 8, "hubUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21" } },
-  { "name": "ShiftConfirmedChefEmail", "purpose": "Bevestiging aan de chef dat Chef & Serve hun shift definitief heeft ingepland, met klant, rol, tijd, locatie en contactpersoon.", "audience": "chef", "trigger": "Admin bevestigt een plaatsing — confirm-action + confirmPlacement() in src/lib/domain/placement-transition.ts", "recipients": "chef.email", "subjectExample": "Shift bevestigd: Souschef bij Hotel Okura Amsterdam", "sampleProps": { "chefName": "Sander Bakker", "clientName": "Hotel Okura Amsterdam", "shiftWhen": "maandag 15 juni 2026, 18:00–23:00", "shiftLocation": "Ferdinand Bolstraat 333, 1072 LH Amsterdam", "shiftRole": "Souschef", "clientContactName": "Eva van Dijk", "clientContactPhone": "020 678 7111", "placementUrl": "https://chefandserve2.vercel.app/chef/shifts/pl_4d9c12" } },
-  { "name": "ShiftConfirmedClientEmail", "purpose": "Bevestiging aan de klant dat hun chef definitief is ingepland, met het vakniveau en de ervaring van de chef en de details van de dienst.", "audience": "klant", "trigger": "Admin bevestigt een plaatsing — confirm-action + confirmPlacement() in src/lib/domain/placement-transition.ts", "recipients": "recipientsForClient(clientRow.id, 'generic')", "subjectExample": "Chef bevestigd voor Hotel Okura Amsterdam — Souschef", "sampleProps": { "clientContactName": "Eva van Dijk", "companyName": "Hotel Okura Amsterdam", "chefName": "Sander Bakker", "chefVakniveau": "Zelfstandig werkend kok", "chefYears": 8, "shiftWhen": "maandag 15 juni 2026, 18:00–23:00", "shiftLocation": "Ferdinand Bolstraat 333, 1072 LH Amsterdam", "shiftRole": "Souschef", "hubUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21" } },
-  { "name": "ShiftProposedEmail", "purpose": "Aanbieding aan een chef dat de eigenaar hen voor een shift heeft voorgesteld, met klant, rol, tijd, locatie, tarief en notitie, en een knop om te accepteren of af te wijzen.", "audience": "chef", "trigger": "Admin stelt een chef voor (of draft → proposed) — sendProposalNotifications() in src/lib/domain/matching.ts", "recipients": "chef.email", "subjectExample": "Nieuwe shift bij Hotel Okura Amsterdam — Souschef", "sampleProps": { "chefName": "Sander Bakker", "clientName": "Hotel Okura Amsterdam", "shiftWhen": "maandag 15 juni 2026, 18:00–23:00", "shiftRole": "Souschef", "shiftCity": "Amsterdam", "shiftRateEur": 35.0, "shiftNotes": "Witte koksbuis meenemen en je melden bij de personeelsingang aan de achterzijde.", "placementUrl": "https://chefandserve2.vercel.app/chef/shifts/pl_4d9c12" } }
+  {
+    "name": "BillingEmailChangedKlantEmail",
+    "purpose": "Beveiligingsmelding naar het OUDE facturatie-e-mailadres wanneer een klant zijn factuuradres in het portaal wijzigt, zodat een ongewenste wijziging binnen 7 dagen kan worden teruggedraaid.",
+    "audience": "klant (oude facturatie-adres)",
+    "trigger": "Klant past billingEmail aan in /client/profile — save-action in src/app/(client)/client/profile/page.tsx",
+    "recipients": "het OUDE billing-adres rechtstreeks (bewust NIET via recipientsForClient)",
+    "subjectExample": "Facturatie-e-mail gewijzigd — Hotel Okura Amsterdam",
+    "sampleProps": {
+      "companyName": "Hotel Okura Amsterdam",
+      "oldEmail": "facturen@okura-amsterdam.nl",
+      "newEmail": "boekhouding@okura-amsterdam.nl"
+    }
+  },
+  {
+    "name": "ChefProposedKlantEmail",
+    "purpose": "Bericht aan de klant dat Chef & Serve een chef heeft voorgesteld voor hun shift; de klant kan het voorstel bekijken en een opmerking meesturen, maar heeft geen vetorecht.",
+    "audience": "klant",
+    "trigger": "Admin stelt een chef voor (of draft → proposed) — sendProposalNotifications() in src/lib/domain/matching.ts",
+    "recipients": "recipientsForClient(client.id, 'chef_proposed')",
+    "subjectExample": "Voorgestelde chef voor Souschef — maandag 15 juni 2026, 18:00–23:00",
+    "sampleProps": {
+      "contactName": "Eva van Dijk",
+      "companyName": "Hotel Okura Amsterdam",
+      "chefName": "Sander Bakker",
+      "chefVakniveau": "Zelfstandig werkend kok",
+      "chefYears": 8,
+      "shiftWhen": "maandag 15 juni 2026, 18:00–23:00",
+      "shiftRole": "Souschef",
+      "hubUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21"
+    }
+  },
+  {
+    "name": "ChefWeekPlanningEmail",
+    "purpose": "Wekelijkse planningsmail naar een chef wanneer de planner een week publiceert; één mail met al hun diensten inclusief adres, contactpersoon en telefoon, plus een .ics-agendabijlage.",
+    "audience": "chef",
+    "trigger": "Planner publiceert een week (PR-PLANBORD-2) — publishDraftsForPeriod() in src/lib/domain/roster-publish.ts",
+    "recipients": "chef.email",
+    "subjectExample": "Je planning — week 25 (2 diensten)",
+    "sampleProps": {
+      "chefName": "Sander Bakker",
+      "weekLabel": "week 25 · 15–21 juni 2026",
+      "shifts": [
+        {
+          "when": "maandag 15 juni 2026, 18:00–23:00",
+          "klant": "Hotel Okura Amsterdam",
+          "role": "Souschef",
+          "location": "Ferdinand Bolstraat 333, 1072 LH Amsterdam",
+          "contactName": "Eva van Dijk",
+          "contactPhone": "020 678 7111",
+          "details": "Witte koksbuis meenemen, melden bij de personeelsingang"
+        },
+        {
+          "when": "zaterdag 20 juni 2026, 16:00–23:30",
+          "klant": "Restaurant De Kas",
+          "role": "Chef de partie",
+          "location": "Kamerlingh Onneslaan 3, 1097 DE Amsterdam",
+          "contactName": "Thomas Visser",
+          "contactPhone": "020 462 4562",
+          "details": "Tasting menu van 7 gangen, mise en place vanaf 16:00"
+        }
+      ],
+      "portalUrl": "https://chefandserve2.vercel.app/chef"
+    }
+  },
+  {
+    "name": "ClientChangeRequestAdminEmail",
+    "purpose": "Interne melding aan de admins dat een klant via het portaal een wijzigings- of annuleringsverzoek voor een ingeplande shift heeft ingediend.",
+    "audience": "admin/owner",
+    "trigger": "Klant dient wijzigings-/annuleringsverzoek in (PR-KLANT-2) — createClientShiftChangeRequest() in src/lib/domain/shift-change-requests.tsx",
+    "recipients": "recipientsFor('client_portal_request') (admin-groep)",
+    "subjectExample": "Annuleringsverzoek van Restaurant De Kas",
+    "sampleProps": {
+      "companyName": "Restaurant De Kas",
+      "kind": "cancel",
+      "shiftWhen": "zaterdag 20 juni 2026, 16:00–23:30",
+      "shiftRole": "Chef de partie",
+      "reason": "Het besloten diner van 40 gasten is door de gastheer afgezegd, we hebben de chef deze avond niet meer nodig.",
+      "adminUrl": "https://chefandserve2.vercel.app/admin/business/shifts/sh_8f3a21"
+    }
+  },
+  {
+    "name": "ClientChangeRequestOutcomeKlantEmail",
+    "purpose": "Terugkoppeling aan de klant of hun wijzigings- of annuleringsverzoek wel of niet is doorgevoerd, in gewoon Nederlands met een duidelijke vervolgstap.",
+    "audience": "klant",
+    "trigger": "Chef & Serve beslist op een klant-verzoek (PR-KLANT-2) — decideClientShiftChangeRequest() in src/lib/domain/shift-change-requests.tsx",
+    "recipients": "recipientsForClient(req.clientId, 'client_shift_change_requested')",
+    "subjectExample": "Annulering doorgevoerd",
+    "sampleProps": {
+      "contactName": "Eva van Dijk",
+      "companyName": "Hotel Okura Amsterdam",
+      "kind": "change",
+      "outcome": "approved",
+      "shiftWhen": "maandag 15 juni 2026, 18:00–23:00",
+      "shiftRole": "Souschef",
+      "decisionNotes": "We hebben de starttijd verzet naar 19:00 en dit met de ingeplande chef afgestemd.",
+      "shiftUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21"
+    }
+  },
+  {
+    "name": "HoursApprovedChefEmail",
+    "purpose": "Bevestiging aan de chef dat Chef & Serve hun uren definitief heeft goedgekeurd en dat het bedrag via de payroll wordt uitbetaald.",
+    "audience": "chef",
+    "trigger": "Admin keurt uren definitief goed — approveHours() in src/lib/domain/hours.ts",
+    "recipients": "chef.email",
+    "subjectExample": "Uren goedgekeurd — wordt uitbetaald",
+    "sampleProps": {
+      "recipientName": "Sander Bakker",
+      "clientName": "Hotel Okura Amsterdam",
+      "shiftDate": "2026-06-15",
+      "workedHoursLabel": "4 uur 30 min",
+      "expectedAmountEur": 157.5
+    }
+  },
+  {
+    "name": "HoursApprovedKlantEmail",
+    "purpose": "Melding aan de klant dat de uren van de chef definitief zijn afgerond en dat de factuur binnen 5 werkdagen volgt.",
+    "audience": "klant",
+    "trigger": "Admin keurt uren definitief goed — approveHours() in src/lib/domain/hours.ts",
+    "recipients": "klant-contact",
+    "subjectExample": "Uren afgerond voor maandag 15 juni — factuur volgt",
+    "sampleProps": {
+      "recipientName": "Eva van Dijk",
+      "chefName": "Sander Bakker",
+      "shiftDate": "2026-06-15",
+      "workedHoursLabel": "4 uur 30 min",
+      "clientAmountEur": 247.5
+    }
+  },
+  {
+    "name": "HoursRejectedByAdminEmail",
+    "purpose": "Bericht dat Chef & Serve al-ondertekende uren heeft teruggezet; één template voor twee ontvangers — de chef (met knop om aan te passen) en de klant (ter info).",
+    "audience": "chef én klant",
+    "trigger": "Admin keurt ondertekende uren af — rejectSignedHours() in src/lib/domain/hours.ts (twee sends, role chef/klant)",
+    "recipients": "chef.email of klant-contact (afhankelijk van recipientRole)",
+    "subjectExample": "Chef & Serve heeft je uren teruggezet",
+    "sampleProps": {
+      "recipientName": "Sander Bakker",
+      "recipientRole": "chef",
+      "chefName": "Sander Bakker",
+      "clientName": "Hotel Okura Amsterdam",
+      "shiftDate": "2026-06-15",
+      "adminNote": "De pauze van 30 minuten ontbreekt in je opgave — voeg die toe en dien opnieuw in.",
+      "editUrl": "https://chefandserve2.vercel.app/chef/hours/pl_4d9c12"
+    }
+  },
+  {
+    "name": "HoursRejectedByKlantChefEmail",
+    "purpose": "Bericht aan de chef dat de klant hun ingediende uren heeft teruggegeven, met de opmerking van de klant erbij.",
+    "audience": "chef",
+    "trigger": "Klant keurt ingediende uren af — reject()-action in src/app/(client)/client/shifts/[shiftId]/hours/page.tsx",
+    "recipients": "chef.email",
+    "subjectExample": "Uren-correctie nodig — Hotel Okura Amsterdam",
+    "sampleProps": {
+      "recipientName": "Sander Bakker",
+      "clientName": "Hotel Okura Amsterdam",
+      "shiftDate": "2026-06-15",
+      "klantNote": "Je bent om 18:15 begonnen in plaats van 18:00, kun je de starttijd aanpassen?",
+      "editUrl": "https://chefandserve2.vercel.app/chef/hours/pl_4d9c12"
+    }
+  },
+  {
+    "name": "HoursReminderChefEmail",
+    "purpose": "Geautomatiseerde herinnering aan de chef die zijn uren na een afgeronde dienst nog niet heeft ingediend; fases 24u en 72u.",
+    "audience": "chef",
+    "trigger": "Cron/AI wanneer uren openstaan — sendHoursReminder() in src/lib/ai/actions/send-hours-reminder.ts",
+    "recipients": "chef.email",
+    "subjectExample": "Herinnering: vul je uren in",
+    "sampleProps": {
+      "recipientName": "Sander Bakker",
+      "clientName": "Hotel Okura Amsterdam",
+      "shiftDate": "2026-06-15",
+      "stage": "72h",
+      "submitUrl": "https://chefandserve2.vercel.app/chef/hours/pl_4d9c12"
+    }
+  },
+  {
+    "name": "HoursReminderKlantEmail",
+    "purpose": "Geautomatiseerde herinnering aan de klant die de uren van de chef nog niet heeft ondertekend, met één knop om akkoord te geven.",
+    "audience": "klant",
+    "trigger": "Cron/AI wanneer uren wachten op handtekening — sendHoursReminder() in src/lib/ai/actions/send-hours-reminder.ts",
+    "recipients": "recipientsForClient(row.clientId, 'hours_ready_to_sign')",
+    "subjectExample": "Herinnering: keur de uren goed",
+    "sampleProps": {
+      "recipientName": "Eva van Dijk",
+      "chefName": "Sander Bakker",
+      "shiftDate": "2026-06-15",
+      "signUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21/hours"
+    }
+  },
+  {
+    "name": "HoursSignedAdminEmail",
+    "purpose": "Melding aan de admins dat een klant de uren van een chef heeft ondertekend; bevat chef-kosten, klant-omzet en marge, en vraagt om de finale goedkeuring.",
+    "audience": "admin/owner",
+    "trigger": "Klant ondertekent uren — sign()-action in src/app/(client)/client/shifts/[shiftId]/hours/page.tsx",
+    "recipients": "recipientsFor('hours_signed') (admin-groep)",
+    "subjectExample": "Uren goedgekeurd door Hotel Okura Amsterdam — keuren?",
+    "sampleProps": {
+      "chefName": "Sander Bakker",
+      "clientName": "Hotel Okura Amsterdam",
+      "shiftDate": "2026-06-15",
+      "workedHoursLabel": "4 uur 30 min",
+      "chefAmountEur": 157.5,
+      "clientAmountEur": 247.5,
+      "marginEur": 90.0,
+      "approveUrl": "https://chefandserve2.vercel.app/admin/business/hours/h_7b2e44"
+    }
+  },
+  {
+    "name": "HoursSignedChefEmail",
+    "purpose": "Informatieve melding aan de chef dat de klant hun uren heeft ondertekend; geen actie nodig, Chef & Serve geeft de finale goedkeuring.",
+    "audience": "chef",
+    "trigger": "Klant ondertekent uren — sign()-action in src/app/(client)/client/shifts/[shiftId]/hours/page.tsx",
+    "recipients": "chef.email",
+    "subjectExample": "Je uren zijn ondertekend door Hotel Okura Amsterdam",
+    "sampleProps": {
+      "recipientName": "Sander Bakker",
+      "clientName": "Hotel Okura Amsterdam",
+      "shiftDate": "2026-06-15",
+      "workedHoursLabel": "4 uur 30 min",
+      "expectedAmountEur": 157.5
+    }
+  },
+  {
+    "name": "HoursSubmittedKlantEmail",
+    "purpose": "Bericht aan de klant dat een chef zijn uren heeft ingediend, met geplande versus ingevulde tijden, zodat de klant kan controleren en akkoord geven of afkeuren.",
+    "audience": "klant",
+    "trigger": "Chef dient uren in — submit-action in src/app/(chef)/chef/hours/[placementId]/page.tsx",
+    "recipients": "klant-contact",
+    "subjectExample": "Uren te ondertekenen — Sander Bakker op 15 juni",
+    "sampleProps": {
+      "recipientName": "Eva van Dijk",
+      "chefName": "Sander Bakker",
+      "shiftDate": "2026-06-15",
+      "scheduledStart": "18:00",
+      "scheduledEnd": "23:00",
+      "actualStart": "18:00",
+      "actualEnd": "23:30",
+      "breakMinutes": 30,
+      "workedHoursLabel": "5 uur 00 min",
+      "expectedAmountEur": 175.0,
+      "signUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21/hours"
+    }
+  },
+  {
+    "name": "KlantWeekPlanningEmail",
+    "purpose": "Wekelijkse planningsmail naar een klant wanneer de planner een week publiceert; de diensten met de voorgestelde chef + telefoonnummer, plus een .ics-agendabijlage (alleen klant-veilige velden, AVG-bewust).",
+    "audience": "klant",
+    "trigger": "Planner publiceert een week (PR-PLANBORD-2) — publishDraftsForPeriod() in src/lib/domain/roster-publish.ts",
+    "recipients": "recipientsForClient(clientId, 'chef_proposed')",
+    "subjectExample": "Jullie planning — week 25 (2 diensten)",
+    "sampleProps": {
+      "contactName": "Eva van Dijk",
+      "companyName": "Hotel Okura Amsterdam",
+      "weekLabel": "week 25 · 15–21 juni 2026",
+      "shifts": [
+        {
+          "when": "maandag 15 juni 2026, 18:00–23:00",
+          "role": "Souschef",
+          "chefName": "Sander Bakker",
+          "chefPhone": "06 24 81 99 03"
+        },
+        {
+          "when": "zaterdag 20 juni 2026, 16:00–23:30",
+          "role": "Chef de partie",
+          "chefName": "Lotte Jansen",
+          "chefPhone": "06 18 42 55 71"
+        }
+      ],
+      "hubUrl": "https://chefandserve2.vercel.app/client"
+    }
+  },
+  {
+    "name": "MagicLinkEmail",
+    "purpose": "Inlogmail met een eenmalige magic link waarmee de ontvanger zonder wachtwoord inlogt; 15 minuten geldig, eenmalig bruikbaar.",
+    "audience": "elke gebruiker die inlogt",
+    "trigger": "Iemand vraagt magic-link login aan — Auth.js sendVerificationRequest in src/lib/auth.ts",
+    "recipients": "het ingevoerde e-mailadres",
+    "subjectExample": "Je inloglink voor Chef & Serve",
+    "sampleProps": {
+      "url": "https://chefandserve2.vercel.app/api/auth/callback/resend?token=8f3a21b7c9d4e6&email=sander.bakker%40gmail.com",
+      "host": "Chef & Serve",
+      "recipientEmail": "sander.bakker@gmail.com"
+    }
+  },
+  {
+    "name": "OwnerMessageEmail",
+    "purpose": "Vrije-tekst mail die de eigenaar via de AI-assistent verstuurt; de inhoud is vooraf goedgekeurd en wordt als alinea's weergegeven.",
+    "audience": "vrije ontvanger",
+    "trigger": "Eigenaar laat via de assistent een mail versturen (confirm-gated) — sendOwnerEmail() in src/lib/ai/actions/send-owner-email.ts",
+    "recipients": "het door de eigenaar opgegeven adres (replyTo = MAARTEN_EMAIL)",
+    "subjectExample": "Bedankt voor de fijne samenwerking afgelopen weekend",
+    "sampleProps": {
+      "title": "Bedankt voor de fijne samenwerking",
+      "body": "Beste Eva,\n\nWat was het weer een topweekend bij Hotel Okura. Sander vertelde dat alles op rolletjes liep en dat het team enthousiast was.\n\nMochten jullie volgende maand opnieuw versterking nodig hebben, laat het gerust weten — we denken graag mee.\n\nHartelijke groet,\nMaarten"
+    }
+  },
+  {
+    "name": "PortalInviteEmail",
+    "purpose": "Welkomstmail wanneer een chef, klant of medewerker toegang krijgt tot zijn portaal; legt uit wat het portaal biedt en verwijst naar de inlogpagina.",
+    "audience": "chef, klant of medewerker",
+    "trigger": "Gebruiker wordt geactiveerd/uitgenodigd — activateUser() / invite in src/lib/domain/portal-invites.ts",
+    "recipients": "user.email",
+    "subjectExample": "Welkom bij Chef & Serve — toegang tot je chef-portaal",
+    "sampleProps": {
+      "recipientName": "Sander Bakker",
+      "recipientKind": "chef",
+      "loginUrl": "https://chefandserve2.vercel.app/login"
+    }
+  },
+  {
+    "name": "PrivacyRequestExtensionEmail",
+    "purpose": "Bericht aan de betrokkene dat Chef & Serve de behandeltermijn van zijn privacyverzoek verlengt, met de nieuwe uiterste datum en de reden (AVG art. 12(3)).",
+    "audience": "betrokkene (data subject)",
+    "trigger": "Behandeltermijn privacyverzoek verlengd (PR-AVG-1) — extendPrivacyRequest() in src/lib/domain/privacy.ts",
+    "recipients": "e-mailadres van de aanvrager",
+    "subjectExample": "Verlenging behandeltermijn privacyverzoek",
+    "sampleProps": {
+      "requesterName": "Lotte Jansen",
+      "newDueDate": "15 augustus 2026",
+      "reason": "Je verzoek raakt gegevens uit meerdere systemen die we zorgvuldig moeten controleren voordat we ze verstrekken."
+    }
+  },
+  {
+    "name": "PrivacyRequestOutcomeEmail",
+    "purpose": "Eindbericht aan de betrokkene over de uitkomst van zijn privacyverzoek (afgehandeld, deels, of afgewezen), eventueel met toelichting en uitleg over wat bewaard blijft.",
+    "audience": "betrokkene (data subject)",
+    "trigger": "Privacyverzoek afgehandeld (PR-AVG-1/2) — fulfill/rejectPrivacyRequest() in src/lib/domain/privacy.ts",
+    "recipients": "e-mailadres van de aanvrager",
+    "subjectExample": "Privacyverzoek (inzage) — uitkomst",
+    "sampleProps": {
+      "requesterName": "Lotte Jansen",
+      "type": "inzage",
+      "outcome": "partially_fulfilled",
+      "decisionNotes": "We hebben je persoonsgegevens uit het chef-profiel meegestuurd in een apart, beveiligd bestand.",
+      "retainedExplanation": "De urenregistratie en facturen van afgeronde diensten bewaren we 7 jaar vanwege de fiscale bewaarplicht."
+    }
+  },
+  {
+    "name": "PrivacyRequestReceivedAdminEmail",
+    "purpose": "Interne melding aan de privacy-verantwoordelijke admins dat er een AVG-verzoek is binnengekomen, met type, kanaal en de wettelijke uiterste reactiedatum.",
+    "audience": "admin/owner",
+    "trigger": "AVG-verzoek binnengekomen (PR-AVG-1) — createPrivacyRequest() in src/lib/domain/privacy.ts",
+    "recipients": "recipientsFor('privacy_request') (admin-groep)",
+    "subjectExample": "Privacyverzoek (inzage) — Lotte Jansen",
+    "sampleProps": {
+      "requesterLabel": "Lotte Jansen",
+      "type": "inzage",
+      "channel": "portaal",
+      "dueDate": "8 juli 2026",
+      "adminUrl": "https://chefandserve2.vercel.app/admin/system/privacy-requests/pr_3c8a90"
+    }
+  },
+  {
+    "name": "ProfileDataRequestEmail",
+    "purpose": "Verzoek aan een chef met een onvolledig profiel om de ontbrekende gegevens aan te vullen via het intakeformulier, zodat we hem goed kunnen inplannen.",
+    "audience": "chef",
+    "trigger": "Admin vraagt ontbrekende profielgegevens op (Cockpit PR-2.1) — createProfileDataRequest() in src/lib/domain/profile-data-requests.ts",
+    "recipients": "chef.email",
+    "subjectExample": "Vul je gegevens aan — Chef & Serve",
+    "sampleProps": {
+      "chefName": "Sander Bakker",
+      "missingLabels": [
+        "Woonadres",
+        "Telefoonnummer",
+        "Kopie ID-bewijs"
+      ],
+      "formUrl": "https://form.jotform.com/chefandserve/chef-intake"
+    }
+  },
+  {
+    "name": "RatingPendingKlantEmail",
+    "purpose": "Uitnodiging aan de klant om na een afgeronde shift feedback over de chef te geven; bewust 'feedback' en niet 'review', alleen intern zichtbaar om matches te verbeteren.",
+    "audience": "klant",
+    "trigger": "Uren admin-goedgekeurd (PR-KLANT-5) — approveHours() in src/lib/domain/hours.ts",
+    "recipients": "recipientsForClient(row.clientId, 'rating_pending')",
+    "subjectExample": "Geef feedback over Sander Bakker",
+    "sampleProps": {
+      "companyName": "Hotel Okura Amsterdam",
+      "chefName": "Sander Bakker",
+      "shiftDate": "maandag 15 juni 2026",
+      "rateUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21/rate"
+    }
+  },
+  {
+    "name": "RecoveryEmail",
+    "purpose": "Herstelmail voor interne medewerkers die hun wachtwoord vergeten zijn of hun authenticator kwijt zijn; eenmalige, intent-gebonden link (15 min geldig).",
+    "audience": "interne medewerker",
+    "trigger": "Interne gebruiker vraagt accountherstel aan — requestRecovery() in src/lib/domain/recovery.ts",
+    "recipients": "user.email",
+    "subjectExample": "Herstel je wachtwoord voor Chef & Serve",
+    "sampleProps": {
+      "recipientName": "Maarten de Groot",
+      "intent": "password",
+      "recoveryUrl": "https://chefandserve2.vercel.app/recover/password?token=8f3a21b7c9d4e6a5"
+    }
+  },
+  {
+    "name": "ShiftCancelledByChefClientEmail",
+    "purpose": "Bericht aan de klant dat een chef een bevestigde shift heeft moeten annuleren, met de reden en geruststelling dat Chef & Serve vervanging zoekt.",
+    "audience": "klant",
+    "trigger": "Chef annuleert een geaccepteerde/bevestigde plaatsing — cancel-action in src/app/(chef)/chef/shifts/[placementId]/page.tsx",
+    "recipients": "recipientsForClient(ctx.clientId, 'generic')",
+    "subjectExample": "Chef heeft geannuleerd — maandag 15 juni",
+    "sampleProps": {
+      "clientContactName": "Eva van Dijk",
+      "companyName": "Hotel Okura Amsterdam",
+      "chefName": "Sander Bakker",
+      "shiftWhen": "maandag 15 juni 2026",
+      "reason": "Ik ben vanochtend ziek geworden en kan vanavond helaas niet werken.",
+      "hoursUntilShift": 8,
+      "hubUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21"
+    }
+  },
+  {
+    "name": "ShiftConfirmedChefEmail",
+    "purpose": "Bevestiging aan de chef dat Chef & Serve hun shift definitief heeft ingepland, met klant, rol, tijd, locatie en contactpersoon.",
+    "audience": "chef",
+    "trigger": "Admin bevestigt een plaatsing — confirm-action + confirmPlacement() in src/lib/domain/placement-transition.ts",
+    "recipients": "chef.email",
+    "subjectExample": "Shift bevestigd: Souschef bij Hotel Okura Amsterdam",
+    "sampleProps": {
+      "chefName": "Sander Bakker",
+      "clientName": "Hotel Okura Amsterdam",
+      "shiftWhen": "maandag 15 juni 2026, 18:00–23:00",
+      "shiftLocation": "Ferdinand Bolstraat 333, 1072 LH Amsterdam",
+      "shiftRole": "Souschef",
+      "clientContactName": "Eva van Dijk",
+      "clientContactPhone": "020 678 7111",
+      "placementUrl": "https://chefandserve2.vercel.app/chef/shifts/pl_4d9c12"
+    }
+  },
+  {
+    "name": "ShiftConfirmedClientEmail",
+    "purpose": "Bevestiging aan de klant dat hun chef definitief is ingepland, met het vakniveau en de ervaring van de chef en de details van de dienst.",
+    "audience": "klant",
+    "trigger": "Admin bevestigt een plaatsing — confirm-action + confirmPlacement() in src/lib/domain/placement-transition.ts",
+    "recipients": "recipientsForClient(clientRow.id, 'generic')",
+    "subjectExample": "Chef bevestigd voor Hotel Okura Amsterdam — Souschef",
+    "sampleProps": {
+      "clientContactName": "Eva van Dijk",
+      "companyName": "Hotel Okura Amsterdam",
+      "chefName": "Sander Bakker",
+      "chefVakniveau": "Zelfstandig werkend kok",
+      "chefYears": 8,
+      "shiftWhen": "maandag 15 juni 2026, 18:00–23:00",
+      "shiftLocation": "Ferdinand Bolstraat 333, 1072 LH Amsterdam",
+      "shiftRole": "Souschef",
+      "hubUrl": "https://chefandserve2.vercel.app/client/shifts/sh_8f3a21"
+    }
+  },
+  {
+    "name": "ShiftProposedEmail",
+    "purpose": "Aanbieding aan een chef dat de eigenaar hen voor een shift heeft voorgesteld, met klant, rol, tijd, locatie, tarief en notitie, en een knop om te accepteren of af te wijzen.",
+    "audience": "chef",
+    "trigger": "Admin stelt een chef voor (of draft → proposed) — sendProposalNotifications() in src/lib/domain/matching.ts",
+    "recipients": "chef.email",
+    "subjectExample": "Nieuwe shift bij Hotel Okura Amsterdam — Souschef",
+    "sampleProps": {
+      "chefName": "Sander Bakker",
+      "clientName": "Hotel Okura Amsterdam",
+      "shiftWhen": "maandag 15 juni 2026, 18:00–23:00",
+      "shiftRole": "Souschef",
+      "shiftCity": "Amsterdam",
+      "shiftRateEur": 35.0,
+      "shiftNotes": "Witte koksbuis meenemen en je melden bij de personeelsingang aan de achterzijde.",
+      "placementUrl": "https://chefandserve2.vercel.app/chef/shifts/pl_4d9c12"
+    }
+  },
+  {
+    "name": "InvoiceKlantEmail",
+    "purpose": "Factuur aan de klant voor een factuurperiode: regeloverzicht van de shifts, subtotaal, btw en totaal, met factuurnummer, factuur- en vervaldatum en een knop naar de factuur in het portaal. Sluit de belofte “de factuur volgt” uit de uren-goedgekeurd-mail.",
+    "audience": "klant",
+    "trigger": "Admin verstuurt een factuur — sendInvoice() in src/lib/domain/invoicing.ts (draft → sent)",
+    "recipients": "recipientsForClient(clientId, \"invoice_sent\") — finance-contact of billingEmail",
+    "subjectExample": "Factuur 2026-0001 — te voldoen vóór 22 juni 2026",
+    "sampleProps": {
+      "recipientName": "Sophie de Wit",
+      "billToName": "Hotel Okura Amsterdam",
+      "invoiceNumber": "2026-0001",
+      "periodLabel": "1 juni 2026 – 7 juni 2026",
+      "issueDateLabel": "8 juni 2026",
+      "dueDateLabel": "22 juni 2026",
+      "lines": [
+        {
+          "description": "Sander Bakker — Souschef op 3 juni 2026",
+          "amountCents": 20000
+        },
+        {
+          "description": "Lisa Jansen — Chef de partie op 5 juni 2026",
+          "amountCents": 18000
+        }
+      ],
+      "subtotalCents": 38000,
+      "vatCents": 7980,
+      "vatRateLabel": "21%",
+      "totalCents": 45980,
+      "invoiceUrl": "https://chefandserve2.vercel.app/client/invoices/inv_4d9c12"
+    }
+  }
 ]

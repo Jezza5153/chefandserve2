@@ -73,6 +73,19 @@ export default async function PlanbordPage({
         )
     : [];
 
+  // Rejected placements re-open the slot silently — surface a count so the
+  // planner knows a chef declined and the slot needs a new concept (D1).
+  const rejectedRows = shiftIds.length
+    ? await db
+        .select({ shiftId: placements.shiftId })
+        .from(placements)
+        .where(and(inArray(placements.shiftId, shiftIds), eq(placements.status, "rejected")))
+    : [];
+  const rejectedByShift = new Map<string, number>();
+  for (const r of rejectedRows) {
+    rejectedByShift.set(r.shiftId, (rejectedByShift.get(r.shiftId) ?? 0) + 1);
+  }
+
   const slotsByShift = new Map<string, PlanbordShift["slots"]>();
   for (const p of plRows) {
     const arr = slotsByShift.get(p.shiftId) ?? [];
@@ -93,6 +106,7 @@ export default async function PlanbordPage({
       headcount: s.headcount,
       status: s.status,
       city: s.city,
+      rejectedCount: rejectedByShift.get(s.id) ?? 0,
       slots: slotsByShift.get(s.id) ?? [],
     });
   }

@@ -49,10 +49,12 @@ export default async function ClientLayout({
 
   const nav = [
     { label: "Dashboard", href: "/client" },
+    { label: "Mijn week", href: "/client/week" },
     { label: "Komende shifts", href: "/client/shifts" },
     { label: "Vaste shifts", href: "/client/templates" },
     { label: "Mijn aanvragen", href: "/client/requests" },
     { label: "Nieuwe aanvraag", href: "/client/request" },
+    { label: "Facturen", href: "/client/invoices" },
     { label: "Mijn profiel", href: "/client/profile" },
     { label: "Privacy", href: "/client/privacy" },
   ];
