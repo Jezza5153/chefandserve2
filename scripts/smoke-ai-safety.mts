@@ -42,6 +42,7 @@ const ctx = (actor: AiActor): ToolContext => ({ actor, channel: "dashboard" });
 // flagging that its sample needs adding.
 const SAMPLE: Record<string, unknown> = {
   "hours.approve": { hoursId: "x" },
+  "hours.detail": { hoursId: "x" },
   "hours.reject": { hoursId: "x", reason: "test reden" },
   "hours.send_reminder": { hoursId: "x" },
   "placements.propose": { shiftId: "x", chefId: "y" },
