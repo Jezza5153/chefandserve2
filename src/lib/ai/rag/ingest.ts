@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
+import { getObjectBytes, r2IsConfigured } from "@/lib/r2";
 import { embedText, vectorLiteral, aiEmbeddingsEnabled } from "@/lib/ai/embeddings";
 import { redact, isPiiDense, REDACTION_VERSION } from "@/lib/ai/rag/redact";
 import { chunkText, chunkMarkdown } from "@/lib/ai/rag/chunk";
@@ -255,6 +256,122 @@ export async function ingestDocs(
   }
 
   log(`  docs: files=${counts.rows} indexed=${counts.indexed} superseded=${counts.superseded} unchanged=${counts.unchanged}`);
+  return counts;
+}
+
+/**
+ * Ingest chef CVs — text-based PDFs the chef uploaded THEMSELVES (type='cv' AND
+ * uploaded_by = chef.userId, per rag-source-catalog.md: never OCR third-party/ID docs). Fetches
+ * the PDF from R2 → extracts text (unpdf, no OCR — scanned PDFs with no embedded text are
+ * skipped) → redact → chunk → embed. visibility=chef_own_and_admin, tenant_scope=chefId:<id>.
+ * Script-driven (like docs) — R2 + PDF parsing stays out of the nightly cron's hot path.
+ */
+export async function ingestCvs(opts: Opts = {}): Promise<SourceCounts> {
+  const log = opts.onLog ?? (() => {});
+  const delay = opts.requestDelayMs ?? 50;
+  const counts: SourceCounts = { id: "chef_documents.cv", rows: 0, indexed: 0, superseded: 0, unchanged: 0, skippedPiiDense: 0, skippedEmpty: 0 };
+
+  if (!r2IsConfigured()) {
+    log("  cv: R2 not configured — skipping CV indexing.");
+    return counts;
+  }
+
+  const res = await db.execute(sql`
+    SELECT cd.id, cd.r2_key, cd.mime_type, cd.chef_id, ch.full_name
+    FROM chef_documents cd
+    JOIN chefs ch ON ch.id = cd.chef_id
+    WHERE cd.type = 'cv' AND cd.deleted_at IS NULL AND cd.status != 'rejected'
+      AND ch.deleted_at IS NULL AND ch.user_id IS NOT NULL AND cd.uploaded_by = ch.user_id
+  `);
+  const rows = rowsOf(res);
+  counts.rows = rows.length;
+  if (rows.length === 0) {
+    log("  cv: no chef-uploaded CVs to index.");
+    return counts;
+  }
+
+  const { extractText, getDocumentProxy } = await import("unpdf");
+
+  for (const row of rows) {
+    const docId = String(row.id);
+    const chefId = String(row.chef_id);
+    const key = String(row.r2_key);
+    const mime = String(row.mime_type ?? "");
+    if (!mime.includes("pdf") && !key.toLowerCase().endsWith(".pdf")) {
+      counts.skippedEmpty++; // V1: text PDFs only (no OCR for images/scans)
+      continue;
+    }
+
+    let rawText = "";
+    try {
+      const bytes = await getObjectBytes(key);
+      const pdf = await getDocumentProxy(bytes);
+      const { text } = await extractText(pdf, { mergePages: true });
+      rawText = (Array.isArray(text) ? text.join("\n") : (text ?? "")).trim();
+    } catch (e) {
+      log(`  ! CV parse failed for ${docId}: ${e instanceof Error ? e.message : e}`);
+      counts.skippedEmpty++;
+      continue;
+    }
+    if (!rawText) {
+      counts.skippedEmpty++; // scanned/image PDF — no embedded text
+      continue;
+    }
+
+    const withCtx = `CV van chef ${String(row.full_name)}: ${rawText}`;
+    const red = redact(withCtx);
+    const newHash = hashOf(red.text);
+    const existing = await liveHash("chef_documents", docId, "cv");
+
+    if (isPiiDense(withCtx, red)) {
+      if (existing) counts.superseded += await supersede("chef_documents", docId, "cv");
+      counts.skippedPiiDense++;
+      continue;
+    }
+    if (existing === newHash) {
+      counts.unchanged++;
+      continue;
+    }
+
+    const chunks = chunkText(red.text);
+    if (chunks.length === 0) {
+      counts.skippedEmpty++;
+      continue;
+    }
+    const vectors: number[][] = [];
+    let embedFailed = false;
+    for (const c of chunks) {
+      const vec = await embedText(c);
+      if (!vec) {
+        embedFailed = true;
+        break;
+      }
+      vectors.push(vec);
+      if (delay) await sleep(delay);
+    }
+    if (embedFailed) {
+      log(`  ! embed failed for CV ${docId} — left existing chunks intact`);
+      continue;
+    }
+
+    if (existing) counts.superseded += await supersede("chef_documents", docId, "cv");
+    for (let i = 0; i < chunks.length; i++) {
+      await insertChunk({
+        table: "chef_documents",
+        pk: docId,
+        field: "cv",
+        chunkIndex: i,
+        text: chunks[i],
+        vec: vectors[i],
+        tenantScope: `chefId:${chefId}`,
+        visibility: "chef_own_and_admin",
+        contentHash: newHash,
+      });
+      counts.indexed++;
+    }
+  }
+
+  log(`  cv: docs=${counts.rows} indexed=${counts.indexed} superseded=${counts.superseded} unchanged=${counts.unchanged} skipped=${counts.skippedEmpty + counts.skippedPiiDense}`);
   return counts;
 }
 
