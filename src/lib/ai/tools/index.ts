@@ -36,7 +36,7 @@ import { plannerCockpitTool, shiftsSuggestChefs, shiftsMargin } from "@/lib/ai/t
 import { contactsTimeline } from "@/lib/ai/tools/contacts";
 import { chefsSemanticSearch, clientsSemanticSearch } from "@/lib/ai/tools/semantic";
 import { knowledgeSearch } from "@/lib/ai/tools/knowledge";
-import { auditSearch, documentsListForChef, privacyListRequests, emailStatus, payrollRead } from "@/lib/ai/tools/oversight";
+import { auditSearch, documentsListForChef, documentsExpiring, privacyListRequests, emailStatus, payrollRead } from "@/lib/ai/tools/oversight";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -65,6 +65,7 @@ export const ALL_TOOLS: AnyTool[] = [
   knowledgeSearch,
   auditSearch,
   documentsListForChef,
+  documentsExpiring,
   privacyListRequests,
   emailStatus,
   payrollRead,

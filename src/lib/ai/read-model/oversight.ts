@@ -6,7 +6,7 @@
  *   - documents.list     → type/status/expiry/verified ONLY (never bytes or a download URL)
  *   - privacy.list       → type/status/due/requester ONLY (never the raw request text)
  */
-import { and, desc, eq, gte, ilike, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, isNotNull, isNull, lte } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { auditLog, chefDocuments, chefs, emailMessages, payrollBatches, privacyRequests, users } from "@/lib/db/schema";
@@ -116,6 +116,38 @@ export async function chefDocumentsForAi(chefId: string) {
     documents,
     expiringOrExpired: documents.filter((d) => d.expiry === "verlopen" || d.expiry?.startsWith("verloopt")).length,
   };
+}
+
+/** All chef documents expiring within `days` (or already expired), across ALL chefs — metadata
+ *  only, sorted soonest-first. Answers "welke documenten/VOG's verlopen binnenkort?" in one shot
+ *  instead of looping documents.list_for_chef per chef. */
+export async function expiringDocumentsForAi(args: { days: number; limit: number }) {
+  const now = Date.now();
+  const horizon = new Date(now + args.days * 86_400_000);
+  const rows = await db
+    .select({
+      chef: chefs.fullName,
+      type: chefDocuments.type,
+      status: chefDocuments.status,
+      expiresAt: chefDocuments.expiresAt,
+    })
+    .from(chefDocuments)
+    .innerJoin(chefs, eq(chefs.id, chefDocuments.chefId))
+    .where(and(isNull(chefDocuments.deletedAt), isNotNull(chefDocuments.expiresAt), lte(chefDocuments.expiresAt, horizon)))
+    .orderBy(asc(chefDocuments.expiresAt))
+    .limit(args.limit);
+
+  return rows.map((r) => {
+    const ms = new Date(r.expiresAt as Date).getTime();
+    const dleft = Math.round((ms - now) / 86_400_000);
+    return {
+      chef: r.chef,
+      soort: DOC_TYPE_NL[r.type] ?? r.type,
+      status: DOC_STATUS_NL[r.status] ?? r.status,
+      verloopt: ms < now ? `verlopen (${day(r.expiresAt as Date)})` : `${day(r.expiresAt as Date)} (over ${dleft} ${dleft === 1 ? "dag" : "dagen"})`,
+      verlopen: ms < now,
+    };
+  });
 }
 
 /** Privacy requests — METADATA only (type/status/due/requester). Never the raw request text. */
