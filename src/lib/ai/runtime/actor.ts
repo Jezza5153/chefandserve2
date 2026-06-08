@@ -7,10 +7,10 @@
  * security keystone: the executor's permission check is only as trustworthy as
  * the ceiling built here.
  */
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { roles, userRoles } from "@/lib/db/schema";
+import { chefs, clients, roles, userRoles } from "@/lib/db/schema";
 import { CATALOG } from "@/lib/rbac/catalog";
 import { computeEffectivePermissionSet } from "@/lib/permissions";
 import type { AiActor } from "@/lib/ai/types";
@@ -47,5 +47,45 @@ export async function resolveAiActor(userId: string): Promise<AiActor> {
     // its id instead (no other code changes needed — the executor/sink already key off it).
     paServiceUserId: userId,
     effectivePerms,
+  };
+}
+
+/**
+ * Build the {@link AiActor} for a CHEF portal user. Resolves their own chef profile from the
+ * session user id (the "auth IS the lookup" rule) and stamps it as the `subject` — the chef's
+ * scoped tools key every query off `subject.entityId`, never a model-supplied id. No RBAC
+ * permissions (the scoped tools use `permission: null`); the ceiling here is *ownership*, not
+ * a permission set. Returns null when the account has no (live) chef profile.
+ */
+export async function resolveChefActor(userId: string): Promise<AiActor | null> {
+  const [chef] = await db
+    .select({ id: chefs.id })
+    .from(chefs)
+    .where(and(eq(chefs.userId, userId), isNull(chefs.deletedAt)))
+    .limit(1);
+  if (!chef) return null;
+  return {
+    requestedByUserId: userId,
+    requestedByRole: "chef",
+    paServiceUserId: userId,
+    effectivePerms: new Set<string>(),
+    subject: { kind: "chef", entityId: chef.id },
+  };
+}
+
+/** Build the {@link AiActor} for a KLANT portal user. Mirrors {@link resolveChefActor}. */
+export async function resolveClientActor(userId: string): Promise<AiActor | null> {
+  const [client] = await db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(and(eq(clients.userId, userId), isNull(clients.deletedAt)))
+    .limit(1);
+  if (!client) return null;
+  return {
+    requestedByUserId: userId,
+    requestedByRole: "client",
+    paServiceUserId: userId,
+    effectivePerms: new Set<string>(),
+    subject: { kind: "client", entityId: client.id },
   };
 }

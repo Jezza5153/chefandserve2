@@ -28,9 +28,15 @@ type ApiResponse = {
 export function AssistantChat({
   enabled,
   variant = "page",
+  endpoint = "/api/ai/chat",
+  placeholder = "Stel een vraag, bijvoorbeeld: “wie heeft z’n uren nog niet goedgekeurd?”",
 }: {
   enabled: boolean;
   variant?: "page" | "widget";
+  /** Chat endpoint — defaults to the owner channel; the portal passes /api/ai/portal/chat. */
+  endpoint?: string;
+  /** Empty-state hint, tailored per persona. */
+  placeholder?: string;
 }) {
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
@@ -88,7 +94,7 @@ export function AssistantChat({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/ai/chat", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -140,11 +146,7 @@ export function AssistantChat({
           isWidget ? "flex-1 overflow-y-auto" : "min-h-[280px]"
         }`}
       >
-        {msgs.length === 0 && (
-          <p className="text-sm text-ink-400">
-            Stel een vraag, bijvoorbeeld: &ldquo;wie heeft z&rsquo;n uren nog niet goedgekeurd?&rdquo;
-          </p>
-        )}
+        {msgs.length === 0 && <p className="text-sm text-ink-400">{placeholder}</p>}
         {msgs.map((m, i) => (
           <div key={`${m.role}-${i}`} className={m.role === "user" ? "text-right" : "text-left"}>
             <span
