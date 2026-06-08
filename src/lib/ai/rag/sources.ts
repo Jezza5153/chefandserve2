@@ -147,6 +147,37 @@ export const RAG_SOURCES: RagSourceDef[] = [
       return `${head}: ${s(r.note)}`.trim();
     },
   },
+  {
+    // "Welke chef deed het goed bij deze klant / dit soort werk?" — completed placements +
+    // the rating given. admin_only (ratings are internal-only V1; only the owner retrieves
+    // these — chef/klant PAs are blocked by visibility). Grouped per klant via tenant_scope.
+    id: "placements.outcome",
+    sourceTable: "placements",
+    field: "placement_outcome",
+    visibility: "admin_only",
+    select: `
+      SELECT p.id, ch.full_name AS chef_name, c.company_name AS client_name, c.id AS client_id,
+             sh.role_needed, sh.starts_at, r.stars, r.tags, r.comment
+      FROM placements p
+      JOIN shifts sh ON sh.id = p.shift_id
+      JOIN clients c ON c.id = sh.client_id
+      JOIN chefs ch ON ch.id = p.chef_id
+      LEFT JOIN ratings r ON r.placement_id = p.id
+      WHERE p.status = 'completed' AND ch.deleted_at IS NULL AND c.deleted_at IS NULL`,
+    tenantScope: (r) => (s(r.client_id) ? `clientId:${s(r.client_id)}` : "internal"),
+    buildText: (r) => {
+      const when = dateNl(r.starts_at);
+      const parts = [
+        `Afgeronde plaatsing: chef ${s(r.chef_name)} bij ${s(r.client_name)}${when ? ` op ${when}` : ""}, rol ${formatChefRole(s(r.role_needed) || null)}`,
+      ];
+      if (r.stars != null && r.stars !== "") {
+        const tags = arr(r.tags).join(", ");
+        parts.push(`beoordeling ${s(r.stars)}★${tags ? ` (${tags})` : ""}`);
+      }
+      const body = parts.join(", ");
+      return s(r.comment) ? `${body}: ${s(r.comment)}` : body;
+    },
+  },
 ];
 
 /**
