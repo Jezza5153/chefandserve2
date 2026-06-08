@@ -264,6 +264,26 @@ export default async function ChefDetailPage({
     redirect(`/admin/business/chefs/${id}`);
   }
 
+  // One-click: create the portal account AND activate it (+ welcome mail) in a single step,
+  // so there's no "invited but can't log in" limbo. Chains the two tested helpers.
+  async function doInviteAndActivate() {
+    "use server";
+    const session = await requirePermission("chefs", "write");
+    const invited = await inviteChefToPortal(id, session.user.id);
+    if (!invited.ok) {
+      redirect(`/admin/business/chefs/${id}?portal=invite_failed&reason=${encodeURIComponent(invited.error)}`);
+    }
+    const res = await activatePortalUser(invited.userId, session.user.id);
+    if (!res.ok) {
+      redirect(`/admin/business/chefs/${id}?portal=activate_failed&reason=${encodeURIComponent(res.error)}`);
+    }
+    redirect(
+      res.emailSent
+        ? `/admin/business/chefs/${id}?portal=activated_sent`
+        : `/admin/business/chefs/${id}?portal=activated_no_email&reason=${encodeURIComponent(res.emailError ?? "onbekend")}`,
+    );
+  }
+
   /* ---------- server actions ----------------------------------- */
   async function updateBasics(formData: FormData) {
     "use server";
@@ -604,6 +624,7 @@ export default async function ChefDetailPage({
         chef={chef}
         portalUser={portalUser}
         doInviteToPortal={doInviteToPortal}
+        doInviteAndActivate={doInviteAndActivate}
         doActivatePortal={doActivatePortal}
         doDisablePortal={doDisablePortal}
       />
