@@ -6,7 +6,7 @@
  *   - See every invoice with its status + "wat gebeurt er nu?".
  * Sending / mark-paid / void live on the per-invoice detail page.
  */
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
 
 import { db } from "@/lib/db/client";
@@ -33,10 +33,14 @@ function fmtDate(d: Date | string): string {
 export default async function InvoicesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string; error?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; status?: string }>;
 }) {
   await requirePermission("invoices", "read");
   const sp = await searchParams;
+  const STATUSES = ["draft", "sent", "paid", "void", "credit"] as const;
+  const statusFilter = STATUSES.includes(sp.status as (typeof STATUSES)[number])
+    ? (sp.status as (typeof STATUSES)[number])
+    : null;
 
   // Period default: last calendar month (same convention as payroll).
   const now = new Date();
@@ -55,6 +59,7 @@ export default async function InvoicesPage({
   const rows = await db
     .select()
     .from(invoices)
+    .where(statusFilter ? eq(invoices.status, statusFilter) : undefined)
     .orderBy(desc(invoices.issueDate), desc(invoices.createdAt))
     .limit(100);
 
@@ -208,7 +213,7 @@ export default async function InvoicesPage({
             ) : null}
             {rows.length > 0 ? (
               <a
-                href="/admin/business/invoices/export.csv"
+                href={`/admin/business/invoices/export.csv${statusFilter ? `?status=${statusFilter}` : ""}`}
                 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy hover:underline"
               >
                 Exporteer CSV ↓
@@ -217,9 +222,34 @@ export default async function InvoicesPage({
           </div>
         </div>
 
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {[
+            { k: "", label: "Alle" },
+            { k: "draft", label: "Concept" },
+            { k: "sent", label: "Verstuurd" },
+            { k: "paid", label: "Betaald" },
+            { k: "void", label: "Geannuleerd" },
+          ].map((f) => {
+            const active = (statusFilter ?? "") === f.k;
+            return (
+              <Link
+                key={f.k || "all"}
+                href={f.k ? `/admin/business/invoices?status=${f.k}` : "/admin/business/invoices"}
+                className={`rounded-full px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] ${
+                  active
+                    ? "bg-burgundy text-white"
+                    : "border border-ink-200 text-ink-600 hover:border-burgundy hover:text-burgundy"
+                }`}
+              >
+                {f.label}
+              </Link>
+            );
+          })}
+        </div>
+
         {rows.length === 0 ? (
           <p className="mt-3 rounded-lg border border-ink-200 bg-white p-6 text-center text-sm text-ink-500">
-            Nog geen facturen aangemaakt.
+            {statusFilter ? "Geen facturen met deze status." : "Nog geen facturen aangemaakt."}
           </p>
         ) : (
           <ul className="mt-3 space-y-2">

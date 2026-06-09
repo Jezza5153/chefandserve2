@@ -30,6 +30,7 @@ import { getChefDailySeries } from "@/lib/domain/metrics-history";
 import { buildChefTrends } from "@/lib/domain/chef-trends";
 import { getOnboardingReadiness, getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { computeChefInzetbaarheid } from "@/lib/domain/chef-inzetbaarheid";
+import { getChefPatterns } from "@/lib/domain/intel";
 import { getChefReliability } from "@/lib/chef-events";
 import {
   createProfileDataRequest,
@@ -48,6 +49,7 @@ import { PortalAccess } from "./_components/PortalAccess";
 import { DocumentsSection } from "./_components/DocumentsSection";
 import { Chef360 } from "./_components/Chef360";
 import { InzetbaarheidCard } from "./_components/InzetbaarheidCard";
+import { ChefPatronenCard } from "./_components/ChefPatronenCard";
 
 export const metadata = { title: "Chef" };
 
@@ -128,12 +130,13 @@ export default async function ChefDetailPage({
 
   // PR-1.6: Chef 360 read model (hours from FINAL hours only · feedback from
   // real ratings · reliability = raw counts).
-  const [workSummary, feedback, recentShifts, reliability, chefSeries] = await Promise.all([
+  const [workSummary, feedback, recentShifts, reliability, chefSeries, patterns] = await Promise.all([
     getChefWorkSummary(id),
     getChefFeedbackSummary(id),
     getChefRecentShifts(id, 8),
     getChefReliability(id),
     getChefDailySeries(id, 90), // KPI-2: 90d of snapshot rows → 8-week trends
+    getChefPatterns(id), // PR-INTEL: weekday/role/earnings patterns + klant relationships
   ]);
   // KPI-2: pure trend layer over the snapshot rows (sparklines + noise-guarded deltas
   // + honest churn signal). Rendered alongside the point-in-time numbers below.
@@ -473,6 +476,9 @@ export default async function ChefDetailPage({
         doInviteAndActivate={doInviteAndActivate}
         doActivatePortal={doActivatePortal}
       />
+
+      {/* PR-INTEL: patterns & relationships — when/what/who-with + earnings. */}
+      <ChefPatronenCard patterns={patterns} />
 
       {/* PR-1.6: Chef 360 — full track record, moved directly under the verdict so
           opening a chef shows WHO they are first, before the editing chrome. */}

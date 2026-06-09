@@ -16,6 +16,7 @@ import { isValidEmail } from "@/lib/forms/validation";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { buildClientTrends, getClientSummary } from "@/lib/domain/client-history";
 import { computeClientHealth } from "@/lib/domain/client-health";
+import { getClientPatterns } from "@/lib/domain/intel";
 import { getClientDailySeries } from "@/lib/domain/metrics-history";
 import {
   activatePortalUser,
@@ -31,6 +32,7 @@ import { Binnenkort } from "./_components/Binnenkort";
 import { ChangeRequestsSection } from "./_components/ChangeRequestsSection";
 import { ClientTypeSection } from "./_components/ClientTypeSection";
 import { ClientHealthCard } from "./_components/ClientHealthCard";
+import { KlantPatronenCard } from "./_components/KlantPatronenCard";
 import { Klant360 } from "./_components/Klant360";
 import { PortalAccessSection } from "./_components/PortalAccessSection";
 
@@ -81,9 +83,11 @@ export default async function ClientDetailPage({
   const chefNameById = new Map(relatedChefs.map((c) => [c.id, c.fullName]));
 
   // KPI-3: Klant 360 — live point-in-time summary + 8-week snapshot trends.
-  const [clientSummary, clientSeries] = await Promise.all([
+  // PR-INTEL: booking patterns + chef relationships (weekday histogram, role mix, vaste chefs).
+  const [clientSummary, clientSeries, patterns] = await Promise.all([
     getClientSummary(id),
     getClientDailySeries(id, 90),
+    getClientPatterns(id),
   ]);
   const clientTrends = buildClientTrends(clientSeries);
   // Klant 360 verdict — "goede klant?" (computed inline; summary + status already loaded).
@@ -445,6 +449,9 @@ export default async function ClientDetailPage({
       </p>
 
       <ClientHealthCard verdict={clientHealth} />
+
+      {/* PR-INTEL: Patronen & relaties — booking patterns + vaste chefs */}
+      <KlantPatronenCard patterns={patterns} />
 
       <BasicsForm client={client} updateBasics={updateBasics} />
 
