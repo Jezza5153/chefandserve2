@@ -66,6 +66,7 @@ const SAMPLE: Record<string, unknown> = {
   "knowledge.search": { query: "test" },
   "documents.list_for_chef": { chefId: "x" },
   "chefs.history_at_client": { chefId: "x", clientId: "y" },
+  "contacts.log": { targetType: "chef", targetId: "x", channel: "phone", note: "test notitie" },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 

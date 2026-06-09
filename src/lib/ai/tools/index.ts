@@ -34,7 +34,7 @@ import {
 import { rosterOverview, rosterPublish, rosterAutofill, rosterCopyLastWeek } from "@/lib/ai/tools/roster";
 import { clientsHistory, clientsHealth } from "@/lib/ai/tools/clients";
 import { plannerCockpitTool, shiftsSuggestChefs, shiftsMargin } from "@/lib/ai/tools/staffing";
-import { contactsTimeline } from "@/lib/ai/tools/contacts";
+import { contactsTimeline, contactsLog } from "@/lib/ai/tools/contacts";
 import { chefsSemanticSearch, clientsSemanticSearch } from "@/lib/ai/tools/semantic";
 import { knowledgeSearch } from "@/lib/ai/tools/knowledge";
 import { auditSearch, documentsListForChef, documentsExpiring, privacyListRequests, emailStatus, payrollRead } from "@/lib/ai/tools/oversight";
@@ -91,6 +91,7 @@ export const ALL_TOOLS: AnyTool[] = [
   chefsApproveProfileChange,
   chefsRejectProfileChange,
   chefsSendAvailabilityReminder,
+  contactsLog,
   // personal — Maarten's own to-remember list
   remindersCreate,
   remindersList,
