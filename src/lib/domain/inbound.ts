@@ -10,7 +10,7 @@
  * as instructions. The list tool deliberately returns subject + classification only, so untrusted
  * body text never lands in the model's context unprompted.
  */
-import { desc, eq, isNull } from "drizzle-orm";
+import { desc, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { chefs, clientContacts, clients, inboundMessages, users } from "@/lib/db/schema";
@@ -43,25 +43,26 @@ function classify(subject: string, body: string, matched: boolean): InboundCateg
 async function matchSender(
   email: string,
 ): Promise<{ chefId: string | null; clientId: string | null; label: string | null }> {
+  // lower() on the column side too — stored emails can be mixed-case ("Jan@Hotel.nl").
   const lower = email.toLowerCase();
   const [chef] = await db
     .select({ id: chefs.id, name: chefs.fullName })
     .from(chefs)
-    .where(eq(chefs.email, lower))
+    .where(sql`lower(${chefs.email}) = ${lower}`)
     .limit(1);
   if (chef) return { chefId: chef.id, clientId: null, label: chef.name };
 
   const [client] = await db
     .select({ id: clients.id, name: clients.companyName })
     .from(clients)
-    .where(eq(clients.email, lower))
+    .where(sql`lower(${clients.email}) = ${lower}`)
     .limit(1);
   if (client) return { chefId: null, clientId: client.id, label: client.name };
 
   const [contact] = await db
     .select({ clientId: clientContacts.clientId, name: clientContacts.name })
     .from(clientContacts)
-    .where(eq(clientContacts.email, lower))
+    .where(sql`lower(${clientContacts.email}) = ${lower}`)
     .limit(1);
   if (contact) {
     const [c] = await db

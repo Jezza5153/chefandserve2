@@ -52,6 +52,29 @@ function verifySignature(args: {
 
 const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
 
+/**
+ * The real email.received webhook carries METADATA ONLY (email_id/from/to/subject/message_id —
+ * no body). Best-effort: fetch the body via GET /emails/receiving/{id}. Graceful on failure —
+ * a send-only restricted RESEND_API_KEY gets 401 here, and we proceed with subject-only
+ * classification (bodies start flowing the moment the key gains receiving-read).
+ */
+async function fetchReceivedBody(emailId: string): Promise<string | null> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  try {
+    const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const d = (await res.json()) as Record<string, unknown>;
+    const html = str(d.html);
+    return str(d.text) ?? (html ? html.replace(/<[^>]+>/g, " ") : null);
+  } catch {
+    return null;
+  }
+}
+
 /** Pull the inbound fields out of Resend's payload, defensively (shape may vary). */
 function extract(payload: unknown): {
   fromRaw: string;
@@ -59,6 +82,7 @@ function extract(payload: unknown): {
   subject: string | null;
   bodyText: string | null;
   messageId: string | null;
+  emailId: string | null;
 } | null {
   const root = (payload ?? {}) as Record<string, unknown>;
   const d = (root.data ?? root) as Record<string, unknown>;
@@ -85,7 +109,7 @@ function extract(payload: unknown): {
   const html = str(d.html);
   const bodyText = str(d.text) ?? str(d.body) ?? (html ? html.replace(/<[^>]+>/g, " ") : null);
   const messageId = str(d.message_id) ?? str(d.messageId) ?? str(d.id) ?? str(root.id);
-  return { fromRaw, to, subject: str(d.subject), bodyText, messageId };
+  return { fromRaw, to, subject: str(d.subject), bodyText, messageId, emailId: str(d.email_id) };
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -131,12 +155,14 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
+    const bodyText =
+      fields.bodyText ?? (fields.emailId ? await fetchReceivedBody(fields.emailId) : null);
     const r = await processInboundEmail({
       fromRaw: fields.fromRaw,
       to: fields.to,
       subject: fields.subject,
-      bodyText: fields.bodyText,
-      providerMessageId: fields.messageId,
+      bodyText,
+      providerMessageId: fields.messageId ?? fields.emailId,
       provider: "resend",
     });
     return NextResponse.json({ ok: true, ...r }, { status: 200 });
