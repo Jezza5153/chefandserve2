@@ -19,6 +19,10 @@ export async function runOwnerAssistant(args: {
   brain: Brain;
   confirmSecret: string;
   reason?: string;
+  /** Per-request dynamic context (page the owner is on + their remembered notes). Appended as a
+   *  TRAILING system message — not folded into the brain's system prompt — so the static prefix
+   *  (system prompt + tool defs) stays byte-stable across turns and pages, keeping it cacheable. */
+  systemContext?: string;
 }): Promise<AgentOutcome> {
   const actor = await resolveAiActor(args.userId);
   const registry = buildRegistry();
@@ -27,10 +31,13 @@ export async function runOwnerAssistant(args: {
     channel: args.channel,
     ...(args.reason ? { reason: args.reason } : {}),
   };
+  const messages = args.systemContext
+    ? [...args.messages, { role: "system" as const, content: args.systemContext }]
+    : args.messages;
   return runAgent({
     brain: args.brain,
     registry,
-    messages: args.messages,
+    messages,
     ctx,
     executeOptions: { auditSink: aiAuditSink, confirmSecret: args.confirmSecret },
   });

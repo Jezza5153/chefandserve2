@@ -48,6 +48,12 @@ export type OpenAiBrainOptions = {
   retryDelaysMs?: number[];
   /** Called with token usage after each successful model call (feeds the usage tally). */
   onUsage?: (usage: TokenUsage) => void;
+  /** Hard cap on output tokens per call — bounds cost (output is 6× input) + tail latency.
+   *  Set generously; the playbook already asks for short answers. */
+  maxCompletionTokens?: number;
+  /** Stable cache key (e.g. per user) so OpenAI routes repeat calls to the same cache. With a
+   *  byte-stable prefix (system + tools), this lifts the prompt-cache hit rate (10× cheaper input). */
+  promptCacheKey?: string;
 };
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -77,6 +83,8 @@ export function createOpenAiBrain(opts: OpenAiBrainOptions): Brain {
         payload.tools = tools.map(toOpenAiTool);
         payload.tool_choice = "auto";
       }
+      if (opts.maxCompletionTokens) payload.max_completion_tokens = opts.maxCompletionTokens;
+      if (opts.promptCacheKey) payload.prompt_cache_key = opts.promptCacheKey;
       const req = {
         url: "https://api.openai.com/v1/chat/completions",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${opts.apiKey}` },

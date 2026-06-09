@@ -13,7 +13,7 @@ import { executeTool, type ExecuteOptions } from "@/lib/ai/runtime/execute";
 export type ToolCallRef = { id: string; name: string; arguments: string };
 
 export type Msg = {
-  role: "user" | "assistant" | "tool";
+  role: "user" | "assistant" | "tool" | "system";
   content: string;
   /** Present on an assistant message that IS a single tool call — so the model sees its own call. */
   toolCall?: ToolCallRef;
