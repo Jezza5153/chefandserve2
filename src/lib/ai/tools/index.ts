@@ -46,6 +46,7 @@ import { intakeList, intakeConvert } from "@/lib/ai/tools/intake";
 import { onboardingMissing, onboardingRequestMissing } from "@/lib/ai/tools/onboarding";
 import { clientOnboardingMissing } from "@/lib/ai/tools/client-onboarding";
 import { demandForecast } from "@/lib/ai/tools/demand";
+import { inboundList } from "@/lib/ai/tools/inbound-comms";
 import { chefsAvailability } from "@/lib/ai/tools/chef-availability";
 import { clientsShiftRequests, clientsDecideShiftRequest } from "@/lib/ai/tools/client-requests";
 import { placementsReply } from "@/lib/ai/tools/placement-reply";
@@ -75,6 +76,7 @@ export const ALL_TOOLS: AnyTool[] = [
   onboardingMissing,
   clientOnboardingMissing,
   demandForecast,
+  inboundList,
   clientsHistory,
   clientsHealth,
   clientsShiftRequests,

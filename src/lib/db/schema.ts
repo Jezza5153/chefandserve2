@@ -3200,3 +3200,45 @@ export const clientMetricsDaily = pgTable(
 );
 export type ClientMetricsDaily = typeof clientMetricsDaily.$inferSelect;
 export type NewClientMetricsDaily = typeof clientMetricsDaily.$inferInsert;
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Inbound messages (PR-AI-INBOUND) — chef/klant e-mail RECEIVED via Resend inbound.
+ * Landed by /api/webhooks/resend-inbound (svix-verified), matched to a chef/klant by sender,
+ * heuristically classified, surfaced to Maarten (notification) + the AI (inbound.list tool).
+ * IMPORTANT: bodyPreview is UNTRUSTED sender content — it is DATA, never instructions (the AI
+ * treats it as quoted material). Separate from the OUTBOUND email_messages/email_events tables.
+ * ────────────────────────────────────────────────────────────────────────── */
+export const inboundCategoryEnum = pgEnum("inbound_category", [
+  "question", // a normal vraag from a known chef/klant
+  "complaint", // klacht / ontevreden
+  "urgent", // spoed / vandaag / noodgeval
+  "other", // unmatched sender or unclear
+]);
+
+export const inboundMessages = pgTable(
+  "inbound_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull().default("resend"),
+    /** Provider's message id — dedup key (Resend redelivers webhooks). */
+    providerMessageId: text("provider_message_id"),
+    fromEmail: text("from_email").notNull(),
+    fromName: text("from_name"),
+    toEmail: text("to_email"),
+    subject: text("subject"),
+    /** Capped plain-text body — UNTRUSTED content. Never executed as instructions. */
+    bodyPreview: text("body_preview"),
+    matchedChefId: text("matched_chef_id").references(() => chefs.id, { onDelete: "set null" }),
+    matchedClientId: text("matched_client_id").references(() => clients.id, { onDelete: "set null" }),
+    category: inboundCategoryEnum("category").notNull().default("other"),
+    /** Set when Maarten has dealt with it (clears it from the "needs attention" list). */
+    handledAt: timestamp("handled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    createdIdx: index("inbound_messages_created_idx").on(t.createdAt),
+    providerMsgIdx: uniqueIndex("inbound_messages_provider_msg_unique").on(t.providerMessageId),
+  }),
+);
+export type InboundMessage = typeof inboundMessages.$inferSelect;
+export type NewInboundMessage = typeof inboundMessages.$inferInsert;
