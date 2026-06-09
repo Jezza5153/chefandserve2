@@ -43,6 +43,8 @@ export function AssistantChat({
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 👍/👎 per assistant-message index — the learning loop's intake (POST /api/ai/feedback).
+  const [rated, setRated] = useState<Record<number, "up" | "down">>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
@@ -55,9 +57,14 @@ export function AssistantChat({
     try {
       const raw = sessionStorage.getItem(storageKey);
       if (raw) {
-        const saved = JSON.parse(raw) as { msgs?: ChatMsg[]; pending?: Pending | null };
+        const saved = JSON.parse(raw) as {
+          msgs?: ChatMsg[];
+          pending?: Pending | null;
+          rated?: Record<number, "up" | "down">;
+        };
         if (Array.isArray(saved.msgs)) setMsgs(saved.msgs);
         if (saved.pending) setPending(saved.pending);
+        if (saved.rated && typeof saved.rated === "object") setRated(saved.rated);
       }
     } catch {
       // ignore corrupt/blocked storage
@@ -70,11 +77,11 @@ export function AssistantChat({
       return;
     }
     try {
-      sessionStorage.setItem(storageKey, JSON.stringify({ msgs, pending }));
+      sessionStorage.setItem(storageKey, JSON.stringify({ msgs, pending, rated }));
     } catch {
       // ignore
     }
-  }, [msgs, pending, storageKey]);
+  }, [msgs, pending, rated, storageKey]);
 
   // keep the newest message in view (matters most in the compact widget)
   useEffect(() => {
@@ -85,6 +92,7 @@ export function AssistantChat({
     setMsgs([]);
     setPending(null);
     setError(null);
+    setRated({});
     try {
       sessionStorage.removeItem(storageKey);
     } catch {
@@ -168,6 +176,20 @@ export function AssistantChat({
     pushAssistant("Oké, geannuleerd.");
   }
 
+  /** 👍/👎 on assistant message i — optimistic, fire-and-forget (feedback may never block chat). */
+  function sendFeedback(i: number, verdict: "up" | "down") {
+    if (rated[i]) return;
+    setRated((r) => ({ ...r, [i]: verdict }));
+    const question = [...msgs.slice(0, i)].reverse().find((m) => m.role === "user")?.content ?? null;
+    void fetch("/api/ai/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ verdict, question, answer: msgs[i]?.content ?? "" }),
+    }).catch(() => {
+      // best-effort — losing one rating is fine, annoying the user is not
+    });
+  }
+
   if (!enabled) {
     return (
       <div className="rounded-lg border border-ink-200 bg-white p-4 text-sm text-ink-500">
@@ -208,6 +230,36 @@ export function AssistantChat({
             >
               {m.content}
             </span>
+            {m.role === "assistant" ? (
+              <div className="mt-0.5 flex items-center gap-1.5">
+                {rated[i] ? (
+                  <span className="font-ui text-[10px] text-ink-400">
+                    {rated[i] === "up" ? "✓ Bedankt!" : "✓ Bedankt — we kijken ernaar."}
+                  </span>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => sendFeedback(i, "up")}
+                      aria-label="Goed antwoord"
+                      title="Goed antwoord"
+                      className="rounded px-1 text-xs text-ink-300 transition hover:text-emerald-600"
+                    >
+                      👍
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => sendFeedback(i, "down")}
+                      aria-label="Slecht antwoord"
+                      title="Slecht antwoord"
+                      className="rounded px-1 text-xs text-ink-300 transition hover:text-red-600"
+                    >
+                      👎
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : null}
           </div>
         ))}
         {pending && (
