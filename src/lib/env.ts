@@ -82,6 +82,11 @@ const serverSchema = z.object({
   OPENAI_PRICE_OUTPUT_PER_1M: z.coerce.number().nonnegative().optional(),
   //   OPENAI_PRICE_CURRENCY — display currency for the env-set prices (default USD).
   OPENAI_PRICE_CURRENCY: z.string().optional(),
+  //   AI_DAILY_BUDGET — hard daily ceiling for assistant spend (all chat surfaces), in the
+  //   configured price currency. Needs OPENAI_PRICE_* to compute cost; unset (or prices
+  //   unset) → no ceiling. At ≥80% the owner gets a warning notification (throttled); at
+  //   100% the assistant declines new turns until the next day.
+  AI_DAILY_BUDGET: z.coerce.number().positive().optional(),
   //   CRON_SECRET — bearer secret Vercel Cron sends as `Authorization: Bearer <secret>`.
   //   Gates /api/cron/* (e.g. the nightly RAG re-index). Missing → the cron routes
   //   refuse to run (so they can't be triggered publicly).

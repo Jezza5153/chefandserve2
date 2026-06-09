@@ -20,7 +20,7 @@ import { createOpenAiBrain, DEFAULT_SYSTEM_PROMPT } from "@/lib/ai/runtime/opena
 import { confirmOwnerAction, runOwnerAssistant } from "@/lib/ai/runtime/assistant";
 import { ownerMemoryPromptBlock } from "@/lib/ai/read-model/owner-memory";
 import { timeContextBlock } from "@/lib/ai/runtime/time-context";
-import { recordAiUsage } from "@/lib/ai/read-model/ai-usage";
+import { checkAiBudget, maybeNotifyAiBudget, recordAiUsage } from "@/lib/ai/read-model/ai-usage";
 import type { Msg } from "@/lib/ai/runtime/agent";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +56,24 @@ export async function POST(req: Request): Promise<Response> {
     confirmSecret = aiConfirmSecret();
   } catch {
     return NextResponse.json({ error: "AI_CONFIRM_SECRET ontbreekt — kan acties niet veilig bevestigen." }, { status: 500 });
+  }
+
+  // Daily budget ceiling (audit fix: spend was tracked but never BLOCKED). Best-effort warn at
+  // ≥80% (throttled), hard decline at 100% — usage resets at the next UTC day.
+  try {
+    const budget = await checkAiBudget(new Date());
+    void maybeNotifyAiBudget(budget).catch(() => {});
+    if (budget.limited && budget.spent != null && budget.limit != null) {
+      return NextResponse.json({
+        outcome: {
+          kind: "final",
+          text: `Het AI-dagbudget is bereikt (${budget.currency} ${budget.spent.toFixed(2)} van ${budget.currency} ${budget.limit.toFixed(2)}). Morgen sta ik weer klaar — of verhoog AI_DAILY_BUDGET.`,
+          steps: [],
+        },
+      });
+    }
+  } catch {
+    // budget check unavailable → fail open (never block the assistant on a tally hiccup)
   }
 
   let body: unknown;
