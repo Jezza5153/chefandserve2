@@ -21,9 +21,11 @@ const {
   getChefDeclineSignals,
   getChefIntelSnapshot,
   getClientIntelSnapshot,
+  getMatchIntel,
+  saveMatchIntel,
 } = await import("@/lib/domain/intel");
 const { chefs, clients, placements, shiftHours, shifts, users } = await import("@/lib/db/schema");
-const { eq, inArray } = await import("drizzle-orm");
+const { and, eq, inArray } = await import("drizzle-orm");
 
 const MARK = `INTEL_SMOKE_${crypto.randomUUID()}`;
 const HOUR = 3_600_000;
@@ -183,6 +185,26 @@ try {
       empty.patterns.preferredDays.every((d) => d.count === 0),
     JSON.stringify({ b: empty?.brein, d: empty?.declineSignals, last: empty?.daysSinceLastWorked, dp: empty?.patterns.topDaypart }),
   );
+
+  // ---- match-intel (Phase 4/5): pair-memory partial upsert + thumbs ----
+  // (1) AI writes the why-field first.
+  await saveMatchIntel({ chefId, clientId, updatedBy: userId, aiWhyWorks: "rustig, past bij hun gasten" });
+  let mi = await getMatchIntel(chefId, clientId);
+  assert("match: completedShifts = 3 (derived history)", mi.history.completedShifts === 3, String(mi.history.completedShifts));
+  assert("match: aiWhyWorks stored", mi.pair?.aiWhyWorks === "rustig, past bij hun gasten", JSON.stringify(mi.pair));
+  assert("match: note null after AI-only save", mi.pair?.note === null, JSON.stringify(mi.pair));
+
+  // (2) Maarten saves note + wouldRehire — partial upsert must PRESERVE aiWhyWorks.
+  await saveMatchIntel({ chefId, clientId, updatedBy: userId, note: "klant vroeg naar hem", wouldRehire: true });
+  mi = await getMatchIntel(chefId, clientId);
+  assert("match: note saved", mi.pair?.note === "klant vroeg naar hem", JSON.stringify(mi.pair));
+  assert("match: wouldRehire = true", mi.pair?.wouldRehire === true, JSON.stringify(mi.pair));
+  assert("match: partial upsert preserved aiWhyWorks", mi.pair?.aiWhyWorks === "rustig, past bij hun gasten", JSON.stringify(mi.pair));
+
+  // (3) post-shift thumb: chef_return_signal on completed placements → thumbs.up.
+  await db.update(placements).set({ chefReturnSignal: true }).where(and(eq(placements.chefId, chefId), eq(placements.status, "completed")));
+  mi = await getMatchIntel(chefId, clientId);
+  assert("match: thumbs.up reflects chef_return_signal (3/0)", mi.thumbs.up === 3 && mi.thumbs.down === 0, JSON.stringify(mi.thumbs));
 
   // Platform intel KPIs — global (counts real dev data); just verify SQL runs + shape.
   const kpis = await getPlatformIntelKpis();

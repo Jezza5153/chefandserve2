@@ -324,6 +324,46 @@ async function cancel(formData: FormData) {
   redirect("/chef?cancelled=1");
 }
 
+/* -------- server action: post-shift return-thumb (PR-INTEL-P5) -------- */
+/* OBSERVE/NUDGE: one tap after a worked shift → placements.chef_return_signal.
+   Internal preference signal — feeds match.intel (the chef×klant fit the AI
+   reads). Never shown to klanten. Ownership-scoped; the chef can change it. */
+
+async function recordReturnSignal(formData: FormData) {
+  "use server";
+  const session = await requireAuth();
+  const placementId = String(formData.get("placementId") ?? "");
+  const signal = String(formData.get("signal") ?? "");
+  if (!placementId || (signal !== "up" && signal !== "down")) {
+    redirect(`/chef/shifts/${placementId}`);
+  }
+
+  // Auth IS the lookup — scope the write to the caller's own placement.
+  const chef = await db.query.chefs.findFirst({
+    where: eq(chefs.userId, session.user.id),
+  });
+  if (!chef) redirect("/chef");
+
+  const updated = await db
+    .update(placements)
+    .set({ chefReturnSignal: signal === "up", updatedAt: new Date() })
+    .where(and(eq(placements.id, placementId), eq(placements.chefId, chef.id)))
+    .returning({ id: placements.id });
+  if (updated.length === 0) {
+    redirect(`/chef/shifts/${placementId}?error=stale`);
+  }
+
+  await recordAuditFromRequest({
+    userId: session.user.id,
+    action: "placements.chef_return_signal",
+    resource: "placements",
+    resourceId: placementId,
+    after: { returnSignal: signal === "up" },
+  });
+
+  redirect(`/chef/shifts/${placementId}`);
+}
+
 /* -------- page ------------------------------------------------------- */
 
 export default async function ChefShiftDetailPage({
@@ -368,6 +408,11 @@ export default async function ChefShiftDetailPage({
 
   const tier = tierForShift(shift.startsAt);
   const canCancel = ["accepted", "confirmed"].includes(placement.status);
+  // PR-INTEL-P5: ask the return-thumb once the chef has actually worked here
+  // (shift ended + they were committed). The answer feeds match.intel.
+  const isPastWorked =
+    new Date(shift.endsAt).getTime() < Date.now() &&
+    ["accepted", "confirmed", "completed"].includes(placement.status);
 
   return (
     <div>
@@ -466,6 +511,15 @@ export default async function ChefShiftDetailPage({
           cancelAction={cancel}
         />
       )}
+
+      {/* Post-shift return-thumb (PR-INTEL-P5) — worked-here, now past */}
+      {isPastWorked && (
+        <ReturnSignalSection
+          placementId={placement.id}
+          current={placement.chefReturnSignal}
+          action={recordReturnSignal}
+        />
+      )}
     </div>
   );
 }
@@ -506,6 +560,61 @@ function labelFor(status: string): string {
       no_show: "No-show",
     } as Record<string, string>
   )[status] ?? status;
+}
+
+function ReturnSignalSection({
+  placementId,
+  current,
+  action,
+}: {
+  placementId: string;
+  current: boolean | null;
+  action: (formData: FormData) => Promise<void>;
+}) {
+  return (
+    <section className="mt-8 rounded-lg border border-ink-200 bg-white p-5">
+      <h2 className="font-serif text-xl text-ink-900">Zou je hier terugkomen?</h2>
+      <p className="mt-1 text-sm text-ink-700">
+        Eén tik — alleen Maarten ziet dit. Het helpt om jou bij de juiste plekken
+        in te delen.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <form action={action}>
+          <input type="hidden" name="placementId" value={placementId} />
+          <input type="hidden" name="signal" value="up" />
+          <button
+            type="submit"
+            className={`rounded-full px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] ${
+              current === true
+                ? "bg-emerald-600 text-white"
+                : "border border-emerald-600/40 bg-white text-emerald-700 hover:bg-emerald-50"
+            }`}
+          >
+            👍 Graag weer
+          </button>
+        </form>
+        <form action={action}>
+          <input type="hidden" name="placementId" value={placementId} />
+          <input type="hidden" name="signal" value="down" />
+          <button
+            type="submit"
+            className={`rounded-full px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] ${
+              current === false
+                ? "bg-burgundy text-white"
+                : "border border-burgundy/40 bg-white text-burgundy hover:bg-burgundy/5"
+            }`}
+          >
+            👎 Liever niet
+          </button>
+        </form>
+      </div>
+      {current !== null && (
+        <p className="mt-3 text-xs text-ink-500">
+          Bedankt — je kunt dit altijd aanpassen.
+        </p>
+      )}
+    </section>
+  );
 }
 
 function ContactCard({

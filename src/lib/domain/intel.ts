@@ -375,7 +375,12 @@ export async function getMatchIntel(chefId: string, clientId: string): Promise<M
   };
 }
 
-/** Upsert the chef×klant pair-memory (idempotent on the pair). */
+/**
+ * Upsert the chef×klant pair-memory (idempotent on the pair). PARTIAL: only the
+ * fields explicitly passed are written — an `undefined` field is left untouched
+ * on update. This lets Maarten save a note/would-rehire without wiping the AI's
+ * `aiWhyWorks`/`aiWhyFails`, and vice-versa. Pass `null` to deliberately clear.
+ */
 export async function saveMatchIntel(args: {
   chefId: string;
   clientId: string;
@@ -386,17 +391,17 @@ export async function saveMatchIntel(args: {
   aiWhyWorks?: string | null;
   aiWhyFails?: string | null;
 }): Promise<void> {
-  const fields = {
-    note: args.note ?? null,
-    wouldRehire: args.wouldRehire ?? null,
-    wouldReturn: args.wouldReturn ?? null,
-    aiWhyWorks: args.aiWhyWorks ?? null,
-    aiWhyFails: args.aiWhyFails ?? null,
+  const set: Partial<typeof matchIntel.$inferInsert> = {
     updatedBy: args.updatedBy,
     updatedAt: new Date(),
   };
+  if (args.note !== undefined) set.note = args.note;
+  if (args.wouldRehire !== undefined) set.wouldRehire = args.wouldRehire;
+  if (args.wouldReturn !== undefined) set.wouldReturn = args.wouldReturn;
+  if (args.aiWhyWorks !== undefined) set.aiWhyWorks = args.aiWhyWorks;
+  if (args.aiWhyFails !== undefined) set.aiWhyFails = args.aiWhyFails;
   await db
     .insert(matchIntel)
-    .values({ chefId: args.chefId, clientId: args.clientId, ...fields })
-    .onConflictDoUpdate({ target: [matchIntel.chefId, matchIntel.clientId], set: fields });
+    .values({ chefId: args.chefId, clientId: args.clientId, ...set })
+    .onConflictDoUpdate({ target: [matchIntel.chefId, matchIntel.clientId], set });
 }

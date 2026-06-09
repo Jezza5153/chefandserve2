@@ -16,10 +16,12 @@ import {
   chefs,
   clients,
   contactLogs,
+  matchIntel,
   placements,
   shifts,
 } from "@/lib/db/schema";
 import { addPlacementComment, listVisibleComments } from "@/lib/domain/comments";
+import { saveMatchIntel } from "@/lib/domain/intel";
 import { completePlacement } from "@/lib/domain/hours-admin";
 import {
   findMatchesForShift,
@@ -47,6 +49,7 @@ import { NotesForm } from "./_components/NotesForm";
 import { ExistingPlacements } from "./_components/ExistingPlacements";
 import { MatchSuggestions } from "./_components/MatchSuggestions";
 import { EmptyState } from "./_components/EmptyState";
+import { MatchIntelSection, type PairValue } from "./_components/MatchIntelSection";
 
 export const metadata = { title: "Shift" };
 
@@ -666,6 +669,69 @@ export default async function ShiftDetailPage({
     ),
   );
 
+  // PR-INTEL-P5: pair-intel for the chefs who actually have a relationship here
+  // (proposed-only chefs share no history yet). Scoped to THIS klant; deduped.
+  const pairChefList = (() => {
+    const seen = new Set<string>();
+    return existingPlacements
+      .filter((p) =>
+        ["accepted", "confirmed", "completed"].includes(p.placement.status),
+      )
+      .filter((p) => (seen.has(p.chef.id) ? false : (seen.add(p.chef.id), true)))
+      .map((p) => ({ chefId: p.chef.id, chefName: p.chef.fullName }));
+  })();
+  const pairByChef = new Map<string, PairValue>();
+  if (client && pairChefList.length > 0) {
+    const rows = await db
+      .select({
+        chefId: matchIntel.chefId,
+        note: matchIntel.note,
+        wouldRehire: matchIntel.wouldRehire,
+      })
+      .from(matchIntel)
+      .where(
+        and(
+          eq(matchIntel.clientId, client.id),
+          inArray(
+            matchIntel.chefId,
+            pairChefList.map((p) => p.chefId),
+          ),
+        ),
+      );
+    for (const r of rows) {
+      pairByChef.set(r.chefId, { note: r.note, wouldRehire: r.wouldRehire });
+    }
+  }
+
+  // PR-INTEL-P5: Maarten upserts the chef×klant pair-memory. Partial upsert —
+  // never wipes the AI's why-fields. Internal-only; feeds match.intel.
+  async function saveMatchIntelAction(formData: FormData) {
+    "use server";
+    const session = await requirePermission("shifts", "write");
+    const chefId = String(formData.get("chefId") ?? "").trim();
+    const clientId = String(formData.get("clientId") ?? "").trim();
+    if (!chefId || !clientId) return;
+    const note = String(formData.get("note") ?? "").trim();
+    const rehireRaw = String(formData.get("wouldRehire") ?? "unknown");
+    const wouldRehire =
+      rehireRaw === "yes" ? true : rehireRaw === "no" ? false : null;
+    await saveMatchIntel({
+      chefId,
+      clientId,
+      updatedBy: session.user.id,
+      note: note.length > 0 ? note : null,
+      wouldRehire,
+    });
+    await recordAuditFromRequest({
+      userId: session.user.id,
+      action: "match_intel.upsert",
+      resource: "match_intel",
+      resourceId: `${chefId}:${clientId}`,
+      after: { hasNote: note.length > 0, wouldRehire },
+    });
+    revalidatePath(`/admin/business/shifts/${id}`);
+  }
+
   async function updateShiftNotes(formData: FormData) {
     "use server";
     const s = await requirePermission("shifts", "write");
@@ -772,6 +838,17 @@ export default async function ShiftDetailPage({
       )}
 
       {matches.length === 0 && existingPlacements.length === 0 && <EmptyState />}
+
+      {/* PR-INTEL-P5 — pair-intel for placed chefs at this klant (DICTATE) */}
+      {client && (
+        <MatchIntelSection
+          clientId={client.id}
+          clientName={client.companyName}
+          placedChefs={pairChefList}
+          pairByChef={pairByChef}
+          saveAction={saveMatchIntelAction}
+        />
+      )}
 
       {/* P3 — cancel the whole dienst. Hidden once cancelled/completed. */}
       {shift.status !== "cancelled" && shift.status !== "completed" && (
