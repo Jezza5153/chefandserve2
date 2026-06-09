@@ -46,7 +46,7 @@ import { intakeList } from "@/lib/ai/tools/intake";
 import { chefsAvailability } from "@/lib/ai/tools/chef-availability";
 import { clientsShiftRequests, clientsDecideShiftRequest } from "@/lib/ai/tools/client-requests";
 import { placementsReply } from "@/lib/ai/tools/placement-reply";
-import { reportsBusinessKpi, reportsChefs } from "@/lib/ai/tools/reports";
+import { reportsBusinessKpi, reportsChefs, reportsClients } from "@/lib/ai/tools/reports";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -82,6 +82,7 @@ export const ALL_TOOLS: AnyTool[] = [
   knowledgeSearch,
   reportsBusinessKpi,
   reportsChefs,
+  reportsClients,
   auditSearch,
   documentsListForChef,
   documentsExpiring,
