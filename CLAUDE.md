@@ -64,6 +64,8 @@ change/cancel request · berichten. Every shift-related dashboard card links her
 
 The three klant-phase follow-ups are now resolved: worker scheduling
 (`complete-placements` + `document-expiry` in supervisor JOBS), chef
-profile-change admin review, and chef-photo authz for klanten. Remaining
-deferred items (Payingit API, accounting platform, AVG legal text, `hours-reminders`
-worker not yet built, Web Push) live in MEMORY.md "Open questions".
+profile-change admin review, and chef-photo authz for klanten. The
+`hours-reminders` worker is also built + live (`workers/hours-reminders.ts`,
+PR-AUDIT-6 — gated off by default; supervisor JOBS). Remaining deferred items
+(Payingit API, accounting platform, AVG legal text, Web Push) live in
+MEMORY.md "Open questions".
