@@ -46,6 +46,7 @@ export function AssistantChat({
   // 👍/👎 per assistant-message index — the learning loop's intake (POST /api/ai/feedback).
   const [rated, setRated] = useState<Record<number, "up" | "down">>({});
   const scrollRef = useRef<HTMLDivElement>(null);
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pathname = usePathname();
 
   // Persist the conversation per channel so closing the widget or navigating pages
@@ -54,6 +55,7 @@ export function AssistantChat({
   const storageKey = `ai-chat:${endpoint}`;
   const skipFirstSave = useRef(true);
   useEffect(() => {
+    let hadLocal = false;
     try {
       const raw = sessionStorage.getItem(storageKey);
       if (raw) {
@@ -62,12 +64,26 @@ export function AssistantChat({
           pending?: Pending | null;
           rated?: Record<number, "up" | "down">;
         };
-        if (Array.isArray(saved.msgs)) setMsgs(saved.msgs);
+        if (Array.isArray(saved.msgs) && saved.msgs.length > 0) {
+          setMsgs(saved.msgs);
+          hadLocal = true;
+        }
         if (saved.pending) setPending(saved.pending);
         if (saved.rated && typeof saved.rated === "object") setRated(saved.rated);
       }
     } catch {
       // ignore corrupt/blocked storage
+    }
+    // Fresh tab/device (no local copy) → pick the conversation back up from the server mirror.
+    if (!hadLocal) {
+      void fetch("/api/ai/conversation")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { messages?: ChatMsg[] } | null) => {
+          if (d && Array.isArray(d.messages) && d.messages.length > 0) setMsgs(d.messages);
+        })
+        .catch(() => {
+          // best-effort — no server copy is fine
+        });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey]);
@@ -80,6 +96,19 @@ export function AssistantChat({
       sessionStorage.setItem(storageKey, JSON.stringify({ msgs, pending, rated }));
     } catch {
       // ignore
+    }
+    // Mirror to the server (debounced, fire-and-forget) so other tabs/devices can resume.
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    if (msgs.length > 0) {
+      syncTimer.current = setTimeout(() => {
+        void fetch("/api/ai/conversation", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: msgs }),
+        }).catch(() => {
+          // best-effort
+        });
+      }, 1200);
     }
   }, [msgs, pending, rated, storageKey]);
 
@@ -98,6 +127,10 @@ export function AssistantChat({
     } catch {
       // ignore
     }
+    if (syncTimer.current) clearTimeout(syncTimer.current); // don't let a pending sync resurrect it
+    void fetch("/api/ai/conversation", { method: "DELETE" }).catch(() => {
+      // best-effort
+    });
   }
 
   const pushAssistant = (content: string) =>
