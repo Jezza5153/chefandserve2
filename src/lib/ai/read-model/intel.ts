@@ -47,9 +47,19 @@ export async function clientIntelForAi(clientId: string) {
 }
 export type ClientIntelForAi = NonNullable<Awaited<ReturnType<typeof clientIntelForAi>>>;
 
-/** The chef×klant fit — derived history + post-shift thumbs + pair-memory + AI why. */
+/**
+ * The chef×klant fit — derived history + post-shift thumbs + pair-memory + AI why,
+ * PLUS the chef's and klant's judgment layers (PR-INTEL-P9). One call returns the
+ * complete evidence the brain needs to weigh a pairing — and the exact input an
+ * enrichment step would summarise into `aiWhyWorks`/`aiWhyFails`. No fabrication:
+ * every field is observed, captured, or Maarten-written.
+ */
 export async function matchIntelForAi(chefId: string, clientId: string) {
-  const m = await getMatchIntel(chefId, clientId);
+  const [m, chef, klant] = await Promise.all([
+    getMatchIntel(chefId, clientId),
+    chefIntelForAi(chefId),
+    clientIntelForAi(clientId),
+  ]);
   return {
     samengewerkt: m.history.completedShifts,
     laatstGewerkt: m.history.lastWorkedAt,
@@ -62,6 +72,13 @@ export async function matchIntelForAi(chefId: string, clientId: string) {
     wouldReturn: m.pair?.wouldReturn ?? null,
     aiWhyWorks: m.pair?.aiWhyWorks ?? null,
     aiWhyFails: m.pair?.aiWhyFails ?? null,
+    // Judgment + fit signals — the evidence behind a verdict.
+    chefBrein: chef?.brein ?? null,
+    chefDagdeel: chef?.topDaypart ?? null,
+    chefTopRollen: chef?.topRoles ?? [],
+    chefWijstVaakAf: chef?.declineSignals ?? [],
+    klantBrein: klant?.brein ?? null,
+    klantTopRollen: klant?.topRoles ?? [],
   };
 }
 export type MatchIntelForAi = Awaited<ReturnType<typeof matchIntelForAi>>;

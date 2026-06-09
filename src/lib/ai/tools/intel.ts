@@ -48,7 +48,7 @@ export const matchIntelLookup = defineTool({
   name: "match.intel",
   title: "Match-intel (chef × klant)",
   description:
-    "Het volledige match-beeld voor één chef + klant samen: hebben ze eerder gewerkt (hoe vaak, laatste keer, klant-beoordeling, favoriet/geblokkeerd), de post-shift duimen, én Maarten's pair-notitie + de AI-samenvatting waarom het werkt of mis kan gaan. Gebruik om te beoordelen of een chef bij een klant past vóór een voorstel. chefId + clientId via chefs.find / clients.find.",
+    "Het volledige match-beeld voor één chef + klant samen: hebben ze eerder gewerkt (hoe vaak, laatste keer, klant-beoordeling, favoriet/geblokkeerd), de post-shift duimen, Maarten's pair-notitie + de AI-samenvatting waarom het werkt of mis kan gaan, én — als bewijs voor een oordeel — het brein van zowel de chef (best ingezet voor / dagdeel / toprollen / wat hij vaak afwijst) als de klant (beste chef-type / waar ze om geven). Eén call = alle context om een koppeling te wegen vóór een voorstel. chefId + clientId via chefs.find / clients.find.",
   risk: "read",
   permission: { resource: "chefs", action: "read" },
   input: z.object({
