@@ -13,7 +13,7 @@
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { chefs, clients, placements, shiftHours, shifts } from "@/lib/db/schema";
+import { chefs, clientMetricsDaily, clients, placements, shiftHours, shifts } from "@/lib/db/schema";
 
 /** FINAL hours = money is real (admin-approved or already exported). */
 const FINAL_HOURS = ["admin_approved", "exported"] as const;
@@ -154,4 +154,44 @@ export async function getClientPatterns(clientId: string): Promise<ClientPattern
   const repeatChefs = chefRows.map((r) => ({ name: r.name, count: Number(r.count) }));
 
   return { bookingDays, busiestDayLabel, roleMix, repeatChefs };
+}
+
+export type PlatformIntelKpis = {
+  /** Avg klant hours-signing latency (submit → sign), hours, last 90d. */
+  avgSigningHours: number | null;
+  /** Distinct chefs who completed a shift in the last 30 days. */
+  activeChefs30d: number;
+  /** Distinct klanten with a (non-cancelled) shift in the last 30 days. */
+  activeKlanten30d: number;
+};
+
+/** Operator-level "are relationships healthy + responsive?" KPIs. */
+export async function getPlatformIntelKpis(): Promise<PlatformIntelKpis> {
+  const [sign] = await db
+    .select({
+      minutes: sql<number>`coalesce(sum(${clientMetricsDaily.approvalSlaMinutesSum}),0)::bigint`,
+      count: sql<number>`coalesce(sum(${clientMetricsDaily.approvalSlaCount}),0)::bigint`,
+    })
+    .from(clientMetricsDaily)
+    .where(sql`${clientMetricsDaily.snapshotDate} > current_date - 90`);
+  const signCount = Number(sign?.count ?? 0);
+  const avgSigningHours =
+    signCount > 0 ? Math.round((Number(sign?.minutes ?? 0) / signCount / 60) * 10) / 10 : null;
+
+  const [chefsActive] = await db
+    .select({ n: sql<number>`count(distinct ${placements.chefId})::int` })
+    .from(placements)
+    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .where(and(eq(placements.status, "completed"), sql`${shifts.startsAt} > now() - interval '30 days'`));
+
+  const [klantenActive] = await db
+    .select({ n: sql<number>`count(distinct ${shifts.clientId})::int` })
+    .from(shifts)
+    .where(and(ne(shifts.status, "cancelled"), sql`${shifts.startsAt} > now() - interval '30 days'`));
+
+  return {
+    avgSigningHours,
+    activeChefs30d: Number(chefsActive?.n ?? 0),
+    activeKlanten30d: Number(klantenActive?.n ?? 0),
+  };
 }

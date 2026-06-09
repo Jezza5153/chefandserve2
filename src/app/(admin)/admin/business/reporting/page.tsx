@@ -14,6 +14,7 @@ import { getLeaderboards } from "@/lib/domain/leaderboards";
 import { getPlatformRollups } from "@/lib/domain/platform-rollups";
 import { getPlannerReport } from "@/lib/domain/planner-intel";
 import { getUnbilledHoursByClient } from "@/lib/domain/invoicing";
+import { getPlatformIntelKpis } from "@/lib/domain/intel";
 import {
   detectSwing,
   getChefRevenueBreakdown,
@@ -39,7 +40,7 @@ export default async function ReportingPage({
   const bucket: "week" | "month" = sp.range === "month" ? "month" : "week";
 
   const rangeDays = bucket === "month" ? 365 : 90;
-  const [rollups, series, planner, leaders, clientBreakdown, chefBreakdown, unbilled] =
+  const [rollups, series, planner, leaders, clientBreakdown, chefBreakdown, unbilled, intelKpis] =
     await Promise.all([
       getPlatformRollups(),
       getPlatformTimeSeries({ bucket }),
@@ -48,6 +49,7 @@ export default async function ReportingPage({
       getClientRevenueBreakdown(rangeDays, { limit: 10 }),
       getChefRevenueBreakdown(rangeDays, { limit: 10 }),
       getUnbilledHoursByClient(),
+      getPlatformIntelKpis(),
     ]);
 
   const unbilledTotal = unbilled.reduce((sum, u) => sum + u.totalCents, 0);
@@ -165,6 +167,25 @@ export default async function ReportingPage({
           label="Mediane reactietijd"
           value={planner.medianResponseMin != null ? `${planner.medianResponseMin} min` : "—"}
           sub="chefs op een voorstel · 30 dagen"
+        />
+      </section>
+
+      {/* Intel KPIs — relaties + responsiviteit */}
+      <section className="mt-4 grid gap-4 sm:grid-cols-3">
+        <StatTile
+          label="Gem. tekensnelheid klant"
+          value={intelKpis.avgSigningHours != null ? `${intelKpis.avgSigningHours} u` : "—"}
+          sub="uren indienen → akkoord · 90 dagen"
+        />
+        <StatTile
+          label="Actieve chefs"
+          value={String(intelKpis.activeChefs30d)}
+          sub="met een afgeronde dienst · 30 dagen"
+        />
+        <StatTile
+          label="Actieve klanten"
+          value={String(intelKpis.activeKlanten30d)}
+          sub="met een dienst · 30 dagen"
         />
       </section>
 

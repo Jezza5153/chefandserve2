@@ -14,7 +14,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 const { db } = await import("@/lib/db/client");
-const { getChefPatterns, getClientPatterns } = await import("@/lib/domain/intel");
+const { getChefPatterns, getClientPatterns, getPlatformIntelKpis } = await import("@/lib/domain/intel");
 const { chefs, clients, placements, shiftHours, shifts, users } = await import("@/lib/db/schema");
 const { eq } = await import("drizzle-orm");
 
@@ -102,6 +102,12 @@ try {
   assert("klant: booking histogram sums to 3", kp.bookingDays.reduce((s, d) => s + d.count, 0) === 3);
   assert("klant: roleMix top = chef_de_partie (2)", kp.roleMix[0]?.role === "chef_de_partie" && kp.roleMix[0]?.count === 2, JSON.stringify(kp.roleMix));
   assert("klant: repeat chef listed with 3 shifts", kp.repeatChefs.length === 1 && kp.repeatChefs[0].count === 3, JSON.stringify(kp.repeatChefs));
+
+  // Platform intel KPIs — global (counts real dev data); just verify SQL runs + shape.
+  const kpis = await getPlatformIntelKpis();
+  assert("platform kpis: activeChefs30d ≥ 0", typeof kpis.activeChefs30d === "number" && kpis.activeChefs30d >= 0, JSON.stringify(kpis));
+  assert("platform kpis: activeKlanten30d ≥ 0", typeof kpis.activeKlanten30d === "number" && kpis.activeKlanten30d >= 0);
+  assert("platform kpis: avgSigningHours is number|null", kpis.avgSigningHours === null || typeof kpis.avgSigningHours === "number", JSON.stringify(kpis));
 } finally {
   if (clientId) {
     await db.delete(shiftHours).where(eq(shiftHours.clientId, clientId));
