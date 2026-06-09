@@ -10,8 +10,9 @@
  * as instructions. The list tool deliberately returns subject + classification only, so untrusted
  * body text never lands in the model's context unprompted.
  */
-import { desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
 
+import { recordAuditFromRequest } from "@/lib/audit";
 import { db } from "@/lib/db/client";
 import { chefs, clientContacts, clients, inboundMessages, users } from "@/lib/db/schema";
 import { env } from "@/lib/env";
@@ -136,7 +137,7 @@ export async function processInboundEmail(input: ProcessInboundInput): Promise<{
         type: "inbound_message",
         title: `${tag} van ${who}`,
         body: subject ? `Onderwerp: "${subject}".` : "Nieuw binnengekomen bericht.",
-        actionUrl: "/admin/business",
+        actionUrl: "/admin/business/berichten",
         entityType: m.chefId ? "chefs" : m.clientId ? "clients" : undefined,
         entityId: m.chefId ?? m.clientId ?? undefined,
       });
@@ -155,6 +156,79 @@ export type InboundListItem = {
   receivedAt: string;
   handled: boolean;
 };
+
+export type InboundAdminRow = {
+  id: string;
+  fromEmail: string;
+  fromName: string | null;
+  toEmail: string | null;
+  subject: string | null;
+  /** UNTRUSTED sender text — render escaped (plain text), never as HTML. */
+  bodyPreview: string | null;
+  category: InboundCategory;
+  matchedChefId: string | null;
+  matchedClientId: string | null;
+  chefName: string | null;
+  clientName: string | null;
+  handledAt: Date | null;
+  createdAt: Date;
+};
+
+/** Admin (Berichten page) read: full rows incl. body, joined chef/klant names. */
+export async function listInboundAdmin(opts?: {
+  unhandledOnly?: boolean;
+  category?: InboundCategory;
+  limit?: number;
+}): Promise<InboundAdminRow[]> {
+  const conditions: SQL[] = [];
+  if (opts?.unhandledOnly) conditions.push(isNull(inboundMessages.handledAt));
+  if (opts?.category) conditions.push(eq(inboundMessages.category, opts.category));
+  const rows = await db
+    .select({
+      id: inboundMessages.id,
+      fromEmail: inboundMessages.fromEmail,
+      fromName: inboundMessages.fromName,
+      toEmail: inboundMessages.toEmail,
+      subject: inboundMessages.subject,
+      bodyPreview: inboundMessages.bodyPreview,
+      category: inboundMessages.category,
+      matchedChefId: inboundMessages.matchedChefId,
+      matchedClientId: inboundMessages.matchedClientId,
+      chefName: chefs.fullName,
+      clientName: clients.companyName,
+      handledAt: inboundMessages.handledAt,
+      createdAt: inboundMessages.createdAt,
+    })
+    .from(inboundMessages)
+    .leftJoin(chefs, eq(inboundMessages.matchedChefId, chefs.id))
+    .leftJoin(clients, eq(inboundMessages.matchedClientId, clients.id))
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(inboundMessages.createdAt))
+    .limit(Math.min(opts?.limit ?? 100, 200));
+  return rows.map((r) => ({ ...r, category: r.category as InboundCategory }));
+}
+
+/** Mark a message afgehandeld (or reopen it). Audited; no message content in the audit. */
+export async function setInboundHandled(args: {
+  id: string;
+  handled: boolean;
+  actorId: string;
+}): Promise<{ ok: boolean }> {
+  const [row] = await db
+    .update(inboundMessages)
+    .set({ handledAt: args.handled ? new Date() : null })
+    .where(eq(inboundMessages.id, args.id))
+    .returning({ id: inboundMessages.id });
+  if (!row) return { ok: false };
+  await recordAuditFromRequest({
+    userId: args.actorId,
+    action: args.handled ? "inbound_messages.handled" : "inbound_messages.reopened",
+    resource: "inbound_messages",
+    resourceId: args.id,
+    after: { handled: args.handled },
+  });
+  return { ok: true };
+}
 
 /** The AI's read surface — subject + classification only (never the raw untrusted body). */
 export async function listRecentInbound(opts?: {
