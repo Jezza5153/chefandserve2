@@ -16,7 +16,7 @@ import { createOpenAiBrain } from "@/lib/ai/runtime/openai-brain";
 import { CHEF_SYSTEM_PROMPT, CLIENT_SYSTEM_PROMPT } from "@/lib/ai/runtime/portal-prompts";
 import { runChefAssistant, runClientAssistant } from "@/lib/ai/runtime/assistant";
 import { timeContextBlock } from "@/lib/ai/runtime/time-context";
-import { recordAiUsage } from "@/lib/ai/read-model/ai-usage";
+import { checkAiBudget, maybeNotifyAiBudget, recordAiUsage } from "@/lib/ai/read-model/ai-usage";
 import type { Msg } from "@/lib/ai/runtime/agent";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +50,23 @@ export async function POST(req: Request): Promise<Response> {
     confirmSecret = aiConfirmSecret();
   } catch {
     return NextResponse.json({ error: "AI_CONFIRM_SECRET ontbreekt." }, { status: 500 });
+  }
+
+  // Shared daily budget ceiling — portal turns spend from the same pool as the owner.
+  try {
+    const budget = await checkAiBudget(new Date());
+    void maybeNotifyAiBudget(budget).catch(() => {});
+    if (budget.limited) {
+      return NextResponse.json({
+        outcome: {
+          kind: "final",
+          text: "De assistent heeft z'n dagelijkse limiet bereikt. Probeer het morgen opnieuw — of neem contact op met kantoor.",
+          steps: [],
+        },
+      });
+    }
+  } catch {
+    // fail open
   }
 
   let body: unknown;
