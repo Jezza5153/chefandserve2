@@ -3274,3 +3274,31 @@ export const aiFeedback = pgTable(
 );
 export type AiFeedback = typeof aiFeedback.$inferSelect;
 export type NewAiFeedback = typeof aiFeedback.$inferInsert;
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * AI conversations (PR-AI-PERSIST) — server-side mirror of the assistant chat, so a refresh,
+ * new tab or other device picks the conversation back up (sessionStorage only survives one tab).
+ * ONE active conversation per user per surface (owner | chef | client), messages as a capped
+ * jsonb array {role, content} — same shape the chat client already keeps. Synced best-effort by
+ * /api/ai/conversation (GET/PUT/DELETE); never on the chat hot path. Cascades with the user (AVG).
+ * ────────────────────────────────────────────────────────────────────────── */
+export const aiConversations = pgTable(
+  "ai_conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Which assistant surface: owner | chef | client. */
+    surface: text("surface").notNull().default("owner"),
+    /** Capped array of { role: "user"|"assistant", content } — see lib/ai/conversation.ts. */
+    messages: jsonb("messages").notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userSurfaceUnique: uniqueIndex("ai_conversations_user_surface_unique").on(t.userId, t.surface),
+  }),
+);
+export type AiConversation = typeof aiConversations.$inferSelect;
+export type NewAiConversation = typeof aiConversations.$inferInsert;

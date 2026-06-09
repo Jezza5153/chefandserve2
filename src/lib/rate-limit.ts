@@ -33,7 +33,8 @@ export type RateLimitScope =
   | "client_request_ip"
   | "intake_webhook_ip"
   | "ai_chat_user"
-  | "ai_feedback_user";
+  | "ai_feedback_user"
+  | "ai_conversation_user";
 
 export type RateLimitResult =
   | { ok: true; remaining: number }
@@ -157,6 +158,8 @@ export const THRESHOLDS = {
   ai_chat_user: { max: 30, windowSeconds: 60 },
   // 👍/👎 on assistant answers — cheap insert, but cap runaway clients all the same.
   ai_feedback_user: { max: 30, windowSeconds: 60 },
+  // Conversation sync (debounced PUT per turn + GET on mount) — same runaway-client cap.
+  ai_conversation_user: { max: 30, windowSeconds: 60 },
 } as const satisfies Record<RateLimitScope, { max: number; windowSeconds: number }>;
 
 /** Convenience wrapper using the standard thresholds. */
