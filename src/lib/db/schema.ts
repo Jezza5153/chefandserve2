@@ -770,6 +770,21 @@ export const clientSubmissions = pgTable(
  * through Jotform.
  * =========================================================================== */
 
+/**
+ * The "Maarten brein" judgment layer for a chef — PR-INTEL. INTERNAL-ONLY (AVG:
+ * never chef- or klant-facing). Professional language only (the editor enforces
+ * it with hints): "needs clear brief" not "difficult". Filled by Maarten OR by
+ * the AI from his brain-dump; read by the AI to reason over matches.
+ */
+export type ChefIntel = {
+  bestUsedFor?: string; // best ingezet voor
+  notIdealFor?: string; // niet ideaal voor
+  motivatedBy?: string; // gemotiveerd door
+  needsFromMaarten?: string; // nodig van Maarten
+  riskIfIgnored?: string; // risico als genegeerd
+  nextBestAction?: string; // volgende actie
+};
+
 export const chefs = pgTable("chefs", {
   id: text("id")
     .primaryKey()
@@ -822,6 +837,9 @@ export const chefs = pgTable("chefs", {
   preferences: text("preferences").array(),
   employmentType: employmentTypeEnum("employment_type"),
   applyingAs: applyingAsEnum("applying_as"),
+
+  /** PR-INTEL: the "Maarten brein" judgment layer — internal-only, never chef/klant-facing. */
+  intel: jsonb("intel").$type<ChefIntel>(),
 
   /* ----- ratings rollup (PR-KLANT-5) -------------------------------
    * Recomputed in the same tx as each rating insert. averageRating stays
@@ -896,6 +914,20 @@ export const chefs = pgTable("chefs", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
+/**
+ * The "Maarten brein" judgment layer for a klant — PR-INTEL. INTERNAL-ONLY.
+ * Professional language only. Filled by Maarten or the AI; read by the AI to
+ * answer "wie stuur ik hierheen?" and "welke klant vraagt aandacht?".
+ */
+export type ClientIntel = {
+  bestChefType?: string; // beste chef-type
+  caresAbout?: string; // geeft echt om (prijs/snelheid/kwaliteit/rust/luxe)
+  hiddenRisk?: string; // verborgen risico
+  commercialValue?: string; // commerciële waarde
+  relationshipStatus?: string; // relatie-status (warm/neutraal/fragiel)
+  nextBestAction?: string; // volgende actie
+};
+
 export const clients = pgTable("clients", {
   id: text("id")
     .primaryKey()
@@ -953,6 +985,9 @@ export const clients = pgTable("clients", {
   favoriteChefIds: text("favorite_chef_ids").array(),
   /** chefs to never send here (HARD exclude in ranking). */
   blockedChefIds: text("blocked_chef_ids").array(),
+
+  /** PR-INTEL: the "Maarten brein" judgment layer — internal-only. */
+  intel: jsonb("intel").$type<ClientIntel>(),
 
   /* ----- lifecycle ----- */
   status: clientStatusEnum("status").notNull().default("prospect"),
@@ -1397,6 +1432,8 @@ export const placements = pgTable(
     notes: text("notes"),
     /** Maarten's match-score snapshot at proposal time (0-100). */
     matchScore: integer("match_score"),
+    /** PR-INTEL: structured 1-tap reason a chef declined (te_ver/tijd/bezet/keuken/tarief/anders) — feeds preference signals. */
+    declineReason: text("decline_reason"),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

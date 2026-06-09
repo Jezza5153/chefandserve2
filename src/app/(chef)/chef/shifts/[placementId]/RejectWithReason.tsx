@@ -30,6 +30,28 @@ export function RejectWithReason({ placementId, respondAction }: Props) {
     <form action={respondAction} className="w-full max-w-md space-y-3">
       <input type="hidden" name="placementId" value={placementId} />
       <input type="hidden" name="decision" value="rejected" />
+      <fieldset>
+        <legend className="mb-1.5 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
+          Waarom niet? (1 tik — helpt Maarten met de volgende match)
+        </legend>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { v: "te_ver", l: "Te ver" },
+            { v: "verkeerd_tijdstip", l: "Verkeerd tijdstip" },
+            { v: "al_bezet", l: "Al bezet" },
+            { v: "type_keuken", l: "Type keuken" },
+            { v: "tarief", l: "Tarief" },
+            { v: "anders", l: "Anders" },
+          ].map((r) => (
+            <label key={r.v} className="cursor-pointer">
+              <input type="radio" name="declineReason" value={r.v} className="peer sr-only" />
+              <span className="inline-block rounded-full border border-ink-200 bg-white px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-ink-600 hover:border-burgundy peer-checked:border-burgundy peer-checked:bg-burgundy peer-checked:text-white">
+                {r.l}
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <label className="block">
         <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
           Even toelichten? (optioneel)

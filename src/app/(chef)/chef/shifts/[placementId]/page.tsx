@@ -50,6 +50,7 @@ async function respond(formData: FormData) {
     | "rejected";
   const placementId = String(formData.get("placementId") ?? "");
   const rejectionReason = String(formData.get("rejectionReason") ?? "").trim();
+  const declineReason = String(formData.get("declineReason") ?? "").trim() || null;
   if (decision !== "accepted" && decision !== "rejected") return;
   if (!placementId) return;
 
@@ -89,6 +90,8 @@ async function respond(formData: FormData) {
       respondedAt: new Date(),
       updatedAt: new Date(),
       ...(appendedNotes ? { notes: appendedNotes } : {}),
+      // PR-INTEL: the structured 1-tap reason → preference signal for Maarten/AI.
+      ...(decision === "rejected" && declineReason ? { declineReason } : {}),
     })
     .where(
       and(
@@ -124,6 +127,7 @@ async function respond(formData: FormData) {
         decision,
         shiftId: pl.shiftId,
         ...(rejectionReason ? { rejectionReason } : {}),
+        ...(declineReason ? { declineReason } : {}),
       },
     });
   }

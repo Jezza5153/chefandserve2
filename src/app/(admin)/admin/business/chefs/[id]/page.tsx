@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
+import { revalidatePath } from "next/cache";
+
 import { recordAuditFromRequest } from "@/lib/audit";
 import {
   chefSubmissions,
@@ -50,6 +52,7 @@ import { DocumentsSection } from "./_components/DocumentsSection";
 import { Chef360 } from "./_components/Chef360";
 import { InzetbaarheidCard } from "./_components/InzetbaarheidCard";
 import { ChefPatronenCard } from "./_components/ChefPatronenCard";
+import { ChefBreinCard } from "./_components/ChefBreinCard";
 
 export const metadata = { title: "Chef" };
 
@@ -302,6 +305,23 @@ export default async function ChefDetailPage({
   }
 
   /* ---------- server actions ----------------------------------- */
+  async function saveChefIntel(formData: FormData) {
+    "use server";
+    await requirePermission("chefs", "write");
+    const f = (k: string) => String(formData.get(k) ?? "").trim() || undefined;
+    const intel = {
+      bestUsedFor: f("bestUsedFor"),
+      notIdealFor: f("notIdealFor"),
+      motivatedBy: f("motivatedBy"),
+      needsFromMaarten: f("needsFromMaarten"),
+      riskIfIgnored: f("riskIfIgnored"),
+      nextBestAction: f("nextBestAction"),
+    };
+    await db.update(chefs).set({ intel, updatedAt: new Date() }).where(eq(chefs.id, id));
+    await recordAuditFromRequest({ action: "chefs.intel_updated", resource: "chefs", resourceId: id });
+    revalidatePath(`/admin/business/chefs/${id}`);
+  }
+
   async function updateBasics(formData: FormData) {
     "use server";
     const session = await requirePermission("chefs", "write");
@@ -479,6 +499,9 @@ export default async function ChefDetailPage({
 
       {/* PR-INTEL: patterns & relationships — when/what/who-with + earnings. */}
       <ChefPatronenCard patterns={patterns} />
+
+      {/* PR-INTEL: "Maarten's brein" — the editable judgment layer (internal). */}
+      <ChefBreinCard intel={chef.intel} saveAction={saveChefIntel} />
 
       {/* PR-1.6: Chef 360 — full track record, moved directly under the verdict so
           opening a chef shows WHO they are first, before the editing chrome. */}

@@ -14,7 +14,14 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 const { db } = await import("@/lib/db/client");
-const { getChefPatterns, getClientPatterns, getPlatformIntelKpis } = await import("@/lib/domain/intel");
+const {
+  getChefPatterns,
+  getClientPatterns,
+  getPlatformIntelKpis,
+  getChefDeclineSignals,
+  getChefIntelSnapshot,
+  getClientIntelSnapshot,
+} = await import("@/lib/domain/intel");
 const { chefs, clients, placements, shiftHours, shifts, users } = await import("@/lib/db/schema");
 const { eq } = await import("drizzle-orm");
 
@@ -102,6 +109,34 @@ try {
   assert("klant: booking histogram sums to 3", kp.bookingDays.reduce((s, d) => s + d.count, 0) === 3);
   assert("klant: roleMix top = chef_de_partie (2)", kp.roleMix[0]?.role === "chef_de_partie" && kp.roleMix[0]?.count === 2, JSON.stringify(kp.roleMix));
   assert("klant: repeat chef listed with 3 shifts", kp.repeatChefs.length === 1 && kp.repeatChefs[0].count === 3, JSON.stringify(kp.repeatChefs));
+
+  // ---- decline signals + AI snapshots (Phase 1C/1D) ----
+  const [rejShift] = await db
+    .insert(shifts)
+    .values({
+      clientId,
+      startsAt: new Date("2099-08-01T12:00:00Z"),
+      endsAt: new Date("2099-08-01T16:00:00Z"),
+      roleNeeded: "chef_de_partie",
+      headcount: 1,
+      status: "open",
+      notes: MARK,
+    })
+    .returning({ id: shifts.id });
+  await db.insert(placements).values({ shiftId: rejShift.id, chefId, status: "rejected", declineReason: "te_ver" });
+  await db.update(chefs).set({ intel: { bestUsedFor: "ontbijt" } }).where(eq(chefs.id, chefId));
+  await db.update(clients).set({ intel: { bestChefType: "kalm" } }).where(eq(clients.id, clientId));
+
+  const ds = await getChefDeclineSignals(chefId);
+  assert("decline signals: te_ver count 1 (label 'Te ver')", ds.length === 1 && ds[0].reason === "te_ver" && ds[0].count === 1 && ds[0].label === "Te ver", JSON.stringify(ds));
+
+  const snap = await getChefIntelSnapshot(chefId);
+  assert("chef snapshot: brein.bestUsedFor = 'ontbijt'", snap?.brein?.bestUsedFor === "ontbijt", JSON.stringify(snap?.brein));
+  assert("chef snapshot: bundles patterns + decline signals", (snap?.patterns.preferredDays.length ?? 0) === 7 && (snap?.declineSignals.length ?? 0) === 1, JSON.stringify({ d: snap?.declineSignals }));
+  assert("chef snapshot: daysSinceLastWorked is a number", typeof snap?.daysSinceLastWorked === "number");
+
+  const csnap = await getClientIntelSnapshot(clientId);
+  assert("klant snapshot: brein.bestChefType = 'kalm' + patterns", csnap?.brein?.bestChefType === "kalm" && csnap?.patterns.bookingDays.length === 7, JSON.stringify(csnap?.brein));
 
   // Platform intel KPIs — global (counts real dev data); just verify SQL runs + shape.
   const kpis = await getPlatformIntelKpis();

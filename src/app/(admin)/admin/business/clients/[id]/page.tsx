@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
@@ -32,6 +33,7 @@ import { Binnenkort } from "./_components/Binnenkort";
 import { ChangeRequestsSection } from "./_components/ChangeRequestsSection";
 import { ClientTypeSection } from "./_components/ClientTypeSection";
 import { ClientHealthCard } from "./_components/ClientHealthCard";
+import { KlantBreinCard } from "./_components/KlantBreinCard";
 import { KlantPatronenCard } from "./_components/KlantPatronenCard";
 import { Klant360 } from "./_components/Klant360";
 import { PortalAccessSection } from "./_components/PortalAccessSection";
@@ -180,6 +182,24 @@ export default async function ClientDetailPage({
     if (!invited.ok) throw new Error(invited.error);
     await activatePortalUser(invited.userId, session.user.id);
     redirect(`/admin/business/clients/${id}`);
+  }
+
+  // PR-INTEL: "Maarten's brein" — the six judgment fields the AI reasons over.
+  async function saveClientIntel(formData: FormData) {
+    "use server";
+    await requirePermission("clients", "write");
+    const f = (k: string) => String(formData.get(k) ?? "").trim() || undefined;
+    const intel = {
+      bestChefType: f("bestChefType"),
+      caresAbout: f("caresAbout"),
+      hiddenRisk: f("hiddenRisk"),
+      commercialValue: f("commercialValue"),
+      relationshipStatus: f("relationshipStatus"),
+      nextBestAction: f("nextBestAction"),
+    };
+    await db.update(clients).set({ intel, updatedAt: new Date() }).where(eq(clients.id, id));
+    await recordAuditFromRequest({ action: "clients.intel_updated", resource: "clients", resourceId: id });
+    revalidatePath(`/admin/business/clients/${id}`);
   }
 
   async function updateBasics(formData: FormData) {
@@ -452,6 +472,9 @@ export default async function ClientDetailPage({
 
       {/* PR-INTEL: Patronen & relaties — booking patterns + vaste chefs */}
       <KlantPatronenCard patterns={patterns} />
+
+      {/* PR-INTEL: Maarten's brein — the six judgment fields (internal-only) */}
+      <KlantBreinCard intel={client.intel} saveAction={saveClientIntel} />
 
       <BasicsForm client={client} updateBasics={updateBasics} />
 

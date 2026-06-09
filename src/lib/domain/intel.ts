@@ -10,10 +10,19 @@
  * Returns plain data (AI-ready: a tool can read these directly). Day-of-week is
  * computed in Europe/Amsterdam so "werkt meestal op zaterdag" is true locally.
  */
-import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { chefs, clientMetricsDaily, clients, placements, shiftHours, shifts } from "@/lib/db/schema";
+import {
+  chefs,
+  clientMetricsDaily,
+  clients,
+  placements,
+  shiftHours,
+  shifts,
+  type ChefIntel,
+  type ClientIntel,
+} from "@/lib/db/schema";
 
 /** FINAL hours = money is real (admin-approved or already exported). */
 const FINAL_HOURS = ["admin_approved", "exported"] as const;
@@ -194,4 +203,86 @@ export async function getPlatformIntelKpis(): Promise<PlatformIntelKpis> {
     activeChefs30d: Number(chefsActive?.n ?? 0),
     activeKlanten30d: Number(klantenActive?.n ?? 0),
   };
+}
+
+const DECLINE_LABELS: Record<string, string> = {
+  te_ver: "Te ver",
+  verkeerd_tijdstip: "Verkeerd tijdstip",
+  al_bezet: "Al bezet",
+  type_keuken: "Type keuken",
+  tarief: "Tarief",
+  anders: "Anders",
+};
+
+/** Aggregated decline reasons (the 1-tap chips) for a chef — a preference signal. */
+export async function getChefDeclineSignals(
+  chefId: string,
+): Promise<Array<{ reason: string; label: string; count: number }>> {
+  const rows = await db
+    .select({ reason: placements.declineReason, count: sql<number>`count(*)::int` })
+    .from(placements)
+    .where(
+      and(
+        eq(placements.chefId, chefId),
+        eq(placements.status, "rejected"),
+        isNotNull(placements.declineReason),
+      ),
+    )
+    .groupBy(placements.declineReason)
+    .orderBy(desc(sql`count(*)`));
+  return rows
+    .filter((r) => r.reason)
+    .map((r) => ({
+      reason: r.reason as string,
+      label: DECLINE_LABELS[r.reason as string] ?? (r.reason as string),
+      count: Number(r.count),
+    }));
+}
+
+export type ChefIntelSnapshot = {
+  /** Maarten's manual judgment layer. */
+  brein: ChefIntel | null;
+  /** Derived behaviour (when/what/who-with + earnings). */
+  patterns: ChefPatterns;
+  /** What they turn down most (preference signal). */
+  declineSignals: Array<{ reason: string; label: string; count: number }>;
+  /** Reactivation hint: days since their last confirmed/completed shift. */
+  daysSinceLastWorked: number | null;
+};
+
+/**
+ * One plain-data object bundling everything known about a chef — manual judgment
+ * + derived patterns + decline signals + reactivation. AI-ready: a tool reads
+ * this to answer "wie stuur ik morgen naar Hotel X?" / "wie loopt weg?".
+ */
+export async function getChefIntelSnapshot(chefId: string): Promise<ChefIntelSnapshot | null> {
+  const [row] = await db.select({ intel: chefs.intel }).from(chefs).where(eq(chefs.id, chefId)).limit(1);
+  if (!row) return null;
+  const [patterns, declineSignals, lastWorked] = await Promise.all([
+    getChefPatterns(chefId),
+    getChefDeclineSignals(chefId),
+    db
+      .select({ d: sql<string | null>`max(${shifts.startsAt})` })
+      .from(placements)
+      .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+      .where(and(eq(placements.chefId, chefId), inArray(placements.status, [...REAL_PLACEMENTS])))
+      .then((r) => r[0]?.d ?? null),
+  ]);
+  const daysSinceLastWorked = lastWorked
+    ? Math.floor((Date.now() - new Date(lastWorked).getTime()) / 86_400_000)
+    : null;
+  return { brein: row.intel ?? null, patterns, declineSignals, daysSinceLastWorked };
+}
+
+export type ClientIntelSnapshot = {
+  brein: ClientIntel | null;
+  patterns: ClientPatterns;
+};
+
+/** AI-ready snapshot for a klant: manual judgment + booking/relationship patterns. */
+export async function getClientIntelSnapshot(clientId: string): Promise<ClientIntelSnapshot | null> {
+  const [row] = await db.select({ intel: clients.intel }).from(clients).where(eq(clients.id, clientId)).limit(1);
+  if (!row) return null;
+  const patterns = await getClientPatterns(clientId);
+  return { brein: row.intel ?? null, patterns };
 }
