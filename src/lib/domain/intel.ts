@@ -538,3 +538,48 @@ export async function getQuietClients(opts?: {
     totalShifts: Number(r.totalShifts),
   }));
 }
+
+export type MatchHealthKpis = {
+  /** Post-shift return-thumbs that were 👍. */
+  thumbsUp: number;
+  /** All answered return-thumbs (👍 + 👎). */
+  thumbsTotal: number;
+  /** Share of return-thumbs that are 👍 (null until any are answered). */
+  satisfactionPct: number | null;
+  /** Pairs Maarten marked "klant neemt weer" (would-rehire = true). */
+  provenPairs: number;
+  /** Pairs carrying a written pair-note (capture adoption). */
+  notedPairs: number;
+};
+
+/**
+ * Platform "match-health" — turns the captured pair-memory into KPI numbers:
+ * how happy chefs are to return (post-shift thumbs) and how many proven /
+ * documented chef×klant pairs the relationship layer holds. Enriches the cockpit
+ * with the data Phases 4-7 capture. Cheap counts; degrades gracefully to zero.
+ */
+export async function getMatchHealthKpis(): Promise<MatchHealthKpis> {
+  const [[thumbs], [pairs]] = await Promise.all([
+    db
+      .select({
+        up: sql<number>`coalesce(count(*) filter (where ${placements.chefReturnSignal} = true),0)::int`,
+        total: sql<number>`coalesce(count(*) filter (where ${placements.chefReturnSignal} is not null),0)::int`,
+      })
+      .from(placements),
+    db
+      .select({
+        proven: sql<number>`coalesce(count(*) filter (where ${matchIntel.wouldRehire} = true),0)::int`,
+        noted: sql<number>`coalesce(count(*) filter (where ${matchIntel.note} is not null and length(btrim(${matchIntel.note})) > 0),0)::int`,
+      })
+      .from(matchIntel),
+  ]);
+  const thumbsUp = Number(thumbs?.up ?? 0);
+  const thumbsTotal = Number(thumbs?.total ?? 0);
+  return {
+    thumbsUp,
+    thumbsTotal,
+    satisfactionPct: thumbsTotal > 0 ? Math.round((thumbsUp / thumbsTotal) * 100) : null,
+    provenPairs: Number(pairs?.proven ?? 0),
+    notedPairs: Number(pairs?.noted ?? 0),
+  };
+}

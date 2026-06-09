@@ -25,6 +25,7 @@ const {
   saveMatchIntel,
   getReactivationChefs,
   getQuietClients,
+  getMatchHealthKpis,
 } = await import("@/lib/domain/intel");
 const { chefs, clients, placements, shiftHours, shifts, users } = await import("@/lib/db/schema");
 const { and, eq, inArray } = await import("drizzle-orm");
@@ -210,6 +211,14 @@ try {
   await db.update(placements).set({ chefReturnSignal: true }).where(and(eq(placements.chefId, chefId), eq(placements.status, "completed")));
   mi = await getMatchIntel(chefId, clientId);
   assert("match: thumbs.up reflects chef_return_signal (3/0)", mi.thumbs.up === 3 && mi.thumbs.down === 0, JSON.stringify(mi.thumbs));
+
+  // ---- match-health KPIs (Phase 8): global, assert fixture minimums + shape ----
+  const mh = await getMatchHealthKpis();
+  assert("match-health: thumbsUp ≥ 3 (fixture)", mh.thumbsUp >= 3, JSON.stringify(mh));
+  assert("match-health: thumbsTotal ≥ thumbsUp", mh.thumbsTotal >= mh.thumbsUp, JSON.stringify(mh));
+  assert("match-health: satisfactionPct 0..100", typeof mh.satisfactionPct === "number" && mh.satisfactionPct >= 0 && mh.satisfactionPct <= 100, String(mh.satisfactionPct));
+  assert("match-health: provenPairs ≥ 1 (fixture would-rehire)", mh.provenPairs >= 1, String(mh.provenPairs));
+  assert("match-health: notedPairs ≥ 1 (fixture note)", mh.notedPairs >= 1, String(mh.notedPairs));
 
   // ---- relationship-health (Phase 7): reactivation chefs + quiet klanten ----
   // Global queries → use membership (not exact counts). Past-dated fixtures: a

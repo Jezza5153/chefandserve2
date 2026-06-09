@@ -19,6 +19,7 @@ import {
   getPlatformIntelKpis,
   getReactivationChefs,
   getQuietClients,
+  getMatchHealthKpis,
 } from "@/lib/domain/intel";
 import {
   detectSwing,
@@ -56,6 +57,7 @@ export default async function ReportingPage({
     intelKpis,
     reactivationChefs,
     quietClients,
+    matchHealth,
   ] = await Promise.all([
     getPlatformRollups(),
     getPlatformTimeSeries({ bucket }),
@@ -67,6 +69,7 @@ export default async function ReportingPage({
     getPlatformIntelKpis(),
     getReactivationChefs(),
     getQuietClients(),
+    getMatchHealthKpis(),
   ]);
 
   const unbilledTotal = unbilled.reduce((sum, u) => sum + u.totalCents, 0);
@@ -211,6 +214,29 @@ export default async function ReportingPage({
           label="Actieve klanten"
           value={String(intelKpis.activeKlanten30d)}
           sub="met een dienst · 30 dagen"
+        />
+      </section>
+
+      {/* Match-gezondheid — de vastgelegde pair-memory als KPI (PR-INTEL-P8) */}
+      <section className="mt-4 grid gap-4 sm:grid-cols-3">
+        <StatTile
+          label="Chef-tevredenheid"
+          value={
+            matchHealth.satisfactionPct != null
+              ? `${matchHealth.satisfactionPct}%`
+              : "—"
+          }
+          sub={`👍 na de dienst · ${matchHealth.thumbsTotal} beoordeeld`}
+        />
+        <StatTile
+          label="Bewezen matches"
+          value={String(matchHealth.provenPairs)}
+          sub="klant neemt deze chef weer"
+        />
+        <StatTile
+          label="Pair-notities"
+          value={String(matchHealth.notedPairs)}
+          sub="chef × klant vastgelegd"
         />
       </section>
 
