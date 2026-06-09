@@ -17,7 +17,7 @@ import { isValidEmail } from "@/lib/forms/validation";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { buildClientTrends, getClientSummary } from "@/lib/domain/client-history";
 import { computeClientHealth } from "@/lib/domain/client-health";
-import { getClientPatterns } from "@/lib/domain/intel";
+import { getClientIntelSnapshot } from "@/lib/domain/intel";
 import { getClientDailySeries } from "@/lib/domain/metrics-history";
 import {
   activatePortalUser,
@@ -35,6 +35,7 @@ import { ClientTypeSection } from "./_components/ClientTypeSection";
 import { ClientHealthCard } from "./_components/ClientHealthCard";
 import { KlantBreinCard } from "./_components/KlantBreinCard";
 import { KlantPatronenCard } from "./_components/KlantPatronenCard";
+import { KlantSnapshotCard } from "./_components/KlantSnapshotCard";
 import { Klant360 } from "./_components/Klant360";
 import { PortalAccessSection } from "./_components/PortalAccessSection";
 
@@ -86,11 +87,12 @@ export default async function ClientDetailPage({
 
   // KPI-3: Klant 360 — live point-in-time summary + 8-week snapshot trends.
   // PR-INTEL: booking patterns + chef relationships (weekday histogram, role mix, vaste chefs).
-  const [clientSummary, clientSeries, patterns] = await Promise.all([
+  const [clientSummary, clientSeries, snapshot] = await Promise.all([
     getClientSummary(id),
     getClientDailySeries(id, 90),
-    getClientPatterns(id),
+    getClientIntelSnapshot(id),
   ]);
+  if (!snapshot) notFound();
   const clientTrends = buildClientTrends(clientSeries);
   // Klant 360 verdict — "goede klant?" (computed inline; summary + status already loaded).
   const clientHealth = computeClientHealth({
@@ -470,8 +472,11 @@ export default async function ClientDetailPage({
 
       <ClientHealthCard verdict={clientHealth} />
 
+      {/* PR-INTEL-P2: "Voor je belt" — composed brein + patronen glance */}
+      <KlantSnapshotCard snapshot={snapshot} />
+
       {/* PR-INTEL: Patronen & relaties — booking patterns + vaste chefs */}
-      <KlantPatronenCard patterns={patterns} />
+      <KlantPatronenCard patterns={snapshot.patterns} />
 
       {/* PR-INTEL: Maarten's brein — the six judgment fields (internal-only) */}
       <KlantBreinCard intel={client.intel} saveAction={saveClientIntel} />

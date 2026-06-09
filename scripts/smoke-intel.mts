@@ -99,6 +99,7 @@ try {
   assert("chef: exactly one weekday has 2", cp.preferredDays.filter((d) => d.count === 2).length === 1);
   assert("chef: exactly one weekday has 1", cp.preferredDays.filter((d) => d.count === 1).length === 1);
   assert("chef: busiest day label set", cp.busiestDayLabel != null, String(cp.busiestDayLabel));
+  assert("chef: topDaypart = lunch (14:00 Amsterdam)", cp.topDaypart === "lunch", String(cp.topDaypart));
   assert("chef: roleMix top = chef_de_partie (2)", cp.roleMix[0]?.role === "chef_de_partie" && cp.roleMix[0]?.count === 2, JSON.stringify(cp.roleMix));
   assert("chef: 1 klant in earnings, 36000c over 3 shifts", cp.clientEarnings.length === 1 && cp.clientEarnings[0].cents === 36000 && cp.clientEarnings[0].shifts === 3, JSON.stringify(cp.clientEarnings));
   assert("chef: totalEarned = 36000c", cp.totalEarnedCents === 36000, `=${cp.totalEarnedCents}`);

@@ -31,6 +31,7 @@ export function ChefSnapshotCard({ snapshot }: { snapshot: ChefIntelSnapshot }) 
   if (patterns.busiestDayLabel) {
     facts.push(`werkt vaak ${FULL_DAY[patterns.busiestDayLabel] ?? patterns.busiestDayLabel}`);
   }
+  if (patterns.topDaypart) facts.push(`${patterns.topDaypart}-diensten`);
   if (topClient) facts.push(`vooral bij ${topClient.name}`);
   if (declineSignals[0]) facts.push(`wijst vaak af: ${declineSignals[0].label.toLowerCase()}`);
 

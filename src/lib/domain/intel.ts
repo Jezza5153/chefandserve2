@@ -48,6 +48,8 @@ export type ChefPatterns = {
   /** When this chef actually works (confirmed/completed), per weekday. */
   preferredDays: DayStat[];
   busiestDayLabel: string | null;
+  /** Most-worked daypart — ontbijt/lunch/diner/nacht (or null). */
+  topDaypart: string | null;
   /** Which roles they're booked for, most-first. */
   roleMix: RoleStat[];
   /** Lifetime + last-30-day payout (FINAL hours). */
@@ -70,6 +72,28 @@ export async function getChefPatterns(chefId: string): Promise<ChefPatterns> {
   const preferredDays = toMonFirstHistogram(dayRows);
   const busiest = [...preferredDays].sort((a, b) => b.count - a.count)[0];
   const busiestDayLabel = busiest && busiest.count > 0 ? busiest.label : null;
+
+  // Daypart from the Amsterdam start hour — what kind of shift this chef works.
+  const hourRows = await db
+    .select({
+      hour: sql<number>`extract(hour from (${shifts.startsAt} at time zone 'Europe/Amsterdam'))::int`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(placements)
+    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .where(and(eq(placements.chefId, chefId), inArray(placements.status, [...REAL_PLACEMENTS])))
+    .groupBy(sql`1`);
+  const dayparts: Record<string, number> = { ontbijt: 0, lunch: 0, diner: 0, nacht: 0 };
+  for (const r of hourRows) {
+    const h = Number(r.hour);
+    const c = Number(r.count);
+    if (h >= 5 && h <= 10) dayparts.ontbijt += c;
+    else if (h >= 11 && h <= 14) dayparts.lunch += c;
+    else if (h >= 15 && h <= 22) dayparts.diner += c;
+    else dayparts.nacht += c;
+  }
+  const topDaypartEntry = Object.entries(dayparts).sort((a, b) => b[1] - a[1])[0];
+  const topDaypart = topDaypartEntry && topDaypartEntry[1] > 0 ? topDaypartEntry[0] : null;
 
   const roleRows = await db
     .select({ role: shifts.roleNeeded, count: sql<number>`count(*)::int` })
@@ -111,6 +135,7 @@ export async function getChefPatterns(chefId: string): Promise<ChefPatterns> {
   return {
     preferredDays,
     busiestDayLabel,
+    topDaypart,
     roleMix,
     totalEarnedCents: Number(totals?.total ?? 0),
     earned30dCents: Number(totals?.last30 ?? 0),
