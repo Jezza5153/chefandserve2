@@ -147,3 +147,65 @@ export function getOnboardingReadiness(c: OnboardingInput): OnboardingReadiness 
 
   return { score, missingCritical, ready: missingCritical.length === 0, idExpired, idExpiringSoon };
 }
+
+/* ==========================================================================
+ * CLIENT (klant) onboarding readiness — the B2B sibling of the chef readiness
+ * above. Same shape, same discipline: takes only PRESENCE booleans + plain
+ * fields, returns the MISSING FIELD LABELS (never the values). Used by the AI
+ * client-onboarding read-model so the assistant can chase klant-completeness
+ * without ever exposing contact PII. Billing fields are NOT part of readiness
+ * (the invoicing team owns those).
+ * ========================================================================== */
+
+export type ClientOnboardingInput = {
+  companyName?: string | null;
+  visitStreet?: string | null;
+  visitHouseNumber?: string | null;
+  visitPostcode?: string | null;
+  visitCity?: string | null;
+  kvk?: string | null;
+  btw?: string | null;
+  rechtsvorm?: string | null;
+  /** A client_contacts row with role general_contact exists (name+email are NOT NULL). */
+  hasGeneralContact?: boolean;
+  /** A client_contacts row with role signing_authority exists (needed to sign the overeenkomst). */
+  hasSigningContact?: boolean;
+  rieAvailable?: boolean | null;
+  hasRieDocument?: boolean;
+  safetyInstructions?: string | null;
+  onboardingStatus?: string | null;
+};
+
+export type ClientOnboardingReadiness = {
+  score: number; // 0–100
+  missingCritical: string[];
+  ready: boolean;
+  submitted: boolean; // klant formally submitted the onboarding form
+};
+
+export function getClientOnboardingReadiness(c: ClientOnboardingInput): ClientOnboardingReadiness {
+  const critical: { key: string; ok: boolean }[] = [
+    { key: "bedrijfsnaam", ok: has(c.companyName) },
+    {
+      key: "bezoekadres",
+      ok: has(c.visitStreet) && has(c.visitHouseNumber) && has(c.visitPostcode) && has(c.visitCity),
+    },
+    { key: "KvK-nummer", ok: has(c.kvk) },
+    { key: "BTW-nummer", ok: has(c.btw) },
+    { key: "rechtsvorm", ok: has(c.rechtsvorm) },
+    { key: "algemeen contactpersoon", ok: !!c.hasGeneralContact },
+    { key: "tekenbevoegde", ok: !!c.hasSigningContact },
+    {
+      key: "RI&E / veiligheidsinformatie",
+      ok: c.rieAvailable === true || !!c.hasRieDocument || has(c.safetyInstructions),
+    },
+  ];
+  const missingCritical = critical.filter((f) => !f.ok).map((f) => f.key);
+  const score = Math.round((critical.filter((f) => f.ok).length / critical.length) * 100);
+  return {
+    score,
+    missingCritical,
+    ready: missingCritical.length === 0,
+    submitted: c.onboardingStatus === "submitted",
+  };
+}
