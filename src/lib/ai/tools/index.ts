@@ -44,6 +44,7 @@ import { chefsHistoryAtClient } from "@/lib/ai/tools/chef-client-history";
 import { risksScan } from "@/lib/ai/tools/risks";
 import { intakeList } from "@/lib/ai/tools/intake";
 import { chefsAvailability } from "@/lib/ai/tools/chef-availability";
+import { clientsShiftRequests, clientsDecideShiftRequest } from "@/lib/ai/tools/client-requests";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -67,6 +68,7 @@ export const ALL_TOOLS: AnyTool[] = [
   intakeList,
   clientsHistory,
   clientsHealth,
+  clientsShiftRequests,
   chefsHistoryAtClient,
   plannerCockpitTool,
   risksScan,
@@ -98,6 +100,7 @@ export const ALL_TOOLS: AnyTool[] = [
   chefsRejectProfileChange,
   chefsSendAvailabilityReminder,
   contactsLog,
+  clientsDecideShiftRequest,
   // personal — Maarten's own to-remember list
   remindersCreate,
   remindersList,
