@@ -8,10 +8,10 @@
  * never fabricate a rate. Aggregation + cost math are pure + exported so they're testable
  * without a DB (scripts/smoke-ai-usage.mts).
  */
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { businessSettings, notifications, users } from "@/lib/db/schema";
+import { auditLog, businessSettings, notifications, users } from "@/lib/db/schema";
 import { withTx } from "@/lib/db/tx";
 import { env } from "@/lib/env";
 import { aiPricing } from "@/lib/ai/config";
@@ -107,6 +107,45 @@ export async function recordAiUsage(args: {
         set: { value: bag, updatedAt: new Date() },
       });
   });
+}
+
+/* ----- per-tool usage (audit fix: usage was per-model only — no per-tool visibility) ----- */
+
+export type AiToolUsageRow = { tool: string; completed: number; failed: number };
+
+/**
+ * Tool call counts from the audit trail (ai.tool_completed / ai.tool_failed), busiest first.
+ * Token-attribution per tool isn't possible (tokens are per model call), but call/failure
+ * counts answer "which tool is hot, which tool keeps failing?".
+ */
+export async function getAiToolUsage(args: {
+  now: Date;
+  windowDays?: number;
+  limit?: number;
+}): Promise<AiToolUsageRow[]> {
+  const windowDays = args.windowDays ?? 30;
+  const since = new Date(args.now.getTime() - windowDays * 86_400_000);
+  const tool = sql<string>`${auditLog.after} ->> 'tool'`;
+  const rows = await db
+    .select({
+      tool,
+      completed: sql<number>`count(*) filter (where ${auditLog.action} = 'ai.tool_completed')`,
+      failed: sql<number>`count(*) filter (where ${auditLog.action} = 'ai.tool_failed')`,
+    })
+    .from(auditLog)
+    .where(
+      and(
+        eq(auditLog.resource, "ai_tool"),
+        gt(auditLog.createdAt, since),
+        inArray(auditLog.action, ["ai.tool_completed", "ai.tool_failed"]),
+      ),
+    )
+    .groupBy(tool)
+    .orderBy(sql`count(*) desc`)
+    .limit(args.limit ?? 8);
+  return rows
+    .filter((r) => Boolean(r.tool))
+    .map((r) => ({ tool: r.tool, completed: Number(r.completed), failed: Number(r.failed) }));
 }
 
 /* ----- daily budget ceiling (audit fix: spend was tracked but never blocked) ----- */

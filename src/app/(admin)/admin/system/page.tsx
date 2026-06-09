@@ -32,7 +32,7 @@ import {
 } from "@/lib/domain/system-intel";
 import { env } from "@/lib/env";
 import { getIntegrationHealth } from "@/lib/integrations";
-import { getAiUsageSummary } from "@/lib/ai/read-model/ai-usage";
+import { getAiToolUsage, getAiUsageSummary } from "@/lib/ai/read-model/ai-usage";
 import { requirePermission } from "@/lib/permissions";
 import { r2IsConfigured } from "@/lib/r2";
 
@@ -66,6 +66,7 @@ export default async function SystemDashboardPage() {
     [latestBackup],
     [latestPayroll],
     aiUsage,
+    aiToolUsage,
   ] = await Promise.all([
     db.execute(sql`SELECT 1`).then(() => true).catch(() => false),
     getIntegrationHealth(),
@@ -85,6 +86,7 @@ export default async function SystemDashboardPage() {
     db.select().from(backupRuns).orderBy(desc(backupRuns.startedAt)).limit(1),
     db.select({ exportedAt: payrollBatches.exportedAt, createdAt: payrollBatches.createdAt }).from(payrollBatches).orderBy(desc(payrollBatches.createdAt)).limit(1),
     getAiUsageSummary({ now }),
+    getAiToolUsage({ now }),
   ]);
 
   /* ---- health components (reuse /api/health primitives directly) ---- */
@@ -231,7 +233,17 @@ export default async function SystemDashboardPage() {
               badge={aiUsage.turns > 0 ? { text: "Live · 30d", tone: "green" } : { text: "Concept", tone: "grey" }}
               value={aiUsage.totalTokens > 0 ? aiUsage.totalTokens.toLocaleString("nl-NL") : "—"} unit="tokens" concept={aiUsage.turns === 0}
               lines={aiUsage.turns > 0
-                ? [`${aiUsage.turns} beurten · ${aiUsage.promptTokens.toLocaleString("nl-NL")} in / ${aiUsage.completionTokens.toLocaleString("nl-NL")} uit`]
+                ? [
+                    `${aiUsage.turns} beurten · ${aiUsage.promptTokens.toLocaleString("nl-NL")} in / ${aiUsage.completionTokens.toLocaleString("nl-NL")} uit`,
+                    ...(aiToolUsage.length > 0
+                      ? [
+                          `top tools: ${aiToolUsage
+                            .slice(0, 3)
+                            .map((t) => `${t.tool} (${t.completed}×${t.failed > 0 ? ` · ${t.failed}✗` : ""})`)
+                            .join(" · ")}`,
+                        ]
+                      : []),
+                  ]
                 : ["nog geen tokenlog", "wordt gemeten zodra de assistent draait"]}
               cost={aiUsage.totalTokens === 0
                 ? "n.t.b."

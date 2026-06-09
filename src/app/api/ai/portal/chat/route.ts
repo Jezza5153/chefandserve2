@@ -17,6 +17,7 @@ import { CHEF_SYSTEM_PROMPT, CLIENT_SYSTEM_PROMPT } from "@/lib/ai/runtime/porta
 import { runChefAssistant, runClientAssistant } from "@/lib/ai/runtime/assistant";
 import { timeContextBlock } from "@/lib/ai/runtime/time-context";
 import { checkAiBudget, maybeNotifyAiBudget, recordAiUsage } from "@/lib/ai/read-model/ai-usage";
+import { breakerOpen, recordAiFailure, recordAiSuccess } from "@/lib/ai/circuit-breaker";
 import type { Msg } from "@/lib/ai/runtime/agent";
 
 export const dynamic = "force-dynamic";
@@ -69,6 +70,17 @@ export async function POST(req: Request): Promise<Response> {
     // fail open
   }
 
+  // Circuit breaker — shared with the owner surface (same provider, same pause).
+  if (await breakerOpen()) {
+    return NextResponse.json({
+      outcome: {
+        kind: "final",
+        text: "De assistent heeft even een storing — probeer het over een paar minuten opnieuw.",
+        steps: [],
+      },
+    });
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -87,15 +99,28 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const systemPrompt = kind === "chef" ? CHEF_SYSTEM_PROMPT : CLIENT_SYSTEM_PROMPT;
     const brain = createOpenAiBrain({ apiKey: env.OPENAI_API_KEY, model: aiModel(), systemPrompt, onUsage });
-    const run = {
-      userId: session.user.id,
-      channel: "dashboard" as const,
-      messages,
-      brain,
-      confirmSecret,
-      systemContext: timeContextBlock().trim(),
+    const runWith = (b: typeof brain) => {
+      const run = {
+        userId: session.user.id,
+        channel: "dashboard" as const,
+        messages,
+        brain: b,
+        confirmSecret,
+        systemContext: timeContextBlock().trim(),
+      };
+      return kind === "chef" ? runChefAssistant(run) : runClientAssistant(run);
     };
-    const outcome = kind === "chef" ? await runChefAssistant(run) : await runClientAssistant(run);
+    let outcome: Awaited<ReturnType<typeof runWith>>;
+    try {
+      outcome = await runWith(brain);
+      void recordAiSuccess();
+    } catch (err) {
+      void recordAiFailure();
+      if (!env.OPENAI_FALLBACK_MODEL) throw err;
+      const fallbackBrain = createOpenAiBrain({ apiKey: env.OPENAI_API_KEY, model: env.OPENAI_FALLBACK_MODEL, systemPrompt, onUsage });
+      outcome = await runWith(fallbackBrain);
+      void recordAiSuccess();
+    }
     if (outcome === null) {
       const what = kind === "chef" ? "chef-profiel" : "klant-profiel";
       return NextResponse.json({
