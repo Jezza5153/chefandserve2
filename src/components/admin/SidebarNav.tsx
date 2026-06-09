@@ -26,6 +26,7 @@ const MAIN: Item[] = [
   { label: "Chefs", href: "/admin/business/chefs", icon: "users" },
   { label: "Klanten", href: "/admin/business/clients", icon: "building" },
   { label: "Inbox", href: "/admin/business/inbox", icon: "inbox" },
+  { label: "Berichten", href: "/admin/business/berichten", icon: "message" },
   { label: "Formulieren", href: "/admin/business/forms", icon: "message" },
   { label: "Herinneringen", href: "/admin/business/reminders", icon: "bell" },
   { label: "Uren & loon", href: "/admin/business/hours", icon: "wallet" },
