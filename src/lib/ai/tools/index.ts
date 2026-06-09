@@ -42,6 +42,8 @@ import { briefingDaily } from "@/lib/ai/tools/briefing";
 import { shiftsDetail } from "@/lib/ai/tools/shift-detail";
 import { chefsHistoryAtClient } from "@/lib/ai/tools/chef-client-history";
 import { risksScan } from "@/lib/ai/tools/risks";
+import { intakeList } from "@/lib/ai/tools/intake";
+import { chefsAvailability } from "@/lib/ai/tools/chef-availability";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -61,6 +63,8 @@ export const ALL_TOOLS: AnyTool[] = [
   chefsFeedback,
   chefsTrends,
   chefsProfileCompleteness,
+  chefsAvailability,
+  intakeList,
   clientsHistory,
   clientsHealth,
   chefsHistoryAtClient,
