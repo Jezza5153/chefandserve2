@@ -19,6 +19,8 @@ export const CURRENT_VERSIONS = {
   // PR-FB: consent for processing special-category onboarding PII (BSN/IBAN/ID).
   // Recorded at Stage-2 onboarding submit; not gated by the ConsentGate.
   chef_onboarding: "verwerking_bijzondere_gegevens_chef_v1",
+  // PR-CLIENT-ONBOARDING: consent for the company-data onboarding submit (BEDRIJFSGEGEVENS).
+  client_onboarding: "verwerking_bedrijfsgegevens_klant_v1",
 } as const;
 
 export type ConsentKind = keyof typeof CURRENT_VERSIONS;
