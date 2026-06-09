@@ -87,6 +87,11 @@ const JOBS: Job[] = [
   // nudges each in-app (missing labels only — no PII) + summarises for Maarten.
   // Per-user throttled (6 days). GATED via ONBOARDING_NUDGE_ENABLED. Default OFF.
   { name: "onboarding-nudge", schedule: "0 9 * * 1", script: "onboarding-nudge.ts" },
+  // §6 decision-point watchdog (daily 08:15 Amsterdam). Thin: POSTs the app-side
+  // /api/cron/ai-watchdog — stale open shifts / silent chefs / low ratings become
+  // owner notifications WITH a draft next step (no auto-sends; Maarten stays the
+  // actor). Per-entity throttled (6 days). GATED via AI_WATCHDOG_ENABLED. Default OFF.
+  { name: "ai-watchdog", schedule: "15 8 * * *", script: "ai-watchdog.ts" },
 ];
 
 function ts(): string {
