@@ -23,7 +23,7 @@ const {
   getClientIntelSnapshot,
 } = await import("@/lib/domain/intel");
 const { chefs, clients, placements, shiftHours, shifts, users } = await import("@/lib/db/schema");
-const { eq } = await import("drizzle-orm");
+const { eq, inArray } = await import("drizzle-orm");
 
 const MARK = `INTEL_SMOKE_${crypto.randomUUID()}`;
 const HOUR = 3_600_000;
@@ -43,6 +43,7 @@ function assert(name: string, cond: boolean, detail?: string) {
 let userId = "";
 let clientId = "";
 let chefId = "";
+const extraChefIds: string[] = []; // chef2 (daypart) + chef3 (empty snapshot)
 
 async function makeUnit(opts: { startsAt: Date; role: "chef_de_partie" | "sous_chef" }): Promise<void> {
   const [s] = await db
@@ -139,6 +140,50 @@ try {
   const csnap = await getClientIntelSnapshot(clientId);
   assert("klant snapshot: brein.bestChefType = 'kalm' + patterns", csnap?.brein?.bestChefType === "kalm" && csnap?.patterns.bookingDays.length === 7, JSON.stringify(csnap?.brein));
 
+  // ---- HARDENING: edge cases ----
+  // (A) Decline aggregation: more reasons → ordered by count, labelled.
+  for (const day of ["2099-08-02", "2099-08-03"]) {
+    const [s] = await db
+      .insert(shifts)
+      .values({ clientId, startsAt: new Date(`${day}T12:00:00Z`), endsAt: new Date(`${day}T16:00:00Z`), roleNeeded: "chef_de_partie", headcount: 1, status: "open", notes: MARK })
+      .returning({ id: shifts.id });
+    await db.insert(placements).values({ shiftId: s.id, chefId, status: "rejected", declineReason: day.endsWith("02") ? "te_ver" : "tarief" });
+  }
+  const ds2 = await getChefDeclineSignals(chefId);
+  assert(
+    "decline: te_ver(2) ranks before tarief(1)",
+    ds2.length === 2 && ds2[0].reason === "te_ver" && ds2[0].count === 2 && ds2[1].reason === "tarief" && ds2[1].count === 1,
+    JSON.stringify(ds2),
+  );
+
+  // (B) Daypart boundary: 18:00 UTC = 20:00 Amsterdam → diner (a 2nd chef).
+  const [ch2] = await db.insert(chefs).values({ fullName: `${MARK} DinerChef`, status: "active" }).returning({ id: chefs.id });
+  extraChefIds.push(ch2.id);
+  for (const day of ["2099-09-01", "2099-09-02"]) {
+    const [s] = await db
+      .insert(shifts)
+      .values({ clientId, startsAt: new Date(`${day}T18:00:00Z`), endsAt: new Date(`${day}T23:00:00Z`), roleNeeded: "sous_chef", headcount: 1, status: "open", notes: MARK })
+      .returning({ id: shifts.id });
+    await db.insert(placements).values({ shiftId: s.id, chefId: ch2.id, status: "completed" });
+  }
+  const cp2 = await getChefPatterns(ch2.id);
+  assert("daypart: 20:00 Amsterdam → diner", cp2.topDaypart === "diner", String(cp2.topDaypart));
+
+  // (C) A fresh chef (no data): snapshot is non-null but empty, never crashes.
+  const [ch3] = await db.insert(chefs).values({ fullName: `${MARK} FreshChef`, status: "active" }).returning({ id: chefs.id });
+  extraChefIds.push(ch3.id);
+  const empty = await getChefIntelSnapshot(ch3.id);
+  assert(
+    "empty chef: snapshot non-null, brein null, no declines, no last-worked, zeroed days",
+    empty != null &&
+      empty.brein === null &&
+      empty.declineSignals.length === 0 &&
+      empty.daysSinceLastWorked === null &&
+      empty.patterns.topDaypart === null &&
+      empty.patterns.preferredDays.every((d) => d.count === 0),
+    JSON.stringify({ b: empty?.brein, d: empty?.declineSignals, last: empty?.daysSinceLastWorked, dp: empty?.patterns.topDaypart }),
+  );
+
   // Platform intel KPIs — global (counts real dev data); just verify SQL runs + shape.
   const kpis = await getPlatformIntelKpis();
   assert("platform kpis: activeChefs30d ≥ 0", typeof kpis.activeChefs30d === "number" && kpis.activeChefs30d >= 0, JSON.stringify(kpis));
@@ -149,8 +194,9 @@ try {
     await db.delete(shiftHours).where(eq(shiftHours.clientId, clientId));
   }
   if (chefId) await db.delete(placements).where(eq(placements.chefId, chefId));
-  if (clientId) await db.delete(shifts).where(eq(shifts.clientId, clientId));
+  if (clientId) await db.delete(shifts).where(eq(shifts.clientId, clientId)); // cascades extra chefs' placements
   if (chefId) await db.delete(chefs).where(eq(chefs.id, chefId));
+  if (extraChefIds.length) await db.delete(chefs).where(inArray(chefs.id, extraChefIds));
   if (clientId) await db.delete(clients).where(eq(clients.id, clientId));
   if (userId) await db.delete(users).where(eq(users.id, userId));
 }
