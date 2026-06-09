@@ -6,7 +6,7 @@
 import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
-import { generateKpiReport } from "@/lib/ai/reports/render";
+import { generateKpiReport, generateChefsReport } from "@/lib/ai/reports/render";
 
 export const reportsBusinessKpi = defineTool({
   name: "reports.business_kpi",
@@ -22,6 +22,24 @@ export const reportsBusinessKpi = defineTool({
     return {
       data: { url: res.url, format: "pdf" },
       summary: `Je KPI-bedrijfsrapport (PDF) staat klaar — downloadlink (24u geldig): ${res.url}`,
+    };
+  },
+});
+
+export const reportsChefs = defineTool({
+  name: "reports.chefs",
+  title: "Chef-rapport (PDF)",
+  description:
+    "Genereer een nette PDF-rapportage over de chefs: per chef de omzet, marge en inzet (uren · diensten) over de gekozen periode (standaard 90 dagen), met een top-chefs-grafiek, een volledige tabel en uitleg in gewone taal. Geeft een downloadlink terug (24u geldig). Voor 'maak me een rapport over de chefs / chef-prestaties in PDF'. Read-only.",
+  risk: "read",
+  permission: { resource: "cockpit", action: "read" },
+  input: z.object({ rangeDays: z.number().int().min(7).max(365).optional() }),
+  run: async (input) => {
+    const res = await generateChefsReport(new Date(), input.rangeDays ?? 90);
+    if (!res.ok) throw new Error(res.error);
+    return {
+      data: { url: res.url, format: "pdf" },
+      summary: `Je chef-rapport (PDF) staat klaar — downloadlink (24u geldig): ${res.url}`,
     };
   },
 });
