@@ -47,7 +47,7 @@ import { DetailShell } from "@/components/ui/DetailShell";
 import { SummaryCard } from "./_components/SummaryCard";
 import { NotesForm } from "./_components/NotesForm";
 import { ExistingPlacements } from "./_components/ExistingPlacements";
-import { MatchSuggestions } from "./_components/MatchSuggestions";
+import { MatchSuggestions, type PairIntelBadge } from "./_components/MatchSuggestions";
 import { EmptyState } from "./_components/EmptyState";
 import { MatchIntelSection, type PairValue } from "./_components/MatchIntelSection";
 
@@ -142,6 +142,60 @@ export default async function ShiftDetailPage({
   // PR-2B: klant favorite/blocked sets.
   const favoriteSet = new Set(client?.favoriteChefIds ?? []);
   const blockedSet = new Set(client?.blockedChefIds ?? []);
+
+  // PR-INTEL-P6: captured pair-memory + post-shift thumbs for each candidate at
+  // THIS klant — surfaced in the rail so the data Maarten/chefs captured drives
+  // the choice. Two batched queries (note/wouldRehire + thumb tallies).
+  const pairIntelByChef = new Map<string, PairIntelBadge>();
+  if (candidateChefIds.length > 0) {
+    const [pairRows, thumbRows] = await Promise.all([
+      db
+        .select({
+          chefId: matchIntel.chefId,
+          note: matchIntel.note,
+          wouldRehire: matchIntel.wouldRehire,
+        })
+        .from(matchIntel)
+        .where(
+          and(
+            eq(matchIntel.clientId, shift.clientId),
+            inArray(matchIntel.chefId, candidateChefIds),
+          ),
+        ),
+      db
+        .select({
+          chefId: placements.chefId,
+          up: sql<number>`coalesce(count(*) filter (where ${placements.chefReturnSignal} = true),0)::int`,
+          down: sql<number>`coalesce(count(*) filter (where ${placements.chefReturnSignal} = false),0)::int`,
+        })
+        .from(placements)
+        .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+        .where(
+          and(
+            inArray(placements.chefId, candidateChefIds),
+            eq(shifts.clientId, shift.clientId),
+          ),
+        )
+        .groupBy(placements.chefId),
+    ]);
+    for (const cid of candidateChefIds) {
+      pairIntelByChef.set(cid, { note: null, wouldRehire: null, up: 0, down: 0 });
+    }
+    for (const r of pairRows) {
+      const e = pairIntelByChef.get(r.chefId);
+      if (e) {
+        e.note = r.note;
+        e.wouldRehire = r.wouldRehire;
+      }
+    }
+    for (const r of thumbRows) {
+      const e = pairIntelByChef.get(r.chefId);
+      if (e) {
+        e.up = Number(r.up);
+        e.down = Number(r.down);
+      }
+    }
+  }
 
   function candidateSignals(chefId: string, score: number): CandidateSignals {
     const c = chefById.get(chefId);
@@ -834,6 +888,7 @@ export default async function ShiftDetailPage({
           propose={propose}
           logContact={logContact}
           toggleClientChef={toggleClientChef}
+          pairIntelByChef={pairIntelByChef}
         />
       )}
 

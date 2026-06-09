@@ -14,6 +14,14 @@ import { formatChefRole } from "@/lib/labels";
 
 type TravelMargin = { t: TravelEstimate; margin: MarginEstimate } | null;
 
+/** PR-INTEL-P6: captured chef×klant pair-memory, surfaced at the choice moment. */
+export type PairIntelBadge = {
+  note: string | null;
+  wouldRehire: boolean | null;
+  up: number;
+  down: number;
+};
+
 /**
  * "Vul deze dienst — beste matches" ranked candidate list. Action-bearing: the
  * `propose`, `logContact` and `toggleClientChef` "use server" actions stay in
@@ -35,6 +43,7 @@ export function MatchSuggestions({
   propose,
   logContact,
   toggleClientChef,
+  pairIntelByChef,
 }: {
   matches: MatchResult[];
   rankedMatches: MatchResult[];
@@ -46,6 +55,7 @@ export function MatchSuggestions({
   propose: (formData: FormData) => Promise<void>;
   logContact: (formData: FormData) => Promise<void>;
   toggleClientChef: (formData: FormData) => Promise<void>;
+  pairIntelByChef: Map<string, PairIntelBadge>;
 }) {
   return (
     <section className="mt-10">
@@ -137,6 +147,7 @@ export function MatchSuggestions({
                       </span>
                     </div>
                   )}
+                  <PairIntelLine intel={pairIntelByChef.get(m.chef.id)} />
                   {m.reasons.length > 0 && (
                     <ul className="mt-2 flex flex-wrap gap-1">
                       {m.reasons.map((r) => (
@@ -237,6 +248,41 @@ export function MatchSuggestions({
         })}
       </ul>
     </section>
+  );
+}
+
+/** PR-INTEL-P6 — the captured pair-memory for this chef at this klant, compact. */
+function PairIntelLine({ intel }: { intel: PairIntelBadge | undefined }) {
+  if (!intel) return null;
+  const { note, wouldRehire, up, down } = intel;
+  if (up === 0 && down === 0 && wouldRehire === null && !note) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px]">
+      {up > 0 && (
+        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">👍 {up}</span>
+      )}
+      {down > 0 && (
+        <span className="rounded-full bg-burgundy/5 px-2 py-0.5 text-burgundy">👎 {down}</span>
+      )}
+      {wouldRehire === true && (
+        <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700">
+          klant neemt weer
+        </span>
+      )}
+      {wouldRehire === false && (
+        <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800">
+          klant liever niet
+        </span>
+      )}
+      {note && (
+        <span
+          title={note}
+          className="max-w-[240px] truncate rounded-full bg-bg-cream px-2 py-0.5 italic text-ink-600"
+        >
+          &ldquo;{note}&rdquo;
+        </span>
+      )}
+    </div>
   );
 }
 
