@@ -26,6 +26,7 @@ const {
   getReactivationChefs,
   getQuietClients,
   getMatchHealthKpis,
+  getProvenMatchOpportunities,
 } = await import("@/lib/domain/intel");
 const { chefs, clients, placements, shiftHours, shifts, users } = await import("@/lib/db/schema");
 const { and, eq, inArray } = await import("drizzle-orm");
@@ -219,6 +220,20 @@ try {
   assert("match-health: satisfactionPct 0..100", typeof mh.satisfactionPct === "number" && mh.satisfactionPct >= 0 && mh.satisfactionPct <= 100, String(mh.satisfactionPct));
   assert("match-health: provenPairs ≥ 1 (fixture would-rehire)", mh.provenPairs >= 1, String(mh.provenPairs));
   assert("match-health: notedPairs ≥ 1 (fixture note)", mh.notedPairs >= 1, String(mh.notedPairs));
+
+  // ---- proven-pair opportunities (Phase 11): open near shift × would-rehire ----
+  // chefId×clientId already has would_rehire=true; add an OPEN shift in 3 days.
+  const SOON = new Date(Date.now() + 3 * 24 * HOUR);
+  const [openShift] = await db
+    .insert(shifts)
+    .values({ clientId, startsAt: SOON, endsAt: new Date(SOON.getTime() + 4 * HOUR), roleNeeded: "chef_de_partie", headcount: 1, status: "open", notes: MARK })
+    .returning({ id: shifts.id });
+  const opps = await getProvenMatchOpportunities({ horizonDays: 14, limit: 1000 });
+  const opp = opps.find((o) => o.shiftId === openShift.id && o.chefId === chefId);
+  assert("opportunity: open shift × would-rehire chef present", opp != null, JSON.stringify(opps.slice(0, 2)));
+  assert("opportunity: carries klant + role", opp?.companyName?.includes(MARK) === true && opp?.roleNeeded === "chef_de_partie", JSON.stringify(opp));
+  // The far-future (2099) open-less shifts must NOT appear (outside 14d horizon).
+  assert("opportunity: out-of-horizon shifts excluded", !opps.some((o) => new Date(o.startsAt).getUTCFullYear() >= 2099));
 
   // ---- relationship-health (Phase 7): reactivation chefs + quiet klanten ----
   // Global queries → use membership (not exact counts). Past-dated fixtures: a

@@ -7,23 +7,61 @@
  */
 import Link from "next/link";
 
-import type { QuietClient, ReactivationChef } from "@/lib/domain/intel";
+import type {
+  ProvenOpportunity,
+  QuietClient,
+  ReactivationChef,
+} from "@/lib/domain/intel";
+import { formatShiftRole } from "@/lib/labels";
 
 export function DaglijstCard({
+  opportunities,
   reactivationChefs,
   quietClients,
 }: {
+  opportunities: ProvenOpportunity[];
   reactivationChefs: ReactivationChef[];
   quietClients: QuietClient[];
 }) {
-  if (reactivationChefs.length === 0 && quietClients.length === 0) return null;
+  if (
+    opportunities.length === 0 &&
+    reactivationChefs.length === 0 &&
+    quietClients.length === 0
+  )
+    return null;
   return (
     <section className="rounded-lg border border-ink-200 bg-white p-6">
       <h2 className="font-serif text-lg text-ink-900">Maarten&rsquo;s daglijst</h2>
       <p className="mt-1 text-xs text-ink-500">
-        Relatie-signalen — wie raakt uit beeld en is het waard om warm te houden.
-        Niet de open diensten (dat is de planning), maar de mensen erachter.
+        Relatie-signalen — wie raakt uit beeld en is het waard om warm te houden,
+        en waar een bewezen match een open dienst kan vullen.
       </p>
+
+      {/* Kansen — proven chef × open dienst, the highest-signal "do dit nu" */}
+      {opportunities.length > 0 && (
+        <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50/50 p-4">
+          <h3 className="font-ui text-[11px] uppercase tracking-[0.18em] text-emerald-800">
+            Kansen — bewezen chef voor een open dienst ({opportunities.length})
+          </h3>
+          <ul className="mt-2 space-y-1.5">
+            {opportunities.map((o) => (
+              <li key={`${o.shiftId}:${o.chefId}`} className="text-sm">
+                <Link
+                  href={`/admin/business/shifts/${o.shiftId}`}
+                  className="text-ink-900 hover:text-burgundy hover:underline"
+                >
+                  <strong>{o.chefName}</strong> → {o.companyName}
+                </Link>
+                <span className="text-ink-500">
+                  {" · "}
+                  {formatShiftRole(o.roleNeeded)} · {formatWhen(o.startsAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="mt-4 grid gap-6 md:grid-cols-2">
         <Column
           title={`Chefs om te bellen (${reactivationChefs.length})`}
@@ -48,6 +86,14 @@ export function DaglijstCard({
       </div>
     </section>
   );
+}
+
+function formatWhen(d: Date): string {
+  return d.toLocaleDateString("nl-NL", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
 }
 
 function Column({

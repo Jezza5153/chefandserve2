@@ -20,6 +20,7 @@ import {
   getReactivationChefs,
   getQuietClients,
   getMatchHealthKpis,
+  getProvenMatchOpportunities,
 } from "@/lib/domain/intel";
 import {
   detectSwing,
@@ -58,6 +59,7 @@ export default async function ReportingPage({
     reactivationChefs,
     quietClients,
     matchHealth,
+    opportunities,
   ] = await Promise.all([
     getPlatformRollups(),
     getPlatformTimeSeries({ bucket }),
@@ -70,6 +72,7 @@ export default async function ReportingPage({
     getReactivationChefs(),
     getQuietClients(),
     getMatchHealthKpis(),
+    getProvenMatchOpportunities(),
   ]);
 
   const unbilledTotal = unbilled.reduce((sum, u) => sum + u.totalCents, 0);
@@ -136,6 +139,7 @@ export default async function ReportingPage({
       {/* Maarten's daglijst — proactive relationship signals (PR-INTEL-P7) */}
       <div className="mt-8">
         <DaglijstCard
+          opportunities={opportunities}
           reactivationChefs={reactivationChefs}
           quietClients={quietClients}
         />

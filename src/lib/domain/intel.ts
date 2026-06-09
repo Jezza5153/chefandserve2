@@ -583,3 +583,88 @@ export async function getMatchHealthKpis(): Promise<MatchHealthKpis> {
     notedPairs: Number(pairs?.noted ?? 0),
   };
 }
+
+export type ProvenOpportunity = {
+  shiftId: string;
+  startsAt: Date;
+  roleNeeded: string;
+  clientId: string;
+  companyName: string;
+  chefId: string;
+  chefName: string;
+};
+
+/**
+ * The actionable intersection of intel × operations (PR-INTEL-P11): an OPEN
+ * upcoming shift at a klant who has a PROVEN chef (`match_intel.would_rehire =
+ * true`) — "stuur chef Y naar Hotel X, de klant neemt hem graag weer". Excludes
+ * chefs the klant blocked and chefs already on the shift. Soonest-first. This is
+ * the single highest-signal "do dit nu" — relationship-memory turned into a fill.
+ */
+export async function getProvenMatchOpportunities(opts?: {
+  horizonDays?: number;
+  limit?: number;
+}): Promise<ProvenOpportunity[]> {
+  const horizon = opts?.horizonDays ?? 14;
+  const limit = opts?.limit ?? 8;
+
+  const rows = await db
+    .select({
+      shiftId: shifts.id,
+      startsAt: sql<string>`${shifts.startsAt}`,
+      roleNeeded: shifts.roleNeeded,
+      clientId: clients.id,
+      companyName: clients.companyName,
+      blocked: clients.blockedChefIds,
+      chefId: chefs.id,
+      chefName: chefs.fullName,
+    })
+    .from(shifts)
+    .innerJoin(clients, eq(clients.id, shifts.clientId))
+    .innerJoin(
+      matchIntel,
+      and(eq(matchIntel.clientId, shifts.clientId), eq(matchIntel.wouldRehire, true)),
+    )
+    .innerJoin(chefs, and(eq(chefs.id, matchIntel.chefId), eq(chefs.status, "active")))
+    .where(
+      and(
+        eq(shifts.status, "open"),
+        sql`${shifts.startsAt} > now()`,
+        sql`${shifts.startsAt} < now() + make_interval(days => ${horizon})`,
+      ),
+    )
+    .orderBy(sql`${shifts.startsAt} asc`)
+    .limit(limit * 5); // buffer for the blocked / already-placed filters below
+
+  if (rows.length === 0) return [];
+
+  // Exclude any chef already on the shift (a live placement).
+  const shiftIds = [...new Set(rows.map((r) => r.shiftId))];
+  const placed = await db
+    .select({ shiftId: placements.shiftId, chefId: placements.chefId })
+    .from(placements)
+    .where(
+      and(
+        inArray(placements.shiftId, shiftIds),
+        sql`${placements.status} NOT IN ('rejected','cancelled')`,
+      ),
+    );
+  const placedSet = new Set(placed.map((p) => `${p.shiftId}:${p.chefId}`));
+
+  const out: ProvenOpportunity[] = [];
+  for (const r of rows) {
+    if ((r.blocked ?? []).includes(r.chefId)) continue; // klant blocked this chef
+    if (placedSet.has(`${r.shiftId}:${r.chefId}`)) continue; // already on the shift
+    out.push({
+      shiftId: r.shiftId,
+      startsAt: new Date(r.startsAt),
+      roleNeeded: r.roleNeeded,
+      clientId: r.clientId,
+      companyName: r.companyName,
+      chefId: r.chefId,
+      chefName: r.chefName,
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
