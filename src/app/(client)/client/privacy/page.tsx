@@ -6,6 +6,9 @@
 import { redirect } from "next/navigation";
 
 import { fieldClass } from "@/components/forms/Fields";
+import { ClientDataOverview } from "@/components/privacy/ClientDataOverview";
+import { CLIENT_ONBOARDING_FORM_SLUG, getClientByUserId, hydrateFormState } from "@/lib/domain/client-onboarding";
+import { getPublishedForm } from "@/lib/domain/forms";
 import { createPrivacyRequest } from "@/lib/domain/privacy";
 import { requireAuth } from "@/lib/permissions";
 
@@ -43,8 +46,13 @@ export default async function ClientPrivacyPage({
 }: {
   searchParams: Promise<{ ok?: string }>;
 }) {
-  await requireAuth("/client/privacy");
+  const session = await requireAuth("/client/privacy");
   const sp = await searchParams;
+
+  // AVG transparency: load the klant's own data so we can show exactly what we hold.
+  const client = await getClientByUserId(session.user.id);
+  const form = client ? await getPublishedForm(CLIENT_ONBOARDING_FORM_SLUG) : null;
+  const overviewInitial = client && form ? await hydrateFormState(form, client) : null;
 
   return (
     <div className="mx-auto max-w-xl">
@@ -96,6 +104,23 @@ export default async function ClientPrivacyPage({
           Verzoek indienen
         </button>
       </form>
+
+      {form && overviewInitial ? (
+        <section className="mt-12">
+          <h2 className="font-serif text-2xl text-ink-900">Welke gegevens hebben we van jou?</h2>
+          <p className="mt-1 text-sm text-ink-500">
+            Dit zijn de bedrijfsgegevens die we op dit moment van je bewaren. Kloppen ze niet, of wil
+            je iets verwijderen? Gebruik het formulier hierboven, of pas ze zelf aan bij{" "}
+            <a href="/client/onboarding" className="text-burgundy underline-offset-4 hover:underline">
+              je bedrijfsgegevens
+            </a>
+            . Facturatiegegevens worden apart beheerd en staan hier niet bij.
+          </p>
+          <div className="mt-5">
+            <ClientDataOverview form={form} initial={overviewInitial} />
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
