@@ -41,6 +41,7 @@ import { auditSearch, documentsListForChef, documentsExpiring, privacyListReques
 import { briefingDaily } from "@/lib/ai/tools/briefing";
 import { shiftsDetail } from "@/lib/ai/tools/shift-detail";
 import { chefsHistoryAtClient } from "@/lib/ai/tools/chef-client-history";
+import { risksScan } from "@/lib/ai/tools/risks";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -64,6 +65,7 @@ export const ALL_TOOLS: AnyTool[] = [
   clientsHealth,
   chefsHistoryAtClient,
   plannerCockpitTool,
+  risksScan,
   shiftsSuggestChefs,
   chefsSemanticSearch,
   clientsSemanticSearch,
