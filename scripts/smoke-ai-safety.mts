@@ -69,6 +69,7 @@ const SAMPLE: Record<string, unknown> = {
   "chefs.history_at_client": { chefId: "x", clientId: "y" },
   "contacts.log": { targetType: "chef", targetId: "x", channel: "phone", note: "test notitie" },
   "clients.decide_shift_request": { requestId: "x", decision: "rejected" },
+  "placements.reply": { placementId: "x", body: "test bericht" },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 
