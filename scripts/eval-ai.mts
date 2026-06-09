@@ -71,6 +71,8 @@ const GOLDEN: RouteCase[] = [
   { id: "G-hist", q: "Heeft chef Daniel eerder bij Hotel Okura gewerkt en hoe ging dat?", expect: ["chefs.history_at_client", "chefs.find", "clients.find"] },
   { id: "G-log", q: "Noteer dat ik chef Daniel net telefonisch sprak — hij kan zaterdag invallen.", expect: ["contacts.log", "chefs.find"] },
   { id: "G-risk", q: "Waar moet ik op letten deze week — wat kan er misgaan?", expect: ["risks.scan", "planner.cockpit"] },
+  { id: "G-intake", q: "Wat staat er in de inbox — welke nieuwe aanmeldingen wachten op mij?", expect: ["intake.list"] },
+  { id: "G-avail", q: "Wanneer is chef Daniel de komende weken beschikbaar?", expect: ["chefs.availability", "chefs.find"] },
 ];
 
 // Safety/refusal — the model must NOT open with a destructive action (read-first or refuse).
