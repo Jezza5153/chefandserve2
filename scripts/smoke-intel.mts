@@ -23,6 +23,8 @@ const {
   getClientIntelSnapshot,
   getMatchIntel,
   saveMatchIntel,
+  getReactivationChefs,
+  getQuietClients,
 } = await import("@/lib/domain/intel");
 const { chefs, clients, placements, shiftHours, shifts, users } = await import("@/lib/db/schema");
 const { and, eq, inArray } = await import("drizzle-orm");
@@ -46,6 +48,9 @@ let userId = "";
 let clientId = "";
 let chefId = "";
 const extraChefIds: string[] = []; // chef2 (daypart) + chef3 (empty snapshot)
+let idleChefId = ""; // Phase 7: reactivation fixture (past, idle)
+let quietClientId = ""; // Phase 7: quiet-klant fixture (past-only)
+let quietUserId = "";
 
 async function makeUnit(opts: { startsAt: Date; role: "chef_de_partie" | "sous_chef" }): Promise<void> {
   const [s] = await db
@@ -206,6 +211,33 @@ try {
   mi = await getMatchIntel(chefId, clientId);
   assert("match: thumbs.up reflects chef_return_signal (3/0)", mi.thumbs.up === 3 && mi.thumbs.down === 0, JSON.stringify(mi.thumbs));
 
+  // ---- relationship-health (Phase 7): reactivation chefs + quiet klanten ----
+  // Global queries → use membership (not exact counts). Past-dated fixtures: a
+  // far-future "completed" shift is NOT idle, so we need real past dates here.
+  const PAST = new Date(Date.now() - 60 * 24 * HOUR); // 60 days ago
+  const PAST_END = new Date(PAST.getTime() + 4 * HOUR);
+  const [idle] = await db.insert(chefs).values({ fullName: `${MARK} IdleChef`, status: "active" }).returning({ id: chefs.id });
+  idleChefId = idle.id;
+  for (let i = 0; i < 2; i++) {
+    const [s] = await db.insert(shifts).values({ clientId, startsAt: PAST, endsAt: PAST_END, roleNeeded: "chef_de_partie", headcount: 1, status: "completed", notes: MARK }).returning({ id: shifts.id });
+    await db.insert(placements).values({ shiftId: s.id, chefId: idleChefId, status: "completed" });
+  }
+  const react = await getReactivationChefs({ limit: 1000 });
+  const idleRow = react.find((r) => r.chefId === idleChefId);
+  assert("reactivation: idle chef present", idleRow != null, JSON.stringify(react.slice(0, 2)));
+  assert("reactivation: idle chef 2 shifts, daysSince≥21", (idleRow?.completedShifts ?? 0) === 2 && (idleRow?.daysSince ?? 0) >= 21, JSON.stringify(idleRow));
+  assert("reactivation: future-active chef excluded", !react.some((r) => r.chefId === chefId));
+
+  const [qu] = await db.insert(users).values({ email: `${MARK}-quiet@smoke.invalid`.toLowerCase() }).returning({ id: users.id });
+  quietUserId = qu.id;
+  const [qc] = await db.insert(clients).values({ companyName: `${MARK} QuietBV`, userId: quietUserId }).returning({ id: clients.id });
+  quietClientId = qc.id;
+  const [qs] = await db.insert(shifts).values({ clientId: quietClientId, startsAt: PAST, endsAt: PAST_END, roleNeeded: "chef_de_partie", headcount: 1, status: "completed", notes: MARK }).returning({ id: shifts.id });
+  await db.insert(placements).values({ shiftId: qs.id, chefId, status: "completed" });
+  const quiet = await getQuietClients({ limit: 1000 });
+  assert("quiet: past-only klant present", quiet.some((r) => r.clientId === quietClientId), JSON.stringify(quiet.slice(0, 2)));
+  assert("quiet: future-active klant excluded", !quiet.some((r) => r.clientId === clientId));
+
   // Platform intel KPIs — global (counts real dev data); just verify SQL runs + shape.
   const kpis = await getPlatformIntelKpis();
   assert("platform kpis: activeChefs30d ≥ 0", typeof kpis.activeChefs30d === "number" && kpis.activeChefs30d >= 0, JSON.stringify(kpis));
@@ -219,7 +251,13 @@ try {
   if (clientId) await db.delete(shifts).where(eq(shifts.clientId, clientId)); // cascades extra chefs' placements
   if (chefId) await db.delete(chefs).where(eq(chefs.id, chefId));
   if (extraChefIds.length) await db.delete(chefs).where(inArray(chefs.id, extraChefIds));
+  // Phase 7 fixtures: idle chef (its placements cascaded via clientId shifts) +
+  // quiet klant (delete its shift — chefId's placement on it already gone above).
+  if (idleChefId) await db.delete(chefs).where(eq(chefs.id, idleChefId));
+  if (quietClientId) await db.delete(shifts).where(eq(shifts.clientId, quietClientId));
+  if (quietClientId) await db.delete(clients).where(eq(clients.id, quietClientId));
   if (clientId) await db.delete(clients).where(eq(clients.id, clientId));
+  if (quietUserId) await db.delete(users).where(eq(users.id, quietUserId));
   if (userId) await db.delete(users).where(eq(users.id, userId));
 }
 

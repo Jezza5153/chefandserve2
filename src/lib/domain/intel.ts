@@ -405,3 +405,136 @@ export async function saveMatchIntel(args: {
     .values({ chefId: args.chefId, clientId: args.clientId, ...set })
     .onConflictDoUpdate({ target: [matchIntel.chefId, matchIntel.clientId], set });
 }
+
+/* ── Relationship-health signals for "Maarten's daglijst" (PR-INTEL-P7) ───────
+   Proactive, not operational: who's drifting away that's worth keeping warm.
+   Distinct from risks.scan (open shifts) — this is the relationship lane. ───── */
+
+export type ReactivationChef = {
+  chefId: string;
+  fullName: string;
+  lastWorkedAt: Date | null;
+  daysSince: number;
+  completedShifts: number;
+};
+
+/**
+ * Good chefs gone quiet — a completed track record (≥ minShifts) but idle for
+ * ≥ thresholdDays AND nothing live on the horizon. "Wie kan ik bellen voor een
+ * shift?" Warmest (most-recently-active) first.
+ */
+export async function getReactivationChefs(opts?: {
+  thresholdDays?: number;
+  minShifts?: number;
+  limit?: number;
+}): Promise<ReactivationChef[]> {
+  const threshold = opts?.thresholdDays ?? 21;
+  const minShifts = opts?.minShifts ?? 2;
+  const limit = opts?.limit ?? 8;
+
+  const candidates = await db
+    .select({
+      chefId: chefs.id,
+      fullName: chefs.fullName,
+      lastWorkedAt: sql<string | null>`max(${shifts.startsAt})`,
+      completedShifts: sql<number>`count(*)::int`,
+    })
+    .from(placements)
+    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .innerJoin(chefs, eq(chefs.id, placements.chefId))
+    .where(and(eq(placements.status, "completed"), eq(chefs.status, "active")))
+    .groupBy(chefs.id, chefs.fullName)
+    .having(
+      and(
+        sql`max(${shifts.startsAt}) < now() - make_interval(days => ${threshold})`,
+        sql`count(*) >= ${minShifts}`,
+      ),
+    )
+    .orderBy(desc(sql`max(${shifts.startsAt})`))
+    .limit(limit + 6); // buffer for the upcoming-booking filter below
+
+  // Drop anyone already re-engaged (a future proposed/accepted/confirmed shift).
+  const ids = candidates.map((c) => c.chefId);
+  const busy = new Set<string>();
+  if (ids.length > 0) {
+    const upcoming = await db
+      .selectDistinct({ chefId: placements.chefId })
+      .from(placements)
+      .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+      .where(
+        and(
+          inArray(placements.chefId, ids),
+          inArray(placements.status, ["proposed", "accepted", "confirmed"]),
+          sql`${shifts.startsAt} > now()`,
+        ),
+      );
+    for (const u of upcoming) busy.add(u.chefId);
+  }
+
+  return candidates
+    .filter((c) => !busy.has(c.chefId))
+    .slice(0, limit)
+    .map((c) => ({
+      chefId: c.chefId,
+      fullName: c.fullName,
+      lastWorkedAt: c.lastWorkedAt ? new Date(c.lastWorkedAt) : null,
+      daysSince: c.lastWorkedAt
+        ? Math.floor((Date.now() - new Date(c.lastWorkedAt).getTime()) / 86_400_000)
+        : 0,
+      completedShifts: Number(c.completedShifts),
+    }));
+}
+
+export type QuietClient = {
+  clientId: string;
+  companyName: string;
+  lastShiftAt: Date | null;
+  daysSince: number;
+  totalShifts: number;
+};
+
+/**
+ * Klanten gone quiet — booked before (≥ minShifts non-cancelled shifts) but
+ * nothing since ≥ thresholdDays. Because we aggregate ALL non-cancelled shifts,
+ * a max start-date in the past also means nothing is upcoming. "Tijd om weer
+ * eens te bellen." Most-recently-active first.
+ */
+export async function getQuietClients(opts?: {
+  thresholdDays?: number;
+  minShifts?: number;
+  limit?: number;
+}): Promise<QuietClient[]> {
+  const threshold = opts?.thresholdDays ?? 30;
+  const minShifts = opts?.minShifts ?? 1;
+  const limit = opts?.limit ?? 8;
+
+  const rows = await db
+    .select({
+      clientId: clients.id,
+      companyName: clients.companyName,
+      lastShiftAt: sql<string | null>`max(${shifts.startsAt})`,
+      totalShifts: sql<number>`count(*)::int`,
+    })
+    .from(shifts)
+    .innerJoin(clients, eq(clients.id, shifts.clientId))
+    .where(ne(shifts.status, "cancelled"))
+    .groupBy(clients.id, clients.companyName)
+    .having(
+      and(
+        sql`max(${shifts.startsAt}) < now() - make_interval(days => ${threshold})`,
+        sql`count(*) >= ${minShifts}`,
+      ),
+    )
+    .orderBy(desc(sql`max(${shifts.startsAt})`))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    clientId: r.clientId,
+    companyName: r.companyName,
+    lastShiftAt: r.lastShiftAt ? new Date(r.lastShiftAt) : null,
+    daysSince: r.lastShiftAt
+      ? Math.floor((Date.now() - new Date(r.lastShiftAt).getTime()) / 86_400_000)
+      : 0,
+    totalShifts: Number(r.totalShifts),
+  }));
+}

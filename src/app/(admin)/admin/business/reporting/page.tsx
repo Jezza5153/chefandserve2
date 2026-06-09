@@ -7,6 +7,7 @@
  */
 import Link from "next/link";
 
+import { DaglijstCard } from "@/components/dashboard/DaglijstCard";
 import { LeaderboardCard } from "@/components/dashboard/LeaderboardCard";
 import { MoneyStrip } from "@/components/dashboard/MoneyStrip";
 import { TrendChart } from "@/components/dashboard/TrendChart";
@@ -14,7 +15,11 @@ import { getLeaderboards } from "@/lib/domain/leaderboards";
 import { getPlatformRollups } from "@/lib/domain/platform-rollups";
 import { getPlannerReport } from "@/lib/domain/planner-intel";
 import { getUnbilledHoursByClient } from "@/lib/domain/invoicing";
-import { getPlatformIntelKpis } from "@/lib/domain/intel";
+import {
+  getPlatformIntelKpis,
+  getReactivationChefs,
+  getQuietClients,
+} from "@/lib/domain/intel";
 import {
   detectSwing,
   getChefRevenueBreakdown,
@@ -40,17 +45,29 @@ export default async function ReportingPage({
   const bucket: "week" | "month" = sp.range === "month" ? "month" : "week";
 
   const rangeDays = bucket === "month" ? 365 : 90;
-  const [rollups, series, planner, leaders, clientBreakdown, chefBreakdown, unbilled, intelKpis] =
-    await Promise.all([
-      getPlatformRollups(),
-      getPlatformTimeSeries({ bucket }),
-      getPlannerReport(),
-      getLeaderboards(rangeDays, 5),
-      getClientRevenueBreakdown(rangeDays, { limit: 10 }),
-      getChefRevenueBreakdown(rangeDays, { limit: 10 }),
-      getUnbilledHoursByClient(),
-      getPlatformIntelKpis(),
-    ]);
+  const [
+    rollups,
+    series,
+    planner,
+    leaders,
+    clientBreakdown,
+    chefBreakdown,
+    unbilled,
+    intelKpis,
+    reactivationChefs,
+    quietClients,
+  ] = await Promise.all([
+    getPlatformRollups(),
+    getPlatformTimeSeries({ bucket }),
+    getPlannerReport(),
+    getLeaderboards(rangeDays, 5),
+    getClientRevenueBreakdown(rangeDays, { limit: 10 }),
+    getChefRevenueBreakdown(rangeDays, { limit: 10 }),
+    getUnbilledHoursByClient(),
+    getPlatformIntelKpis(),
+    getReactivationChefs(),
+    getQuietClients(),
+  ]);
 
   const unbilledTotal = unbilled.reduce((sum, u) => sum + u.totalCents, 0);
   const revenueSwing = detectSwing(series.points, "revenueCents");
@@ -111,6 +128,14 @@ export default async function ReportingPage({
       {/* Headline money */}
       <div className="mt-8">
         <MoneyStrip week={rollups.week} month={rollups.month} ytd={rollups.ytd} />
+      </div>
+
+      {/* Maarten's daglijst — proactive relationship signals (PR-INTEL-P7) */}
+      <div className="mt-8">
+        <DaglijstCard
+          reactivationChefs={reactivationChefs}
+          quietClients={quietClients}
+        />
       </div>
 
       {/* Range toggle */}
