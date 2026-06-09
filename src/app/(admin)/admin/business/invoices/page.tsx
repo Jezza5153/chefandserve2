@@ -198,13 +198,23 @@ export default async function InvoicesPage({
 
       {/* List */}
       <section className="mt-10">
-        <div className="flex items-baseline justify-between">
+        <div className="flex items-baseline justify-between gap-3">
           <h2 className="font-serif text-xl text-ink-900">Alle facturen</h2>
-          {openCents > 0 ? (
-            <p className="text-sm text-ink-500">
-              Openstaand: <strong className="text-ink-900">{formatEuro(openCents)}</strong>
-            </p>
-          ) : null}
+          <div className="flex items-baseline gap-4">
+            {openCents > 0 ? (
+              <p className="text-sm text-ink-500">
+                Openstaand: <strong className="text-ink-900">{formatEuro(openCents)}</strong>
+              </p>
+            ) : null}
+            {rows.length > 0 ? (
+              <a
+                href="/admin/business/invoices/export.csv"
+                className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy hover:underline"
+              >
+                Exporteer CSV ↓
+              </a>
+            ) : null}
+          </div>
         </div>
 
         {rows.length === 0 ? (

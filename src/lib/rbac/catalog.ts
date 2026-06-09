@@ -187,7 +187,7 @@ export const GATE_MAP: GateMapping[] = [
   { id: "hours.approve", oldGate: "owner", perm: "hours.approve", routes: ["/admin/business/hours/[id]"] },
   { id: "payroll", oldGate: "owner", perm: "payroll.read", routes: ["/admin/business/payroll"] },
   { id: "payroll.export", oldGate: "owner", perm: "payroll.export", routes: ["/admin/business/payroll/[id]/export.csv"] },
-  { id: "invoices", oldGate: "owner", perm: "invoices.read", routes: ["/admin/business/invoices", "/admin/business/invoices/[id]"] },
+  { id: "invoices", oldGate: "owner", perm: "invoices.read", routes: ["/admin/business/invoices", "/admin/business/invoices/[id]", "/admin/business/invoices/export.csv"] },
   { id: "account.settings", oldGate: "owner", perm: "account.settings", routes: ["/admin/account/instellingen", "/admin/account/2fa"] },
   { id: "business.settings", oldGate: "owner", perm: "settings.write", routes: ["/admin/business/instellingen"] },
   { id: "notifications.center", oldGate: "owner", perm: "notifications.read", routes: ["/admin/notifications"] },
