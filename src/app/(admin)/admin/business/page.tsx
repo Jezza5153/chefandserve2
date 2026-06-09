@@ -39,6 +39,7 @@ import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { getRosterSettings } from "@/lib/domain/user-settings";
 import { getPlatformRollups } from "@/lib/domain/platform-rollups";
 import { getUnbilledHoursByClient } from "@/lib/domain/invoicing";
+import { detectSwing, getPlatformTimeSeries } from "@/lib/domain/reporting";
 import { formatEuro } from "@/lib/hours-labels";
 import { requirePermission } from "@/lib/permissions";
 import {
@@ -177,6 +178,9 @@ export default async function BusinessDashboardPage() {
   // Proactive billing nudge: approved hours not yet on any invoice.
   const unbilledList = await getUnbilledHoursByClient();
   const unbilledCents = unbilledList.reduce((sum, u) => sum + u.totalCents, 0);
+  // Anomaly: a noise-guarded week-over-week revenue swing (C5).
+  const weekSeries = await getPlatformTimeSeries({ bucket: "week" });
+  const revSwing = detectSwing(weekSeries.points, "revenueCents");
 
   /* ---- derive per-shift intel + day metrics ---- */
   const countByShift = new Map<string, number>();
@@ -485,6 +489,24 @@ export default async function BusinessDashboardPage() {
                 Maak facturen →
               </span>
             </Link>
+          ) : null}
+          {revSwing ? (
+            <div
+              className={`mt-3 rounded-lg border px-4 py-2.5 text-sm ${
+                revSwing.direction === "down"
+                  ? "border-amber-200 bg-amber-50/60 text-amber-800"
+                  : "border-emerald-200 bg-emerald-50/60 text-emerald-800"
+              }`}
+            >
+              {revSwing.direction === "down" ? "↓" : "↑"} Omzet deze week{" "}
+              <strong>
+                {revSwing.pct}% {revSwing.direction === "down" ? "lager" : "hoger"}
+              </strong>{" "}
+              dan vorige week ({formatEuro(revSwing.prevCents)} → {formatEuro(revSwing.lastCents)}).{" "}
+              <Link href="/admin/business/reporting" className="underline">
+                Bekijk rapportage
+              </Link>
+            </div>
           ) : null}
         </div>
 
