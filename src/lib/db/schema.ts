@@ -1434,6 +1434,8 @@ export const placements = pgTable(
     matchScore: integer("match_score"),
     /** PR-INTEL: structured 1-tap reason a chef declined (te_ver/tijd/bezet/keuken/tarief/anders) — feeds preference signals. */
     declineReason: text("decline_reason"),
+    /** PR-INTEL-P4: chef's post-shift 1-tap — would they work here again? (null = not asked). */
+    chefReturnSignal: boolean("chef_return_signal"),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1448,6 +1450,43 @@ export const placements = pgTable(
       t.chefId,
       t.shiftId,
     ),
+  }),
+);
+
+/**
+ * Chef×klant pair-memory — PR-INTEL-P4, the "match-intelligence" layer (the
+ * relationship the user flagged as the missing piece). One row per (chef, klant):
+ * Maarten's note + would-rehire/would-return + the AI's why-it-works/why-it-fails.
+ * INTERNAL-ONLY. The derived facts (worked-together count, ratings) stay LIVE via
+ * getChefClientHistory; THIS table holds only the judgment + AI summary you can't
+ * derive. AI-readable for "wie past bij Hotel X?" / "waarom kan dit misgaan?".
+ */
+export const matchIntel = pgTable(
+  "match_intel",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    /** Maarten's free-text note about this specific pairing. */
+    note: text("note"),
+    /** Klant would rehire this chef (null = unknown). */
+    wouldRehire: boolean("would_rehire"),
+    /** Chef would return to this klant (null = unknown; fed by post-shift thumbs). */
+    wouldReturn: boolean("would_return"),
+    /** AI-written (or Maarten-edited): why this match works. */
+    aiWhyWorks: text("ai_why_works"),
+    /** AI-written: why this match may fail. */
+    aiWhyFails: text("ai_why_fails"),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pairUnique: uniqueIndex("match_intel_chef_client_unique").on(t.chefId, t.clientId),
   }),
 );
 
@@ -1474,6 +1513,8 @@ export type Shift = typeof shifts.$inferSelect;
 export type NewShift = typeof shifts.$inferInsert;
 export type Placement = typeof placements.$inferSelect;
 export type NewPlacement = typeof placements.$inferInsert;
+export type MatchIntel = typeof matchIntel.$inferSelect;
+export type NewMatchIntel = typeof matchIntel.$inferInsert;
 export type ChefDocument = typeof chefDocuments.$inferSelect;
 export type NewChefDocument = typeof chefDocuments.$inferInsert;
 export type RateLimit = typeof rateLimits.$inferSelect;

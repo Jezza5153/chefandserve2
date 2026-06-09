@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
 import { intakeInboxForAi } from "@/lib/ai/read-model/intake";
+import { convertChefSubmission, convertClientSubmission } from "@/lib/domain/conversions";
 
 export const intakeList = defineTool({
   name: "intake.list",
@@ -24,5 +25,31 @@ export const intakeList = defineTool({
           ? "De intake-inbox is leeg — geen openstaande aanmeldingen."
           : `${d.totaal} openstaande aanmelding(en): ${d.chefs.length} chef(s) + ${d.klanten.length} klant(en).`,
     };
+  },
+});
+
+export const intakeConvert = defineTool({
+  name: "intake.convert",
+  title: "Aanmelding omzetten",
+  description:
+    "Zet een intake-aanmelding om naar een echt profiel: een chef-aanmelding → chef-record, een klant-aanmelding → klant-record. Idempotent (al omgezet = geen dubbele). Dit is de start van de onboarding — uitnodigen voor het portaal is een aparte stap. Voor 'zet deze sollicitatie om naar een chef / maak een klant aan van aanvraag X'. Gebruik intake.list voor het submissionId.",
+  risk: "outbound",
+  permission: { resource: "inbox", action: "triage" },
+  input: z.object({
+    submissionId: z.string().min(1, "submissionId is verplicht"),
+    kind: z.enum(["chef", "client"]),
+  }),
+  describeAction: (i) => `Intake-aanmelding ${i.submissionId} omzetten naar een ${i.kind === "chef" ? "chef" : "klant"}-profiel.`,
+  run: async (input, ctx) => {
+    try {
+      if (input.kind === "chef") {
+        const { chefId } = await convertChefSubmission(input.submissionId, ctx.actor.requestedByUserId);
+        return { data: { chefId }, summary: "Aanmelding omgezet naar een chef-profiel. (Uitnodigen voor het portaal is de volgende stap.)" };
+      }
+      const { clientId } = await convertClientSubmission(input.submissionId, ctx.actor.requestedByUserId);
+      return { data: { clientId }, summary: "Aanmelding omgezet naar een klant-profiel. (Uitnodigen voor het portaal is de volgende stap.)" };
+    } catch (e) {
+      throw new Error(e instanceof Error && /not found/i.test(e.message) ? "deze aanmelding bestaat niet (meer)" : "kon de aanmelding niet omzetten");
+    }
   },
 });
