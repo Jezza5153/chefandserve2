@@ -32,7 +32,8 @@ export type RateLimitScope =
   | "chef_apply_ip"
   | "client_request_ip"
   | "intake_webhook_ip"
-  | "ai_chat_user";
+  | "ai_chat_user"
+  | "ai_feedback_user";
 
 export type RateLimitResult =
   | { ok: true; remaining: number }
@@ -154,6 +155,8 @@ export const THRESHOLDS = {
   // Owner AI assistant — per-user chat-request ceiling. A human types a handful per minute;
   // this stops a runaway client or over-eager loop from racking up OpenAI cost.
   ai_chat_user: { max: 30, windowSeconds: 60 },
+  // 👍/👎 on assistant answers — cheap insert, but cap runaway clients all the same.
+  ai_feedback_user: { max: 30, windowSeconds: 60 },
 } as const satisfies Record<RateLimitScope, { max: number; windowSeconds: number }>;
 
 /** Convenience wrapper using the standard thresholds. */

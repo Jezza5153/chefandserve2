@@ -3242,3 +3242,35 @@ export const inboundMessages = pgTable(
 );
 export type InboundMessage = typeof inboundMessages.$inferSelect;
 export type NewInboundMessage = typeof inboundMessages.$inferInsert;
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * AI feedback (PR-AI-FEEDBACK) — 👍/👎 on assistant answers, the learning loop's raw signal.
+ * Written by POST /api/ai/feedback from the shared AssistantChat (owner + chef/klant portals).
+ * Q/A text is capped and owned by the rating user (cascade on user erasure — AVG). Mined later
+ * for playbook/eval improvements ("which questions got 👎?"); no automated behaviour yet.
+ * ────────────────────────────────────────────────────────────────────────── */
+export const aiFeedbackVerdictEnum = pgEnum("ai_feedback_verdict", ["up", "down"]);
+
+export const aiFeedback = pgTable(
+  "ai_feedback",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Which assistant surface: owner | chef | client. */
+    channel: text("channel").notNull().default("owner"),
+    verdict: aiFeedbackVerdictEnum("verdict").notNull(),
+    /** The user question the answer responded to (capped at write time). */
+    question: text("question"),
+    /** The assistant answer being rated (capped at write time). */
+    answer: text("answer"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    createdIdx: index("ai_feedback_created_idx").on(t.createdAt),
+    verdictIdx: index("ai_feedback_verdict_idx").on(t.verdict),
+  }),
+);
+export type AiFeedback = typeof aiFeedback.$inferSelect;
+export type NewAiFeedback = typeof aiFeedback.$inferInsert;
