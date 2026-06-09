@@ -83,6 +83,9 @@ assert("clients.semantic_search present (read)", byName.get("clients.semantic_se
 assert("shifts.margin present (read)", byName.get("shifts.margin")?.risk === "read");
 assert("contacts.timeline present (read)", byName.get("contacts.timeline")?.risk === "read");
 assert("roster.overview present (read)", byName.get("roster.overview")?.risk === "read");
+assert("chefs.intel_snapshot present (read)", byName.get("chefs.intel_snapshot")?.risk === "read");
+assert("clients.intel_snapshot present (read)", byName.get("clients.intel_snapshot")?.risk === "read");
+assert("match.intel present (read)", byName.get("match.intel")?.risk === "read");
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 if (fail > 0) process.exit(1);

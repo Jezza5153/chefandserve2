@@ -17,12 +17,14 @@ import {
   chefs,
   clientMetricsDaily,
   clients,
+  matchIntel,
   placements,
   shiftHours,
   shifts,
   type ChefIntel,
   type ClientIntel,
 } from "@/lib/db/schema";
+import { getChefClientHistory } from "@/lib/domain/chef-history";
 
 /** FINAL hours = money is real (admin-approved or already exported). */
 const FINAL_HOURS = ["admin_approved", "exported"] as const;
@@ -310,4 +312,91 @@ export async function getClientIntelSnapshot(clientId: string): Promise<ClientIn
   if (!row) return null;
   const patterns = await getClientPatterns(clientId);
   return { brein: row.intel ?? null, patterns };
+}
+
+export type MatchIntelView = {
+  /** Maarten's editable pair-memory + AI summary (null if never noted). */
+  pair: {
+    note: string | null;
+    wouldRehire: boolean | null;
+    wouldReturn: boolean | null;
+    aiWhyWorks: string | null;
+    aiWhyFails: string | null;
+  } | null;
+  /** Derived "worked together?" facts (live, never stored). */
+  history: {
+    completedShifts: number;
+    lastWorkedAt: Date | null;
+    ratingForClient: number | null;
+    isFavorite: boolean;
+    isBlocked: boolean;
+  };
+  /** Post-shift thumbs for this exact pair. */
+  thumbs: { up: number; down: number };
+};
+
+/**
+ * The full chef×klant match picture — pair-memory (judgment + AI) + derived
+ * history + post-shift thumbs. AI-readable for "past deze chef bij Hotel X?".
+ */
+export async function getMatchIntel(chefId: string, clientId: string): Promise<MatchIntelView> {
+  const [[pairRow], hist, [thumbs]] = await Promise.all([
+    db
+      .select({
+        note: matchIntel.note,
+        wouldRehire: matchIntel.wouldRehire,
+        wouldReturn: matchIntel.wouldReturn,
+        aiWhyWorks: matchIntel.aiWhyWorks,
+        aiWhyFails: matchIntel.aiWhyFails,
+      })
+      .from(matchIntel)
+      .where(and(eq(matchIntel.chefId, chefId), eq(matchIntel.clientId, clientId)))
+      .limit(1),
+    getChefClientHistory(chefId, clientId),
+    db
+      .select({
+        up: sql<number>`coalesce(count(*) filter (where ${placements.chefReturnSignal} = true),0)::int`,
+        down: sql<number>`coalesce(count(*) filter (where ${placements.chefReturnSignal} = false),0)::int`,
+      })
+      .from(placements)
+      .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+      .where(and(eq(placements.chefId, chefId), eq(shifts.clientId, clientId))),
+  ]);
+  return {
+    pair: pairRow ?? null,
+    history: {
+      completedShifts: hist.completedShifts,
+      lastWorkedAt: hist.lastWorkedAt,
+      ratingForClient: hist.averageRatingForClient,
+      isFavorite: hist.isFavorite,
+      isBlocked: hist.isBlocked,
+    },
+    thumbs: { up: Number(thumbs?.up ?? 0), down: Number(thumbs?.down ?? 0) },
+  };
+}
+
+/** Upsert the chef×klant pair-memory (idempotent on the pair). */
+export async function saveMatchIntel(args: {
+  chefId: string;
+  clientId: string;
+  updatedBy: string;
+  note?: string | null;
+  wouldRehire?: boolean | null;
+  wouldReturn?: boolean | null;
+  aiWhyWorks?: string | null;
+  aiWhyFails?: string | null;
+}): Promise<void> {
+  const fields = {
+    note: args.note ?? null,
+    wouldRehire: args.wouldRehire ?? null,
+    wouldReturn: args.wouldReturn ?? null,
+    aiWhyWorks: args.aiWhyWorks ?? null,
+    aiWhyFails: args.aiWhyFails ?? null,
+    updatedBy: args.updatedBy,
+    updatedAt: new Date(),
+  };
+  await db
+    .insert(matchIntel)
+    .values({ chefId: args.chefId, clientId: args.clientId, ...fields })
+    .onConflictDoUpdate({ target: [matchIntel.chefId, matchIntel.clientId], set: fields });
 }

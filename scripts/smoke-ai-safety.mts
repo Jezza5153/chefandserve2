@@ -67,9 +67,13 @@ const SAMPLE: Record<string, unknown> = {
   "knowledge.search": { query: "test" },
   "documents.list_for_chef": { chefId: "x" },
   "chefs.history_at_client": { chefId: "x", clientId: "y" },
+  "chefs.intel_snapshot": { chefId: "x" },
+  "clients.intel_snapshot": { clientId: "x" },
+  "match.intel": { chefId: "x", clientId: "y" },
   "contacts.log": { targetType: "chef", targetId: "x", channel: "phone", note: "test notitie" },
   "clients.decide_shift_request": { requestId: "x", decision: "rejected" },
   "placements.reply": { placementId: "x", body: "test bericht" },
+  "intake.convert": { submissionId: "x", kind: "chef" },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 

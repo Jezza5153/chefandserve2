@@ -42,11 +42,12 @@ import { briefingDaily } from "@/lib/ai/tools/briefing";
 import { shiftsDetail } from "@/lib/ai/tools/shift-detail";
 import { chefsHistoryAtClient } from "@/lib/ai/tools/chef-client-history";
 import { risksScan } from "@/lib/ai/tools/risks";
-import { intakeList } from "@/lib/ai/tools/intake";
+import { intakeList, intakeConvert } from "@/lib/ai/tools/intake";
 import { chefsAvailability } from "@/lib/ai/tools/chef-availability";
 import { clientsShiftRequests, clientsDecideShiftRequest } from "@/lib/ai/tools/client-requests";
 import { placementsReply } from "@/lib/ai/tools/placement-reply";
 import { reportsBusinessKpi, reportsChefs, reportsClients } from "@/lib/ai/tools/reports";
+import { chefsIntelSnapshot, clientsIntelSnapshot, matchIntelLookup } from "@/lib/ai/tools/intel";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -72,6 +73,9 @@ export const ALL_TOOLS: AnyTool[] = [
   clientsHealth,
   clientsShiftRequests,
   chefsHistoryAtClient,
+  chefsIntelSnapshot,
+  clientsIntelSnapshot,
+  matchIntelLookup,
   plannerCockpitTool,
   risksScan,
   shiftsSuggestChefs,
@@ -107,6 +111,7 @@ export const ALL_TOOLS: AnyTool[] = [
   chefsSendAvailabilityReminder,
   contactsLog,
   clientsDecideShiftRequest,
+  intakeConvert,
   // personal — Maarten's own to-remember list
   remindersCreate,
   remindersList,
