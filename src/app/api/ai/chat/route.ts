@@ -76,7 +76,11 @@ export async function POST(req: Request): Promise<Response> {
     : "";
   // Inject what Maarten has had the assistant remember (memory.remember), so it uses it automatically.
   const memoryBlock = await ownerMemoryPromptBlock(userId);
-  const systemPrompt = `${DEFAULT_SYSTEM_PROMPT}${pageBlock}${memoryBlock}`;
+  // Keep pageBlock + memoryBlock OUT of the brain's system prompt: they're DYNAMIC (page changes on
+  // every nav, memory on edit) and folding them into the prefix defeats OpenAI prompt caching. Pass
+  // them as a TRAILING context message instead, so the static prefix (system prompt + tool defs)
+  // stays byte-stable across turns/pages and caches at ~10× cheaper input.
+  const systemContext = `${pageBlock}${memoryBlock}`.trim() || undefined;
   // Accumulate token usage across the turn's model calls; persisted after the run for the
   // /admin/system AI-tokens card. A tally failure never breaks the chat (try/catch below).
   let promptTokens = 0;
@@ -84,7 +88,9 @@ export async function POST(req: Request): Promise<Response> {
   const brain = createOpenAiBrain({
     apiKey: env.OPENAI_API_KEY,
     model: aiModel(),
-    systemPrompt,
+    systemPrompt: DEFAULT_SYSTEM_PROMPT, // static → cacheable prefix; dynamic context rides trailing
+    promptCacheKey: `owner:${userId}`,
+    maxCompletionTokens: 2000,
     onUsage: (u) => {
       promptTokens += u.promptTokens;
       completionTokens += u.completionTokens;
@@ -106,7 +112,7 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     const messages = (body as { messages?: Msg[] }).messages ?? [];
-    const outcome = await runOwnerAssistant({ userId, channel: "dashboard", messages, brain, confirmSecret });
+    const outcome = await runOwnerAssistant({ userId, channel: "dashboard", messages, brain, confirmSecret, systemContext });
     if (promptTokens > 0 || completionTokens > 0) {
       try {
         await recordAiUsage({ model: aiModel(), promptTokens, completionTokens, now: new Date() });
