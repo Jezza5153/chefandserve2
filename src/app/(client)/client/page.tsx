@@ -229,6 +229,26 @@ export default async function ClientDashboardPage() {
         {client.companyName}
       </h1>
 
+      {client.onboardingStatus !== "submitted" ? (
+        <Link
+          href="/client/onboarding"
+          className="mt-5 flex items-center justify-between gap-4 rounded-lg border border-burgundy/30 bg-burgundy/5 p-4 transition hover:border-burgundy/50"
+        >
+          <div>
+            <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">Actie</p>
+            <p className="mt-1 text-sm font-medium text-ink-900">Rond je bedrijfsgegevens af</p>
+            <p className="mt-0.5 text-sm text-ink-600">
+              {client.onboardingStatus === "in_progress"
+                ? "Je hebt een concept opgeslagen — maak het af zodat we de samenwerking kunnen inrichten."
+                : "Vul je bedrijfs-, contact- en veiligheidsgegevens in zodat we direct met je aan de slag kunnen."}
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-burgundy px-4 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.14em] text-white">
+            Invullen →
+          </span>
+        </Link>
+      ) : null}
+
       {/* JOUW CIJFERS — read-only insights */}
       <section className="mt-8">
         <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
