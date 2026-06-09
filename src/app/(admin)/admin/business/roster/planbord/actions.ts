@@ -13,6 +13,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
 import { shifts } from "@/lib/db/schema";
 import { draftPlacement, findMatchesForShift } from "@/lib/domain/matching";
+import { getChefClientHistory } from "@/lib/domain/chef-history";
 import { estimateMargin, estimateTravel } from "@/lib/domain/travel";
 import { autofillWeek, copyLastWeek, type AutofillResult, type CopyResult } from "@/lib/domain/roster-autofill";
 import {
@@ -75,6 +76,9 @@ export async function matchesForShiftAction(shiftId: string): Promise<
     travelKm: number | null;
     marginCents: number | null;
     marginTone: "ok" | "low" | "negative" | null;
+    workedHere: number;
+    isFavorite: boolean;
+    ratingForClient: number | null;
   }>
 > {
   const session = await requirePermission("shifts", "write");
@@ -89,7 +93,12 @@ export async function matchesForShiftAction(shiftId: string): Promise<
     ? (new Date(shift.endsAt).getTime() - new Date(shift.startsAt).getTime()) / 3_600_000
     : 0;
   const matches = await findMatchesForShift(shiftId, { limit: 8 });
-  return matches.map((m) => {
+  // PR-INTEL-P3: chef×klant relationship at the matching moment ("3× hier · favoriet").
+  const histories =
+    shift != null
+      ? await Promise.all(matches.map((m) => getChefClientHistory(m.chef.id, shift.clientId)))
+      : null;
+  return matches.map((m, i) => {
     const from =
       m.chef.latitude != null && m.chef.longitude != null
         ? { lat: Number(m.chef.latitude), lng: Number(m.chef.longitude) }
@@ -116,6 +125,9 @@ export async function matchesForShiftAction(shiftId: string): Promise<
       travelKm: travel?.km ?? null,
       marginCents,
       marginTone,
+      workedHere: histories?.[i]?.completedShifts ?? 0,
+      isFavorite: histories?.[i]?.isFavorite ?? false,
+      ratingForClient: histories?.[i]?.averageRatingForClient ?? null,
     };
   });
 }

@@ -68,6 +68,9 @@ type ShiftMatch = {
   travelKm: number | null;
   marginCents: number | null;
   marginTone: MarginTone | null;
+  workedHere: number;
+  isFavorite: boolean;
+  ratingForClient: number | null;
 };
 type RailChef = PlanbordChef & {
   score?: number;
@@ -76,6 +79,9 @@ type RailChef = PlanbordChef & {
   travelKm?: number | null;
   marginCents?: number | null;
   marginTone?: MarginTone | null;
+  workedHere?: number;
+  isFavorite?: boolean;
+  ratingForClient?: number | null;
 };
 
 const MARGIN_TONE: Record<MarginTone, string> = {
@@ -329,6 +335,9 @@ export function Planbord({
             travelKm: m.travelKm,
             marginCents: m.marginCents,
             marginTone: m.marginTone,
+            workedHere: m.workedHere,
+            isFavorite: m.isFavorite,
+            ratingForClient: m.ratingForClient,
           };
         })
       : chefPool;
@@ -692,6 +701,19 @@ function ChefCard({ chef }: { chef: RailChef }) {
       </p>
       {chef.reason && <p className="truncate text-[10px] text-emerald-700">✓ {chef.reason}</p>}
       {chef.warning && <p className="truncate text-[10px] text-amber-700">⚠ {chef.warning}</p>}
+      {(chef.workedHere ?? 0) > 0 || chef.isFavorite ? (
+        <p className="truncate text-[10px] font-medium text-burgundy">
+          {[
+            chef.isFavorite ? "★ favoriet" : null,
+            (chef.workedHere ?? 0) > 0 ? `${chef.workedHere}× hier` : null,
+            chef.ratingForClient != null
+              ? `${String(chef.ratingForClient).replace(".", ",")}★`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      ) : null}
     </div>
   );
 }
