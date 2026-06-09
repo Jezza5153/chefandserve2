@@ -6,6 +6,7 @@
  * nudged by the hints — "needs clear brief", never "difficult".
  */
 import type { ChefIntel } from "@/lib/db/schema";
+
 import { fieldClass } from "@/components/forms/Fields";
 
 const FIELDS: Array<{ key: keyof ChefIntel; label: string; hint: string }> = [
