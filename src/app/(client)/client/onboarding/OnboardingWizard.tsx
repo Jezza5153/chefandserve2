@@ -12,6 +12,16 @@ import type { OnboardingInitial } from "@/lib/domain/client-onboarding";
 const INPUT =
   "w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-400 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy";
 
+// "Zelfde als algemeen contact" — let the klant copy the general contact into the
+// finance / signing contact rather than retyping it. Matched by systemKey (stable),
+// mapped to the form-field key for the values map.
+const CONTACT_PARTS = ["name", "title", "phone", "email"] as const;
+const CONTACT_LINK_ROLES = [
+  { suffix: "finance", label: "Financieel contact" },
+  { suffix: "signing", label: "Tekenbevoegde" },
+] as const;
+const contactSysKey = (suffix: string, part: string) => `client.contact_${suffix}_${part}`;
+
 export function OnboardingWizard({
   form,
   initial,
@@ -45,6 +55,48 @@ export function OnboardingWizard({
     [fields, initial],
   );
 
+  // systemKey → form-field key (the values map is keyed by field.key, contacts are addressed by systemKey).
+  const keyForSys = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const f of fields) if (f.systemKey) m[f.systemKey] = f.key;
+    return m;
+  }, [fields]);
+  const contactKey = (suffix: string, part: string): string | undefined => keyForSys[contactSysKey(suffix, part)];
+  const generalPartByKey = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const p of CONTACT_PARTS) {
+      const k = keyForSys[contactSysKey("general", p)];
+      if (k) m[k] = p;
+    }
+    return m;
+  }, [keyForSys]);
+  const [linked, setLinked] = useState<Record<string, boolean>>({});
+  const lockedKeys = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of CONTACT_LINK_ROLES)
+      if (linked[r.suffix])
+        for (const p of CONTACT_PARTS) {
+          const k = keyForSys[contactSysKey(r.suffix, p)];
+          if (k) s.add(k);
+        }
+    return s;
+  }, [linked, keyForSys]);
+
+  function toggleLink(suffix: string, on: boolean) {
+    setLinked((s) => ({ ...s, [suffix]: on }));
+    if (on) {
+      setValues((s) => {
+        const next = { ...s };
+        for (const p of CONTACT_PARTS) {
+          const gk = keyForSys[contactSysKey("general", p)];
+          const rk = keyForSys[contactSysKey(suffix, p)];
+          if (rk) next[rk] = gk ? (s[gk] ?? null) : null;
+        }
+        return next;
+      });
+    }
+  }
+
   function docIds(): Record<string, string | null> {
     const d: Record<string, string | null> = {};
     for (const f of fields) {
@@ -63,7 +115,17 @@ export function OnboardingWizard({
   const pct = requiredFields.length ? Math.round((satisfiedCount / requiredFields.length) * 100) : 100;
 
   function setValue(key: string, val: FormSubmitValue) {
-    setValues((s) => ({ ...s, [key]: val }));
+    setValues((s) => {
+      const next = { ...s, [key]: val };
+      const part = generalPartByKey[key];
+      if (part)
+        for (const r of CONTACT_LINK_ROLES)
+          if (linked[r.suffix]) {
+            const rk = keyForSys[contactSysKey(r.suffix, part)];
+            if (rk) next[rk] = val;
+          }
+      return next;
+    });
     setErrors((e) => {
       if (!e[key]) return e;
       const next = { ...e };
@@ -162,10 +224,33 @@ export function OnboardingWizard({
       ) : null}
 
       <div className="mt-6 space-y-6">
-        {form.sections.map((section) => (
+        {form.sections.map((section) => {
+          const sectionKeys = new Set(section.fields.map((f) => f.key));
+          const linkRoles = contactKey("general", "name")
+            ? CONTACT_LINK_ROLES.filter((r) => {
+                const rk = contactKey(r.suffix, "name");
+                return rk && sectionKeys.has(rk);
+              })
+            : [];
+          return (
           <section key={section.id} className="rounded-lg border border-ink-200 bg-white p-5">
             <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">{section.title}</h2>
             {section.description ? <p className="mt-1 text-xs text-ink-500">{section.description}</p> : null}
+            {linkRoles.length > 0 && !readOnly ? (
+              <div className="mt-3 space-y-1.5 rounded border border-ink-100 bg-ink-50/60 p-3">
+                {linkRoles.map((r) => (
+                  <label key={r.suffix} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(linked[r.suffix])}
+                      onChange={(e) => toggleLink(r.suffix, e.target.checked)}
+                      className="h-4 w-4 rounded border-ink-300 text-burgundy focus:ring-burgundy"
+                    />
+                    <span className="font-ui text-[12px] text-ink-700">{r.label}: zelfde als algemeen contact</span>
+                  </label>
+                ))}
+              </div>
+            ) : null}
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               {section.fields.map((field) => (
                 <div
@@ -178,7 +263,8 @@ export function OnboardingWizard({
               ))}
             </div>
           </section>
-        ))}
+          );
+        })}
       </div>
 
       {!done ? (
@@ -209,6 +295,8 @@ export function OnboardingWizard({
   function renderField(field: FieldDTO) {
     const err = errors[field.key];
     const value = values[field.key];
+    const locked = lockedKeys.has(field.key);
+    const fieldDisabled = readOnly || locked;
     const label = (
       <label className="block font-ui text-[13px] font-medium text-ink-800">
         {field.label}
@@ -264,7 +352,7 @@ export function OnboardingWizard({
               <button
                 key={opt.l}
                 type="button"
-                disabled={readOnly}
+                disabled={fieldDisabled}
                 onClick={() => setValue(field.key, opt.v)}
                 className={`rounded-full px-4 py-1.5 font-ui text-[11px] font-medium uppercase tracking-[0.15em] ${
                   value === opt.v
@@ -288,7 +376,7 @@ export function OnboardingWizard({
             <input
               type="checkbox"
               checked={value === true}
-              disabled={readOnly}
+              disabled={fieldDisabled}
               onChange={(e) => setValue(field.key, e.target.checked)}
               className="mt-0.5 h-4 w-4 rounded border-ink-300 text-burgundy focus:ring-burgundy"
             />
@@ -310,7 +398,7 @@ export function OnboardingWizard({
           {help}
           <select
             value={typeof value === "string" ? value : ""}
-            disabled={readOnly}
+            disabled={fieldDisabled}
             onChange={(e) => setValue(field.key, e.target.value || null)}
             className={`mt-1.5 ${INPUT} disabled:opacity-50`}
           >
@@ -339,7 +427,7 @@ export function OnboardingWizard({
                 <button
                   key={o.value}
                   type="button"
-                  disabled={readOnly}
+                  disabled={fieldDisabled}
                   onClick={() =>
                     setValue(field.key, on ? arr.filter((x) => x !== o.value) : [...arr, o.value])
                   }
@@ -366,7 +454,7 @@ export function OnboardingWizard({
             rows={3}
             value={typeof value === "string" ? value : ""}
             placeholder={field.placeholder ?? ""}
-            disabled={readOnly}
+            disabled={fieldDisabled}
             onChange={(e) => setValue(field.key, e.target.value)}
             className={`mt-1.5 ${INPUT} disabled:opacity-50`}
           />
@@ -395,12 +483,13 @@ export function OnboardingWizard({
           inputMode={field.type === "bsn" ? "numeric" : undefined}
           value={value === null || value === undefined ? "" : String(value)}
           placeholder={field.placeholder ?? ""}
-          disabled={readOnly}
+          disabled={fieldDisabled}
           onChange={(e) =>
             setValue(field.key, field.type === "number" ? (e.target.value === "" ? null : Number(e.target.value)) : e.target.value)
           }
           className={`mt-1.5 ${INPUT} disabled:opacity-50`}
         />
+        {locked ? <p className="mt-1 text-xs text-ink-400">Gekoppeld aan algemeen contact.</p> : null}
         {filledHint}
         {errEl}
       </div>
