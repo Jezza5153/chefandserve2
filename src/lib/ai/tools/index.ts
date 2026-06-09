@@ -45,6 +45,7 @@ import { risksScan } from "@/lib/ai/tools/risks";
 import { intakeList } from "@/lib/ai/tools/intake";
 import { chefsAvailability } from "@/lib/ai/tools/chef-availability";
 import { clientsShiftRequests, clientsDecideShiftRequest } from "@/lib/ai/tools/client-requests";
+import { placementsReply } from "@/lib/ai/tools/placement-reply";
 
 export const ALL_TOOLS: AnyTool[] = [
   // read — the eyes
@@ -92,6 +93,7 @@ export const ALL_TOOLS: AnyTool[] = [
   placementsPropose,
   placementsConfirm,
   placementsCancel,
+  placementsReply,
   rosterPublish,
   rosterAutofill,
   rosterCopyLastWeek,

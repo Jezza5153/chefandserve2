@@ -68,6 +68,7 @@ export async function shiftDetailForAi(shiftId: string) {
     const hoursStatus = hoursByPlacement.get(r.placementId);
     return {
       chef: r.chef,
+      placementId: r.placementId, // so the assistant can target a reply (placements.reply)
       status: PLACEMENT_STATUS_NL[r.status] ?? r.status,
       uren: hoursStatus ? humanStatus(hoursStatus) : null,
     };
