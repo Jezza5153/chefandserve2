@@ -32,6 +32,7 @@ const counts = [
   d.today.openShifts,
   d.today.hoursAwaitingApproval,
   d.today.expiringDocs,
+  d.risks,
 ];
 ok(counts.every((n) => typeof n === "number" && n >= 0), "all data counts are non-negative numbers");
 

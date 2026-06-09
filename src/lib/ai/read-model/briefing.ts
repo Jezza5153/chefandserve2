@@ -17,6 +17,7 @@ import { chefs, clients, placementComments, shiftHours, shifts } from "@/lib/db/
 import { addDaysToKey, amsterdamDayKey, amsterdamMidnightUtc } from "@/lib/roster-format";
 import { expiringDocumentsForAi } from "@/lib/ai/read-model/oversight";
 import { listHoursAwaitingApproval } from "@/lib/ai/read-model/hours";
+import { scanRisksForAi } from "@/lib/ai/read-model/risks";
 
 /** Unresolved hours statuses, in plain Dutch — what's blocking each row from being "rond". */
 const HOURS_PROBLEM_NL: Record<string, string> = {
@@ -46,6 +47,7 @@ export type DailyBriefing = {
   data: {
     yesterday: { shifts: number; unresolvedHours: number; newClientComments: number };
     today: { shifts: number; openShifts: number; hoursAwaitingApproval: number; expiringDocs: number };
+    risks: number;
   };
 };
 
@@ -56,7 +58,7 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
   const tStart = amsterdamMidnightUtc(todayKey);
   const tEnd = amsterdamMidnightUtc(addDaysToKey(todayKey, 1));
 
-  const [yShifts, problemRows, newComments, tShifts, awaiting, expiring] = await Promise.all([
+  const [yShifts, problemRows, newComments, tShifts, awaiting, expiring, riskScan] = await Promise.all([
     // Yesterday — shifts that ran
     db
       .select({ client: clients.companyName })
@@ -94,6 +96,7 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
       .where(and(gte(shifts.startsAt, tStart), lt(shifts.startsAt, tEnd))),
     listHoursAwaitingApproval(),
     expiringDocumentsForAi({ days: 14, limit: 5 }),
+    scanRisksForAi(now),
   ]);
 
   const openToday = tShifts.filter((s) => s.status === "open" || s.status === "request").length;
@@ -134,15 +137,25 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
     vandaag.push("• Niets urgents — rustige dag op de planning.");
   }
 
-  const text = `Goedemorgen Maarten — je dagstart voor ${dutchDate(now)}.\n\n${gisteren.join("\n")}\n\n${vandaag.join("\n")}`;
+  const risico: string[] = [];
+  if (riskScan.risks.length > 0) {
+    risico.push("⚠️ *Risico's (vooruit)*");
+    for (const r of riskScan.risks.slice(0, 3)) risico.push(`• ${r.ernst === "hoog" ? "🔴" : "🟠"} ${r.melding}`);
+  }
 
+  const sections = [gisteren.join("\n"), vandaag.join("\n")];
+  if (risico.length > 0) sections.push(risico.join("\n"));
+  const text = `Goedemorgen Maarten — je dagstart voor ${dutchDate(now)}.\n\n${sections.join("\n\n")}`;
+
+  const highRisk = riskScan.risks.some((r) => r.ernst === "hoog");
   return {
     date: todayKey,
     text,
-    hasUrgent: problemRows.length > 0 || openToday > 0 || awaiting.length > 0 || expiring.length > 0 || newComments.length > 0,
+    hasUrgent: problemRows.length > 0 || openToday > 0 || awaiting.length > 0 || expiring.length > 0 || newComments.length > 0 || highRisk,
     data: {
       yesterday: { shifts: yShifts.length, unresolvedHours: problemRows.length, newClientComments: newComments.length },
       today: { shifts: tShifts.length, openShifts: openToday, hoursAwaitingApproval: awaiting.length, expiringDocs: expiring.length },
+      risks: riskScan.count,
     },
   };
 }
