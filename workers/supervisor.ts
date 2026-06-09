@@ -82,6 +82,11 @@ const JOBS: Job[] = [
   // (business_settings 'daily_briefing'.hour, Amsterdam). Thin: it POSTs the app-side
   // /api/cron/daily-briefing which builds + delivers (idempotent). Default OFF.
   { name: "daily-briefing", schedule: "0 * * * *", script: "daily-briefing.ts" },
+  // Proactive onboarding chase (Mon 09:00 Amsterdam). Thin: POSTs the app-side
+  // /api/cron/onboarding-nudge which sweeps incomplete chef + client onboarding,
+  // nudges each in-app (missing labels only — no PII) + summarises for Maarten.
+  // Per-user throttled (6 days). GATED via ONBOARDING_NUDGE_ENABLED. Default OFF.
+  { name: "onboarding-nudge", schedule: "0 9 * * 1", script: "onboarding-nudge.ts" },
 ];
 
 function ts(): string {
