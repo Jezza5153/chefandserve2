@@ -17,8 +17,10 @@ import { and, eq, isNull } from "drizzle-orm";
 import { recordAuditCore, stampFromRequest } from "@/lib/audit";
 import { db } from "@/lib/db/client";
 import { withTx } from "@/lib/db/tx";
-import { clientContacts, clientDocuments, clients } from "@/lib/db/schema";
+import { clientContacts, clientDocuments, clients, users } from "@/lib/db/schema";
+import { env } from "@/lib/env";
 import { recordConsent } from "@/lib/consent";
+import { createNotification } from "@/lib/integrations/notifications";
 import { flattenFields, getPublishedForm } from "@/lib/domain/forms";
 import { getClientSystemBinding } from "@/lib/forms/client-system-bindings";
 import { toColumnValue } from "@/lib/forms/serialization";
@@ -38,6 +40,22 @@ type ContactDraft = { name?: string; title?: string; email?: string; phone?: str
 export async function getClientByUserId(userId: string): Promise<ClientRow | null> {
   const [row] = await db.select().from(clients).where(eq(clients.userId, userId)).limit(1);
   return row ?? null;
+}
+
+/** Best-effort in-app ping to the owner that a klant finished onboarding. Never blocks the submit. */
+async function notifyOwnerOnboardingComplete(client: ClientRow): Promise<void> {
+  if (!env.MAARTEN_EMAIL) return;
+  const [owner] = await db.select({ id: users.id }).from(users).where(eq(users.email, env.MAARTEN_EMAIL)).limit(1);
+  if (!owner) return;
+  await createNotification({
+    userId: owner.id,
+    type: "client_onboarding_completed",
+    title: "Klant heeft bedrijfsgegevens ingevuld",
+    body: `${client.companyName} heeft de onboarding (BEDRIJFSGEGEVENS) ingevuld.`,
+    actionUrl: `/admin/business/clients/${client.id}`,
+    entityType: "clients",
+    entityId: client.id,
+  });
 }
 
 /** Document types present (non-deleted) for a client. */
@@ -274,5 +292,6 @@ export async function submitOnboarding(args: {
 
   await recordConsent({ userId: args.userId, kind: "client", ip: args.ip, userAgent: args.userAgent });
   await recordConsent({ userId: args.userId, kind: "client_onboarding", ip: args.ip, userAgent: args.userAgent });
+  await notifyOwnerOnboardingComplete(client).catch(() => {});
   return { ok: true };
 }
