@@ -6,7 +6,7 @@
 import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
-import { generateKpiReport, generateChefsReport } from "@/lib/ai/reports/render";
+import { generateKpiReport, generateChefsReport, generateClientsReport } from "@/lib/ai/reports/render";
 
 export const reportsBusinessKpi = defineTool({
   name: "reports.business_kpi",
@@ -40,6 +40,24 @@ export const reportsChefs = defineTool({
     return {
       data: { url: res.url, format: "pdf" },
       summary: `Je chef-rapport (PDF) staat klaar — downloadlink (24u geldig): ${res.url}`,
+    };
+  },
+});
+
+export const reportsClients = defineTool({
+  name: "reports.clients",
+  title: "Klant-rapport (PDF)",
+  description:
+    "Genereer een nette PDF-rapportage over de klanten: per klant de omzet, marge en bezetting over de gekozen periode (standaard 90 dagen), met een top-klanten-grafiek, een volledige tabel en uitleg in gewone taal. Geeft een downloadlink terug (24u geldig). Voor 'maak me een rapport over de klanten / welke hotels brengen het meest op in PDF'. Read-only.",
+  risk: "read",
+  permission: { resource: "cockpit", action: "read" },
+  input: z.object({ rangeDays: z.number().int().min(7).max(365).optional() }),
+  run: async (input) => {
+    const res = await generateClientsReport(new Date(), input.rangeDays ?? 90);
+    if (!res.ok) throw new Error(res.error);
+    return {
+      data: { url: res.url, format: "pdf" },
+      summary: `Je klant-rapport (PDF) staat klaar — downloadlink (24u geldig): ${res.url}`,
     };
   },
 });

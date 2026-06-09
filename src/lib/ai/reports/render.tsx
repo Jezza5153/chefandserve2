@@ -9,8 +9,10 @@ import { renderToBuffer } from "@react-pdf/renderer";
 
 import { buildKpiReportData } from "@/lib/ai/read-model/report-kpi";
 import { buildChefsReportData } from "@/lib/ai/read-model/report-chefs";
+import { buildClientsReportData } from "@/lib/ai/read-model/report-clients";
 import { KpiReportDoc } from "@/lib/ai/reports/kpi-report";
 import { ChefsReportDoc } from "@/lib/ai/reports/chefs-report";
+import { ClientsReportDoc } from "@/lib/ai/reports/clients-report";
 import { getDownloadUrl, putObject, r2IsConfigured } from "@/lib/r2";
 
 export type ReportResult = { ok: true; url: string } | { ok: false; error: string };
@@ -36,4 +38,11 @@ export async function generateChefsReport(now: Date, rangeDays = 90): Promise<Re
   const data = await buildChefsReportData(now, rangeDays);
   const buffer = await renderToBuffer(<ChefsReportDoc data={data} />);
   return uploadPdf(buffer, "chefs", now);
+}
+
+export async function generateClientsReport(now: Date, rangeDays = 90): Promise<ReportResult> {
+  if (!r2IsConfigured()) return { ok: false, error: R2_MISSING };
+  const data = await buildClientsReportData(now, rangeDays);
+  const buffer = await renderToBuffer(<ClientsReportDoc data={data} />);
+  return uploadPdf(buffer, "clients", now);
 }
