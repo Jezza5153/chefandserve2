@@ -82,6 +82,9 @@ const serverSchema = z.object({
   OPENAI_PRICE_OUTPUT_PER_1M: z.coerce.number().nonnegative().optional(),
   //   OPENAI_PRICE_CURRENCY — display currency for the env-set prices (default USD).
   OPENAI_PRICE_CURRENCY: z.string().optional(),
+  //   OPENAI_FALLBACK_MODEL — when the primary model errors after retries, the chat routes try
+  //   this model ONCE before giving up (e.g. a cheaper/older model). Unset → no fallback.
+  OPENAI_FALLBACK_MODEL: z.string().optional(),
   //   AI_DAILY_BUDGET — hard daily ceiling for assistant spend (all chat surfaces), in the
   //   configured price currency. Needs OPENAI_PRICE_* to compute cost; unset (or prices
   //   unset) → no ceiling. At ≥80% the owner gets a warning notification (throttled); at

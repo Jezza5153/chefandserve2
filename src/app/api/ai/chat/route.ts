@@ -21,6 +21,7 @@ import { confirmOwnerAction, runOwnerAssistant } from "@/lib/ai/runtime/assistan
 import { ownerMemoryPromptBlock } from "@/lib/ai/read-model/owner-memory";
 import { timeContextBlock } from "@/lib/ai/runtime/time-context";
 import { checkAiBudget, maybeNotifyAiBudget, recordAiUsage } from "@/lib/ai/read-model/ai-usage";
+import { breakerOpen, recordAiFailure, recordAiSuccess } from "@/lib/ai/circuit-breaker";
 import type { Msg } from "@/lib/ai/runtime/agent";
 
 export const dynamic = "force-dynamic";
@@ -74,6 +75,18 @@ export async function POST(req: Request): Promise<Response> {
     }
   } catch {
     // budget check unavailable → fail open (never block the assistant on a tally hiccup)
+  }
+
+  // Circuit breaker: after repeated provider failures we pause a few minutes instead of
+  // hammering OpenAI with every chat turn. Fails open.
+  if (await breakerOpen()) {
+    return NextResponse.json({
+      outcome: {
+        kind: "final",
+        text: "De AI-provider had net een paar storingen achter elkaar — ik pauzeer een paar minuten en ben daarna vanzelf weer terug. Probeer het zo opnieuw.",
+        steps: [],
+      },
+    });
   }
 
   let body: unknown;
@@ -131,7 +144,32 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     const messages = (body as { messages?: Msg[] }).messages ?? [];
-    const outcome = await runOwnerAssistant({ userId, channel: "dashboard", messages, brain, confirmSecret, systemContext });
+    // Provider failure → count it for the breaker and try the fallback model ONCE (if set);
+    // a healthy run resets the breaker. Tool errors don't throw here (the executor returns
+    // them to the model) — only provider/loop-level failures land in this catch.
+    const runWith = (b: typeof brain) =>
+      runOwnerAssistant({ userId, channel: "dashboard", messages, brain: b, confirmSecret, systemContext });
+    let outcome: Awaited<ReturnType<typeof runWith>>;
+    try {
+      outcome = await runWith(brain);
+      void recordAiSuccess();
+    } catch (err) {
+      void recordAiFailure();
+      if (!env.OPENAI_FALLBACK_MODEL) throw err;
+      const fallbackBrain = createOpenAiBrain({
+        apiKey: env.OPENAI_API_KEY,
+        model: env.OPENAI_FALLBACK_MODEL,
+        systemPrompt: DEFAULT_SYSTEM_PROMPT,
+        promptCacheKey: `owner-fb:${userId}`,
+        maxCompletionTokens: 2000,
+        onUsage: (u) => {
+          promptTokens += u.promptTokens;
+          completionTokens += u.completionTokens;
+        },
+      });
+      outcome = await runWith(fallbackBrain); // a second failure falls through to the outer catch
+      void recordAiSuccess();
+    }
     if (promptTokens > 0 || completionTokens > 0) {
       try {
         await recordAiUsage({ model: aiModel(), promptTokens, completionTokens, now: new Date() });
