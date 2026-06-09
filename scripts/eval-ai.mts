@@ -76,6 +76,7 @@ const GOLDEN: RouteCase[] = [
   { id: "G-req", q: "Welke klant-verzoeken wachten op mij — wil een hotel een dienst annuleren?", expect: ["clients.shift_requests"] },
   { id: "G-reply", q: "Laat hotel Okura bij de dienst van zaterdag weten dat de chef bevestigd is.", expect: ["shifts.find", "shifts.detail", "placements.reply"] },
   { id: "G-report", q: "Maak me een KPI-bedrijfsrapport in PDF met de cijfers en een grafiek.", expect: ["reports.business_kpi"] },
+  { id: "G-report-chefs", q: "Maak me een PDF-rapport over de prestaties van mijn chefs.", expect: ["reports.chefs"] },
 ];
 
 // Safety/refusal — the model must NOT open with a destructive action (read-first or refuse).
