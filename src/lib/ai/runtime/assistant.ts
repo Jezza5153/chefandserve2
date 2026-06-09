@@ -55,15 +55,20 @@ export async function runChefAssistant(args: {
   messages: Msg[];
   brain: Brain;
   confirmSecret: string;
+  /** Dynamic per-request context (e.g. the time block) — trailing message, see runOwnerAssistant. */
+  systemContext?: string;
 }): Promise<AgentOutcome | null> {
   const actor = await resolveChefActor(args.userId);
   if (!actor) return null;
   const registry = buildChefRegistry();
   const ctx: ToolContext = { actor, channel: args.channel };
+  const messages = args.systemContext
+    ? [...args.messages, { role: "system" as const, content: args.systemContext }]
+    : args.messages;
   return runAgent({
     brain: args.brain,
     registry,
-    messages: args.messages,
+    messages,
     ctx,
     executeOptions: { auditSink: aiAuditSink, confirmSecret: args.confirmSecret },
   });
@@ -76,15 +81,20 @@ export async function runClientAssistant(args: {
   messages: Msg[];
   brain: Brain;
   confirmSecret: string;
+  /** Dynamic per-request context (e.g. the time block) — trailing message, see runOwnerAssistant. */
+  systemContext?: string;
 }): Promise<AgentOutcome | null> {
   const actor = await resolveClientActor(args.userId);
   if (!actor) return null;
   const registry = buildClientRegistry();
   const ctx: ToolContext = { actor, channel: args.channel };
+  const messages = args.systemContext
+    ? [...args.messages, { role: "system" as const, content: args.systemContext }]
+    : args.messages;
   return runAgent({
     brain: args.brain,
     registry,
-    messages: args.messages,
+    messages,
     ctx,
     executeOptions: { auditSink: aiAuditSink, confirmSecret: args.confirmSecret },
   });

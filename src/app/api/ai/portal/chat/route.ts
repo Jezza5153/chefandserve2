@@ -15,6 +15,7 @@ import { aiConfirmSecret, aiEnabled, aiModel } from "@/lib/ai/config";
 import { createOpenAiBrain } from "@/lib/ai/runtime/openai-brain";
 import { CHEF_SYSTEM_PROMPT, CLIENT_SYSTEM_PROMPT } from "@/lib/ai/runtime/portal-prompts";
 import { runChefAssistant, runClientAssistant } from "@/lib/ai/runtime/assistant";
+import { timeContextBlock } from "@/lib/ai/runtime/time-context";
 import { recordAiUsage } from "@/lib/ai/read-model/ai-usage";
 import type { Msg } from "@/lib/ai/runtime/agent";
 
@@ -69,7 +70,14 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const systemPrompt = kind === "chef" ? CHEF_SYSTEM_PROMPT : CLIENT_SYSTEM_PROMPT;
     const brain = createOpenAiBrain({ apiKey: env.OPENAI_API_KEY, model: aiModel(), systemPrompt, onUsage });
-    const run = { userId: session.user.id, channel: "dashboard" as const, messages, brain, confirmSecret };
+    const run = {
+      userId: session.user.id,
+      channel: "dashboard" as const,
+      messages,
+      brain,
+      confirmSecret,
+      systemContext: timeContextBlock().trim(),
+    };
     const outcome = kind === "chef" ? await runChefAssistant(run) : await runClientAssistant(run);
     if (outcome === null) {
       const what = kind === "chef" ? "chef-profiel" : "klant-profiel";
