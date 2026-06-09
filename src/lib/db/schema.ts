@@ -928,6 +928,16 @@ export type ClientIntel = {
   nextBestAction?: string; // volgende actie
 };
 
+/** Native Stage-2 client onboarding lifecycle (mirrors chefOnboardingStatusEnum). */
+export const clientOnboardingStatusEnum = pgEnum("client_onboarding_status", [
+  "not_started",
+  "in_progress",
+  "submitted",
+]);
+
+/** Legal form (rechtsvorm) — from the BEDRIJFSGEGEVENS onboarding form. */
+export const clientRechtsvormEnum = pgEnum("client_rechtsvorm", ["bv", "nv", "eenmanszaak", "ander"]);
+
 export const clients = pgTable("clients", {
   id: text("id")
     .primaryKey()
@@ -994,6 +1004,54 @@ export const clients = pgTable("clients", {
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
 
   notes: text("notes"),
+
+  /* ----- PR-CLIENT-ONBOARDING: native Stage-2 onboarding (BEDRIJFSGEGEVENS) -----
+   * FACTS from the klant — legal/company/workplace. Billing stays with the invoicing
+   * team (billingEmail/paymentTermsDays/payingitClientId above); judgment ("Maarten
+   * brein") lives in `intel` (intel team). Additive, all nullable. */
+  // NAW (companyName/email/phone/kvk/btw reused from above)
+  handelsnaam: text("handelsnaam"),
+  website: text("website"),
+  visitStreet: text("visit_street"),
+  visitHouseNumber: text("visit_house_number"),
+  visitPostcode: text("visit_postcode"),
+  visitCity: text("visit_city"),
+  visitCountry: text("visit_country"),
+  // legal
+  rechtsvorm: clientRechtsvormEnum("rechtsvorm"),
+  rsin: text("rsin"),
+  partOfHolding: boolean("part_of_holding"),
+  holdingName: text("holding_name"),
+  // CAO / arbeidsvoorwaarden
+  caoApplicable: boolean("cao_applicable"),
+  caoName: text("cao_name"),
+  ownWorkRegulations: boolean("own_work_regulations"),
+  inlenersbeloning: boolean("inlenersbeloning"),
+  pensionScheme: boolean("pension_scheme"),
+  travelCostPolicy: text("travel_cost_policy"),
+  overtimePolicy: text("overtime_policy"),
+  // RI&E / veiligheid
+  rieAvailable: boolean("rie_available"),
+  rieDate: date("rie_date"),
+  workplaceSafe: boolean("workplace_safe"),
+  safetyInstructions: text("safety_instructions"),
+  pbmRequired: boolean("pbm_required"),
+  vogRequired: boolean("vog_required"),
+  // overeenkomst
+  contractStartDate: date("contract_start_date"),
+  // Werkcontext — light operational FACTS (separate from admin-curated clientType/clientTags)
+  primaryWorkTypes: text("primary_work_types").array(),
+  usualNeededRoles: text("usual_needed_roles").array(),
+  mainShiftTypes: text("main_shift_types").array(),
+  kitchenLanguage: text("kitchen_language"),
+  chefMustBring: text("chef_must_bring").array(),
+  parkingAvailable: boolean("parking_available"),
+  mealIncluded: boolean("meal_included"),
+  workClothingRequired: text("work_clothing_required"),
+  // onboarding lifecycle (mirrors chefs.onboarding*)
+  onboardingStatus: clientOnboardingStatusEnum("onboarding_status").notNull().default("not_started"),
+  onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
+  onboardingFormVersion: integer("onboarding_form_version"),
 
   createdBy: text("created_by").references(() => users.id, {
     onDelete: "set null",
@@ -2947,6 +3005,9 @@ export const clientContactRoleEnum = pgEnum("client_contact_role", [
   "finance",
   "hours_approval",
   "emergency",
+  // appended (PR-CLIENT-ONBOARDING) — keep at end: pg ADD VALUE appends, code order = DB order
+  "general_contact",
+  "signing_authority",
 ]);
 
 export const clientContacts = pgTable(
@@ -2959,6 +3020,8 @@ export const clientContacts = pgTable(
     name: text("name").notNull(),
     email: text("email").notNull(),
     phone: text("phone"),
+    /** Functie / job title of the contact (PR-CLIENT-ONBOARDING). */
+    title: text("title"),
     role: clientContactRoleEnum("role").notNull(),
     receivesNotifications: boolean("receives_notifications")
       .notNull()
@@ -2972,8 +3035,41 @@ export const clientContacts = pgTable(
   },
   (t) => ({
     clientIdx: index("client_contacts_client_idx").on(t.clientId, t.role),
+    // one row per (client, role) — conflict target for the onboarding contact upsert
+    clientRoleUnique: uniqueIndex("client_contacts_client_role_unique").on(t.clientId, t.role),
   }),
 );
+
+/* ----- PR-CLIENT-ONBOARDING: client documents (mirror chef_documents) — for the RI&E upload. */
+export const clientDocumentTypeEnum = pgEnum("client_document_type", ["rie_document", "other"]);
+export const clientDocumentStatusEnum = pgEnum("client_document_status", [
+  "uploaded",
+  "needs_review",
+  "verified",
+  "expired",
+  "rejected",
+]);
+
+export const clientDocuments = pgTable("client_documents", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "cascade" }),
+  type: clientDocumentTypeEnum("type").notNull().default("other"),
+  filename: text("filename").notNull(),
+  /** Key in R2 — `clients/<clientId>/<docType>/<docId>/<filename>`. Private bucket. */
+  r2Key: text("r2_key").notNull().unique(),
+  mimeType: text("mime_type"),
+  sizeBytes: integer("size_bytes"),
+  uploadedBy: text("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  verifiedBy: text("verified_by").references(() => users.id, { onDelete: "set null" }),
+  status: clientDocumentStatusEnum("status").notNull().default("uploaded"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
 
 export type PlacementComment = typeof placementComments.$inferSelect;
 export type NewPlacementComment = typeof placementComments.$inferInsert;
