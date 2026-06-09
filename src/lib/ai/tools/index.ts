@@ -44,6 +44,7 @@ import { chefsHistoryAtClient } from "@/lib/ai/tools/chef-client-history";
 import { risksScan } from "@/lib/ai/tools/risks";
 import { intakeList, intakeConvert } from "@/lib/ai/tools/intake";
 import { onboardingMissing, onboardingRequestMissing } from "@/lib/ai/tools/onboarding";
+import { clientOnboardingMissing } from "@/lib/ai/tools/client-onboarding";
 import { chefsAvailability } from "@/lib/ai/tools/chef-availability";
 import { clientsShiftRequests, clientsDecideShiftRequest } from "@/lib/ai/tools/client-requests";
 import { placementsReply } from "@/lib/ai/tools/placement-reply";
@@ -71,6 +72,7 @@ export const ALL_TOOLS: AnyTool[] = [
   chefsAvailability,
   intakeList,
   onboardingMissing,
+  clientOnboardingMissing,
   clientsHistory,
   clientsHealth,
   clientsShiftRequests,
