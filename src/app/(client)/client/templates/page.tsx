@@ -6,7 +6,7 @@
  * field='template:<id>' so admin sees it in the same Wijzigingsverzoeken tab.
  */
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
 import { fieldClass } from "@/components/forms/Fields";
@@ -142,11 +142,13 @@ export default async function ClientTemplatesPage({
     .where(and(eq(shiftTemplates.clientId, c.id), eq(shiftTemplates.active, true)))
     .orderBy(asc(shiftTemplates.dayOfWeek));
 
-  // Exceptions per template (for accurate next-date display).
+  // Exceptions per template (for accurate next-date display) — own templates only
+  // (data-minimization: an unbounded select pulled every client's exceptions).
   const exRows = templates.length
     ? await db
         .select()
         .from(shiftTemplateExceptions)
+        .where(inArray(shiftTemplateExceptions.templateId, templates.map((t) => t.id)))
     : [];
   const exByTemplate = new Map<string, Set<string>>();
   for (const e of exRows) {
