@@ -19,6 +19,7 @@ import { listInboundAdmin } from "@/lib/domain/inbound";
 import { matchesViewer, viewerInboxFilter } from "@/lib/domain/inboxes";
 import { proposePlacement } from "@/lib/domain/matching";
 import { transitionPlacement } from "@/lib/domain/placement-transition";
+import { autofillWeek } from "@/lib/domain/roster-autofill";
 import { getPlannerCockpit, getPlannerReport } from "@/lib/domain/planner-intel";
 import { formatChefRole } from "@/lib/labels";
 import { hasRole, requirePermission } from "@/lib/permissions";
@@ -42,7 +43,7 @@ const fmtWhen = (d: Date) =>
 export default async function PlanningPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ok?: string }>;
+  searchParams: Promise<{ ok?: string; f?: string; o?: string }>;
 }) {
   const session = await requirePermission("planning", "read");
   const sp = await searchParams;
@@ -92,6 +93,21 @@ export default async function PlanningPage({
     });
     redirect(`/admin/planning?ok=${res.ok && res.changed ? "bevestigd" : "niet-bevestigd"}`);
   }
+
+  // Scale (wave W3): one click and the SAME matching brain pre-fills every open slot of the
+  // coming week as CONCEPTS (invisible to chef + klant) — the planner reviews in the planbord
+  // and hits Publiceer. Re-runs are harmless: covered slots are skipped.
+  async function autofillFromCockpit() {
+    "use server";
+    const session = await requirePermission("shifts", "write");
+    const start = new Date();
+    const res = await autofillWeek({
+      startUtc: start,
+      endUtc: new Date(start.getTime() + 7 * 24 * 3600 * 1000),
+      actorUserId: session.user.id,
+    });
+    redirect(`/admin/planning?ok=voorgevuld&f=${res.filled}&o=${res.openSlotsBefore}`);
+  }
   const d = report.intakeDelta;
   const intakeLine =
     d.mode === "arrow"
@@ -118,13 +134,23 @@ export default async function PlanningPage({
               : "border-emerald-200 bg-emerald-50 text-emerald-800"
           }`}
         >
-          {sp.ok === "al-voorgesteld"
-            ? "Deze kok was al voorgesteld voor die dienst — geen dubbel voorstel verstuurd."
-            : sp.ok === "bevestigd"
-              ? "✓ Plaatsing bevestigd — chef en klant zijn op de hoogte gebracht."
-              : sp.ok === "niet-bevestigd"
-                ? "Niet bevestigd — deze plaatsing is intussen gewijzigd of al bevestigd (de lijst is ververst)."
-                : "✓ Voorstel gestuurd — de kok krijgt bericht en jij ziet de reactie bij 'Te bevestigen'."}
+          {sp.ok === "al-voorgesteld" ? (
+            "Deze kok was al voorgesteld voor die dienst — geen dubbel voorstel verstuurd."
+          ) : sp.ok === "bevestigd" ? (
+            "✓ Plaatsing bevestigd — chef en klant zijn op de hoogte gebracht."
+          ) : sp.ok === "niet-bevestigd" ? (
+            "Niet bevestigd — deze plaatsing is intussen gewijzigd of al bevestigd (de lijst is ververst)."
+          ) : sp.ok === "voorgevuld" ? (
+            <>
+              ⚡ {sp.f ?? 0} van {sp.o ?? 0} open plekken als concept voorgevuld — onzichtbaar voor
+              chef & klant tot jij publiceert.{" "}
+              <Link href="/admin/business/roster/planbord" className="font-medium underline underline-offset-2">
+                Review & publiceer in het planbord
+              </Link>
+            </>
+          ) : (
+            "✓ Voorstel gestuurd — de kok krijgt bericht en jij ziet de reactie bij 'Te bevestigen'."
+          )}
         </p>
       ) : null}
       <AutoRefresh seconds={60} clearParam="ok" />
@@ -296,7 +322,18 @@ export default async function PlanningPage({
       </div>
 
       <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
-        <h2 className="font-serif text-lg text-ink-900">Kritiek · komende 48 uur</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-serif text-lg text-ink-900">Kritiek · komende 48 uur</h2>
+          <form action={autofillFromCockpit}>
+            <button
+              type="submit"
+              className="rounded-full border border-burgundy/30 bg-burgundy/5 px-4 py-1.5 font-ui text-[11px] font-medium uppercase tracking-[0.14em] text-burgundy hover:border-burgundy/60"
+              title="De matching-engine vult alle open plekken van de komende 7 dagen als concept — jij reviewt en publiceert in het planbord."
+            >
+              ⚡ Vul de week automatisch
+            </button>
+          </form>
+        </div>
         {c.open48h.length === 0 ? (
           <p className="mt-2 text-sm text-ink-500">Alles bezet voor de komende 48 uur.</p>
         ) : (

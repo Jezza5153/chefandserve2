@@ -19,6 +19,26 @@ import { placements, shifts } from "@/lib/db/schema";
 import { draftPlacement, findMatchesForShift } from "@/lib/domain/matching";
 import { amsterdamDayKey } from "@/lib/roster-format";
 
+/** Live placements (draft/proposed/accepted/confirmed) per shift — grouped query + Map.
+ *  ⚠ Never compute this as a correlated subquery in a select PROJECTION: drizzle+neon-http
+ *  renders those uncorrelated (always 0 — verified in the W3 idempotency E2E). */
+async function liveCounts(shiftIds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (shiftIds.length === 0) return map;
+  const counts = await db
+    .select({ shiftId: placements.shiftId, n: sql<number>`count(*)::int` })
+    .from(placements)
+    .where(
+      and(
+        inArray(placements.shiftId, shiftIds),
+        inArray(placements.status, ["draft", "proposed", "accepted", "confirmed"]),
+      ),
+    )
+    .groupBy(placements.shiftId);
+  for (const c of counts) map.set(c.shiftId, Number(c.n));
+  return map;
+}
+
 export type AutofillResult = {
   /** Concepts created this pass. */
   filled: number;
@@ -34,11 +54,7 @@ export async function autofillWeek(args: {
   actorUserId: string;
 }): Promise<AutofillResult> {
   const rows = await db
-    .select({
-      id: shifts.id,
-      headcount: shifts.headcount,
-      liveCount: sql<number>`(select count(*) from placements p where p.shift_id = ${shifts.id} and p.status in ('draft','proposed','accepted','confirmed'))::int`,
-    })
+    .select({ id: shifts.id, headcount: shifts.headcount })
     .from(shifts)
     .where(
       and(
@@ -49,8 +65,13 @@ export async function autofillWeek(args: {
     )
     .orderBy(asc(shifts.startsAt));
 
+  // ⚠ Live counts via grouped query + Map — a correlated subquery in the PROJECTION renders
+  // uncorrelated (always 0) under drizzle+neon-http, which made autofill non-idempotent and
+  // over-fill already-full shifts (found in the W3 idempotency E2E).
+  const liveByShift = await liveCounts(rows.map((r) => r.id));
+
   const openShifts = rows
-    .map((s) => ({ id: s.id, open: Math.max(0, s.headcount - s.liveCount) }))
+    .map((s) => ({ id: s.id, open: Math.max(0, s.headcount - (liveByShift.get(s.id) ?? 0)) }))
     .filter((s) => s.open > 0);
   const openSlotsBefore = openShifts.reduce((a, s) => a + s.open, 0);
 
@@ -124,7 +145,6 @@ export async function copyLastWeek(args: {
       startsAt: shifts.startsAt,
       roleNeeded: shifts.roleNeeded,
       headcount: shifts.headcount,
-      liveCount: sql<number>`(select count(*) from placements p where p.shift_id = ${shifts.id} and p.status in ('draft','proposed','accepted','confirmed'))::int`,
     })
     .from(shifts)
     .where(
@@ -136,11 +156,14 @@ export async function copyLastWeek(args: {
     )
     .orderBy(asc(shifts.startsAt));
 
+  // Same projection-subquery fix as autofillWeek — grouped counts via liveCounts().
+  const liveByShift = await liveCounts(thisRows.map((r) => r.id));
+
   const openShifts = thisRows
     .map((s) => ({
       id: s.id,
       key: `${s.clientId}|${amsWeekday(s.startsAt)}|${s.roleNeeded}`,
-      open: Math.max(0, s.headcount - s.liveCount),
+      open: Math.max(0, s.headcount - (liveByShift.get(s.id) ?? 0)),
     }))
     .filter((s) => s.open > 0);
   const openSlotsBefore = openShifts.reduce((a, s) => a + s.open, 0);
