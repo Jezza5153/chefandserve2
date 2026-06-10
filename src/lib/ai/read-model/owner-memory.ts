@@ -20,8 +20,11 @@ export const MEMORY_CAP = 50;
 
 export type MemoryFact = { id: string; userId: string; text: string; createdAt: string };
 
-/** Normalize for dedup: lowercase, collapse whitespace, strip trailing punctuation. */
-const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, " ").replace(/[.!?\s]+$/, "").trim();
+/** Normalize for dedup: lowercase, collapse whitespace, strip trailing punctuation.
+ *  Exported for the memory-mining worker (dedup proposals against existing facts). */
+export const normalizeFactText = (s: string) =>
+  s.toLowerCase().replace(/\s+/g, " ").replace(/[.!?\s]+$/, "").trim();
+const normalize = normalizeFactText;
 
 type Bag = { items: MemoryFact[] };
 

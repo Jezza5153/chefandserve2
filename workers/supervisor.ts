@@ -92,6 +92,11 @@ const JOBS: Job[] = [
   // owner notifications WITH a draft next step (no auto-sends; Maarten stays the
   // actor). Per-entity throttled (6 days). GATED via AI_WATCHDOG_ENABLED. Default OFF.
   { name: "ai-watchdog", schedule: "15 8 * * *", script: "ai-watchdog.ts" },
+  // Conversation→memory mining (daily 03:30 Amsterdam). Thin: POSTs the app-side
+  // /api/cron/ai-memory-mining — durable facts from recent owner chats become PROPOSAL
+  // notifications (never auto-remembered). Per-user 20h throttle. GATED via
+  // AI_MEMORY_MINING_ENABLED. Default OFF.
+  { name: "ai-memory-mining", schedule: "30 3 * * *", script: "ai-memory-mining.ts" },
 ];
 
 function ts(): string {
