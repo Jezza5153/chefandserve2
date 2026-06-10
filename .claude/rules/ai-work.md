@@ -28,9 +28,9 @@ Read `docs/ai/README.md` + `docs/ai/ai-safety-rules.md` before any AI change.
 ## Gates (run before every AI PR — all need `--env-file=.env.local`)
 
 ```
-npx tsx --env-file=.env.local scripts/smoke-ai-tools.mts    # registry integrity (260+ checks)
+npx tsx --env-file=.env.local scripts/smoke-ai-tools.mts    # registry integrity (~290 checks)
 npx tsx --env-file=.env.local scripts/smoke-ai-safety.mts   # safety net (99 checks)
-npx tsx --env-file=.env.local scripts/eval-ai.mts           # 54-case routing eval (GOLDEN+CHAOS+SAFETY)
+npx tsx --env-file=.env.local scripts/eval-ai.mts           # 66-case eval (GOLDEN+CHAOS+MULTI+SAFETY) — also runs in CI on AI-touching PRs
 ```
 
 ## Behaviour tuning
