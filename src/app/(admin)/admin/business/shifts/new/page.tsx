@@ -3,8 +3,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { recordAuditFromRequest } from "@/lib/audit";
-import { clients, shifts } from "@/lib/db/schema";
+import { clients } from "@/lib/db/schema";
+import { createShift as createShiftDomain } from "@/lib/domain/shifts";
 import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Nieuwe shift" };
@@ -76,40 +76,24 @@ export default async function NewShiftPage({
       throw new Error("Verplichte velden ontbreken");
     }
 
-    const startsAt = new Date(startsAtStr);
-    const endsAt = new Date(endsAtStr);
-    if (endsAt <= startsAt) {
-      throw new Error("Eindtijd moet na starttijd liggen");
-    }
-
-    const [shift] = await db
-      .insert(shifts)
-      .values({
-        clientId,
-        startsAt,
-        endsAt,
-        roleNeeded,
-        segment,
-        headcount: Math.max(1, headcount),
-        city,
-        location,
-        clientRateCents: clientRateEur > 0 ? Math.round(clientRateEur * 100) : null,
-        chefRateCents: chefRateEur > 0 ? Math.round(chefRateEur * 100) : null,
-        notes,
-        status: "open",
-        createdBy: session.user.id,
-      })
-      .returning({ id: shifts.id });
-
-    await recordAuditFromRequest({
-      userId: session.user.id,
-      action: "shifts.create",
-      resource: "shifts",
-      resourceId: shift.id,
-      after: { clientId, roleNeeded, headcount },
+    // Domain extraction (wave PR-8): the UI and the AI tool share ONE createShift().
+    const result = await createShiftDomain({
+      clientId,
+      startsAt: new Date(startsAtStr),
+      endsAt: new Date(endsAtStr),
+      roleNeeded,
+      segment,
+      headcount,
+      city,
+      location,
+      clientRateCents: clientRateEur > 0 ? Math.round(clientRateEur * 100) : null,
+      chefRateCents: chefRateEur > 0 ? Math.round(chefRateEur * 100) : null,
+      notes,
+      createdBy: session.user.id,
     });
+    if (!result.ok) throw new Error(result.error);
 
-    redirect(`/admin/business/shifts/${shift.id}`);
+    redirect(`/admin/business/shifts/${result.shiftId}`);
   }
 
   return (
