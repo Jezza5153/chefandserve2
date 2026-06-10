@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
-import { forgetFact, listOwnerMemory, rememberFact } from "@/lib/ai/read-model/owner-memory";
+import { forgetFact, listOwnerMemory, MEMORY_CAP, rememberFact } from "@/lib/ai/read-model/owner-memory";
 
 export const memoryRemember = defineTool({
   name: "memory.remember",
@@ -20,13 +20,19 @@ export const memoryRemember = defineTool({
   permission: null,
   input: z.object({ text: z.string().min(1, "Wat moet ik onthouden?") }),
   run: async (input, ctx) => {
-    const f = await rememberFact({
+    const r = await rememberFact({
       userId: ctx.actor.requestedByUserId,
       text: input.text,
       id: randomUUID(),
       now: new Date().toISOString(),
     });
-    return { data: { id: f.id }, summary: `Onthouden: "${f.text}".` };
+    const evictNote = r.evicted.length
+      ? ` Let op: ik zat aan m'n limiet van ${MEMORY_CAP} — oudste vergeten: "${r.evicted[0].text.slice(0, 60)}".`
+      : "";
+    return {
+      data: { id: r.fact.id, deduped: r.deduped, evicted: r.evicted.length },
+      summary: r.deduped ? `Dat wist ik al — opgefrist: "${r.fact.text}".` : `Onthouden: "${r.fact.text}".${evictNote}`,
+    };
   },
 });
 
@@ -40,8 +46,10 @@ export const memoryList = defineTool({
   run: async (_input, ctx) => {
     const items = await listOwnerMemory(ctx.actor.requestedByUserId);
     return {
-      data: { count: items.length, facts: items },
-      summary: items.length ? `${items.length} ding(en) die ik onthoud.` : "Ik heb nog niets onthouden.",
+      data: { count: items.length, cap: MEMORY_CAP, facts: items },
+      summary: items.length
+        ? `${items.length}/${MEMORY_CAP} ding(en) die ik onthoud.`
+        : "Ik heb nog niets onthouden.",
     };
   },
 });

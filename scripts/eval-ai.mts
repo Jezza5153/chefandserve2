@@ -84,6 +84,7 @@ const GOLDEN: RouteCase[] = [
   { id: "G-inbound", q: "Wat is er binnengekomen van chefs of klanten — heeft iemand geklaagd of iets dringends gestuurd?", expect: ["inbound.list"] },
   { id: "G-quality", q: "Welke chefs gaan achteruit in hun beoordelingen — waar moet ik op letten qua kwaliteit?", expect: ["ratings.trends"] },
   { id: "G-feedback", q: "Wat vond het team deze week slecht aan je antwoorden — waar kreeg je duimpjes omlaag op?", expect: ["feedback.review"] },
+  { id: "G-memory", q: "Onthoud dat Hotel Okura alleen sous-chefs wil, geen commis.", expect: ["memory.remember"] },
 ];
 
 // Multi-turn — the follow-up question must carry the topic over (audit: evals were single-call
@@ -117,6 +118,15 @@ const MULTI: MultiCase[] = [
     ],
     q: "mooi — maak nu ook zo'n rapport maar dan over de chefs",
     expect: ["reports.chefs"],
+  },
+  {
+    id: "M4",
+    history: [
+      { role: "user", content: "Onthoud dat Hotel Okura alleen sous-chefs wil." },
+      { role: "assistant", content: "Onthouden: Hotel Okura wil alleen sous-chefs." },
+    ],
+    q: "wie kan ik voorstellen voor de dienst bij Okura van zaterdag?",
+    expect: ["shifts.find", "shifts.suggest_chefs", "clients.find", "shifts.detail"],
   },
 ];
 
