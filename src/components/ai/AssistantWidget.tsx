@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { AssistantChat } from "@/components/ai/AssistantChat";
 
@@ -20,6 +20,14 @@ export function AssistantWidget({
   placeholder?: string;
 } = {}) {
   const [open, setOpen] = useState(false);
+
+  // Quick-ask (wave W2): page chips dispatch `cs-ai:ask` — open the widget so the prefilled
+  // question (AssistantChat listens for the same event) is right there.
+  useEffect(() => {
+    const onAsk = () => setOpen(true);
+    window.addEventListener("cs-ai:ask", onAsk);
+    return () => window.removeEventListener("cs-ai:ask", onAsk);
+  }, []);
 
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3 print:hidden">

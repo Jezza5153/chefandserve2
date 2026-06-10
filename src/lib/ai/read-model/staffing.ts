@@ -40,18 +40,38 @@ export async function plannerCockpit(now: Date) {
       open: s.open,
       city: s.city,
     })),
-    topMatch: c.topMatch
+    // W1: the cockpit now suggests for the top 3 urgent shifts; the tool surfaces them all
+    // (and keeps `topMatch` as the first entry for prompt/back-compat).
+    topMatches: c.topMatches.map((tm) => ({
+      shift: {
+        shiftId: tm.shift.id,
+        client: tm.shift.clientName,
+        role: formatShiftRole(tm.shift.roleNeeded),
+        startsAt: tm.shift.startsAt,
+        open: tm.shift.open,
+      },
+      suggestions: tm.matches.map(shapeMatch),
+    })),
+    topMatch: c.topMatches[0]
       ? {
           shift: {
-            shiftId: c.topMatch.shift.id,
-            client: c.topMatch.shift.clientName,
-            role: formatShiftRole(c.topMatch.shift.roleNeeded),
-            startsAt: c.topMatch.shift.startsAt,
-            open: c.topMatch.shift.open,
+            shiftId: c.topMatches[0].shift.id,
+            client: c.topMatches[0].shift.clientName,
+            role: formatShiftRole(c.topMatches[0].shift.roleNeeded),
+            startsAt: c.topMatches[0].shift.startsAt,
+            open: c.topMatches[0].shift.open,
           },
-          suggestions: c.topMatch.matches.map(shapeMatch),
+          suggestions: c.topMatches[0].matches.map(shapeMatch),
         }
       : null,
+    // W1 work-queues — the assistant can now answer "wat moet ik bevestigen / wie is stil?".
+    // Humanized like the rest of this read-model: no raw enum labels reach the model.
+    toConfirm: c.toConfirm.map((p) => ({ ...p, roleNeeded: formatShiftRole(p.roleNeeded) })),
+    awaitingChef: c.awaitingChef.map((p) => ({ ...p, roleNeeded: formatShiftRole(p.roleNeeded) })),
+    pendingChangeRequests: c.pendingChangeRequests.map((r) => ({
+      ...r,
+      kind: r.kind === "cancel" ? "annulering" : "wijziging",
+    })),
   };
 }
 

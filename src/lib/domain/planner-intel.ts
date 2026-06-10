@@ -4,10 +4,18 @@
  * accepted-not-confirmed, open slots in the next 48h / 7d) + matching.findMatchesForShift
  * for the single most-urgent open shift. Deterministic; counts + the live roster only.
  */
-import { and, asc, eq, gt, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lte, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { chefSubmissions, clientSubmissions, clients, placements, shifts } from "@/lib/db/schema";
+import {
+  chefs,
+  chefSubmissions,
+  clientShiftChangeRequests,
+  clientSubmissions,
+  clients,
+  placements,
+  shifts,
+} from "@/lib/db/schema";
 import { findMatchesForShift, type MatchResult } from "@/lib/domain/matching";
 
 export type UrgentShift = {
@@ -21,15 +29,42 @@ export type UrgentShift = {
   city: string | null;
 };
 
+/** A placement row in one of the planner's work-queues (confirm / chase). */
+export type QueuedPlacement = {
+  placementId: string;
+  shiftId: string;
+  chefName: string;
+  clientName: string | null;
+  startsAt: Date;
+  roleNeeded: string;
+  /** Hours since the proposal went out (chase-queue only). */
+  ageHours?: number;
+};
+
+export type PendingChangeRequest = {
+  id: string;
+  shiftId: string;
+  kind: string;
+  clientName: string | null;
+  createdAt: Date;
+};
+
 export type PlannerCockpit = {
   intake: { chefs: number; clients: number; total: number };
   acceptedUnconfirmed: number;
   /** Placements still 'proposed' — chefs who haven't said ja/nee yet (hesitation depth). */
   proposedPending: number;
+  /** Work-queue: accepted placements awaiting the planner's confirm (inline action). */
+  toConfirm: QueuedPlacement[];
+  /** Work-queue: proposals the chef hasn't answered, oldest first (chase). */
+  awaitingChef: QueuedPlacement[];
+  /** Pending klant change/cancel requests — can invalidate a shift you're about to fill. */
+  pendingChangeRequests: PendingChangeRequest[];
   open48h: UrgentShift[];
   open48hSlots: number;
   open7dCount: number;
-  topMatch: { shift: UrgentShift; matches: MatchResult[] } | null;
+  /** Match suggestions for the top N most-urgent open shifts (bounded fan-out). */
+  topMatches: { shift: UrgentShift; matches: MatchResult[] }[];
 };
 
 export async function getPlannerCockpit(now: Date = new Date()): Promise<PlannerCockpit> {
@@ -37,11 +72,62 @@ export async function getPlannerCockpit(now: Date = new Date()): Promise<Planner
   const in7d = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
   const confirmedExpr = sql<number>`(select count(*) from placements p where p.shift_id = ${shifts.id} and p.status in ('confirmed','completed'))::int`;
 
-  const [[chefIntake], [clientIntake], [accepted], [proposed], rows, [open7d]] = await Promise.all([
+  // Shared shape for the two placement work-queues (confirm + chase).
+  const queueSelect = {
+    placementId: placements.id,
+    shiftId: placements.shiftId,
+    chefName: chefs.fullName,
+    clientName: clients.companyName,
+    startsAt: shifts.startsAt,
+    roleNeeded: shifts.roleNeeded,
+    proposedAt: placements.proposedAt,
+  };
+
+  const [[chefIntake], [clientIntake], [accepted], [proposed], toConfirmRows, awaitingRows, changeReqRows, rows, [open7d]] = await Promise.all([
     db.select({ n: sql<number>`count(*)::int` }).from(chefSubmissions).where(eq(chefSubmissions.status, "new")),
     db.select({ n: sql<number>`count(*)::int` }).from(clientSubmissions).where(eq(clientSubmissions.status, "new")),
     db.select({ n: sql<number>`count(*)::int` }).from(placements).where(eq(placements.status, "accepted")),
     db.select({ n: sql<number>`count(*)::int` }).from(placements).where(eq(placements.status, "proposed")),
+    db
+      .select(queueSelect)
+      .from(placements)
+      .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+      .innerJoin(chefs, eq(chefs.id, placements.chefId))
+      .leftJoin(clients, eq(clients.id, shifts.clientId))
+      .where(and(eq(placements.status, "accepted"), gt(shifts.startsAt, now)))
+      .orderBy(asc(shifts.startsAt))
+      .limit(8),
+    db
+      .select(queueSelect)
+      .from(placements)
+      .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+      .innerJoin(chefs, eq(chefs.id, placements.chefId))
+      .leftJoin(clients, eq(clients.id, shifts.clientId))
+      .where(and(eq(placements.status, "proposed"), gt(shifts.startsAt, now)))
+      .orderBy(asc(placements.proposedAt))
+      .limit(8),
+    db
+      .select({
+        id: clientShiftChangeRequests.id,
+        shiftId: clientShiftChangeRequests.shiftId,
+        kind: clientShiftChangeRequests.kind,
+        clientName: clients.companyName,
+        createdAt: clientShiftChangeRequests.createdAt,
+      })
+      .from(clientShiftChangeRequests)
+      .innerJoin(shifts, eq(shifts.id, clientShiftChangeRequests.shiftId))
+      .leftJoin(clients, eq(clients.id, clientShiftChangeRequests.clientId))
+      .where(
+        and(
+          inArray(clientShiftChangeRequests.status, ["pending", "in_progress"]),
+          // Liveness: requests on past/cancelled shifts would otherwise nag forever AND starve
+          // the oldest-first cap, hiding NEW actionable requests (review finding).
+          gt(shifts.startsAt, now),
+          sql`${shifts.status} not in ('cancelled','completed')`,
+        ),
+      )
+      .orderBy(asc(clientShiftChangeRequests.createdAt))
+      .limit(5),
     db
       .select({
         id: shifts.id,
@@ -90,13 +176,27 @@ export async function getPlannerCockpit(now: Date = new Date()): Promise<Planner
 
   const open48hSlots = open48h.reduce((a, s) => a + s.open, 0);
 
-  // Suggested matches for the single most-urgent open shift (bounded — never a fan-out).
-  let topMatch: PlannerCockpit["topMatch"] = null;
-  if (open48h.length > 0) {
-    const shift = open48h[0];
-    const matches = await findMatchesForShift(shift.id, { limit: 3 });
-    topMatch = { shift, matches };
-  }
+  // Suggested matches for the top 3 most-urgent open shifts (bounded fan-out: 3 × 2 candidates).
+  // Parallel — each findMatchesForShift is ~6 serial neon-http round-trips; sequential would
+  // triple the latency of a page that AutoRefreshes every 60s (review finding).
+  const topMatches: PlannerCockpit["topMatches"] = await Promise.all(
+    open48h.slice(0, 3).map(async (shift) => ({
+      shift,
+      matches: await findMatchesForShift(shift.id, { limit: 2 }),
+    })),
+  );
+
+  const toQueued = (r: (typeof toConfirmRows)[number], withAge = false): QueuedPlacement => ({
+    placementId: r.placementId,
+    shiftId: r.shiftId,
+    chefName: r.chefName,
+    clientName: r.clientName,
+    startsAt: r.startsAt,
+    roleNeeded: r.roleNeeded,
+    ...(withAge && r.proposedAt
+      ? { ageHours: Math.floor((now.getTime() - new Date(r.proposedAt).getTime()) / 3_600_000) }
+      : {}),
+  });
 
   return {
     intake: {
@@ -106,10 +206,13 @@ export async function getPlannerCockpit(now: Date = new Date()): Promise<Planner
     },
     acceptedUnconfirmed: accepted?.n ?? 0,
     proposedPending: proposed?.n ?? 0,
+    toConfirm: toConfirmRows.map((r) => toQueued(r)),
+    awaitingChef: awaitingRows.map((r) => toQueued(r, true)),
+    pendingChangeRequests: changeReqRows,
     open48h,
     open48hSlots,
     open7dCount: open7d?.n ?? 0,
-    topMatch,
+    topMatches,
   };
 }
 

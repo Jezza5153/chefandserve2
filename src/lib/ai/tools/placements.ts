@@ -59,10 +59,11 @@ export const placementsConfirm = defineTool({
       placementId: input.placementId,
       newStatus: "confirmed",
       actorUserId: ctx.actor.requestedByUserId,
+      expectedStatus: "accepted", // the description promises accepted-only; enforce it atomically
     });
     if (!res.ok) throw new Error(res.reason);
     if (!res.changed) {
-      return { data: { id: input.placementId, changed: false }, summary: "Niet bevestigd — deze plaatsing is al afgerond of geannuleerd." };
+      return { data: { id: input.placementId, changed: false }, summary: "Niet bevestigd — deze plaatsing is niet (meer) in status 'geaccepteerd' (al bevestigd, afgewezen of geannuleerd)." };
     }
     return { data: { id: input.placementId, changed: true }, summary: "Plaatsing bevestigd — chef en klant zijn op de hoogte gebracht." };
   },

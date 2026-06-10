@@ -35,6 +35,10 @@ export async function transitionPlacement(args: {
   placementId: string;
   newStatus: TransitionStatus;
   actorUserId: string;
+  /** House rule "UPDATE … WHERE status='<expected>'": when set, the transition only fires from
+   *  EXACTLY this status — a stale/double click (or an already-confirmed row) becomes a clean
+   *  changed:false instead of re-firing the notify/email cascade. Optional for back-compat. */
+  expectedStatus?: "proposed" | "accepted" | "confirmed";
 }): Promise<TransitionResult> {
   const now = new Date();
   let changed = false;
@@ -53,6 +57,7 @@ export async function transitionPlacement(args: {
         and(
           eq(placements.id, args.placementId),
           sql`${placements.status} NOT IN ('completed', 'cancelled')`,
+          ...(args.expectedStatus ? [eq(placements.status, args.expectedStatus)] : []),
         ),
       )
       .returning({ id: placements.id, shiftId: placements.shiftId });

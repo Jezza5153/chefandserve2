@@ -40,6 +40,17 @@ export function AssistantChat({
 }) {
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
+
+  // Quick-ask (wave W2): a page chip dispatches `cs-ai:ask` with the question — prefill the
+  // input (NEVER auto-send: the human presses verstuur, consistent with the confirm culture).
+  useEffect(() => {
+    const onAsk = (e: Event) => {
+      const prompt = (e as CustomEvent<{ prompt?: string }>).detail?.prompt;
+      if (typeof prompt === "string" && prompt.trim()) setInput(prompt);
+    };
+    window.addEventListener("cs-ai:ask", onAsk);
+    return () => window.removeEventListener("cs-ai:ask", onAsk);
+  }, []);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
