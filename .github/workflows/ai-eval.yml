@@ -1,0 +1,54 @@
+# AI eval gate (wave PR-5) — runs the routing/safety eval on every PR that touches the AI.
+#
+# The eval is PLANNING-ONLY (one brain.plan call per case, no tool execution, no DB queries),
+# so everything except OPENAI_API_KEY is a format-valid dummy: env.ts validates shapes at
+# import, but nothing dials the database. Recipe rehearsed locally with `env -i` before
+# shipping. Retries once — individual cases can flake (the model may answer in words where a
+# tool was expected); a real regression fails twice.
+#
+# Cost: ~63 plan calls per run ≈ cents. Secret: OPENAI_API_KEY (repo secret).
+name: ai-eval
+
+on:
+  pull_request:
+    paths:
+      - "src/lib/ai/**"
+      - "scripts/eval-ai*.mts"
+      - ".github/workflows/ai-eval.yml"
+
+concurrency:
+  group: ai-eval-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Real secret — the only thing the eval actually uses besides the code.
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      # Pin the PRODUCTION brain — without this the eval silently tests the wrong model.
+      OPENAI_MODEL: gpt-5.4
+      # Pace the ~65 plan calls (org TPM limit; first CI run hit it at full speed).
+      EVAL_DELAY_MS: "2000"
+      # Format-valid dummies for env.ts import-time validation (never dialed).
+      AUTH_SECRET: ci-dummy-secret-0123456789abcdef0123456789abcdef
+      AUTH_URL: https://ci.example.com
+      DATABASE_URL: postgresql://ci:ci@ep-ci-dummy.eu-central-1.aws.neon.tech/neondb?sslmode=require
+      DATABASE_URL_UNPOOLED: postgresql://ci:ci@ep-ci-dummy.eu-central-1.aws.neon.tech/neondb?sslmode=require
+      RESEND_API_KEY: re_ci_dummy_key
+      RESEND_FROM_EMAIL: ci@example.com
+      JEZZA_EMAIL: ci-jezza@example.com
+      MAARTEN_EMAIL: ci-maarten@example.com
+      GINA_EMAIL: ci-gina@example.com
+      NEXT_PUBLIC_SITE_URL: https://ci.example.com
+      NEXT_PUBLIC_APP_URL: https://ci.example.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run AI eval (retry once on flake)
+        run: npx tsx scripts/eval-ai.mts || (echo "::warning::eval failed — retrying once" && npx tsx scripts/eval-ai.mts)

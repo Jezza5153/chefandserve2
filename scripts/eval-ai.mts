@@ -31,8 +31,16 @@ if (!env.OPENAI_API_KEY) {
 const tools: ToolSpec[] = buildRegistry().specs();
 const brain = createOpenAiBrain({ apiKey: env.OPENAI_API_KEY, model: aiModel(), systemPrompt: DEFAULT_SYSTEM_PROMPT });
 
+// Optional inter-case pacing (EVAL_DELAY_MS) — CI hits org TPM limits when 60+ cases run
+// back-to-back; locally leave unset for full speed.
+const DELAY_MS = Number(process.env.EVAL_DELAY_MS ?? 0);
+const paced = async () => {
+  if (DELAY_MS > 0) await new Promise((r) => setTimeout(r, DELAY_MS));
+};
+
 /** Every tool the model reaches for this turn (parallel-aware), or [] if it answered in words. */
 async function toolsFor(q: string): Promise<string[]> {
+  await paced();
   const step = await brain.plan({ messages: [{ role: "user", content: q }], tools });
   if (step.kind === "tool_calls") return step.calls.map((c) => c.tool);
   if (step.kind === "tool_call") return [step.tool];
@@ -187,6 +195,7 @@ for (const c of CHAOS) {
 
 console.log("\n=== MULTI-TURN (follow-up must carry the topic over) ===");
 for (const c of MULTI) {
+  await paced();
   const step = await brain.plan({ messages: [...c.history, { role: "user", content: c.q }], tools });
   const got = step.kind === "tool_calls" ? step.calls.map((x) => x.tool) : [];
   const ok = got.some((t) => c.expect.includes(t));
