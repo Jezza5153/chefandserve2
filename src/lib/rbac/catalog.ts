@@ -36,6 +36,8 @@ export type CatalogPerm = {
 export const CATALOG: CatalogPerm[] = [
   /* ===== SYSTEM (super_admin only) ===== */
   { key: "system.read", resource: "system", action: "read", class: "system", label: "Systeemdashboard bekijken" },
+  // Deliberately granted to NO role by default — only super_admin holds it via the bypass.
+  { key: "system.write", resource: "system", action: "write", class: "system", label: "Systeemconfiguratie beheren (inboxen e.d.)" },
   { key: "users.read", resource: "users", action: "read", class: "system", label: "Gebruikers bekijken" },
   { key: "users.write", resource: "users", action: "write", class: "system", label: "Gebruikers bewerken" },
   { key: "users.invite", resource: "users", action: "invite", class: "system", label: "Gebruikers uitnodigen" },
