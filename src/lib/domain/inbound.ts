@@ -43,22 +43,32 @@ function classify(subject: string, body: string, matched: boolean): InboundCateg
 
 async function matchSender(
   email: string,
-): Promise<{ chefId: string | null; clientId: string | null; label: string | null }> {
+): Promise<{ chefId: string | null; clientId: string | null; userId: string | null; label: string | null }> {
   // lower() on the column side too — stored emails can be mixed-case ("Jan@Hotel.nl").
   const lower = email.toLowerCase();
+
+  // Internal staff first (owner/planner mailing the shared planning inbox) — roles ≠ inboxes:
+  // planners have personal addresses; recognize them as INTERN, not "onbekende afzender".
+  const [staff] = await db
+    .select({ id: users.id, name: users.name })
+    .from(users)
+    .where(sql`lower(${users.email}) = ${lower}`)
+    .limit(1);
+  if (staff) return { chefId: null, clientId: null, userId: staff.id, label: staff.name ?? email };
+
   const [chef] = await db
     .select({ id: chefs.id, name: chefs.fullName })
     .from(chefs)
     .where(sql`lower(${chefs.email}) = ${lower}`)
     .limit(1);
-  if (chef) return { chefId: chef.id, clientId: null, label: chef.name };
+  if (chef) return { chefId: chef.id, clientId: null, userId: null, label: chef.name };
 
   const [client] = await db
     .select({ id: clients.id, name: clients.companyName })
     .from(clients)
     .where(sql`lower(${clients.email}) = ${lower}`)
     .limit(1);
-  if (client) return { chefId: null, clientId: client.id, label: client.name };
+  if (client) return { chefId: null, clientId: client.id, userId: null, label: client.name };
 
   const [contact] = await db
     .select({ clientId: clientContacts.clientId, name: clientContacts.name })
@@ -71,9 +81,9 @@ async function matchSender(
       .from(clients)
       .where(eq(clients.id, contact.clientId))
       .limit(1);
-    return { chefId: null, clientId: contact.clientId, label: c?.name ?? contact.name };
+    return { chefId: null, clientId: contact.clientId, userId: null, label: c?.name ?? contact.name };
   }
-  return { chefId: null, clientId: null, label: null };
+  return { chefId: null, clientId: null, userId: null, label: null };
 }
 
 export type ProcessInboundInput = {
@@ -97,7 +107,7 @@ export async function processInboundEmail(input: ProcessInboundInput): Promise<{
   const body = (input.bodyText ?? "").slice(0, BODY_CAP);
 
   const m = await matchSender(email);
-  const matched = Boolean(m.chefId || m.clientId);
+  const matched = Boolean(m.chefId || m.clientId || m.userId);
   const category = classify(subject, body, matched);
 
   const inserted = await db
@@ -112,6 +122,7 @@ export async function processInboundEmail(input: ProcessInboundInput): Promise<{
       bodyPreview: body || null,
       matchedChefId: m.chefId,
       matchedClientId: m.clientId,
+      matchedUserId: m.userId,
       category,
     })
     .onConflictDoNothing({ target: inboundMessages.providerMessageId })
@@ -130,7 +141,7 @@ export async function processInboundEmail(input: ProcessInboundInput): Promise<{
       .where(eq(users.email, env.MAARTEN_EMAIL))
       .limit(1);
     if (owner) {
-      const who = m.label ?? name ?? email;
+      const who = m.userId ? `${m.label ?? email} (intern)` : (m.label ?? name ?? email);
       const tag = category === "complaint" ? "⚠ Klacht" : category === "urgent" ? "⏱ Spoed" : "Bericht";
       const res = await createNotification({
         userId: owner.id,
@@ -152,7 +163,7 @@ export type InboundListItem = {
   from: string;
   subject: string | null;
   category: InboundCategory;
-  matchedTo: "chef" | "klant" | null;
+  matchedTo: "chef" | "klant" | "intern" | null;
   receivedAt: string;
   handled: boolean;
 };
@@ -168,8 +179,10 @@ export type InboundAdminRow = {
   category: InboundCategory;
   matchedChefId: string | null;
   matchedClientId: string | null;
+  matchedUserId: string | null;
   chefName: string | null;
   clientName: string | null;
+  userName: string | null;
   handledAt: Date | null;
   createdAt: Date;
 };
@@ -194,14 +207,17 @@ export async function listInboundAdmin(opts?: {
       category: inboundMessages.category,
       matchedChefId: inboundMessages.matchedChefId,
       matchedClientId: inboundMessages.matchedClientId,
+      matchedUserId: inboundMessages.matchedUserId,
       chefName: chefs.fullName,
       clientName: clients.companyName,
+      userName: users.name,
       handledAt: inboundMessages.handledAt,
       createdAt: inboundMessages.createdAt,
     })
     .from(inboundMessages)
     .leftJoin(chefs, eq(inboundMessages.matchedChefId, chefs.id))
     .leftJoin(clients, eq(inboundMessages.matchedClientId, clients.id))
+    .leftJoin(users, eq(inboundMessages.matchedUserId, users.id))
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(inboundMessages.createdAt))
     .limit(Math.min(opts?.limit ?? 100, 200));
@@ -245,6 +261,7 @@ export async function listRecentInbound(opts?: {
       category: inboundMessages.category,
       chefId: inboundMessages.matchedChefId,
       clientId: inboundMessages.matchedClientId,
+      userId: inboundMessages.matchedUserId,
       createdAt: inboundMessages.createdAt,
       handledAt: inboundMessages.handledAt,
     })
@@ -257,7 +274,7 @@ export async function listRecentInbound(opts?: {
     from: r.fromName ? `${r.fromName} <${r.fromEmail}>` : r.fromEmail,
     subject: r.subject,
     category: r.category as InboundCategory,
-    matchedTo: r.chefId ? "chef" : r.clientId ? "klant" : null,
+    matchedTo: r.chefId ? "chef" : r.clientId ? "klant" : r.userId ? "intern" : null,
     receivedAt: r.createdAt.toISOString(),
     handled: r.handledAt != null,
   }));

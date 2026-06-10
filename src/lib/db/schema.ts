@@ -3230,6 +3230,8 @@ export const inboundMessages = pgTable(
     bodyPreview: text("body_preview"),
     matchedChefId: text("matched_chef_id").references(() => chefs.id, { onDelete: "set null" }),
     matchedClientId: text("matched_client_id").references(() => clients.id, { onDelete: "set null" }),
+    /** Internal staff sender (owner/planner mailing the shared planning inbox) — roles ≠ inboxes. */
+    matchedUserId: text("matched_user_id").references(() => users.id, { onDelete: "set null" }),
     category: inboundCategoryEnum("category").notNull().default("other"),
     /** Set when Maarten has dealt with it (clears it from the "needs attention" list). */
     handledAt: timestamp("handled_at", { withTimezone: true }),

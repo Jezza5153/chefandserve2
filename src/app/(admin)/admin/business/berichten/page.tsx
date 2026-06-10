@@ -141,7 +141,12 @@ export default async function BerichtenPage({
                       Klant: {m.clientName ?? "bekijk"}
                     </Link>
                   ) : null}
-                  {!m.matchedChefId && !m.matchedClientId ? (
+                  {m.matchedUserId ? (
+                    <span className="rounded-full border border-ink-200 bg-ink-50 px-2.5 py-0.5 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-ink-600">
+                      Intern{m.userName ? `: ${m.userName}` : ""}
+                    </span>
+                  ) : null}
+                  {!m.matchedChefId && !m.matchedClientId && !m.matchedUserId ? (
                     <span className="font-ui text-[11px] text-ink-400">Onbekende afzender</span>
                   ) : null}
                   <span className="ml-auto font-ui text-[11px] text-ink-400">{fmtTime(m.createdAt)}</span>
