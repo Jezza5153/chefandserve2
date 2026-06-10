@@ -52,7 +52,7 @@ const DESTRUCTIVE = new Set([
   "hours.approve", "hours.reject", "placements.cancel", "placements.propose", "placements.confirm",
   "email.send", "roster.publish", "roster.autofill", "roster.copy_last_week",
   "chefs.approve_profile_change", "chefs.reject_profile_change", "chefs.send_availability_reminder",
-  "inboxes.grant_access", "inboxes.revoke_access",
+  "inboxes.grant_access", "inboxes.revoke_access", "shifts.create",
 ]);
 
 type RouteCase = { id: string; q: string; expect: string[] };
@@ -97,6 +97,7 @@ const GOLDEN: RouteCase[] = [
   { id: "G-watchdog", q: "Wat ziet je watchdog vandaag — staan er diensten te lang open of zijn er chefs stil?", expect: ["watchdog.findings", "risks.scan"] },
   { id: "G-syshealth", q: "Draait het platform goed — zijn er fouten of storingen in het systeem vandaag?", expect: ["system.health", "integrations.health"] },
   { id: "G-inboxes", q: "Wie heeft er allemaal toegang tot de planning-inbox?", expect: ["inboxes.list"] },
+  { id: "G-newshift", q: "Maak een dienst aan voor aanstaande vrijdag 17:00-23:00 bij Hotel Okura, een sous-chef.", expect: ["clients.find", "shifts.create"] },
 ];
 
 // Multi-turn — the follow-up question must carry the topic over (audit: evals were single-call
