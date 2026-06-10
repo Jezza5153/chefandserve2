@@ -70,7 +70,9 @@ export type PlannerCockpit = {
 export async function getPlannerCockpit(now: Date = new Date()): Promise<PlannerCockpit> {
   const in48h = new Date(now.getTime() + 48 * 3600 * 1000);
   const in7d = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
-  const confirmedExpr = sql<number>`(select count(*) from placements p where p.shift_id = ${shifts.id} and p.status in ('confirmed','completed'))::int`;
+  // ⚠ NO correlated subquery in the projection: drizzle+neon-http renders those uncorrelated
+  // (always 0 — verified empirically, W3 review). Confirmed counts come from a grouped query
+  // + Map instead; WHERE-clause correlation (the open7d filter below) works correctly.
 
   // Shared shape for the two placement work-queues (confirm + chase).
   const queueSelect = {
@@ -136,7 +138,6 @@ export async function getPlannerCockpit(now: Date = new Date()): Promise<Planner
         roleNeeded: shifts.roleNeeded,
         headcount: shifts.headcount,
         city: shifts.city,
-        confirmed: confirmedExpr,
       })
       .from(shifts)
       .leftJoin(clients, eq(clients.id, shifts.clientId))
@@ -161,17 +162,36 @@ export async function getPlannerCockpit(now: Date = new Date()): Promise<Planner
       ),
   ]);
 
+  // Confirmed counts via grouped query + Map (the projection-subquery returns 0 — see above).
+  const confirmedByShift = new Map<string, number>();
+  if (rows.length > 0) {
+    const counts = await db
+      .select({ shiftId: placements.shiftId, n: sql<number>`count(*)::int` })
+      .from(placements)
+      .where(
+        and(
+          inArray(placements.shiftId, rows.map((r) => r.id)),
+          inArray(placements.status, ["confirmed", "completed"]),
+        ),
+      )
+      .groupBy(placements.shiftId);
+    for (const c of counts) confirmedByShift.set(c.shiftId, Number(c.n));
+  }
+
   const open48h: UrgentShift[] = rows
-    .map((r) => ({
-      id: r.id,
-      clientName: r.clientName,
-      startsAt: r.startsAt,
-      roleNeeded: r.roleNeeded,
-      headcount: r.headcount,
-      confirmed: r.confirmed,
-      open: Math.max(0, r.headcount - r.confirmed),
-      city: r.city,
-    }))
+    .map((r) => {
+      const confirmed = confirmedByShift.get(r.id) ?? 0;
+      return {
+        id: r.id,
+        clientName: r.clientName,
+        startsAt: r.startsAt,
+        roleNeeded: r.roleNeeded,
+        headcount: r.headcount,
+        confirmed,
+        open: Math.max(0, r.headcount - confirmed),
+        city: r.city,
+      };
+    })
     .filter((s) => s.open > 0);
 
   const open48hSlots = open48h.reduce((a, s) => a + s.open, 0);

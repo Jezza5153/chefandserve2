@@ -97,6 +97,11 @@ const JOBS: Job[] = [
   // notifications (never auto-remembered). Per-user 20h throttle. GATED via
   // AI_MEMORY_MINING_ENABLED. Default OFF.
   { name: "ai-memory-mining", schedule: "30 3 * * *", script: "ai-memory-mining.ts" },
+  // Nightly pre-plan (daily 05:30 Amsterdam). Thin: POSTs /api/cron/ai-preplan —
+  // autofillWeek drafts the coming week's open slots as CONCEPTS (invisible to chef +
+  // klant); planner reviews & publishes in the morning. Idempotent (covered slots
+  // skipped). GATED via AI_PREPLAN_ENABLED. Default OFF.
+  { name: "ai-preplan", schedule: "30 5 * * *", script: "ai-preplan.ts" },
 ];
 
 function ts(): string {
