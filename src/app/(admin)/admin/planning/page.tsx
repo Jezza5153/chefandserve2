@@ -8,12 +8,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AutoRefresh } from "@/components/admin/AutoRefresh";
 import { Icon } from "@/components/admin/icons";
+import { AiQuickAsk } from "@/components/ai/AiQuickAsk";
 import { OpsCard } from "@/components/dashboard/OpsCard";
+import { aiEnabled } from "@/lib/ai/config";
+import { buildDemandForecast } from "@/lib/ai/read-model/demand-forecast";
 import { findStaleOpenShifts } from "@/lib/ai/read-model/watchdog";
 import { listInboundAdmin } from "@/lib/domain/inbound";
 import { matchesViewer, viewerInboxFilter } from "@/lib/domain/inboxes";
 import { proposePlacement } from "@/lib/domain/matching";
+import { transitionPlacement } from "@/lib/domain/placement-transition";
 import { getPlannerCockpit, getPlannerReport } from "@/lib/domain/planner-intel";
 import { formatChefRole } from "@/lib/labels";
 import { hasRole, requirePermission } from "@/lib/permissions";
@@ -49,11 +54,12 @@ export default async function PlanningPage({
     superAdmin: hasRole(session, "super_admin"),
     owner: hasRole(session, "owner", "super_admin"),
   });
-  const [c, report, staleShifts, inboundRows] = await Promise.all([
+  const [c, report, staleShifts, inboundRows, demand] = await Promise.all([
     getPlannerCockpit(),
     getPlannerReport(),
     findStaleOpenShifts(new Date()),
     listInboundAdmin({ unhandledOnly: true, limit: 50 }),
+    buildDemandForecast(new Date(), 2),
   ]);
   const flaggedInbound = inboundRows.filter(
     (r) => (r.category === "urgent" || r.category === "complaint") && matchesViewer(r.toEmail, inboxFilter),
@@ -69,6 +75,22 @@ export default async function PlanningPage({
     if (!shiftId || !chefId) throw new Error("shiftId/chefId ontbreekt");
     const res = await proposePlacement(shiftId, chefId, { proposedBy: session.user.id, matchScore });
     redirect(`/admin/planning?ok=${res.status === "already_proposed" ? "al-voorgesteld" : "voorstel"}`);
+  }
+
+  // Inline confirm (workbench W1): the SAME atomic transition the shift-detail page and the
+  // placements.confirm AI tool use — chef + klant get their confirmation messages downstream.
+  async function confirmFromCockpit(formData: FormData) {
+    "use server";
+    const session = await requirePermission("shifts", "write");
+    const placementId = String(formData.get("placementId") ?? "").trim();
+    if (!placementId) throw new Error("placementId ontbreekt");
+    const res = await transitionPlacement({
+      placementId,
+      newStatus: "confirmed",
+      actorUserId: session.user.id,
+      expectedStatus: "accepted", // house rule: stale/double clicks become a clean no-op, never a duplicate mail-cascade
+    });
+    redirect(`/admin/planning?ok=${res.ok && res.changed ? "bevestigd" : "niet-bevestigd"}`);
   }
   const d = report.intakeDelta;
   const intakeLine =
@@ -89,14 +111,49 @@ export default async function PlanningPage({
       </p>
 
       {sp.ok ? (
-        <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+        <p
+          className={`mt-4 rounded border px-4 py-2 text-sm ${
+            sp.ok === "niet-bevestigd"
+              ? "border-amber-300 bg-amber-50 text-amber-800"
+              : "border-emerald-200 bg-emerald-50 text-emerald-800"
+          }`}
+        >
           {sp.ok === "al-voorgesteld"
             ? "Deze kok was al voorgesteld voor die dienst — geen dubbel voorstel verstuurd."
-            : "✓ Voorstel gestuurd — de kok krijgt bericht en jij ziet de reactie bij 'Te bevestigen'."}
+            : sp.ok === "bevestigd"
+              ? "✓ Plaatsing bevestigd — chef en klant zijn op de hoogte gebracht."
+              : sp.ok === "niet-bevestigd"
+                ? "Niet bevestigd — deze plaatsing is intussen gewijzigd of al bevestigd (de lijst is ververst)."
+                : "✓ Voorstel gestuurd — de kok krijgt bericht en jij ziet de reactie bij 'Te bevestigen'."}
         </p>
       ) : null}
+      <AutoRefresh seconds={60} clearParam="ok" />
+      {(() => {
+        // Quick-ask chips — only when this viewer actually has the assistant (same gate as the
+        // layout) and only prompts whose tools sit inside the viewer's scoped registry.
+        const isOwner = hasRole(session, "owner", "super_admin");
+        const plannerAi = process.env.PLANNER_AI_ENABLED === "true" && hasRole(session, "planner");
+        if (!aiEnabled() || (!isOwner && !plannerAi)) return null;
+        const urgent = c.open48h[0];
+        const items = [
+          ...(urgent
+            ? [
+                {
+                  label: "Voorstel voor de urgentste dienst",
+                  prompt: `Wie kan ik voorstellen voor de ${formatChefRole(urgent.roleNeeded)}-dienst bij ${urgent.clientName ?? "de klant"} op ${fmtWhen(urgent.startsAt)}?`,
+                },
+              ]
+            : []),
+          { label: "Beschikbare chefs deze week", prompt: "Welke chefs zijn deze week nog beschikbaar om in te plannen?" },
+          { label: "Wat moet ik nu oppakken?", prompt: "Wat staat er in mijn wachtrij — wat moet ik als planner nu als eerste oppakken?" },
+          ...(isOwner
+            ? [{ label: "Watchdog", prompt: "Wat ziet je watchdog vandaag — staan er diensten te lang open of zijn er chefs stil?" }]
+            : []),
+        ];
+        return <AiQuickAsk items={items} />;
+      })()}
 
-      {staleShifts.length > 0 || flaggedInbound.length > 0 ? (
+      {staleShifts.length > 0 || flaggedInbound.length > 0 || c.pendingChangeRequests.length > 0 ? (
         <section className="mt-6 rounded-lg border border-red-200 bg-red-50/50 p-4">
           <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-red-800">Aandacht</h2>
           <ul className="mt-2 space-y-1.5">
@@ -111,6 +168,20 @@ export default async function PlanningPage({
                   className="shrink-0 rounded-full border border-red-300 px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-red-800 hover:bg-red-100"
                 >
                   Vul dienst
+                </Link>
+              </li>
+            ))}
+            {c.pendingChangeRequests.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-3">
+                <p className="min-w-0 truncate text-sm text-ink-900">
+                  ✋ {r.clientName ?? "Klant"} wil deze dienst {r.kind === "cancel" ? "annuleren" : "wijzigen"} —
+                  beslis vóór je verder vult.
+                </p>
+                <Link
+                  href={`/admin/business/shifts/${r.shiftId}`}
+                  className="shrink-0 rounded-full border border-red-300 px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-red-800 hover:bg-red-100"
+                >
+                  Bekijk verzoek
                 </Link>
               </li>
             ))}
@@ -179,7 +250,20 @@ export default async function PlanningPage({
           value={c.open7dCount}
           href="/admin/business/shifts"
           cta="Diensten"
-          lines={[{ text: "onderbezette diensten deze week", tone: "muted" }]}
+          lines={[
+            { text: "onderbezette diensten deze week", tone: "muted" },
+            ...(demand.shortfalls.length > 0
+              ? [
+                  {
+                    text: `vooruit: ${demand.shortfalls
+                      .slice(0, 2)
+                      .map((s) => `wk ${s.weekNo} ${s.open}× ${s.role}`)
+                      .join(" · ")}`,
+                    tone: "amber" as const,
+                  },
+                ]
+              : []),
+          ]}
         />
       </div>
 
@@ -256,45 +340,143 @@ export default async function PlanningPage({
         )}
       </section>
 
-      {c.topMatch ? (
-        <section className="mt-6 rounded-lg border border-ink-200 bg-white p-6">
-          <h2 className="font-serif text-lg text-ink-900">
-            Suggesties · {c.topMatch.shift.clientName ?? "dienst"} ({formatChefRole(c.topMatch.shift.roleNeeded)})
-          </h2>
+      {c.toConfirm.length > 0 ? (
+        <section className="mt-6 rounded-lg border border-amber-200 bg-white p-6">
+          <h2 className="font-serif text-lg text-ink-900">Te bevestigen · chef zei ja</h2>
           <p className="mt-1 text-[11px] text-ink-500">
-            Best passende koks voor de meest urgente open dienst — stel direct voor, of open het rooster.
+            Eén klik en chef + klant krijgen hun bevestiging — daarna staat de dienst vast.
           </p>
-          {c.topMatch.matches.length === 0 ? (
-            <p className="mt-2 text-sm text-ink-500">Geen passende koks gevonden (geblokkeerd, bezet of buiten profiel).</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {c.topMatch.matches.map((m) => (
-                <li key={m.chef.id} className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm text-ink-900">{m.chef.fullName}</p>
-                    {m.reasons[0] ? <p className="text-[11px] text-ink-500">{m.reasons[0]}</p> : null}
-                    {m.warnings[0] ? <p className="text-[11px] text-amber-700">⚠ {m.warnings[0]}</p> : null}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="rounded-full bg-bg-gray px-2.5 py-1 text-[11px] font-medium text-ink-700">
-                      match {m.score}
-                    </span>
-                    <form action={proposeFromCockpit}>
-                      <input type="hidden" name="shiftId" value={c.topMatch!.shift.id} />
-                      <input type="hidden" name="chefId" value={m.chef.id} />
-                      <input type="hidden" name="matchScore" value={m.score} />
-                      <button
-                        type="submit"
-                        className="rounded-full bg-burgundy px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-white hover:bg-burgundy-900"
-                      >
-                        Voorstel
-                      </button>
-                    </form>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ul className="mt-3 divide-y divide-ink-100">
+            {c.toConfirm.map((p) => (
+              <li key={p.placementId} className="flex items-center justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-ink-900">
+                    {p.chefName} → {p.clientName ?? "—"} · {formatChefRole(p.roleNeeded)}
+                  </p>
+                  <p className="text-[11px] text-ink-500">{fmtWhen(p.startsAt)}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Link
+                    href={`/admin/business/shifts/${p.shiftId}`}
+                    className="rounded-full border border-ink-200 px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-ink-600 hover:border-burgundy/40"
+                  >
+                    Detail
+                  </Link>
+                  <form action={confirmFromCockpit}>
+                    <input type="hidden" name="placementId" value={p.placementId} />
+                    <button
+                      type="submit"
+                      className="rounded-full bg-burgundy px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-white hover:bg-burgundy-900"
+                    >
+                      Bevestig
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {c.acceptedUnconfirmed > c.toConfirm.length ? (
+            <Link
+              href="/admin/business/shifts?tab=open"
+              className="mt-3 inline-flex items-center gap-1 font-ui text-[11px] font-medium text-burgundy hover:underline"
+            >
+              +{c.acceptedUnconfirmed - c.toConfirm.length} meer te bevestigen{" "}
+              <Icon name="arrow-right" className="h-3.5 w-3.5" />
+            </Link>
+          ) : null}
+        </section>
+      ) : null}
+
+      {c.awaitingChef.length > 0 ? (
+        <section className="mt-6 rounded-lg border border-ink-200 bg-white p-6">
+          <h2 className="font-serif text-lg text-ink-900">Wacht op chef · voorstellen zonder antwoord</h2>
+          <p className="mt-1 text-[11px] text-ink-500">
+            Oudste eerst — na 24 uur is een belletje vaak sneller dan wachten (het systeem herinnert
+            chefs zelf na 24/72 uur).
+          </p>
+          <ul className="mt-3 divide-y divide-ink-100">
+            {c.awaitingChef.map((p) => (
+              <li key={p.placementId} className="flex items-center justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-ink-900">
+                    {p.chefName} → {p.clientName ?? "—"} · {formatChefRole(p.roleNeeded)}
+                  </p>
+                  <p className="text-[11px] text-ink-500">dienst: {fmtWhen(p.startsAt)}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                      (p.ageHours ?? 0) >= 72
+                        ? "bg-red-50 text-red-700"
+                        : (p.ageHours ?? 0) >= 24
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-bg-gray text-ink-600"
+                    }`}
+                  >
+                    {p.ageHours ?? 0}u stil
+                  </span>
+                  <Link
+                    href={`/admin/business/shifts/${p.shiftId}`}
+                    className="rounded-full border border-ink-200 px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-ink-600 hover:border-burgundy/40"
+                  >
+                    Detail
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {c.topMatches.length > 0 ? (
+        <section className="mt-6 rounded-lg border border-ink-200 bg-white p-6">
+          <h2 className="font-serif text-lg text-ink-900">Suggesties · meest urgente open diensten</h2>
+          <p className="mt-1 text-[11px] text-ink-500">
+            Best passende koks per urgente dienst — stel direct voor, of open het rooster.
+          </p>
+          <div className="mt-3 space-y-4">
+            {c.topMatches.map(({ shift, matches }) => (
+              <div key={shift.id}>
+                <p className="font-ui text-[11px] uppercase tracking-[0.14em] text-ink-500">
+                  {shift.clientName ?? "dienst"} · {formatChefRole(shift.roleNeeded)} · {fmtWhen(shift.startsAt)} ·{" "}
+                  {shift.open} open
+                </p>
+                {matches.length === 0 ? (
+                  <p className="mt-1 text-sm text-ink-500">
+                    Geen passende koks gevonden (geblokkeerd, bezet of buiten profiel).
+                  </p>
+                ) : (
+                  <ul className="mt-1.5 space-y-2">
+                    {matches.map((m) => (
+                      <li key={`${shift.id}-${m.chef.id}`} className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-ink-900">{m.chef.fullName}</p>
+                          {m.reasons[0] ? <p className="text-[11px] text-ink-500">{m.reasons[0]}</p> : null}
+                          {m.warnings[0] ? <p className="text-[11px] text-amber-700">⚠ {m.warnings[0]}</p> : null}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="rounded-full bg-bg-gray px-2.5 py-1 text-[11px] font-medium text-ink-700">
+                            match {m.score}
+                          </span>
+                          <form action={proposeFromCockpit}>
+                            <input type="hidden" name="shiftId" value={shift.id} />
+                            <input type="hidden" name="chefId" value={m.chef.id} />
+                            <input type="hidden" name="matchScore" value={m.score} />
+                            <button
+                              type="submit"
+                              className="rounded-full bg-burgundy px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-white hover:bg-burgundy-900"
+                            >
+                              Voorstel
+                            </button>
+                          </form>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
           <Link
             href="/admin/business/roster?view=day"
             className="mt-3 inline-flex items-center gap-1 font-ui text-[11px] font-medium text-burgundy hover:underline"
