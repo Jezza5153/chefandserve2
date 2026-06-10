@@ -29,7 +29,13 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request): Promise<Response> {
   const session = await auth();
   if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
-  if (!hasRole(session, "owner", "super_admin")) return new NextResponse("Forbidden", { status: 403 });
+  // Planners join behind PLANNER_AI_ENABLED (wave B1): the executor's per-tool RBAC ceiling +
+  // the scoped registry (assistant.ts) are the real walls — this gate is access policy.
+  const isPlanner =
+    process.env.PLANNER_AI_ENABLED === "true" && hasRole(session, "planner");
+  if (!hasRole(session, "owner", "super_admin") && !isPlanner) {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
 
   // Per-user rate limit — every request can trigger paid OpenAI calls. Fail OPEN if the
   // limiter backend is unavailable/unconfigured, so it never breaks the assistant itself.
@@ -112,7 +118,10 @@ export async function POST(req: Request): Promise<Response> {
   // (time every minute, page on every nav, memory on edit) and folding them into the prefix defeats
   // OpenAI prompt caching. Pass them as a TRAILING context message instead, so the static prefix
   // (system prompt + tool defs) stays byte-stable across turns/pages and caches at ~10× cheaper input.
-  const systemContext = `${timeContextBlock()}${pageBlock}${memoryBlock}`.trim() || undefined;
+  const plannerBlock = isPlanner
+    ? "\n\nJe praat met een PLANNER (geen eigenaar): focus op diensten vullen, voorstellen en bevestigen. Financiële informatie, klantwaarde en uren-goedkeuring horen niet bij deze rol — verwijs daarvoor naar Maarten."
+    : "";
+  const systemContext = `${timeContextBlock()}${plannerBlock}${pageBlock}${memoryBlock}`.trim() || undefined;
   // Accumulate token usage across the turn's model calls; persisted after the run for the
   // /admin/system AI-tokens card. A tally failure never breaks the chat (try/catch below).
   let promptTokens = 0;
@@ -121,7 +130,7 @@ export async function POST(req: Request): Promise<Response> {
     apiKey: env.OPENAI_API_KEY,
     model: aiModel(),
     systemPrompt: DEFAULT_SYSTEM_PROMPT, // static → cacheable prefix; dynamic context rides trailing
-    promptCacheKey: `owner:${userId}`,
+    promptCacheKey: `${isPlanner ? "planner" : "owner"}:${userId}`, // planner prefix differs (scoped tool defs)
     maxCompletionTokens: 2000,
     onUsage: (u) => {
       promptTokens += u.promptTokens;

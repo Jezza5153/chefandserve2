@@ -147,3 +147,17 @@ export const ALL_TOOLS: AnyTool[] = [
 export function buildRegistry(): ToolRegistry {
   return createRegistry(ALL_TOOLS);
 }
+
+/**
+ * Permission-scoped registry (wave B1) — for non-owner roles (planner): only the tools whose
+ * permission falls within the requester's effective RBAC set reach the MODEL (cleaner routing,
+ * cheaper prompt). Tools with `permission: null` (memory.*) are per-user by design and stay in.
+ * The executor's per-tool ceiling remains the hard security wall regardless of this filter.
+ */
+export function buildScopedRegistry(perms: ReadonlySet<string>): ToolRegistry {
+  return createRegistry(
+    ALL_TOOLS.filter(
+      (t) => !t.permission || perms.has(`${t.permission.resource}.${t.permission.action}`),
+    ),
+  );
+}

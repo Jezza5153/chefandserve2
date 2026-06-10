@@ -39,11 +39,16 @@ export default async function AdminLayout({
         ? "Planner"
         : session.user.roles.join(", ");
 
-  // Floating assistant rides every admin page — owner/super_admin only, and only when
-  // AI is actually configured (otherwise no dead bubble).
+  // Floating assistant rides every admin page — owner/super_admin, plus planners when
+  // PLANNER_AI_ENABLED is on (the executor's per-tool RBAC ceiling is the real wall; this gate
+  // is UI). Only when AI is actually configured (otherwise no dead bubble).
+  const plannerAi =
+    process.env.PLANNER_AI_ENABLED === "true" && session.user.roles.includes("planner");
   const showAssistant =
     aiEnabled() &&
-    (session.user.roles.includes("owner") || session.user.roles.includes("super_admin"));
+    (session.user.roles.includes("owner") ||
+      session.user.roles.includes("super_admin") ||
+      plannerAi);
 
   return (
     <div className="flex min-h-screen bg-bg-gray">

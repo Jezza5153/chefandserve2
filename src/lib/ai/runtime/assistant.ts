@@ -9,7 +9,7 @@ import { resolveAiActor, resolveChefActor, resolveClientActor } from "@/lib/ai/r
 import { aiAuditSink } from "@/lib/ai/runtime/audit-sink";
 import { executeTool } from "@/lib/ai/runtime/execute";
 import { runAgent, type AgentOutcome, type Brain, type Msg } from "@/lib/ai/runtime/agent";
-import { buildRegistry } from "@/lib/ai/tools/index";
+import { buildRegistry, buildScopedRegistry } from "@/lib/ai/tools/index";
 import { buildChefRegistry, buildClientRegistry } from "@/lib/ai/tools/portal-index";
 
 export async function runOwnerAssistant(args: {
@@ -25,7 +25,10 @@ export async function runOwnerAssistant(args: {
   systemContext?: string;
 }): Promise<AgentOutcome> {
   const actor = await resolveAiActor(args.userId);
-  const registry = buildRegistry();
+  // Owner/super_admin get the full registry; other roles (planner, wave B1) get a
+  // permission-scoped one so owner-only tools never reach their model context.
+  const fullAccess = actor.requestedByRole === "owner" || actor.requestedByRole === "super_admin";
+  const registry = fullAccess ? buildRegistry() : buildScopedRegistry(actor.effectivePerms);
   const ctx: ToolContext = {
     actor,
     channel: args.channel,
