@@ -83,6 +83,7 @@ const GOLDEN: RouteCase[] = [
   { id: "G-demand", q: "Waar kom ik de komende weken chefs tekort — voor welke rollen moet ik werven?", expect: ["demand.forecast"] },
   { id: "G-inbound", q: "Wat is er binnengekomen van chefs of klanten — heeft iemand geklaagd of iets dringends gestuurd?", expect: ["inbound.list"] },
   { id: "G-quality", q: "Welke chefs gaan achteruit in hun beoordelingen — waar moet ik op letten qua kwaliteit?", expect: ["ratings.trends"] },
+  { id: "G-feedback", q: "Wat vond het team deze week slecht aan je antwoorden — waar kreeg je duimpjes omlaag op?", expect: ["feedback.review"] },
 ];
 
 // Multi-turn — the follow-up question must carry the topic over (audit: evals were single-call
