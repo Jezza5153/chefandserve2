@@ -162,7 +162,6 @@ async function submitPortalRequest(formData: FormData) {
             }
           : {}),
       },
-      clientId: me.clientId, // authoritative link — companyName stays for display/legacy rows
       companyName: me.companyName,
       contactName: me.contactName,
       email: me.email,
