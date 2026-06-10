@@ -2,7 +2,11 @@
 
 > Living document. **Update this whenever a new phase ships** so when we wire AI into the system (Phase 9+), every data source, operation, and decision-point is already catalogued. No archaeology needed.
 
-**Status:** Phase 0 complete. AI layer not yet wired. This doc plans the surface so we build correctly *now* and bolt the model on *later*.
+**Status (2026-06-10):** the AI layer is **LIVE** — agent loop, ~90 tools (79 owner + 10 portal),
+RAG, three chat surfaces (owner/chef/klant), a 66-case eval that gates AI-touching PRs in CI, and
+the proactive tier (watchdog · onboarding-nudge · daily briefing · inbound e-mail capture).
+Rollout steps A–E shipped; step F runs draft-only (watchdog proposes, Maarten acts). This doc
+remains the architecture reference; the bottom status sections track plan-vs-built.
 
 **Related docs:**
 - [`BUILD_PLAN.md`](./BUILD_PLAN.md) — tactical Phase 0 detail
@@ -441,12 +445,12 @@ exact tool surface (`findMatchesForShift` / `proposePlacement`), no rework.
 | chef_submissions · client_submissions | Phase 1 | ✓ live (idempotent on (source, external_id)) |
 | chefs · clients · chef_availability | Phase 2 | ✓ live (soft-delete via deleted_at) |
 | shifts · placements | Phase 3 | ✓ live (with vakniveau/segment/shift_status/placement_status enums) |
-| chef_documents (R2 metadata) | Phase 2 polish | DEFERRED (needs R2 creds) |
+| chef_documents (R2 metadata) | Phase 2 polish | ✓ live (incl. expiry-tracking + client_documents mirror) |
 | chef_actions (engagement signal) | Phase 4 | DEFERRED (Phase 7 polish) |
-| hours | Phase 5 | NOT YET (Phase 5 schema lands with Payingit work) |
-| ratings | Phase 6 polish | NOT YET |
-| messages (Resend tracking) | Phase 7 | NOT YET |
-| match_scores (AI outputs) | Phase 9 | NOT YET — placements.match_score column already in place for heuristic v1 |
+| hours | Phase 5 | ✓ live (shift_hours chain: log → sign → approve; AI tools hours.*) |
+| ratings | Phase 6 polish | ✓ live (internal V1; AI: chefs.feedback + ratings.trends; chef sees own avg ≥5) |
+| messages (Resend tracking) | Phase 7 | ✓ live (email_messages/email_events outbound + inbound_messages capture + inbox-ACL) |
+| match_scores (AI outputs) | Phase 9 | NOT YET — placements.match_score column in place for heuristic v1; versioned table still future |
 
 ### Tool surface status
 

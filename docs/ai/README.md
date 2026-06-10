@@ -1,6 +1,11 @@
 # `docs/ai/` — AI readiness for Chef & Serve
 
-> **This folder is documentation only.** No LLM is wired in, no embeddings are generated, no chat UI exists. The point is to prepare the system so that when an AI personal assistant ships (Phase 9+ per `ROADMAP.md`), every workflow, every action, every permission boundary, and every safety rail is already written down. Zero archaeology, zero guessing.
+> **The AI layer is LIVE** (since 2026-06): agent loop + ~90 registered tools (79 owner +
+> 10 portal, count via `scripts/smoke-ai-tools.mts`), RAG (nightly ingest + `knowledge.search`),
+> chat surfaces for owner/chef/klant, a 66-case eval that gates AI-touching PRs in CI, and the
+> proactive tier (watchdog · onboarding-nudge · daily briefing · inbound e-mail capture).
+> This folder is the contract + safety documentation FOR that live layer — read it before any
+> AI change. Newest consolidated contract: `tool-contracts/2026-06-additions.md`.
 
 **Companion docs (do not duplicate, link only):**
 - [`../../AI_INTEGRATION.md`](../../AI_INTEGRATION.md) — strategic 4-layer architecture, data inventory, phased rollout plan. **Read that first** for the why and the eventual shape. This folder is the operational underbelly.
@@ -83,15 +88,17 @@ If you add a new playbook, also add the link to [`workflow-catalog.md`](./workfl
 
 ## Status
 
-| Phase | What exists today |
+| Phase | What exists today (2026-06-10) |
 |---|---|
-| Base docs spine | ✅ landed in PR-AI-0 (this PR) |
-| Workflow playbooks bodies | partial — full bodies land with each PR-CHEF-N |
-| Tool contracts bodies | partial — same co-evolution |
-| Read-model views (`ai_*_view`) | proposed shape only; SQL views ship later |
-| RAG index | not built; pgvector extension is enabled (`workers/embedding-refresh.ts` is a no-op stub) |
-| LLM endpoint | not built |
-| Chat UI | not built |
-| AI tool handlers (Layer 3) | not built |
+| Base docs spine | ✅ |
+| Workflow playbooks bodies | ✅ co-evolved through PR #145 |
+| Tool contracts | ✅ 19 docs incl. the consolidated `2026-06-additions.md` |
+| Read-models | ✅ ~30 modules in `src/lib/ai/read-model/` (labels/aggregates, AVG-safe) |
+| RAG index | ✅ LIVE — `ai_embeddings` (manual migration, dev+prod), nightly `/api/cron/rag-ingest`, `knowledge.search` |
+| LLM endpoint | ✅ `/api/ai/chat` (owner) + `/api/ai/portal/chat` (chef/klant) — gpt-5.4, breaker+fallback, budget-capped |
+| Chat UI | ✅ `AssistantChat` (owner dashboard + portals), 👍/👎 feedback, cross-device persistence |
+| AI tool handlers (Layer 3) | ✅ ~90 registered (79 owner + 10 portal), confirm-gated per risk tier, audit-sinked |
+| Eval / regression net | ✅ 66 cases, gates AI-touching PRs in CI (`ai-eval.yml`) |
+| Proactive tier | ✅ watchdog · onboarding-nudge · daily briefing · inbound capture (+ mining dark) |
 
-This folder is the **brief for that future work**, not the work itself.
+This folder is the **contract for the live layer** — keep it co-evolving with every AI PR.
