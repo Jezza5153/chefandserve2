@@ -14,8 +14,14 @@ import { withTx } from "@/lib/db/tx";
 import { businessSettings } from "@/lib/db/schema";
 
 const KEY = "owner_memory";
+/** Cap per user — every fact is injected into EVERY turn's context, so unbounded growth would
+ *  silently bloat tokens. Oldest facts fall off when the cap is hit (the assistant tells Maarten). */
+export const MEMORY_CAP = 50;
 
 export type MemoryFact = { id: string; userId: string; text: string; createdAt: string };
+
+/** Normalize for dedup: lowercase, collapse whitespace, strip trailing punctuation. */
+const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, " ").replace(/[.!?\s]+$/, "").trim();
 
 type Bag = { items: MemoryFact[] };
 
@@ -37,13 +43,23 @@ export async function listOwnerMemory(userId: string): Promise<MemoryFact[]> {
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+export type RememberResult = {
+  fact: MemoryFact;
+  /** True when an existing fact matched (refreshed in place — no duplicate stored). */
+  deduped: boolean;
+  /** Oldest facts dropped to stay under MEMORY_CAP (empty when under the cap). */
+  evicted: MemoryFact[];
+};
+
 export async function rememberFact(args: {
   userId: string;
   text: string;
   id: string;
   now: string;
-}): Promise<MemoryFact> {
+}): Promise<RememberResult> {
   const fact: MemoryFact = { id: args.id, userId: args.userId, text: args.text, createdAt: args.now };
+  let deduped = false;
+  let evicted: MemoryFact[] = [];
   await withTx(async (tx) => {
     const [row] = await tx
       .select({ value: businessSettings.value })
@@ -51,7 +67,27 @@ export async function rememberFact(args: {
       .where(eq(businessSettings.key, KEY))
       .limit(1);
     const bag = readBag(row?.value);
-    bag.items.push(fact);
+
+    // Dedup: same normalized text for this user → refresh the existing fact instead of duplicating.
+    const norm = normalize(args.text);
+    const existing = bag.items.find((f) => f.userId === args.userId && normalize(f.text) === norm);
+    if (existing) {
+      existing.text = args.text;
+      existing.createdAt = args.now;
+      deduped = true;
+    } else {
+      bag.items.push(fact);
+      // Cap per user: evict the oldest facts beyond MEMORY_CAP.
+      const mine = bag.items
+        .filter((f) => f.userId === args.userId)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      if (mine.length > MEMORY_CAP) {
+        evicted = mine.slice(0, mine.length - MEMORY_CAP);
+        const evictIds = new Set(evicted.map((f) => f.id));
+        bag.items = bag.items.filter((f) => !evictIds.has(f.id));
+      }
+    }
+
     await tx
       .insert(businessSettings)
       .values({ key: KEY, value: bag, updatedBy: args.userId })
@@ -60,7 +96,7 @@ export async function rememberFact(args: {
         set: { value: bag, updatedBy: args.userId, updatedAt: new Date() },
       });
   });
-  return fact;
+  return { fact: deduped ? { ...fact, id: "(bestaand)" } : fact, deduped, evicted };
 }
 
 export async function forgetFact(args: { userId: string; id: string }): Promise<boolean> {
