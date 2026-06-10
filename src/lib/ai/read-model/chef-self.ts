@@ -130,3 +130,40 @@ export async function chefMyProfile(chefId: string) {
     missing,
   };
 }
+
+/* ----- wave PR-9 additions: own documents + own rating average ----- */
+
+/** Own documents with expiry — the chef's self-serve "wanneer verloopt m'n certificaat?". */
+export async function chefMyDocuments(chefId: string) {
+  const { and, isNull, eq } = await import("drizzle-orm");
+  const { chefDocuments } = await import("@/lib/db/schema");
+  const rows = await db
+    .select({
+      type: chefDocuments.type,
+      filename: chefDocuments.filename,
+      expiresAt: chefDocuments.expiresAt,
+      verifiedAt: chefDocuments.verifiedAt,
+    })
+    .from(chefDocuments)
+    .where(and(eq(chefDocuments.chefId, chefId), isNull(chefDocuments.deletedAt)));
+  const soon = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+  return rows.map((r) => ({
+    type: r.type,
+    filename: r.filename,
+    expiresAt: r.expiresAt ? new Date(r.expiresAt).toISOString().slice(0, 10) : null,
+    verified: r.verifiedAt != null,
+    expiringSoon: r.expiresAt != null && new Date(r.expiresAt) < soon,
+  }));
+}
+
+/** Own rating AVERAGE only, and only at >=5 ratings (V1 rule) — never comments or per-klant detail. */
+export async function chefMyRating(chefId: string): Promise<{ count: number; average: number | null }> {
+  const { eq, sql: dsql } = await import("drizzle-orm");
+  const { ratings } = await import("@/lib/db/schema");
+  const [row] = await db
+    .select({ count: dsql<number>`count(*)`, avg: dsql<number>`avg(${ratings.stars})` })
+    .from(ratings)
+    .where(eq(ratings.chefId, chefId));
+  const count = Number(row?.count ?? 0);
+  return { count, average: count >= 5 ? Math.round(Number(row.avg) * 10) / 10 : null };
+}
