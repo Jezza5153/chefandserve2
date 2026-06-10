@@ -37,3 +37,13 @@ rm /tmp/cs-prod.env                                         # never leave prod s
 ```
 
 Verify afterwards via `information_schema` (table/column/enum present) — never assume.
+
+## Manual migrations (OUTSIDE the drizzle journal)
+
+`drizzle/manual_*.sql` are NOT tracked in `drizzle/meta/_journal.json` — `npm run db:migrate`
+never applies them. They must be applied BY HAND, per Neon branch (psql or a one-off script).
+Currently: `manual_pgvector_prep.sql` (pgvector extension) and `manual_ai_embeddings.sql`
+(the RAG table — pgvector column type predates drizzle support). Both are applied on dev
+(`ep-green-mouse`) AND prod (`ep-icy-scene`) as of 2026-06-10 (dev: 843 rows live).
+⚠ A FRESH Neon branch created from scratch + `db:migrate` will silently miss these — RAG
+ingest then fails nightly. Check `SELECT count(*) FROM ai_embeddings` when setting up a branch.
