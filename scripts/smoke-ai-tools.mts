@@ -87,5 +87,20 @@ assert("chefs.intel_snapshot present (read)", byName.get("chefs.intel_snapshot")
 assert("clients.intel_snapshot present (read)", byName.get("clients.intel_snapshot")?.risk === "read");
 assert("match.intel present (read)", byName.get("match.intel")?.risk === "read");
 
+// Wave B1 — planner-scoped registry: only tools within the planner's RBAC set reach the model.
+{
+  const { buildScopedRegistry } = await import("@/lib/ai/tools/index");
+  const { ROLE_GRANTS } = await import("@/lib/rbac/catalog");
+  const plannerPerms: ReadonlySet<string> = new Set(ROLE_GRANTS.planner ?? []);
+  const scoped = new Set(buildScopedRegistry(plannerPerms).specs().map((s) => s.name));
+  assert("planner scope: shifts.suggest_chefs IN", scoped.has("shifts.suggest_chefs"));
+  assert("planner scope: planner.cockpit IN", scoped.has("planner.cockpit"));
+  assert("planner scope: placements.propose IN", scoped.has("placements.propose"));
+  assert("planner scope: hours.approve OUT", !scoped.has("hours.approve"));
+  assert("planner scope: payroll.read OUT", !scoped.has("payroll.read"));
+  assert("planner scope: feedback.review OUT", !scoped.has("feedback.review"));
+  assert("planner scope: inboxes.grant_access OUT", !scoped.has("inboxes.grant_access"));
+}
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 if (fail > 0) process.exit(1);
