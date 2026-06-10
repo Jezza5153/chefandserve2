@@ -3304,3 +3304,39 @@ export const aiConversations = pgTable(
 );
 export type AiConversation = typeof aiConversations.$inferSelect;
 export type NewAiConversation = typeof aiConversations.$inferInsert;
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Inbox access (PR-INBOX-ACCESS) — which staff member may see which captured mailbox.
+ * Roles ≠ inboxes: the system captures mail for multiple addresses (planning@, the owners'
+ * own boxes, …); super_admin maps users ↔ inboxes here. Berichten filters on it; inbound
+ * notifications go to the matched inbox's members (fallback: MAARTEN_EMAIL). No inboxes
+ * configured at all → pre-config behaviour (everyone with clients.read sees everything).
+ * ────────────────────────────────────────────────────────────────────────── */
+export const inboxes = pgTable(
+  "inboxes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Full receiving address, stored lowercase ("planning@chefandserve.nl"). */
+    address: text("address").notNull(),
+    label: text("label").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ addressUnique: uniqueIndex("inboxes_address_unique").on(t.address) }),
+);
+export type Inbox = typeof inboxes.$inferSelect;
+
+export const inboxAccess = pgTable(
+  "inbox_access",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    inboxId: uuid("inbox_id")
+      .notNull()
+      .references(() => inboxes.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ inboxUserUnique: uniqueIndex("inbox_access_inbox_user_unique").on(t.inboxId, t.userId) }),
+);
+export type InboxAccess = typeof inboxAccess.$inferSelect;

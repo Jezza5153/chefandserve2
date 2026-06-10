@@ -15,6 +15,7 @@ import { and, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { db } from "@/lib/db/client";
 import { chefs, clientContacts, clients, inboundMessages, users } from "@/lib/db/schema";
+import { inboxRecipients } from "@/lib/domain/inboxes";
 import { env } from "@/lib/env";
 import { createNotification } from "@/lib/integrations/notifications";
 
@@ -131,20 +132,26 @@ export async function processInboundEmail(input: ProcessInboundInput): Promise<{
   const id = inserted[0]?.id ?? null;
   const deduped = inserted.length === 0;
 
-  // Notify Maarten — only for what matters (a known sender, or urgent/complaint from anyone).
+  // Notify — only for what matters (a known sender, or urgent/complaint from anyone).
   // Unknown-sender "other" (likely spam/newsletter) is stored but stays quiet.
+  // Recipients: the members of the inbox this mail was addressed to (inbox-access mapping);
+  // no mapping → fallback to the owner (pre-config behaviour).
   let notified = false;
-  if (!deduped && (matched || category === "urgent" || category === "complaint") && env.MAARTEN_EMAIL) {
-    const [owner] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, env.MAARTEN_EMAIL))
-      .limit(1);
-    if (owner) {
-      const who = m.userId ? `${m.label ?? email} (intern)` : (m.label ?? name ?? email);
-      const tag = category === "complaint" ? "⚠ Klacht" : category === "urgent" ? "⏱ Spoed" : "Bericht";
+  if (!deduped && (matched || category === "urgent" || category === "complaint")) {
+    let recipientIds = await inboxRecipients(input.to ?? null).catch(() => [] as string[]);
+    if (recipientIds.length === 0 && env.MAARTEN_EMAIL) {
+      const [owner] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, env.MAARTEN_EMAIL))
+        .limit(1);
+      recipientIds = owner ? [owner.id] : [];
+    }
+    const who = m.userId ? `${m.label ?? email} (intern)` : (m.label ?? name ?? email);
+    const tag = category === "complaint" ? "⚠ Klacht" : category === "urgent" ? "⏱ Spoed" : "Bericht";
+    for (const userId of recipientIds) {
       const res = await createNotification({
-        userId: owner.id,
+        userId,
         type: "inbound_message",
         title: `${tag} van ${who}`,
         body: subject ? `Onderwerp: "${subject}".` : "Nieuw binnengekomen bericht.",
@@ -152,7 +159,7 @@ export async function processInboundEmail(input: ProcessInboundInput): Promise<{
         entityType: m.chefId ? "chefs" : m.clientId ? "clients" : undefined,
         entityId: m.chefId ?? m.clientId ?? undefined,
       });
-      notified = res.ok;
+      notified = notified || res.ok;
     }
   }
   return { id, deduped, category, matched, notified };
