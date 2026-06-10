@@ -10,10 +10,13 @@ import { redirect } from "next/navigation";
 
 import { Icon } from "@/components/admin/icons";
 import { OpsCard } from "@/components/dashboard/OpsCard";
+import { findStaleOpenShifts } from "@/lib/ai/read-model/watchdog";
+import { listInboundAdmin } from "@/lib/domain/inbound";
+import { matchesViewer, viewerInboxFilter } from "@/lib/domain/inboxes";
 import { proposePlacement } from "@/lib/domain/matching";
 import { getPlannerCockpit, getPlannerReport } from "@/lib/domain/planner-intel";
 import { formatChefRole } from "@/lib/labels";
-import { requirePermission } from "@/lib/permissions";
+import { hasRole, requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Planning", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -36,9 +39,25 @@ export default async function PlanningPage({
 }: {
   searchParams: Promise<{ ok?: string }>;
 }) {
-  await requirePermission("planning", "read");
+  const session = await requirePermission("planning", "read");
   const sp = await searchParams;
-  const [c, report] = await Promise.all([getPlannerCockpit(), getPlannerReport()]);
+
+  // Aandacht-rail (wave C1): live planning signals — stale shifts (same engine as the watchdog
+  // cron) + unhandled spoed/klacht mail, scoped to THIS viewer's inbox-ACL. Planner-signals only:
+  // silent chefs + low ratings stay owner-side by design.
+  const inboxFilter = await viewerInboxFilter(session.user.id, {
+    superAdmin: hasRole(session, "super_admin"),
+    owner: hasRole(session, "owner", "super_admin"),
+  });
+  const [c, report, staleShifts, inboundRows] = await Promise.all([
+    getPlannerCockpit(),
+    getPlannerReport(),
+    findStaleOpenShifts(new Date()),
+    listInboundAdmin({ unhandledOnly: true, limit: 50 }),
+  ]);
+  const flaggedInbound = inboundRows.filter(
+    (r) => (r.category === "urgent" || r.category === "complaint") && matchesViewer(r.toEmail, inboxFilter),
+  );
 
   // Inline propose (PR-A1): the SAME domain path as shift detail — one click from the cockpit.
   async function proposeFromCockpit(formData: FormData) {
@@ -75,6 +94,43 @@ export default async function PlanningPage({
             ? "Deze kok was al voorgesteld voor die dienst — geen dubbel voorstel verstuurd."
             : "✓ Voorstel gestuurd — de kok krijgt bericht en jij ziet de reactie bij 'Te bevestigen'."}
         </p>
+      ) : null}
+
+      {staleShifts.length > 0 || flaggedInbound.length > 0 ? (
+        <section className="mt-6 rounded-lg border border-red-200 bg-red-50/50 p-4">
+          <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-red-800">Aandacht</h2>
+          <ul className="mt-2 space-y-1.5">
+            {staleShifts.slice(0, 5).map((s) => (
+              <li key={s.shiftId} className="flex items-center justify-between gap-3">
+                <p className="min-w-0 truncate text-sm text-ink-900">
+                  ⏳ {formatChefRole(s.role)} bij {s.client} staat al {s.openForHours}u open ({s.openSlots} plek
+                  {s.openSlots === 1 ? "" : "ken"}) — overweeg tarief of bredere selectie.
+                </p>
+                <Link
+                  href={`/admin/business/shifts/${s.shiftId}`}
+                  className="shrink-0 rounded-full border border-red-300 px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-red-800 hover:bg-red-100"
+                >
+                  Vul dienst
+                </Link>
+              </li>
+            ))}
+            {flaggedInbound.slice(0, 5).map((m) => (
+              <li key={m.id} className="flex items-center justify-between gap-3">
+                <p className="min-w-0 truncate text-sm text-ink-900">
+                  {m.category === "complaint" ? "⚠ Klacht" : "⏱ Spoed"} van{" "}
+                  {m.fromName ?? m.fromEmail}
+                  {m.subject ? ` — "${m.subject}"` : ""}
+                </p>
+                <Link
+                  href="/admin/business/berichten"
+                  className="shrink-0 rounded-full border border-red-300 px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-red-800 hover:bg-red-100"
+                >
+                  Lees & handel af
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
