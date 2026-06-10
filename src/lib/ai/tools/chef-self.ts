@@ -93,3 +93,44 @@ export const chefMyProfileTool = defineTool({
     };
   },
 });
+
+export const chefMyDocumentsTool = defineTool({
+  name: "mijn.documenten",
+  title: "Mijn documenten",
+  description:
+    "Jouw eigen documenten (ID-kopie, certificaten, CV): wat staat er, is het geverifieerd en wanneer verloopt iets? Gebruik dit bij 'wanneer verloopt m'n certificaat / is m'n ID-kopie binnen?'. Read-only, alleen je eigen documenten.",
+  risk: "read",
+  permission: null,
+  input: z.object({}),
+  run: async (_input, ctx: ToolContext) => {
+    const { chefMyDocuments } = await import("@/lib/ai/read-model/chef-self");
+    const docs = await chefMyDocuments(requireChefId(ctx));
+    if (docs.length === 0) return { data: { docs }, summary: "Je hebt nog geen documenten geüpload." };
+    const expiring = docs.filter((d) => d.expiringSoon);
+    return {
+      data: { docs },
+      summary: `${docs.length} document(en)${expiring.length ? ` — let op: ${expiring.map((d) => `${d.type} verloopt ${d.expiresAt}`).join(", ")}` : ", niets verloopt binnenkort"}.`,
+    };
+  },
+});
+
+export const chefMyRatingTool = defineTool({
+  name: "mijn.beoordeling",
+  title: "Mijn beoordeling",
+  description:
+    "Je eigen gemiddelde beoordeling. Het gemiddelde wordt pas zichtbaar vanaf 5 beoordelingen (huisregel); individuele beoordelingen of opmerkingen zie je niet. Read-only.",
+  risk: "read",
+  permission: null,
+  input: z.object({}),
+  run: async (_input, ctx: ToolContext) => {
+    const { chefMyRating } = await import("@/lib/ai/read-model/chef-self");
+    const r = await chefMyRating(requireChefId(ctx));
+    return {
+      data: r,
+      summary:
+        r.average != null
+          ? `Je gemiddelde beoordeling is ${r.average}★ over ${r.count} beoordelingen.`
+          : `Nog te weinig beoordelingen voor een gemiddelde (${r.count} van 5).`,
+    };
+  },
+});
