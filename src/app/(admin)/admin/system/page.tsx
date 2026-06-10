@@ -32,6 +32,7 @@ import {
 } from "@/lib/domain/system-intel";
 import { env } from "@/lib/env";
 import { getIntegrationHealth } from "@/lib/integrations";
+import { getAiFeedbackSummary } from "@/lib/ai/read-model/ai-feedback-summary";
 import { getAiToolUsage, getAiUsageSummary } from "@/lib/ai/read-model/ai-usage";
 import { requirePermission } from "@/lib/permissions";
 import { r2IsConfigured } from "@/lib/r2";
@@ -67,6 +68,7 @@ export default async function SystemDashboardPage() {
     [latestPayroll],
     aiUsage,
     aiToolUsage,
+    aiFeedback,
   ] = await Promise.all([
     db.execute(sql`SELECT 1`).then(() => true).catch(() => false),
     getIntegrationHealth(),
@@ -87,6 +89,7 @@ export default async function SystemDashboardPage() {
     db.select({ exportedAt: payrollBatches.exportedAt, createdAt: payrollBatches.createdAt }).from(payrollBatches).orderBy(desc(payrollBatches.createdAt)).limit(1),
     getAiUsageSummary({ now }),
     getAiToolUsage({ now }),
+    getAiFeedbackSummary({ now }),
   ]);
 
   /* ---- health components (reuse /api/health primitives directly) ---- */
@@ -242,6 +245,9 @@ export default async function SystemDashboardPage() {
                             .map((t) => `${t.tool} (${t.completed}×${t.failed > 0 ? ` · ${t.failed}✗` : ""})`)
                             .join(" · ")}`,
                         ]
+                      : []),
+                    ...(aiFeedback.total > 0
+                      ? [`feedback: ${aiFeedback.up}× 👍 · ${aiFeedback.down}× 👎 (30d)`]
                       : []),
                   ]
                 : ["nog geen tokenlog", "wordt gemeten zodra de assistent draait"]}
