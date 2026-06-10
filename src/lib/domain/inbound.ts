@@ -15,7 +15,7 @@ import { and, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { db } from "@/lib/db/client";
 import { chefs, clientContacts, clients, inboundMessages, users } from "@/lib/db/schema";
-import { inboxRecipients } from "@/lib/domain/inboxes";
+import { inboxLabelFor, inboxRecipients, matchesViewer } from "@/lib/domain/inboxes";
 import { env } from "@/lib/env";
 import { createNotification } from "@/lib/integrations/notifications";
 
@@ -171,6 +171,8 @@ export type InboundListItem = {
   subject: string | null;
   category: InboundCategory;
   matchedTo: "chef" | "klant" | "intern" | null;
+  /** Label of the configured inbox this mail belongs to (null = no configured inbox matches). */
+  inbox: string | null;
   receivedAt: string;
   handled: boolean;
 };
@@ -253,10 +255,18 @@ export async function setInboundHandled(args: {
   return { ok: true };
 }
 
-/** The AI's read surface — subject + classification only (never the raw untrusted body). */
+/**
+ * The AI's read surface — subject + classification only (never the raw untrusted body).
+ * Pass `viewer` (the asking human's inbox filter) so the assistant inherits EXACTLY the same
+ * inbox access as the person asking: a planner's AI never sees the owners' boxes; the owners
+ * see per their own grants (+ stray mail); super_admin sees all. No filter = unrestricted
+ * (only for internal/cron callers — never for a chat surface).
+ */
 export async function listRecentInbound(opts?: {
   unhandledOnly?: boolean;
   limit?: number;
+  viewer?: import("@/lib/domain/inboxes").ViewerInboxFilter;
+  inboxLabels?: { address: string; label: string }[];
 }): Promise<InboundListItem[]> {
   const limit = Math.min(opts?.limit ?? 20, 50);
   const rows = await db
@@ -264,6 +274,7 @@ export async function listRecentInbound(opts?: {
       id: inboundMessages.id,
       fromEmail: inboundMessages.fromEmail,
       fromName: inboundMessages.fromName,
+      toEmail: inboundMessages.toEmail,
       subject: inboundMessages.subject,
       category: inboundMessages.category,
       chefId: inboundMessages.matchedChefId,
@@ -276,12 +287,15 @@ export async function listRecentInbound(opts?: {
     .where(opts?.unhandledOnly ? isNull(inboundMessages.handledAt) : undefined)
     .orderBy(desc(inboundMessages.createdAt))
     .limit(limit);
-  return rows.map((r) => ({
+  const viewer = opts?.viewer;
+  const visible = viewer ? rows.filter((r) => matchesViewer(r.toEmail, viewer)) : rows;
+  return visible.map((r) => ({
     id: r.id,
     from: r.fromName ? `${r.fromName} <${r.fromEmail}>` : r.fromEmail,
     subject: r.subject,
     category: r.category as InboundCategory,
     matchedTo: r.chefId ? "chef" : r.clientId ? "klant" : r.userId ? "intern" : null,
+    inbox: opts?.inboxLabels ? inboxLabelFor(r.toEmail, opts.inboxLabels) : null,
     receivedAt: r.createdAt.toISOString(),
     handled: r.handledAt != null,
   }));

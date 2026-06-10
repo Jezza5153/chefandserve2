@@ -161,6 +161,11 @@ export function inboxLabelFor(
   return all.find((i) => lower.includes(i.address))?.label ?? null;
 }
 
+/** Light list for label badges / AI summaries (no members). */
+export async function listInboxLabels(): Promise<{ address: string; label: string }[]> {
+  return db.select({ address: inboxes.address, label: inboxes.label }).from(inboxes);
+}
+
 /** Users with access to the inbox `toEmail` belongs to (inbound-notification routing). */
 export async function inboxRecipients(toEmail: string | null): Promise<string[]> {
   const lower = (toEmail ?? "").toLowerCase();
