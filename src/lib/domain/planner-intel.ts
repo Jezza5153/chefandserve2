@@ -24,6 +24,8 @@ export type UrgentShift = {
 export type PlannerCockpit = {
   intake: { chefs: number; clients: number; total: number };
   acceptedUnconfirmed: number;
+  /** Placements still 'proposed' — chefs who haven't said ja/nee yet (hesitation depth). */
+  proposedPending: number;
   open48h: UrgentShift[];
   open48hSlots: number;
   open7dCount: number;
@@ -35,10 +37,11 @@ export async function getPlannerCockpit(now: Date = new Date()): Promise<Planner
   const in7d = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
   const confirmedExpr = sql<number>`(select count(*) from placements p where p.shift_id = ${shifts.id} and p.status in ('confirmed','completed'))::int`;
 
-  const [[chefIntake], [clientIntake], [accepted], rows, [open7d]] = await Promise.all([
+  const [[chefIntake], [clientIntake], [accepted], [proposed], rows, [open7d]] = await Promise.all([
     db.select({ n: sql<number>`count(*)::int` }).from(chefSubmissions).where(eq(chefSubmissions.status, "new")),
     db.select({ n: sql<number>`count(*)::int` }).from(clientSubmissions).where(eq(clientSubmissions.status, "new")),
     db.select({ n: sql<number>`count(*)::int` }).from(placements).where(eq(placements.status, "accepted")),
+    db.select({ n: sql<number>`count(*)::int` }).from(placements).where(eq(placements.status, "proposed")),
     db
       .select({
         id: shifts.id,
@@ -102,6 +105,7 @@ export async function getPlannerCockpit(now: Date = new Date()): Promise<Planner
       total: (chefIntake?.n ?? 0) + (clientIntake?.n ?? 0),
     },
     acceptedUnconfirmed: accepted?.n ?? 0,
+    proposedPending: proposed?.n ?? 0,
     open48h,
     open48hSlots,
     open7dCount: open7d?.n ?? 0,
