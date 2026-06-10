@@ -13,7 +13,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { listInboundAdmin, setInboundHandled, type InboundCategory } from "@/lib/domain/inbound";
-import { requireAuth, requirePermission } from "@/lib/permissions";
+import { inboxLabelFor, listInboxesWithMembers, matchesViewer, viewerInboxFilter } from "@/lib/domain/inboxes";
+import { hasRole, requireAuth, requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Berichten" };
 export const dynamic = "force-dynamic";
@@ -48,12 +49,23 @@ export default async function BerichtenPage({
 }: {
   searchParams: Promise<{ filter?: string; kat?: string }>;
 }) {
-  await requirePermission("clients", "read");
+  const session = await requirePermission("clients", "read");
   const sp = await searchParams;
   const showAll = sp.filter === "alles";
   const kat = CATEGORIES.some((c) => c.value === sp.kat) && sp.kat !== "all" ? (sp.kat as InboundCategory) : undefined;
 
-  const rows = await listInboundAdmin({ unhandledOnly: !showAll, category: kat });
+  // Inbox access (roles ≠ inboxes): super_admin sees all; otherwise only the viewer's inboxes
+  // (owners also see mail matching no configured inbox — the stray-mail safety net).
+  const [filter, allInboxes] = await Promise.all([
+    viewerInboxFilter(session.user.id, {
+      superAdmin: hasRole(session, "super_admin"),
+      owner: hasRole(session, "owner", "super_admin"),
+    }),
+    listInboxesWithMembers(),
+  ]);
+  const rows = (await listInboundAdmin({ unhandledOnly: !showAll, category: kat })).filter((r) =>
+    matchesViewer(r.toEmail, filter),
+  );
 
   async function toggleHandled(formData: FormData) {
     "use server";
@@ -125,12 +137,18 @@ export default async function BerichtenPage({
           {rows.map((m) => {
             const badge = CATEGORY_BADGE[m.category];
             const who = m.fromName ? `${m.fromName} · ${m.fromEmail}` : m.fromEmail;
+            const inboxLabel = inboxLabelFor(m.toEmail, allInboxes);
             return (
               <li key={m.id} className={`rounded-lg border bg-white p-4 ${m.handledAt ? "border-ink-100 opacity-70" : "border-ink-200"}`}>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full border px-2.5 py-0.5 font-ui text-[10px] font-medium uppercase tracking-[0.12em] ${badge.cls}`}>
                     {badge.label}
                   </span>
+                  {inboxLabel ? (
+                    <span className="rounded-full border border-burgundy/20 bg-burgundy/5 px-2.5 py-0.5 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-burgundy">
+                      {inboxLabel}
+                    </span>
+                  ) : null}
                   {m.matchedChefId ? (
                     <Link href={`/admin/business/chefs/${m.matchedChefId}`} className="font-ui text-[11px] text-burgundy underline-offset-4 hover:underline">
                       Chef: {m.chefName ?? "bekijk"}

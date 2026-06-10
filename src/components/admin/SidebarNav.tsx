@@ -60,6 +60,7 @@ const SYSTEM: Item[] = [
   { label: "Audit", href: "/admin/system/audit", icon: "list" },
   { label: "Webhooks", href: "/admin/system/webhooks", icon: "arrow-right" },
   { label: "Emails", href: "/admin/system/emails", icon: "message" },
+  { label: "Inboxen", href: "/admin/system/inboxen", icon: "inbox" },
   { label: "Notificaties", href: "/admin/system/notifications", icon: "bell" },
   { label: "Privacyverzoeken", href: "/admin/system/privacy-requests", icon: "shield-check" },
   { label: "Retentie", href: "/admin/system/retention", icon: "clock" },
