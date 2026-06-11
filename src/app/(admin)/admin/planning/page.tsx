@@ -120,7 +120,7 @@ export default async function PlanningPage({
 
   return (
     <div className="max-w-5xl">
-      <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">Planner</p>
+      <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">Werkbank</p>
       <h1 className="mt-2 font-serif text-3xl text-ink-900">Planning</h1>
       <p className="mt-2 max-w-2xl text-sm text-ink-600">
         Je werkdag in één oogopslag — wat binnenkomt, wat bevestigd moet worden, en waar koks tekortkomen.
