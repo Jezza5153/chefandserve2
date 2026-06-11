@@ -9,7 +9,9 @@
  * EVERYTHING the screen shows comes from ONE engine — `buildRosterView` in
  * `roster-intel` — and the AI reads the SAME object via `rosterAiSummary`. KPIs
  * are clickable filters (read-only narrowing). Every CTA links to the existing
- * shift/chef detail page: NO inline mutations (solving lives in the future Planner).
+ * shift/chef detail page: NO inline mutations here — the SOLVING (vullen/bevestigen/
+ * autofill) lives on the Planning workbench (/admin/planning). Rooster = overzicht,
+ * Planning = handelen, Diensten = de lijst.
  */
 
 import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";

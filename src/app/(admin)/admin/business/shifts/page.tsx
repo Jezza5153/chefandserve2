@@ -6,7 +6,7 @@ import { clients, shifts } from "@/lib/db/schema";
 import { formatShiftRole } from "@/lib/labels";
 import { requirePermission } from "@/lib/permissions";
 
-export const metadata = { title: "Shifts" };
+export const metadata = { title: "Diensten" };
 
 type Tab = "upcoming" | "open" | "past" | "all";
 

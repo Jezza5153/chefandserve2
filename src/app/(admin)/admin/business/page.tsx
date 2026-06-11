@@ -458,7 +458,7 @@ export default async function BusinessDashboardPage() {
 
         {/* KPI strip */}
         <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-          <OpsCard icon="calendar" label="Planning" value={shiftsThisWeek} href="/admin/business/shifts" cta="Naar planning"
+          <OpsCard icon="calendar" label="Diensten · deze week" value={shiftsThisWeek} href="/admin/planning" cta="Naar planning"
             lines={[{ text: `${openShifts} open` }, deltaLine(shiftsDelta)]} />
           <OpsCard icon="users" label="Chefs" value={activeChefs} href="/admin/business/chefs" cta="Naar chefs"
             lines={[{ text: "actief" }, missingDataCount > 0 ? { text: `${missingDataCount} mist profieldata`, tone: "amber" } : { text: "data compleet", tone: "muted" }]} />

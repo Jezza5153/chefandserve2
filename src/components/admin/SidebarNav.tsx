@@ -10,10 +10,12 @@ import { Icon, type IconName } from "@/components/admin/icons";
  * Takes `roles` (not the session object) so it stays a clean client component.
  *
  * "Binnenkort" items render disabled — keeps the future shape visible, no dead
- * links. Ambiguous V3 labels map to the nearest real route:
- *   Planning → /shifts · Uren & loon → /hours (payroll via Exporteren/footer).
- * Analyse → /admin/business/insights (KPI-4 ranglijsten). Templates/Payroll stay
- * reachable from the dashboard toolbar; super-admins keep the full Systeem group.
+ * links. The three planning surfaces, SAME labels for owner + planner:
+ *   Rooster   → /admin/business/roster   (read-only control tower: Dag/Week/Maand lenses)
+ *   Planning  → /admin/planning          (the actionable workbench: vullen/bevestigen/autofill)
+ *   Diensten  → /admin/business/shifts   (the raw shifts list + detail)
+ * Uren & loon → /hours; Analyse → /admin/business/insights. Templates/Payroll stay reachable
+ * from the dashboard toolbar; super-admins keep the full Systeem group.
  */
 
 type Item = { label: string; href?: string; icon: IconName; soon?: boolean };
@@ -22,7 +24,8 @@ const MAIN: Item[] = [
   { label: "Cockpit", href: "/admin/business", icon: "dashboard" },
   { label: "Assistent", href: "/admin/assistant", icon: "message" },
   { label: "Rooster", href: "/admin/business/roster", icon: "calendar-days" },
-  { label: "Planning", href: "/admin/business/shifts", icon: "list" },
+  { label: "Planning", href: "/admin/planning", icon: "dashboard" },
+  { label: "Diensten", href: "/admin/business/shifts", icon: "list" },
   { label: "Chefs", href: "/admin/business/chefs", icon: "users" },
   { label: "Klanten", href: "/admin/business/clients", icon: "building" },
   { label: "Inbox", href: "/admin/business/inbox", icon: "inbox" },
@@ -39,9 +42,9 @@ const MAIN: Item[] = [
 ];
 
 /**
- * Planner-only nav (planner AND NOT owner). Cockpit / Klanten / Uren & loon / Analyse
- * are owner-only and intentionally hidden. "Planning" is the planner cockpit
- * (/admin/planning); the owner's "Planning" (shifts) becomes "Diensten" here.
+ * Planner-only nav (planner AND NOT owner). Same Rooster/Planning/Diensten labels + targets
+ * as the owner MAIN nav; this list only HIDES the owner-only items (Cockpit / Klanten /
+ * Uren & loon / Analyse / Facturen / …).
  */
 const PLANNER_MAIN: Item[] = [
   { label: "Planning", href: "/admin/planning", icon: "dashboard" },
