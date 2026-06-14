@@ -39,6 +39,18 @@ export function ClientHealthCard({ verdict }: { verdict: ClientHealthVerdict }) 
           ))}
         </div>
       )}
+      {verdict.nextActions.length > 0 && (
+        <div className="mt-3 border-t border-ink-200/60 pt-3">
+          <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Volgende stap</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {verdict.nextActions.map((a) => (
+              <span key={a} className="rounded-full border border-burgundy/30 bg-burgundy/5 px-2.5 py-1 text-xs font-medium text-burgundy">
+                → {a}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -48,12 +48,19 @@ async function decideShiftRequest(formData: FormData) {
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: FilterStatus; kind?: FilterKind }>;
+  searchParams: Promise<{ status?: FilterStatus; kind?: FilterKind; clientId?: string }>;
 }) {
   await requirePermission("inbox", "triage");
   const params = await searchParams;
-  const status: FilterStatus = params.status ?? "new";
-  const kind: FilterKind = params.kind ?? "all";
+  // Wave 3: per-klant drill-down from the clients list. When scoped to one klant we
+  // show ALL of their requests (any status), chef submissions are irrelevant.
+  const clientId = params.clientId?.trim() || null;
+  const status: FilterStatus = clientId ? "all" : params.status ?? "new";
+  const kind: FilterKind = clientId ? "client" : params.kind ?? "all";
+
+  const scopedClient = clientId
+    ? (await db.select({ name: clients.companyName }).from(clients).where(eq(clients.id, clientId)).limit(1))[0] ?? null
+    : null;
 
   /* ----- queries ----------------------------------------------------- */
   const chefRowsPromise =
@@ -97,7 +104,13 @@ export default async function InboxPage({
             createdAt: clientSubmissions.createdAt,
           })
           .from(clientSubmissions)
-          .where(status === "all" ? undefined : eq(clientSubmissions.status, status))
+          .where(
+            clientId
+              ? eq(clientSubmissions.clientId, clientId)
+              : status === "all"
+                ? undefined
+                : eq(clientSubmissions.status, status),
+          )
           .orderBy(desc(clientSubmissions.createdAt))
           .limit(50);
 
@@ -116,7 +129,12 @@ export default async function InboxPage({
     .innerJoin(clients, eq(clients.id, clientShiftChangeRequests.clientId))
     .innerJoin(shifts, eq(shifts.id, clientShiftChangeRequests.shiftId))
     .where(
-      inArray(clientShiftChangeRequests.status, ["pending", "in_progress"]),
+      clientId
+        ? and(
+            eq(clientShiftChangeRequests.clientId, clientId),
+            inArray(clientShiftChangeRequests.status, ["pending", "in_progress"]),
+          )
+        : inArray(clientShiftChangeRequests.status, ["pending", "in_progress"]),
     )
     .orderBy(desc(clientShiftChangeRequests.createdAt))
     .limit(25);
@@ -169,7 +187,17 @@ export default async function InboxPage({
       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
         Operations
       </p>
-      <h1 className="mt-3 font-serif text-4xl text-ink-900 md:text-5xl">Inbox</h1>
+      <h1 className="mt-3 font-serif text-4xl text-ink-900 md:text-5xl">
+        {scopedClient ? `Aanvragen — ${scopedClient.name}` : "Inbox"}
+      </h1>
+      {scopedClient ? (
+        <p className="mt-2 text-sm text-ink-500">
+          Alle aanvragen &amp; verzoeken van deze klant ·{" "}
+          <Link href="/admin/business/inbox" className="text-burgundy underline-offset-4 hover:underline">
+            terug naar de volledige inbox
+          </Link>
+        </p>
+      ) : null}
       <p className="mt-4 text-sm text-ink-700 md:text-base">
         Aanmeldingen van chefs (work-with-us) en klanten (contact-us). Stuur
         Jotform webhooks naar{" "}
@@ -255,21 +283,23 @@ export default async function InboxPage({
         </section>
       ) : null}
 
-      {/* Filters */}
-      <div className="mt-8 flex flex-wrap items-center gap-2">
-        <FilterPill label="Alle types" active={kind === "all"} href={qs({ kind: "all", status })} />
-        <FilterPill label="Chefs" active={kind === "chef"} href={qs({ kind: "chef", status })} />
-        <FilterPill label="Klanten" active={kind === "client"} href={qs({ kind: "client", status })} />
-        <span className="mx-2 h-4 w-px bg-ink-200" aria-hidden />
-        {(["new", "triaged", "converted", "rejected", "cancelled_by_client", "all"] as FilterStatus[]).map((s) => (
-          <FilterPill
-            key={s}
-            label={statusLabel(s)}
-            active={status === s}
-            href={qs({ kind, status: s })}
-          />
-        ))}
-      </div>
+      {/* Filters — hidden in per-klant drill-down mode (scoped to one client) */}
+      {!scopedClient ? (
+        <div className="mt-8 flex flex-wrap items-center gap-2">
+          <FilterPill label="Alle types" active={kind === "all"} href={qs({ kind: "all", status })} />
+          <FilterPill label="Chefs" active={kind === "chef"} href={qs({ kind: "chef", status })} />
+          <FilterPill label="Klanten" active={kind === "client"} href={qs({ kind: "client", status })} />
+          <span className="mx-2 h-4 w-px bg-ink-200" aria-hidden />
+          {(["new", "triaged", "converted", "rejected", "cancelled_by_client", "all"] as FilterStatus[]).map((s) => (
+            <FilterPill
+              key={s}
+              label={statusLabel(s)}
+              active={status === s}
+              href={qs({ kind, status: s })}
+            />
+          ))}
+        </div>
+      ) : null}
 
       {/* Empty state */}
       {rows.length === 0 ? (
