@@ -117,6 +117,12 @@ const GOLDEN: RouteCase[] = [
   { id: "G-clientintel", q: "Vertel me alles over klant Hotel Okura voor ik ze bel — wat speelt er en wat is de volgende stap?", expect: ["clients.intel_snapshot", "clients.history", "clients.find"] },
   { id: "G-match", q: "Past chef Daniel goed bij Hotel Okura — werkt die koppeling?", expect: ["match.intel", "chefs.find", "clients.find"] },
   { id: "G-roster", q: "Hoe staan we er deze week voor qua bezetting — wat is het rooster-overzicht?", expect: ["roster.overview", "planner.cockpit"] },
+  // AI-W1: profitability-cockpit KPI tools (the UI computes these; the AI now can too).
+  { id: "G-loss", q: "Welke klanten zijn verlieslatend — waar verlies ik geld op?", expect: ["clients.loss_making"] },
+  { id: "G-unbilled", q: "Hoeveel kan ik deze maand nog factureren — welke klant heeft goedgekeurde uren klaarstaan?", expect: ["invoicing.unbilled"] },
+  { id: "G-backlog", q: "Welke klanten tekenen hun uren niet af — waar blijven uurbriefjes hangen?", expect: ["clients.signoff_backlog"] },
+  { id: "G-trend", q: "Hoe ontwikkelt mijn marge zich — deze maand vergeleken met vorige?", expect: ["reports.platform_kpi", "business.overview"] },
+  { id: "G-atrisk", q: "Welke goede chefs dreigen af te haken — wie moet ik reactiveren?", expect: ["chefs.at_risk"] },
 ];
 
 // Multi-turn — the follow-up question must carry the topic over (audit: evals were single-call
