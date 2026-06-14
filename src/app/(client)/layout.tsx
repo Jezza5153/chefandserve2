@@ -86,12 +86,13 @@ export default async function ClientLayout({
               </div>
             </div>
           </div>
-          <nav className="mt-4 flex flex-wrap gap-1">
+          {/* Mobile: one swipeable row (no 3-row wrap on a phone); desktop: wraps. */}
+          <nav className="mt-4 -mx-4 flex gap-1 overflow-x-auto px-4 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:mx-0 md:flex-wrap md:px-0 md:pb-0 [&::-webkit-scrollbar]:hidden">
             {nav.map((n) => (
               <Link
                 key={n.href}
                 href={n.href}
-                className="rounded-full px-3 py-1.5 font-ui text-[11px] font-medium uppercase tracking-[0.15em] text-ink-700 hover:bg-burgundy/10 hover:text-burgundy"
+                className="shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 font-ui text-[11px] font-medium uppercase tracking-[0.15em] text-ink-700 hover:bg-burgundy/10 hover:text-burgundy"
               >
                 {n.label}
               </Link>
