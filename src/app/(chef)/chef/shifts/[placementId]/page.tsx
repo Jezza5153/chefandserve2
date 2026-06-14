@@ -34,6 +34,7 @@ import { formatShiftRole, formatSegment } from "@/lib/labels";
 import { recordChefEvent, diffSeconds } from "@/lib/chef-events";
 import { recipientsFor } from "@/lib/notifications";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
+import { listVisibleComments } from "@/lib/domain/comments";
 import { requireAuth } from "@/lib/permissions";
 
 import { ShiftCancelledByChefClientEmail } from "@/emails/ShiftCancelledByChefClientEmail";
@@ -397,6 +398,10 @@ export default async function ChefShiftDetailPage({
     where: eq(clients.id, shift.clientId),
   });
 
+  // Messages Chef & Serve made visible to the chef on this placement (the admin
+  // "Zichtbaar voor chef" thread — previously never rendered to the chef).
+  const messages = await listVisibleComments(placement.id, { kind: "chef" });
+
   const errorMsg =
     sp.error === "reason-required"
       ? "Geef een reden (minimaal 5 tekens)."
@@ -520,6 +525,25 @@ export default async function ChefShiftDetailPage({
           action={recordReturnSignal}
         />
       )}
+
+      {/* Berichten — chef-visible messages from Chef & Serve on this placement */}
+      {messages.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+            Berichten
+          </h2>
+          <ul className="mt-3 space-y-2">
+            {messages.map((m) => (
+              <li key={m.id} className="rounded-lg border border-ink-200 bg-white p-3">
+                <p className="whitespace-pre-wrap break-words text-sm text-ink-900">{m.body}</p>
+                <p className="mt-1 text-[10px] text-ink-400">
+                  {new Date(m.createdAt).toLocaleString("nl-NL")}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

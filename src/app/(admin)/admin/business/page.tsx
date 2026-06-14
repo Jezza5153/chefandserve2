@@ -318,7 +318,7 @@ export default async function BusinessDashboardPage() {
   if (inboxCount > 0)
     items.push({ kind: "inbox", tone: "blue", icon: "inbox", title: `${inboxCount} nieuwe ${plural(inboxCount, "aanmelding", "aanmeldingen")}`, detail: `${newChefSubs} chef · ${newClientSubs} klant`, href: "/admin/business/inbox", cta: "Open inbox" });
   if (missingDataCount > 0)
-    items.push({ kind: "missing_data", tone: "amber", icon: "user-round", title: `${missingDataCount} chef-${plural(missingDataCount, "profiel", "profielen")} onvolledig`, detail: "postcode of tarief ontbreekt", href: "/admin/business/chefs?filter=mist_data", cta: "Aanvullen" });
+    items.push({ kind: "missing_data", tone: "amber", icon: "user-round", title: `${missingDataCount} chef-${plural(missingDataCount, "profiel", "profielen")} onvolledig`, detail: "postcode of tarief ontbreekt", href: "/admin/business/chefs?data=incomplete", cta: "Aanvullen" });
 
   const ranked = rankAttentionItems(items);
   const visible = ranked.slice(0, 6);
@@ -468,7 +468,7 @@ export default async function BusinessDashboardPage() {
             lines={[{ text: "te keuren" }, hoursKlantTimeout > 0 ? { text: `${hoursKlantTimeout} wacht op klant`, tone: "amber" } : { text: "geen achterstand", tone: "muted" }]} />
           <OpsCard icon="check-circle" label="Bevestigd" value={confirmedThisWeek} href="/admin/business/shifts" cta="Naar shifts"
             lines={[{ text: "deze week" }, deltaLine(confirmedDelta)]} />
-          <OpsCard icon="user-round" label="Profieldata" value={missingDataCount} href="/admin/business/chefs?filter=mist_data" cta="Naar overzicht"
+          <OpsCard icon="user-round" label="Profieldata" value={missingDataCount} href="/admin/business/chefs?data=incomplete" cta="Naar overzicht"
             lines={[{ text: "ontbrekend" }, missingDataCount > 0 ? { text: "actie vereist", tone: "amber" } : { text: "compleet", tone: "emerald" }]} />
         </div>
 

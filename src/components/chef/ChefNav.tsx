@@ -29,6 +29,7 @@ const MORE: NavItem[] = [
   { label: "Mijn profiel", href: "/chef/profile", icon: "user-round" },
   { label: "Meldingen", href: "/chef/notifications", icon: "bell" },
   { label: "Prikbord", href: "/chef/board", icon: "message" },
+  { label: "Agenda-feed", href: "/chef/calendar", icon: "calendar-days" },
   { label: "Onboarding", href: "/chef/onboarding", icon: "check-circle" },
   { label: "Privacy", href: "/chef/privacy", icon: "shield-check" },
 ];
