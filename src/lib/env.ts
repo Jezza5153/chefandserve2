@@ -156,6 +156,11 @@ const serverSchema = z.object({
   // page stays correct when unset (forecastEnabled() gates only the projection block).
   KPI_FORECAST_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-1 — chef-facing AI chat (the portal AssistantWidget). DEFAULT OFF by
+  // owner decision: chefs get AI help only INDIRECTLY (CV suggestions +
+  // completeness nudges + push), never via a chat. Flip to 'true' to re-enable.
+  CHEF_AI_CHAT_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
