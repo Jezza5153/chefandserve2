@@ -45,7 +45,10 @@ export default async function ChefBoardPage() {
     );
   }
 
+  const seenAt = chef.boardSeenAt;
   const feed = await listBoardFeed({ userId: session.user.id });
+  // Bump the "seen" marker so the next visit only flags newer posts.
+  await db.update(chefs).set({ boardSeenAt: new Date() }).where(eq(chefs.id, chef.id));
 
   return (
     <div>
@@ -62,8 +65,13 @@ export default async function ChefBoardPage() {
           feed.map((post) => (
             <article key={post.id} className="rounded-lg border border-ink-200 bg-white p-4">
               {post.pinned ? (
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider text-amber-800">
+                <span className="mr-1 rounded-full bg-amber-100 px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider text-amber-800">
                   Vastgepind
+                </span>
+              ) : null}
+              {seenAt && post.createdAt > seenAt ? (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider text-emerald-700">
+                  Nieuw
                 </span>
               ) : null}
               <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink-900">{post.body}</p>
