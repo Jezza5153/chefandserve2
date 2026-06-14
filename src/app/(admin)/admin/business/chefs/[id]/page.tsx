@@ -39,6 +39,11 @@ import {
   listProfileDataRequests,
 } from "@/lib/domain/profile-data-requests";
 import { decideChefProfileChange } from "@/lib/domain/chef-profile-changes";
+import {
+  acceptSuggestion,
+  dismissSuggestion,
+  listPendingSuggestions,
+} from "@/lib/domain/profile-suggestions";
 import { getChefAverageForAdmin } from "@/lib/domain/ratings";
 import { requirePermission } from "@/lib/permissions";
 import { r2IsConfigured } from "@/lib/r2";
@@ -46,6 +51,7 @@ import { DetailShell } from "@/components/ui/DetailShell";
 
 import { RatingSummary } from "./_components/RatingSummary";
 import { ChangeRequests } from "./_components/ChangeRequests";
+import { CvSuggestions } from "./_components/CvSuggestions";
 import { BasicsForm } from "./_components/BasicsForm";
 import { PortalAccess } from "./_components/PortalAccess";
 import { DocumentsSection } from "./_components/DocumentsSection";
@@ -119,6 +125,9 @@ export default async function ChefDetailPage({
     .limit(25);
   const pendingChanges = changeRequests.filter((r) => r.status === "pending");
   const decidedChanges = changeRequests.filter((r) => r.status !== "pending");
+
+  // CV-AI-1: pending AI profile suggestions (from the chef's CV) for owner review.
+  const cvSuggestions = await listPendingSuggestions(id);
 
   // Load originating submission (if any) for "back to inbox" link
   const sourceSubmission = chef.sourceSubmissionId
@@ -429,6 +438,27 @@ export default async function ChefDetailPage({
     await decideProfileChange(formData, "rejected");
   }
 
+  async function acceptCvSuggestion(formData: FormData) {
+    "use server";
+    const session = await requirePermission("chefs", "write");
+    const suggestionId = String(formData.get("suggestionId") ?? "");
+    if (!suggestionId) return;
+    const res = await acceptSuggestion({
+      suggestionId,
+      decidedBy: session.user.id,
+      actorKind: "owner",
+    });
+    redirect(`/admin/business/chefs/${id}?ok=cv-${res.ok ? res.applied : "gone"}`);
+  }
+  async function dismissCvSuggestion(formData: FormData) {
+    "use server";
+    const session = await requirePermission("chefs", "write");
+    const suggestionId = String(formData.get("suggestionId") ?? "");
+    if (!suggestionId) return;
+    await dismissSuggestion({ suggestionId, decidedBy: session.user.id });
+    redirect(`/admin/business/chefs/${id}?ok=cv-dismissed`);
+  }
+
   /* ---------- view --------------------------------------------- */
   return (
     <DetailShell
@@ -555,6 +585,13 @@ export default async function ChefDetailPage({
         decidedChanges={decidedChanges}
         approveProfileChange={approveProfileChange}
         rejectProfileChange={rejectProfileChange}
+      />
+
+      {/* CV-AI-1: AI-proposed profile enrichments from the chef's CV (owner review) */}
+      <CvSuggestions
+        suggestions={cvSuggestions}
+        acceptCvSuggestion={acceptCvSuggestion}
+        dismissCvSuggestion={dismissCvSuggestion}
       />
 
       {/* Portal access — full controls (the primary invite/activate action is also

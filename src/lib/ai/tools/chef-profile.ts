@@ -6,6 +6,8 @@
  */
 import { z } from "zod";
 
+import { cvProfilingEnabled } from "@/lib/ai/config";
+import { extractChefProfileFromCv } from "@/lib/ai/read-model/chef-cv-extract";
 import { defineTool } from "@/lib/ai/tools/registry";
 import {
   chefWorkSummary,
@@ -13,6 +15,10 @@ import {
   chefTrends,
   chefProfileCompleteness,
 } from "@/lib/ai/read-model/chef-profile";
+import {
+  SUGGESTION_FIELD_LABEL,
+  writeCvSuggestions,
+} from "@/lib/domain/profile-suggestions";
 
 export const chefsWorkSummary = defineTool({
   name: "chefs.work_summary",
@@ -94,5 +100,48 @@ export const chefsProfileCompleteness = defineTool({
     if (!data) throw new Error("deze chef bestaat niet (meer)");
     const miss = data.missingCritical.length ? ` Mist nog: ${data.missingCritical.join(", ")}.` : "";
     return { data, summary: `${data.chef.name}: profiel ${data.score}% (${data.label}).${miss}` };
+  },
+});
+
+export const chefsEnrichFromCv = defineTool({
+  name: "chefs.enrich_from_cv",
+  title: "Profiel verrijken uit CV",
+  description:
+    "Leest het door de chef geüploade CV en stelt gestructureerde profielverbeteringen voor (vakniveau, segmenten, specialiteiten, talen, ervaring) die JIJ daarna nakijkt en goedkeurt op de chef-pagina. Voert NIETS automatisch door en mailt niemand. Gebruik chefs.find voor het chefId.",
+  // 'self': writes only internal staging rows for review — no third-party send,
+  // no money, no chef-visible change. Nothing is applied until the owner accepts.
+  risk: "self",
+  permission: { resource: "chefs", action: "write" },
+  input: z.object({ chefId: z.string().min(1, "chefId is verplicht") }),
+  run: async (input, ctx) => {
+    if (!cvProfilingEnabled()) {
+      return {
+        data: { enabled: false },
+        summary: "CV-profielverrijking staat nog uit (CV_AI_PROFILING_ENABLED).",
+      };
+    }
+    const extract = await extractChefProfileFromCv(input.chefId);
+    if (!extract) {
+      return {
+        data: { cvFound: false },
+        summary: "Geen leesbaar CV gevonden voor deze chef (of het model staat uit).",
+      };
+    }
+    const { written, diffs } = await writeCvSuggestions(
+      input.chefId,
+      extract,
+      ctx.actor.requestedByUserId,
+    );
+    if (written === 0) {
+      return {
+        data: { written: 0, confidence: extract.confidence },
+        summary: "CV gelezen — geen nieuwe profielsuggesties (alles is al ingevuld).",
+      };
+    }
+    const fields = diffs.map((d) => SUGGESTION_FIELD_LABEL[d.field] ?? d.field).join(", ");
+    return {
+      data: { written, diffs, confidence: extract.confidence },
+      summary: `${written} voorstel(len) klaar voor review (${fields}). Bekijk en keur goed op de chef-pagina.`,
+    };
   },
 });

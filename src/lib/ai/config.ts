@@ -24,6 +24,11 @@ export function chefAiChatEnabled(): boolean {
   return env.CHEF_AI_CHAT_ENABLED === "true";
 }
 
+/** CV-driven profile enrichment (chefs.enrich_from_cv tool + nightly sweep). Default off. */
+export function cvProfilingEnabled(): boolean {
+  return env.CV_AI_PROFILING_ENABLED === "true";
+}
+
 /** The model id used for the chat/agent brain. Embeddings use OPENAI_API_KEY directly. */
 export function aiModel(): string {
   return env.OPENAI_MODEL ?? "gpt-4o";

@@ -74,6 +74,15 @@ const SAMPLE: Record<string, unknown> = {
   "clients.decide_shift_request": { requestId: "x", decision: "rejected" },
   "placements.reply": { placementId: "x", body: "test bericht" },
   "intake.convert": { submissionId: "x", kind: "chef" },
+  "chefs.enrich_from_cv": { chefId: "x" },
+  "inboxes.grant_access": { inboxId: "x", userEmail: "test@example.nl" },
+  "inboxes.revoke_access": { inboxId: "x", userEmail: "test@example.nl" },
+  "shifts.create": {
+    clientId: "x",
+    startsAt: "2026-07-01T10:00:00Z",
+    endsAt: "2026-07-01T18:00:00Z",
+    roleNeeded: "chef_de_partie",
+  },
 };
 const sampleFor = (name: string): unknown => SAMPLE[name] ?? {};
 

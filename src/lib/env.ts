@@ -161,6 +161,10 @@ const serverSchema = z.object({
   // completeness nudges + push), never via a chat. Flip to 'true' to re-enable.
   CHEF_AI_CHAT_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CV-AI-1 — AI reads a chef's CV → proposes profile fields for owner review.
+  // Default off; chefs.enrich_from_cv tool + nightly sweep no-op until set.
+  CV_AI_PROFILING_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
