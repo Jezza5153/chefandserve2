@@ -50,8 +50,21 @@ export async function completePlacement(args: {
   actorUserId: string;
 }): Promise<
   | { ok: true; hoursId: string | null }
-  | { ok: false; reason: "not-confirmed" | "no-client" }
+  | { ok: false; reason: "not-confirmed" | "no-client" | "not-ended" }
 > {
+  // ----- Guard: the shift must have actually ENDED -----
+  // Mirror the complete-placements worker's `ends_at < now() - 1h` invariant so we never
+  // book a draft urenregel for unworked/future time (defends the admin button AND the AI tool).
+  const [pre] = await db
+    .select({ endsAt: shifts.endsAt })
+    .from(placements)
+    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .where(eq(placements.id, args.placementId))
+    .limit(1);
+  if (pre?.endsAt && pre.endsAt.getTime() > Date.now() - 3_600_000) {
+    return { ok: false, reason: "not-ended" };
+  }
+
   // ----- Step 1: confirmed → completed (atomic + audited) -----
   const completeAudit = await stampFromRequest({
     userId: args.actorUserId,

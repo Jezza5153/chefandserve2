@@ -11,6 +11,7 @@ import { recordAuditCore } from "@/lib/audit";
 import { proposePlacement } from "@/lib/domain/matching";
 import { recomputeShiftStatus } from "@/lib/domain/shift-status";
 import { transitionPlacement } from "@/lib/domain/placement-transition";
+import { completePlacement } from "@/lib/domain/hours-admin";
 
 export const placementsPropose = defineTool({
   name: "placements.propose",
@@ -89,5 +90,32 @@ export const placementsCancel = defineTool({
       return { data: { id: input.placementId, changed: false }, summary: "Niet geannuleerd — deze plaatsing is al afgerond of geannuleerd." };
     }
     return { data: { id: input.placementId, changed: true }, summary: "Plaatsing geannuleerd." };
+  },
+});
+
+export const placementsComplete = defineTool({
+  name: "placements.complete",
+  title: "Plaatsing afronden",
+  description:
+    "Markeert een BEVESTIGDE, al gewerkte plaatsing als afgerond (→ completed) en zet er een concept-urenregel voor klaar — dit boekt de dienst als gedraaid (loon/factuur volgt). Werkt alleen op een bevestigde plaatsing waarvan de dienst al voorbij is; gebruik shifts.detail om het placementId + de status te checken. Daarna logt de chef de uren.",
+  risk: "financial",
+  permission: { resource: "shifts", action: "write" },
+  input: z.object({ placementId: z.string().min(1, "placementId is verplicht") }),
+  describeAction: (input) => `Plaatsing ${input.placementId} afronden — boekt de dienst als gedraaid + zet een concept-urenregel klaar.`,
+  run: async (input, ctx) => {
+    const res = await completePlacement({ placementId: input.placementId, actorUserId: ctx.actor.requestedByUserId });
+    if (!res.ok) {
+      const reason =
+        res.reason === "not-confirmed"
+          ? "deze plaatsing is niet (meer) bevestigd — alleen een bevestigde, gewerkte dienst kun je afronden"
+          : res.reason === "not-ended"
+            ? "de dienst is nog niet voorbij — je kunt 'm pas afronden ná afloop"
+            : "de dienst heeft geen gekoppelde klant";
+      return { data: { id: input.placementId, ok: false, reason: res.reason }, summary: `Niet afgerond — ${reason}.` };
+    }
+    return {
+      data: { id: input.placementId, ok: true, hoursId: res.hoursId },
+      summary: "Plaatsing afgerond — er staat nu een concept-urenregel klaar om in te dienen.",
+    };
   },
 });
