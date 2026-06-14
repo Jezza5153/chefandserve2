@@ -177,6 +177,11 @@ const serverSchema = z.object({
   // needs SENT_DM_API_KEY + Meta-approved templates. The high-urgency safety net.
   CHEF_WHATSAPP_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // BOARD-1 — communal board ("Prikbord"). Gates the chef-facing feed + the
+  // new-post fan-out. Owner authoring is RBAC-gated regardless; default off so
+  // chefs see nothing + no mass notification fires until the owner opts in.
+  BOARD_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
