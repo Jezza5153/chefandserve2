@@ -13,14 +13,23 @@ type Tab = "upcoming" | "open" | "past" | "all";
 export default async function ShiftsListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: Tab }>;
+  searchParams: Promise<{ tab?: Tab; clientId?: string }>;
 }) {
   await requirePermission("shifts", "read");
   const params = await searchParams;
   const tab: Tab = params.tab ?? "upcoming";
+  const clientId = params.clientId?.trim() || null;
   const now = new Date();
 
+  // K2: owner drill-down from the klant detail — scope the list to one client.
+  const scopedClient = clientId
+    ? (await db.select({ name: clients.companyName }).from(clients).where(eq(clients.id, clientId)).limit(1))[0] ?? null
+    : null;
+
   const whereParts = [];
+  if (clientId) {
+    whereParts.push(eq(shifts.clientId, clientId));
+  }
   if (tab === "upcoming") {
     whereParts.push(gt(shifts.startsAt, now));
   } else if (tab === "open") {
@@ -28,6 +37,15 @@ export default async function ShiftsListPage({
   } else if (tab === "past") {
     whereParts.push(lt(shifts.startsAt, now));
   }
+
+  // Preserve the client scope across the tab pills.
+  const tabHref = (t: Tab | null) => {
+    const qs = new URLSearchParams();
+    if (t) qs.set("tab", t);
+    if (clientId) qs.set("clientId", clientId);
+    const s = qs.toString();
+    return `/admin/business/shifts${s ? `?${s}` : ""}`;
+  };
 
   const rows = await db
     .select({
@@ -55,7 +73,7 @@ export default async function ShiftsListPage({
       upcoming: sql<number>`count(*) filter (where ${shifts.startsAt} > now() AND ${shifts.status} != 'cancelled')::int`,
     })
     .from(shifts)
-    .where(isNotNull(shifts.id));
+    .where(clientId ? eq(shifts.clientId, clientId) : isNotNull(shifts.id));
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -65,8 +83,16 @@ export default async function ShiftsListPage({
             Operations
           </p>
           <h1 className="mt-3 font-serif text-4xl text-ink-900 md:text-5xl">
-            Shifts
+            {scopedClient ? scopedClient.name : "Shifts"}
           </h1>
+          {scopedClient && (
+            <p className="mt-1 text-sm text-ink-500">
+              Alleen shifts van deze klant ·{" "}
+              <Link href="/admin/business/shifts" className="text-burgundy underline-offset-4 hover:underline">
+                toon alle shifts
+              </Link>
+            </p>
+          )}
         </div>
         <Link
           href="/admin/business/shifts/new"
@@ -77,10 +103,10 @@ export default async function ShiftsListPage({
       </div>
 
       <div className="mt-8 flex flex-wrap items-center gap-2">
-        <TabPill label={`Komend (${counts[0]?.upcoming ?? 0})`} active={tab === "upcoming"} href="/admin/business/shifts" />
-        <TabPill label={`Open (${counts[0]?.open ?? 0})`} active={tab === "open"} href="/admin/business/shifts?tab=open" />
-        <TabPill label="Verleden" active={tab === "past"} href="/admin/business/shifts?tab=past" />
-        <TabPill label="Alles" active={tab === "all"} href="/admin/business/shifts?tab=all" />
+        <TabPill label={`Komend (${counts[0]?.upcoming ?? 0})`} active={tab === "upcoming"} href={tabHref(null)} />
+        <TabPill label={`Open (${counts[0]?.open ?? 0})`} active={tab === "open"} href={tabHref("open")} />
+        <TabPill label="Verleden" active={tab === "past"} href={tabHref("past")} />
+        <TabPill label="Alles" active={tab === "all"} href={tabHref("all")} />
       </div>
 
       {rows.length === 0 ? (

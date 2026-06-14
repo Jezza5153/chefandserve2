@@ -8,7 +8,7 @@
  *  - buildClientTrends(): pure 8-week trends over client_metrics_daily snapshot rows
  *    (KPI-1), reusing the metrics-history re-shapers + the shared noise guard.
  */
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { chefs, clients, placements, ratings, shiftHours, shifts } from "@/lib/db/schema";
@@ -167,6 +167,64 @@ export async function getClientHealth(
     signoffAvgHours: summary.signoffAvgHours,
   });
   return { summary, verdict };
+}
+
+/**
+ * Recent + upcoming shifts for a client's owner-side drill-down (K2). Mirrors
+ * getChefRecentShifts (chef-history.ts) but is SHIFT-centric: a klant shift can carry
+ * multiple chefs, so we fetch the shifts then fold placed-chef names in via a grouped
+ * query + Map — never a per-row projection subquery (neon-http renders those uncorrelated).
+ * `status` is the shift's own status (open/filled/completed/…); chefNames lists the
+ * accepted/confirmed/completed placements on it.
+ */
+export type ClientRecentShift = {
+  shiftId: string;
+  startsAt: Date;
+  endsAt: Date;
+  roleNeeded: string;
+  city: string | null;
+  status: string;
+  headcount: number;
+  chefNames: string[];
+};
+
+export async function getClientRecentShifts(clientId: string, limit = 10): Promise<ClientRecentShift[]> {
+  const shiftRows = await db
+    .select({
+      shiftId: shifts.id,
+      startsAt: shifts.startsAt,
+      endsAt: shifts.endsAt,
+      roleNeeded: shifts.roleNeeded,
+      city: shifts.city,
+      status: shifts.status,
+      headcount: shifts.headcount,
+    })
+    .from(shifts)
+    .where(eq(shifts.clientId, clientId))
+    .orderBy(desc(shifts.startsAt))
+    .limit(limit);
+  if (shiftRows.length === 0) return [];
+
+  const ids = shiftRows.map((s) => s.shiftId);
+  const placementRows = await db
+    .select({ shiftId: placements.shiftId, chefName: chefs.fullName, status: placements.status })
+    .from(placements)
+    .innerJoin(chefs, eq(chefs.id, placements.chefId))
+    .where(
+      and(
+        inArray(placements.shiftId, ids),
+        inArray(placements.status, ["accepted", "confirmed", "completed"]),
+      ),
+    );
+
+  const byShift = new Map<string, string[]>();
+  for (const p of placementRows) {
+    const arr = byShift.get(p.shiftId) ?? [];
+    arr.push(p.chefName);
+    byShift.set(p.shiftId, arr);
+  }
+
+  return shiftRows.map((s) => ({ ...s, chefNames: byShift.get(s.shiftId) ?? [] }));
 }
 
 /* ----- trends over the snapshot (pure) ------------------------------------ */
