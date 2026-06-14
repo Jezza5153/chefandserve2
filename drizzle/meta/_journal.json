@@ -351,6 +351,13 @@
       "when": 1781083360106,
       "tag": "0049_inbox_access",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1781429293582,
+      "tag": "0050_profile_suggestions",
+      "breakpoints": true
     }
   ]
 }

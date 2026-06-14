@@ -63,6 +63,7 @@ assert("placements.propose present (outbound)", byName.get("placements.propose")
 assert("shifts.open_soon present (read)", byName.get("shifts.open_soon")?.risk === "read");
 assert("insights.leaderboards present (read)", byName.get("insights.leaderboards")?.risk === "read");
 assert("integrations.health present (read)", byName.get("integrations.health")?.risk === "read");
+assert("chefs.enrich_from_cv present (self)", byName.get("chefs.enrich_from_cv")?.risk === "self");
 assert("reminders.create present (self, no confirm)", byName.get("reminders.create")?.risk === "self");
 assert("reminders.list present (read)", byName.get("reminders.list")?.risk === "read");
 assert("memory.remember present (self)", byName.get("memory.remember")?.risk === "self");

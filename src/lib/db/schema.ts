@@ -2078,6 +2078,84 @@ export type ProfileChangeRequest = typeof profileChangeRequests.$inferSelect;
 export type NewProfileChangeRequest = typeof profileChangeRequests.$inferInsert;
 
 /* =============================================================================
+ * AI profile suggestions (CV-AI-1) — staging for AI-extracted profile enrichment.
+ *
+ * The owner AI reads a chef's CV and proposes structured fields; chef-side
+ * completeness also produces suggestions. BOTH owner and chef review the SAME
+ * rows here. Deliberately NOT overloaded onto profile_change_requests: different
+ * fields, AI provenance + confidence, and a chef-side "dismiss" that must NOT
+ * email or hit the owner queue. Accepting a SAFE field applies directly (a
+ * chefs.update, the saveProfile path); a SENSITIVE field (vakniveau) instead
+ * creates a profile_change_requests row so owner approval stays the single rail.
+ *
+ * proposedValue holds enum/array/short-string values ONLY — never raw CV prose.
+ * ===========================================================================*/
+export const profileSuggestionSourceEnum = pgEnum("profile_suggestion_source", [
+  "cv",
+  "completeness",
+]);
+export const profileSuggestionStatusEnum = pgEnum("profile_suggestion_status", [
+  "pending",
+  "accepted",
+  "dismissed",
+  "superseded",
+]);
+export const profileSuggestionFieldClassEnum = pgEnum(
+  "profile_suggestion_field_class",
+  ["safe", "sensitive"],
+);
+
+export const profileSuggestions = pgTable(
+  "profile_suggestions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    /** chefs-table field: vakniveau | segments | specialties | languages | yearsExperience */
+    field: text("field").notNull(),
+    /** Routing hint, code-owned (CV_FIELD_CLASS) — never model-decided. */
+    fieldClass: profileSuggestionFieldClassEnum("field_class").notNull(),
+    /** Snapshot of the current value at suggestion time (jsonb, any type). */
+    currentValue: jsonb("current_value"),
+    /** Proposed value — enum/array/short-string ONLY, never raw CV prose. */
+    proposedValue: jsonb("proposed_value").notNull(),
+    source: profileSuggestionSourceEnum("source").notNull(),
+    /** Model confidence 0..1 (null for completeness-derived suggestions). */
+    confidence: numeric("confidence", { precision: 3, scale: 2 }),
+    /** CV content hash → idempotent re-sweeps (null for completeness). */
+    sourceHash: text("source_hash"),
+    status: profileSuggestionStatusEnum("status").notNull().default("pending"),
+    createdBy: text("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    decidedBy: text("decided_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    chefStatusIdx: index("profile_suggestions_chef_status_idx").on(
+      t.chefId,
+      t.status,
+    ),
+    // Idempotent CV sweeps: one PENDING row per (chef, field, cv-hash).
+    pendingUnique: uniqueIndex("profile_suggestions_pending_unique")
+      .on(t.chefId, t.field, t.sourceHash)
+      .where(sql`${t.status} = 'pending'`),
+  }),
+);
+
+export type ProfileSuggestion = typeof profileSuggestions.$inferSelect;
+export type NewProfileSuggestion = typeof profileSuggestions.$inferInsert;
+
+/* =============================================================================
  * Client change requests (PR-KLANT-1) — sibling of profile_change_requests.
  *
  * Klant edits contact + shift-location fields directly (instant save). But

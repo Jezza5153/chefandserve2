@@ -30,6 +30,7 @@ import {
   chefsFeedback,
   chefsTrends,
   chefsProfileCompleteness,
+  chefsEnrichFromCv,
 } from "@/lib/ai/tools/chef-profile";
 import { rosterOverview, rosterPublish, rosterAutofill, rosterCopyLastWeek } from "@/lib/ai/tools/roster";
 import { clientsHistory, clientsHealth } from "@/lib/ai/tools/clients";
@@ -76,6 +77,7 @@ export const ALL_TOOLS: AnyTool[] = [
   chefsFeedback,
   chefsTrends,
   chefsProfileCompleteness,
+  chefsEnrichFromCv,
   chefsAvailability,
   intakeList,
   onboardingMissing,
