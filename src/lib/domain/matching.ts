@@ -563,8 +563,8 @@ export async function sendProposalNotifications(placementId: string): Promise<vo
     }
   }
 
-  // 1b. Chef in-app + phone (CHEF-14): the new-shift alert lands on their phone
-  //     (push is dark until WEB_PUSH_ENABLED; the bell row always lands).
+  // 1b. Chef in-app + phone (CHEF-14/15): the new-shift alert lands on their
+  //     phone (push + WhatsApp are dark until their flags; the bell always lands).
   if (chef?.userId) {
     await notifyUser({
       userId: chef.userId,
@@ -575,6 +575,14 @@ export async function sendProposalNotifications(placementId: string): Promise<vo
       entityType: "placements",
       entityId: placementId,
       push: true,
+      whatsapp: {
+        template: "chef_nieuwe_dienst",
+        params: {
+          voornaam: (chef.fullName ?? "chef").split(" ")[0],
+          klant: client?.companyName ?? "een klant",
+          datum: formatShiftWhen(shift.startsAt, shift.endsAt),
+        },
+      },
     });
   }
 
