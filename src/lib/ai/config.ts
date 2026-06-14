@@ -15,6 +15,15 @@ export function aiHasModelKey(): boolean {
   return Boolean(env.OPENAI_API_KEY);
 }
 
+/**
+ * Chef-facing AI chat (portal AssistantWidget). DEFAULT OFF — chefs get AI help
+ * only indirectly (CV-driven profile suggestions + completeness nudges). Gated
+ * separately from aiEnabled() so the owner/klant assistant surfaces stay live.
+ */
+export function chefAiChatEnabled(): boolean {
+  return env.CHEF_AI_CHAT_ENABLED === "true";
+}
+
 /** The model id used for the chat/agent brain. Embeddings use OPENAI_API_KEY directly. */
 export function aiModel(): string {
   return env.OPENAI_MODEL ?? "gpt-4o";

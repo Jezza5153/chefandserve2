@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 
 import { headers } from "next/headers";
@@ -6,17 +6,24 @@ import { revalidatePath } from "next/cache";
 
 import { SignOutLink } from "@/app/(admin)/_components/SignOutLink";
 import { AssistantWidget } from "@/components/ai/AssistantWidget";
+import { ChefNav } from "@/components/chef/ChefNav";
+import { InstallPrompt } from "@/components/chef/InstallPrompt";
+import { PwaRegistrar } from "@/components/chef/PwaRegistrar";
 import { ConsentGate } from "@/components/ConsentGate";
 import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 import { NotificationBell } from "@/components/NotificationBell";
-import { aiEnabled } from "@/lib/ai/config";
+import { aiEnabled, chefAiChatEnabled } from "@/lib/ai/config";
 import { hasCurrentConsent, isConsentEnforced, recordConsent } from "@/lib/consent";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata: Metadata = {
   title: { default: "Chef portal", template: "%s · Chef & Serve" },
   robots: { index: false, follow: false },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Chef & Serve" },
 };
+
+export const viewport: Viewport = { themeColor: "#801B2B" };
 
 /**
  * Chef portal layout — mobile-first. Chefs view this on their phone.
@@ -46,17 +53,6 @@ export default async function ChefLayout({
     kind: "chef",
   });
 
-  const nav = [
-    { label: "Dashboard", href: "/chef" },
-    { label: "Mijn shifts", href: "/chef/shifts" },
-    { label: "Uren", href: "/chef/hours" },
-    { label: "Verdiensten", href: "/chef/earnings" },
-    { label: "Beschikbaarheid", href: "/chef/availability" },
-    { label: "Mijn profiel", href: "/chef/profile" },
-    { label: "Onboarding", href: "/chef/onboarding" },
-    { label: "Privacy", href: "/chef/privacy" },
-  ];
-
   return (
     <div className="flex min-h-screen flex-col bg-bg-gray">
       <ImpersonationBanner session={session} />
@@ -75,29 +71,20 @@ export default async function ChefLayout({
                 notificationsHref="/chef/notifications"
               />
               <div className="text-right">
-                <p className="font-ui text-[10px] uppercase tracking-[0.2em] text-ink-500">
+                <p className="font-ui text-xs uppercase tracking-[0.2em] text-ink-500">
                   {session.user.name ?? session.user.email}
                 </p>
                 <SignOutLink />
               </div>
             </div>
           </div>
-          <nav className="mt-4 flex flex-wrap gap-1">
-            {nav.map((n) => (
-              <Link
-                key={n.href}
-                href={n.href}
-                className="rounded-full px-3 py-1.5 font-ui text-[11px] font-medium uppercase tracking-[0.15em] text-ink-700 hover:bg-burgundy/10 hover:text-burgundy"
-              >
-                {n.label}
-              </Link>
-            ))}
-          </nav>
+          <ChefNav />
         </div>
       </header>
 
       <main className="flex-1">
-        <div className="mx-auto max-w-3xl px-4 py-8">{children}</div>
+        {/* pb-24 on mobile clears the fixed bottom tab bar; normal on md+ */}
+        <div className="mx-auto max-w-3xl px-4 pb-24 pt-8 md:pb-8">{children}</div>
       </main>
 
       {!consented ? (
@@ -108,13 +95,18 @@ export default async function ChefLayout({
         />
       ) : null}
 
-      {aiEnabled() && session.user.kind === "chef" ? (
+      {/* Chef AI chat is OFF by default (CHEF_AI_CHAT_ENABLED). Chefs get AI help
+          indirectly — CV-driven profile suggestions + completeness nudges. */}
+      {aiEnabled() && chefAiChatEnabled() && session.user.kind === "chef" ? (
         <AssistantWidget
           endpoint="/api/ai/portal/chat"
           subtitle="Je hulp"
           placeholder="Stel een vraag, bijvoorbeeld: “wanneer werk ik?” of “welke uren moet ik nog invullen?”"
         />
       ) : null}
+
+      <PwaRegistrar />
+      <InstallPrompt />
     </div>
   );
 }

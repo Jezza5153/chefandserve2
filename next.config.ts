@@ -51,6 +51,9 @@ const nextConfig: NextConfig = {
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self' data:",
       "media-src 'self'",
+      // PWA: service worker (/sw.js) + web app manifest, both same-origin.
+      "worker-src 'self'",
+      "manifest-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
