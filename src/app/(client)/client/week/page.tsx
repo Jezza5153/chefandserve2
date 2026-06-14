@@ -134,9 +134,16 @@ export default async function ClientWeekPage({
         </div>
       </div>
       <p className="mt-3 text-sm text-ink-500">
-        {totalShifts === 0
-          ? "Geen shifts deze week."
-          : `${totalShifts} ${totalShifts === 1 ? "shift" : "shifts"} deze week. Klik een shift voor alle details.`}
+        {totalShifts === 0 ? (
+          <>
+            Geen shifts deze week.{" "}
+            <Link href="/client/request" className="text-burgundy underline-offset-4 hover:underline">
+              Vraag een dienst aan →
+            </Link>
+          </>
+        ) : (
+          `${totalShifts} ${totalShifts === 1 ? "shift" : "shifts"} deze week. Klik een shift voor alle details.`
+        )}
       </p>
 
       <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-7">

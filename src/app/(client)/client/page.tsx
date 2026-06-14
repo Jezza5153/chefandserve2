@@ -14,6 +14,7 @@ import { and, count, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-or
 import Link from "next/link";
 
 import { ActionCard, ActionRow } from "@/components/dashboard/ActionCard";
+import { requestStatusNextStep } from "./_components/RequestStatusBadge";
 import { db } from "@/lib/db/client";
 import {
   chefs,
@@ -289,6 +290,7 @@ export default async function ClientDashboardPage() {
             <ActionCard
               icon="✅"
               title={`${hoursToSign.length} ${hoursToSign.length === 1 ? "uurbriefje wacht" : "uurbriefjes wachten"} op akkoord`}
+              subtitle="Controleer de uren en keur goed of af — dit houdt de uitbetaling van de chef tegen."
               tone="urgent"
             >
               {hoursToSign.slice(0, 4).map(({ h, chefName, shiftId, shiftStart }) => (
@@ -329,6 +331,7 @@ export default async function ClientDashboardPage() {
             <ActionCard
               icon="📝"
               title={`${myPending.length} ${myPending.length === 1 ? "aanvraag wacht" : "aanvragen wachten"} op planning`}
+              subtitle={requestStatusNextStep("triaged")}
               ctaLabel="Bekijk aanvragen"
               ctaHref="/client/requests"
             >

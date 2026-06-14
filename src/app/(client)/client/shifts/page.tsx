@@ -85,9 +85,15 @@ export default async function ClientShiftsPage() {
       </h1>
 
       {shiftRows.length === 0 ? (
-        <p className="mt-8 rounded-lg border border-ink-200 bg-white p-8 text-center text-sm text-ink-500">
-          Nog geen shifts.
-        </p>
+        <div className="mt-8 rounded-lg border border-ink-200 bg-white p-8 text-center">
+          <p className="text-sm text-ink-500">Nog geen shifts.</p>
+          <Link
+            href="/client/request"
+            className="mt-3 inline-block rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
+          >
+            + Vraag een dienst aan
+          </Link>
+        </div>
       ) : (
         <ul className="mt-8 space-y-2">
           {shiftRows.map((s) => {

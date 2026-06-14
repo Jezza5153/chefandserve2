@@ -22,6 +22,7 @@ type Tone = "default" | "urgent" | "critical" | "success";
 export function ActionCard({
   icon,
   title,
+  subtitle,
   count,
   ctaLabel,
   ctaHref,
@@ -30,6 +31,8 @@ export function ActionCard({
 }: {
   icon: string; // emoji or short symbol like "⏰", "✅", "📝"
   title: string;
+  /** Optional "wat gebeurt er nu?" next-step line under the title. */
+  subtitle?: string;
   count?: number;
   ctaLabel?: string;
   ctaHref?: string;
@@ -54,6 +57,7 @@ export function ActionCard({
           </span>
           <div>
             <h3 className="font-serif text-base text-ink-900">{title}</h3>
+            {subtitle ? <p className="mt-1 text-xs text-ink-600">{subtitle}</p> : null}
             {typeof count === "number" ? (
               <p className="mt-1 font-mono text-2xl leading-tight text-ink-900">
                 {count}
