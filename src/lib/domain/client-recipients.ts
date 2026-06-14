@@ -20,6 +20,8 @@ import { shouldSendToUser } from "@/lib/integrations/prefs";
 export type ClientEmailEvent =
   | "chef_proposed"
   | "hours_ready_to_sign"
+  | "hours_approved"
+  | "hours_admin_rejected"
   | "billing_email_changed"
   | "invoice_sent"
   | "client_shift_change_requested"
@@ -30,6 +32,11 @@ export type ClientEmailEvent =
 const EVENT_ROLE_MAP: Record<ClientEmailEvent, Array<typeof clientContacts.$inferSelect.role>> = {
   chef_proposed: ["planning", "onsite"],
   hours_ready_to_sign: ["hours_approval"],
+  // Hours-approved ("afgerond, factuur volgt") + admin-rejected ("uren-correctie") are
+  // transactional financial confirmations tied to money owed — like billing mail, they
+  // route by role but are NOT in CLIENT_NOTIFICATION_PREFS (intentionally always-on).
+  hours_approved: ["hours_approval", "finance"],
+  hours_admin_rejected: ["hours_approval"],
   billing_email_changed: ["finance"],
   invoice_sent: ["finance"],
   client_shift_change_requested: ["planning", "emergency"],
