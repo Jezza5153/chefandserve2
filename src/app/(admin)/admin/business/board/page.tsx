@@ -8,7 +8,13 @@
 import { boardEnabled, listAdminPosts } from "@/lib/domain/board";
 import { requirePermission } from "@/lib/permissions";
 
-import { createPostAction, deletePostAction, togglePinAction } from "./actions";
+import { BoardImageUploader } from "./BoardImageUploader";
+import {
+  createPostAction,
+  deletePostAction,
+  presignBoardImageAction,
+  togglePinAction,
+} from "./actions";
 
 export const metadata = { title: "Prikbord", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -93,6 +99,9 @@ export default async function BoardPage({
                     {p.audience === "all" ? "Iedereen" : "Chefs"}
                   </span>
                   <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink-900">{p.body}</p>
+                  <div className="mt-2">
+                    <BoardImageUploader postId={p.id} presignAction={presignBoardImageAction} />
+                  </div>
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <form action={togglePinAction}>
