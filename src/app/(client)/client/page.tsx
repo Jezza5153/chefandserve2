@@ -329,6 +329,8 @@ export default async function ClientDashboardPage() {
             <ActionCard
               icon="📝"
               title={`${myPending.length} ${myPending.length === 1 ? "aanvraag wacht" : "aanvragen wachten"} op planning`}
+              ctaLabel="Bekijk aanvragen"
+              ctaHref="/client/requests"
             >
               {myPending.slice(0, 4).map((s) => (
                 <ActionRow

@@ -308,7 +308,7 @@ export default async function BusinessDashboardPage() {
   if (acceptedNotConfirmed > 0)
     items.push({ kind: "accepted_unconfirmed", tone: "amber", icon: "alert-triangle", title: `${acceptedNotConfirmed} ${plural(acceptedNotConfirmed, "shift wacht", "shifts wachten")} op bevestiging`, detail: "chef zei ja — bevestig met de klant", href: "/admin/business/shifts", cta: "Bevestigen" });
   if (proposedAwaiting > 0)
-    items.push({ kind: "proposed_no_response", tone: "blue", icon: "info", title: `${proposedAwaiting} ${plural(proposedAwaiting, "chef voorgesteld", "chefs voorgesteld")}`, detail: "wacht op reactie van de chef", href: "/admin/business/shifts?status=open", cta: "Opvolgen" });
+    items.push({ kind: "proposed_no_response", tone: "blue", icon: "info", title: `${proposedAwaiting} ${plural(proposedAwaiting, "chef voorgesteld", "chefs voorgesteld")}`, detail: "wacht op reactie van de chef", href: "/admin/business/shifts?tab=open", cta: "Opvolgen" });
   if (hoursToApprove > 0)
     items.push({ kind: "hours_to_approve", tone: "amber", icon: "clock", title: `${hoursToApprove} ${plural(hoursToApprove, "urenbriefje", "urenbriefjes")} te keuren`, detail: "klant heeft getekend", href: "/admin/business/hours?filter=wacht_op_mij", cta: "Keur uren" });
   const pendingChanges = pendingProfileChanges + pendingClientChanges;
