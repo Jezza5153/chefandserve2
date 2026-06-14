@@ -80,7 +80,7 @@ const GOLDEN: RouteCase[] = [
   { id: "G-hist", q: "Heeft chef Daniel eerder bij Hotel Okura gewerkt en hoe ging dat?", expect: ["chefs.history_at_client", "chefs.find", "clients.find"] },
   { id: "G-log", q: "Noteer dat ik chef Daniel net telefonisch sprak — hij kan zaterdag invallen.", expect: ["contacts.log", "chefs.find"] },
   { id: "G-cv", q: "Kijk of je het profiel van chef Daniel kunt aanvullen op basis van zijn CV.", expect: ["chefs.find", "chefs.enrich_from_cv"] },
-  { id: "G-interest", q: "Wie heeft zich aangemeld / interesse getoond voor deze open dienst?", expect: ["shifts.interested_chefs", "shifts.find", "shifts.open_soon"] },
+  { id: "G-interest", q: "Voor de open dienst bij Hotel Okura aanstaande vrijdag — welke chefs hebben zich aangemeld of interesse getoond?", expect: ["shifts.interested_chefs", "shifts.find", "shifts.open_soon"] },
   { id: "G-reach", q: "Kan ik chef Daniel via WhatsApp of een pushbericht bereiken?", expect: ["chefs.reachability", "chefs.find"] },
   { id: "G-cvpend", q: "Welke CV-voorstellen wachten nog op mijn goedkeuring voor chef Daniel?", expect: ["chefs.pending_cv_suggestions", "chefs.find"] },
   { id: "G-board", q: "Wat staat er op het prikbord en hoeveel reacties kregen die berichten?", expect: ["board.recent"] },
