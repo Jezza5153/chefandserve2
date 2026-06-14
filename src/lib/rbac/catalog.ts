@@ -89,6 +89,7 @@ export const CATALOG: CatalogPerm[] = [
   { key: "forms.write", resource: "forms", action: "write", class: "business", label: "Formulieren bouwen" },
   { key: "reminders.read", resource: "reminders", action: "read", class: "business", label: "Herinneringen bekijken" },
   { key: "reminders.write", resource: "reminders", action: "write", class: "business", label: "Herinneringen beheren" },
+  { key: "board.write", resource: "board", action: "write", class: "business", label: "Prikbord beheren" },
   { key: "inbox.read", resource: "inbox", action: "read", class: "business", label: "Inbox bekijken" },
   { key: "inbox.triage", resource: "inbox", action: "triage", class: "business", label: "Inbox triageren (omzetten/afwijzen)" },
 ];
@@ -130,6 +131,7 @@ const OWNER_PLANNER_PERMS = [
   "forms.read", "forms.write",
   "reminders.read", "reminders.write",
   "inbox.read", "inbox.triage",
+  "board.write",
 ];
 
 const OWNER_ONLY_PERMS = [
@@ -179,6 +181,7 @@ export const GATE_MAP: GateMapping[] = [
   { id: "templates", oldGate: "owner_planner", perm: "templates.write", routes: ["/admin/business/templates", "/admin/business/templates/[id]", "/admin/business/templates/new"] },
   { id: "forms", oldGate: "owner_planner", perm: "forms.write", routes: ["/admin/business/forms", "/admin/business/forms/[slug]"] },
   { id: "reminders", oldGate: "owner_planner", perm: "reminders.write", routes: ["/admin/business/reminders"] },
+  { id: "board", oldGate: "owner_planner", perm: "board.write", routes: ["/admin/business/board"] },
   { id: "inbox", oldGate: "owner_planner", perm: "inbox.triage", routes: ["/admin/business/inbox", "/admin/business/inbox/[kind]/[id]"] },
 
   /* ---- owner-only class ---- */

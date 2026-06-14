@@ -32,6 +32,7 @@ const MAIN: Item[] = [
   { label: "Berichten", href: "/admin/business/berichten", icon: "message" },
   { label: "Formulieren", href: "/admin/business/forms", icon: "message" },
   { label: "Herinneringen", href: "/admin/business/reminders", icon: "bell" },
+  { label: "Prikbord", href: "/admin/business/board", icon: "message" },
   { label: "Uren & loon", href: "/admin/business/hours", icon: "wallet" },
   { label: "Facturen", href: "/admin/business/invoices", icon: "banknote" },
   { label: "Analyse", href: "/admin/business/insights", icon: "bar-chart" },
@@ -54,6 +55,7 @@ const PLANNER_MAIN: Item[] = [
   { label: "Diensten", href: "/admin/business/shifts", icon: "list" },
   { label: "Chefs", href: "/admin/business/chefs", icon: "users" },
   { label: "Herinneringen", href: "/admin/business/reminders", icon: "bell" },
+  { label: "Prikbord", href: "/admin/business/board", icon: "message" },
   { label: "Instellingen", href: "/admin/account/instellingen", icon: "settings" },
 ];
 

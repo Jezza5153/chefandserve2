@@ -2189,6 +2189,74 @@ export const pushSubscriptions = pgTable(
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
 
 /* =============================================================================
+ * Communal board — "Prikbord" (BOARD-1). Maarten + team post announcements /
+ * fun things; chefs read + react. Owner/planner author (RBAC board.write); chefs
+ * read via auth (kind:'chef') + the audience filter. Soft-delete; pinned-first.
+ * Images live in R2 (board_post_images, presigned like chef documents).
+ * ===========================================================================*/
+export const boardAudienceEnum = pgEnum("board_audience", ["chefs", "all"]);
+
+export const boardPosts = pgTable(
+  "board_posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    authorId: text("author_id").references(() => users.id, { onDelete: "set null" }),
+    body: text("body").notNull(),
+    pinned: boolean("pinned").notNull().default(false),
+    audience: boardAudienceEnum("audience").notNull().default("chefs"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => ({
+    feedIdx: index("board_posts_feed_idx").on(t.pinned, t.createdAt),
+  }),
+);
+
+export const boardPostImages = pgTable(
+  "board_post_images",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => boardPosts.id, { onDelete: "cascade" }),
+    r2Key: text("r2_key").notNull(),
+    mimeType: text("mime_type"),
+    sizeBytes: integer("size_bytes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    r2KeyUnique: uniqueIndex("board_post_images_r2_key_unique").on(t.r2Key),
+    postIdx: index("board_post_images_post_idx").on(t.postId),
+  }),
+);
+
+export const boardReactions = pgTable(
+  "board_reactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id")
+      .notNull()
+      .references(() => boardPosts.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emoji: text("emoji").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    // Idempotent toggle: one row per (post, user, emoji). FULL unique index → a
+    // bare onConflictDoNothing is safe (no partial-index 42P10 footgun).
+    reactionUnique: uniqueIndex("board_reactions_unique").on(t.postId, t.userId, t.emoji),
+    postIdx: index("board_reactions_post_idx").on(t.postId),
+  }),
+);
+
+export type BoardPost = typeof boardPosts.$inferSelect;
+export type BoardPostImage = typeof boardPostImages.$inferSelect;
+export type BoardReaction = typeof boardReactions.$inferSelect;
+
+/* =============================================================================
  * Client change requests (PR-KLANT-1) — sibling of profile_change_requests.
  *
  * Klant edits contact + shift-location fields directly (instant save). But
