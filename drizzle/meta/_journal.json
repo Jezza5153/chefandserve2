@@ -379,6 +379,13 @@
       "when": 1781437110630,
       "tag": "0053_shift_interests",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1781447833417,
+      "tag": "0054_chef_whatsapp_enabled",
+      "breakpoints": true
     }
   ]
 }

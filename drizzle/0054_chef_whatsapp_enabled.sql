@@ -1,0 +1,1 @@
+ALTER TABLE "chefs" ADD COLUMN "whatsapp_enabled" boolean DEFAULT true NOT NULL;
