@@ -57,6 +57,41 @@ export async function listAdminPosts(limit = 50): Promise<BoardPost[]> {
     .limit(limit);
 }
 
+export type OwnerBoardPost = {
+  id: string;
+  excerpt: string;
+  pinned: boolean;
+  audience: string;
+  createdAt: Date;
+  reactionCount: number;
+};
+
+/** Owner/AI read: recent posts (pinned-first) + total reactions per post. */
+export async function listOwnerBoardActivity(limit = 20): Promise<OwnerBoardPost[]> {
+  const posts = await db
+    .select()
+    .from(boardPosts)
+    .where(isNull(boardPosts.deletedAt))
+    .orderBy(desc(boardPosts.pinned), desc(boardPosts.createdAt))
+    .limit(limit);
+  if (posts.length === 0) return [];
+  const ids = posts.map((p) => p.id);
+  const reactRows = await db
+    .select({ postId: boardReactions.postId, total: sql<number>`count(*)::int` })
+    .from(boardReactions)
+    .where(inArray(boardReactions.postId, ids))
+    .groupBy(boardReactions.postId);
+  const byPost = new Map(reactRows.map((r) => [r.postId, Number(r.total)]));
+  return posts.map((p) => ({
+    id: p.id,
+    excerpt: p.body.length > 120 ? `${p.body.slice(0, 120)}…` : p.body,
+    pinned: p.pinned,
+    audience: p.audience,
+    createdAt: p.createdAt,
+    reactionCount: byPost.get(p.id) ?? 0,
+  }));
+}
+
 export async function softDeletePost(id: string): Promise<void> {
   await db
     .update(boardPosts)

@@ -14,9 +14,11 @@ import {
   chefFeedback,
   chefTrends,
   chefProfileCompleteness,
+  chefReachability,
 } from "@/lib/ai/read-model/chef-profile";
 import {
   SUGGESTION_FIELD_LABEL,
+  listPendingSuggestions,
   writeCvSuggestions,
 } from "@/lib/domain/profile-suggestions";
 
@@ -142,6 +144,53 @@ export const chefsEnrichFromCv = defineTool({
     return {
       data: { written, diffs, confidence: extract.confidence },
       summary: `${written} voorstel(len) klaar voor review (${fields}). Bekijk en keur goed op de chef-pagina.`,
+    };
+  },
+});
+
+export const chefsReachability = defineTool({
+  name: "chefs.reachability",
+  title: "Bereikbaarheid van een chef",
+  description:
+    "Hoe je een chef kunt bereiken: in-app (bel), web push, WhatsApp (door de owner aan/uit gezet) en e-mail — als booleans. Voor 'kan ik chef X via WhatsApp of push bereiken?'. Read-only; geeft géén telefoonnummer of e-mailadres terug. Gebruik chefs.find voor het chefId.",
+  risk: "read",
+  permission: { resource: "chefs", action: "read" },
+  input: z.object({ chefId: z.string().min(1, "chefId is verplicht") }),
+  run: async (input) => {
+    const r = await chefReachability(input.chefId);
+    if (!r) throw new Error("deze chef bestaat niet (meer)");
+    const channels =
+      [r.inApp && "in-app", r.push && "push", r.whatsapp && "WhatsApp", r.email && "e-mail"]
+        .filter(Boolean)
+        .join(", ") || "geen kanaal";
+    return { data: r, summary: `${r.chef.name} bereikbaar via: ${channels}.` };
+  },
+});
+
+export const chefsPendingCvSuggestions = defineTool({
+  name: "chefs.pending_cv_suggestions",
+  title: "Openstaande CV-profielsuggesties",
+  description:
+    "De openstaande AI-profielsuggesties uit de CV van een chef (vakniveau/segmenten/specialiteiten/talen/ervaring) die nog op jouw review wachten. Voor 'welke CV-voorstellen wachten nog voor chef X?'. Read-only — goedkeuren of negeren doe je op de chef-pagina. Gebruik chefs.find voor het chefId.",
+  risk: "read",
+  permission: { resource: "chefs", action: "read" },
+  input: z.object({ chefId: z.string().min(1, "chefId is verplicht") }),
+  run: async (input) => {
+    const list = await listPendingSuggestions(input.chefId);
+    const summary =
+      list.length === 0
+        ? "Geen openstaande CV-suggesties voor deze chef."
+        : `${list.length} openstaande suggestie(s): ${list.map((s) => SUGGESTION_FIELD_LABEL[s.field] ?? s.field).join(", ")}. Keur goed op de chef-pagina.`;
+    return {
+      data: {
+        count: list.length,
+        suggestions: list.map((s) => ({
+          veld: SUGGESTION_FIELD_LABEL[s.field] ?? s.field,
+          voorstel: s.proposedValue,
+          vertrouwen: s.confidence,
+        })),
+      },
+      summary,
     };
   },
 });
