@@ -11,7 +11,7 @@
  *
  * neon-http: no interactive tx → atomic single statements + claim-then-apply.
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { recordAuditCore } from "@/lib/audit";
 import type { CvExtractResult } from "@/lib/ai/read-model/chef-cv-extract";
@@ -90,6 +90,26 @@ export async function writeCvSuggestions(
       current: chef.yearsExperience ?? null,
       proposed: f.yearsExperience,
     });
+  }
+
+  // Idempotent re-sweeps: never re-propose a field the owner or chef already
+  // ACCEPTED or DISMISSED for THIS CV version (same sourceHash). A changed CV
+  // gets a new hash, so all fields become eligible again.
+  if (diffs.length > 0) {
+    const decided = await db
+      .select({ field: profileSuggestions.field })
+      .from(profileSuggestions)
+      .where(
+        and(
+          eq(profileSuggestions.chefId, chefId),
+          eq(profileSuggestions.sourceHash, extract.sourceHash),
+          inArray(profileSuggestions.status, ["accepted", "dismissed"]),
+        ),
+      );
+    const decidedFields = new Set(decided.map((d) => d.field));
+    for (let i = diffs.length - 1; i >= 0; i--) {
+      if (decidedFields.has(diffs[i].field)) diffs.splice(i, 1);
+    }
   }
 
   // Supersede prior pending CV suggestions (atomic single statement).
