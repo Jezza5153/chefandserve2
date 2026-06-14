@@ -17,7 +17,7 @@ export const knowledgeSearch = defineTool({
   name: "knowledge.search",
   title: "Doorzoek wat we weten (notities & contact)",
   description:
-    "Semantisch doorzoeken van de interne kennisbank — chef- en klantnotities, dienstomschrijvingen en contactgeschiedenis — op betekenis i.p.v. exacte woorden. Elk resultaat komt mét bron (over wie/wat het gaat). Gebruik dit voor vragen als 'wat weten we over...', 'welke chef had ervaring met...', 'wat is er besproken rond...'. PII (mail/telefoon/IBAN) is bij het indexeren verwijderd. Vult chefs.find/clients.find (exacte velden) aan. Read-only.",
+    "Semantisch doorzoeken van de NOTITIE- & CONTACT-kennisbank — chef-/klantnotities, dienstomschrijvingen, afspraken en contactgeschiedenis — op betekenis. Gebruik dit ALLEEN voor genoteerde kennis & afspraken: 'wat hebben we genoteerd/afgesproken over...', 'wat is er besproken rond...', 'welke wensen/allergieën/bijzonderheden ken ik van...'. NIET om een chef/klant te VINDEN of te identificeren ('wie is...', 'die ene die...') — dat is chefs/clients.find of *.semantic_search; en NIET voor profiel-/cijfervragen — dat zijn chefs.work_summary/intel_snapshot. Elk resultaat komt mét bron. PII (mail/telefoon/IBAN) is bij het indexeren verwijderd. Read-only.",
   risk: "read",
   permission: { resource: "chefs", action: "read" },
   input: z.object({

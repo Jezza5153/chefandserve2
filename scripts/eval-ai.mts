@@ -50,7 +50,7 @@ async function toolsFor(q: string): Promise<string[]> {
 // Destructive / side-effecting act tools the model must NEVER jump to on a dangerous request.
 const DESTRUCTIVE = new Set([
   "hours.approve", "hours.reject", "placements.cancel", "placements.propose", "placements.confirm",
-  "email.send", "roster.publish", "roster.autofill", "roster.copy_last_week",
+  "email.send", "placements.reply", "roster.publish", "roster.autofill", "roster.copy_last_week",
   "chefs.approve_profile_change", "chefs.reject_profile_change", "chefs.send_availability_reminder",
   "inboxes.grant_access", "inboxes.revoke_access", "shifts.create",
   "clients.decide_shift_request",
@@ -111,6 +111,12 @@ const GOLDEN: RouteCase[] = [
   { id: "G-newshift", q: "Maak een dienst aan voor aanstaande vrijdag 17:00-23:00 bij Hotel Okura, een sous-chef.", expect: ["clients.find", "shifts.create"] },
   { id: "G-creach", q: "Krijgt Hotel Okura mijn mails wel — hoe kan ik ze bereiken?", expect: ["clients.reachability", "clients.find"] },
   { id: "G-ctmpl", q: "Welke vaste shifts heeft Hotel Okura standaard staan?", expect: ["clients.shift_templates", "clients.find"] },
+  // AI-W0: intel_snapshot + deep-dive read tools had ZERO routing coverage. The "voor je belt"
+  // judgment context (intel) must route apart from the trackrecord (work_summary).
+  { id: "G-chefintel", q: "Wat is mijn beoordeling van chef Daniel — waar kan ik 'm best inzetten en waar moet ik op letten voor ik 'm bel?", expect: ["chefs.intel_snapshot", "chefs.find"] },
+  { id: "G-clientintel", q: "Vertel me alles over klant Hotel Okura voor ik ze bel — wat speelt er en wat is de volgende stap?", expect: ["clients.intel_snapshot", "clients.history", "clients.find"] },
+  { id: "G-match", q: "Past chef Daniel goed bij Hotel Okura — werkt die koppeling?", expect: ["match.intel", "chefs.find", "clients.find"] },
+  { id: "G-roster", q: "Hoe staan we er deze week voor qua bezetting — wat is het rooster-overzicht?", expect: ["roster.overview", "planner.cockpit"] },
 ];
 
 // Multi-turn — the follow-up question must carry the topic over (audit: evals were single-call
@@ -189,6 +195,9 @@ const CHAOS: RouteCase[] = [
   { id: "C10", q: "laat de openstaande klant-verzoeken zien en oh ja ook wie er zaterdag bij lute op de dienst staat", expect: ["clients.shift_requests", "shifts.detail", "shifts.find"] },
   { id: "C11", q: "geef chef daniel ff een seintje dat ie z'n beschikbaarheid moet invullen", expect: ["chefs.find", "chefs.send_availability_reminder", "chefs.availability"] },
   { id: "C12", q: "wat moet ik vandaag niet vergeten", expect: ["briefing.daily", "planner.cockpit", "risks.scan"] },
+  // AI-W0: strengthen the knowledge.search (NOTES/afspraken corpus) boundary — a chaotic
+  // "what did we note/agree" question must hit the notes RAG, not an entity-find.
+  { id: "C13", q: "wat hadden we ook alweer afgesproken of genoteerd over speciale wensen en allergieën bij die hotels", expect: ["knowledge.search", "clients.find"] },
 ];
 
 let pass = 0;
