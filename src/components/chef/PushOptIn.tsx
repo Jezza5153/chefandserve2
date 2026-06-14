@@ -24,9 +24,14 @@ type State = "loading" | "unsupported" | "ios-install" | "default" | "granted" |
 export function PushOptIn({
   vapidKey,
   subscribeAction,
+  idleText = "Zet meldingen aan en je krijgt een seintje op je telefoon zodra er een nieuwe shift of urenvraag is.",
+  grantedText = "✓ Meldingen staan aan. Je krijgt een seintje op je telefoon bij een nieuwe shift of urenvraag.",
 }: {
   vapidKey: string;
   subscribeAction: (sub: SubArgs) => Promise<void>;
+  /** Audience-specific copy (defaults are chef-flavored; klant passes its own). */
+  idleText?: string;
+  grantedText?: string;
 }) {
   const [state, setState] = useState<State>("loading");
   const [busy, setBusy] = useState(false);
@@ -84,9 +89,7 @@ export function PushOptIn({
     <div className="mb-6 rounded-lg border border-ink-200 bg-white p-4">
       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">Meldingen</p>
       {state === "granted" ? (
-        <p className="mt-1 text-sm text-ink-700">
-          ✓ Meldingen staan aan. Je krijgt een seintje op je telefoon bij een nieuwe shift of urenvraag.
-        </p>
+        <p className="mt-1 text-sm text-ink-700">{grantedText}</p>
       ) : state === "ios-install" ? (
         <p className="mt-1 text-sm text-ink-700">
           Voeg Chef &amp; Serve eerst toe aan je beginscherm (deel-icoon →
@@ -98,10 +101,7 @@ export function PushOptIn({
         </p>
       ) : (
         <>
-          <p className="mt-1 text-sm text-ink-700">
-            Zet meldingen aan en je krijgt een seintje op je telefoon zodra er een
-            nieuwe shift of urenvraag is.
-          </p>
+          <p className="mt-1 text-sm text-ink-700">{idleText}</p>
           <button
             type="button"
             onClick={enable}

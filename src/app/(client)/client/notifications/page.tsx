@@ -6,9 +6,12 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { NotificationsPage } from "@/components/NotificationsPage";
+import { PushOptIn } from "@/components/chef/PushOptIn";
 import { db } from "@/lib/db/client";
 import { notificationPrefs } from "@/lib/db/schema";
 import { CLIENT_NOTIFICATION_PREFS } from "@/lib/domain/client-recipients";
+import { subscribePush } from "@/lib/domain/push-subscriptions";
+import { env } from "@/lib/env";
 import { getUnreadCount, listRecent, markAllRead, markRead } from "@/lib/integrations";
 import { setPref } from "@/lib/integrations/prefs";
 import { requireAuth } from "@/lib/permissions";
@@ -39,12 +42,25 @@ async function markAllReadAction() {
 async function savePrefsAction(formData: FormData) {
   "use server";
   const session = await requireAuth();
-  // Auth IS the lookup — prefs are keyed by the session user only.
+  // Auth IS the lookup — prefs are keyed by the session user only. setPref is an
+  // idempotent upsert of immutable boolean values, so a double-submit/replay is
+  // harmless (no nonce needed).
   for (const { event } of CLIENT_NOTIFICATION_PREFS) {
     const enabled = formData.get(`pref_${event}`) === "on";
     await setPref({ userId: session.user.id, eventKey: event, enabled });
   }
   revalidatePath("/client/notifications");
+}
+
+async function subscribePushAction(sub: {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  userAgent: string;
+}) {
+  "use server";
+  const session = await requireAuth();
+  await subscribePush({ userId: session.user.id, ...sub });
 }
 
 export default async function ClientNotificationsPage() {
@@ -65,8 +81,21 @@ export default async function ClientNotificationsPage() {
     current[event] = stored[event] !== false; // default on (V1 always-on)
   }
 
+  const vapidKey =
+    env.WEB_PUSH_ENABLED === "true" && env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      ? env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      : null;
+
   return (
     <>
+      {vapidKey ? (
+        <PushOptIn
+          vapidKey={vapidKey}
+          subscribeAction={subscribePushAction}
+          idleText="Zet meldingen aan en je krijgt een seintje op je telefoon zodra een chef is bevestigd of er uren klaarstaan om te tekenen."
+          grantedText="✓ Meldingen staan aan. Je krijgt een seintje op je telefoon bij een bevestigde chef of uren die je moet tekenen."
+        />
+      ) : null}
       <NotificationsPage
         rows={rows}
         markReadAction={markReadAction}
