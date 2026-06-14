@@ -55,6 +55,8 @@ export default async function ClientLayout({
     { label: "Mijn aanvragen", href: "/client/requests" },
     { label: "Nieuwe aanvraag", href: "/client/request" },
     { label: "Facturen", href: "/client/invoices" },
+    { label: "Agenda", href: "/client/calendar" },
+    { label: "Meldingen", href: "/client/notifications" },
     { label: "Mijn profiel", href: "/client/profile" },
     { label: "Privacy", href: "/client/privacy" },
   ];

@@ -23,8 +23,9 @@ export type ChefHit = {
   averageRating: string | null;
   ratingCount: number | null;
   status: string;
-  email: string | null;
-  phone: string | null;
+  // NB: contact details (email/phone) intentionally NOT exposed to the AI
+  // directory — routing only needs id/name/city/segment. Use chefs.work_summary
+  // for deeper detail. (AVG data-minimisation.)
 };
 
 export async function findChefs(opts: { q?: string; limit?: number }): Promise<ChefHit[]> {
@@ -54,8 +55,6 @@ export async function findChefs(opts: { q?: string; limit?: number }): Promise<C
       averageRating: chefs.averageRating,
       ratingCount: chefs.ratingCount,
       status: chefs.status,
-      email: chefs.email,
-      phone: chefs.phone,
     })
     .from(chefs)
     .where(where)
@@ -73,8 +72,8 @@ export type ClientHit = {
   segment: string | null;
   clientType: string | null;
   status: string;
-  email: string | null;
-  phone: string | null;
+  // Contact details intentionally NOT exposed to the AI directory (AVG); use
+  // clients.health / clients.reachability for deeper detail.
 };
 
 export async function findClients(opts: { q?: string; limit?: number }): Promise<ClientHit[]> {
@@ -100,8 +99,6 @@ export async function findClients(opts: { q?: string; limit?: number }): Promise
       segment: clients.segment,
       clientType: clients.clientType,
       status: clients.status,
-      email: clients.email,
-      phone: clients.phone,
     })
     .from(clients)
     .where(where)

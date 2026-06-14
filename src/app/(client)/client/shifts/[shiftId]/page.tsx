@@ -298,6 +298,11 @@ export default async function ClientShiftHubPage({
           ✓ Je opmerking is verstuurd. Chef &amp; Serve neemt die mee.
         </p>
       ) : null}
+      {sp.ok === "rated" ? (
+        <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+          ✓ Bedankt voor je feedback over de chef. Chef &amp; Serve neemt die mee.
+        </p>
+      ) : null}
       {sp.err === "duplicate" ? (
         <p className="mt-4 rounded border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">
           Je hebt al een verzoek van dit type openstaan voor deze shift. We
