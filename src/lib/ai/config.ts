@@ -29,9 +29,19 @@ export function cvProfilingEnabled(): boolean {
   return env.CV_AI_PROFILING_ENABLED === "true";
 }
 
-/** The model id used for the chat/agent brain. Embeddings use OPENAI_API_KEY directly. */
+/** The model id used for the OWNER chat/agent brain. Embeddings use OPENAI_API_KEY directly. */
 export function aiModel(): string {
   return env.OPENAI_MODEL ?? "gpt-4o";
+}
+
+/**
+ * The model id for the chef/klant PORTAL assistants. They route only 4-6 scoped tools, so a
+ * cheaper tier (e.g. gpt-5.4-mini) is indistinguishable in quality and ~3.3x cheaper + faster
+ * (AI system audit, 2026-06). Set OPENAI_PORTAL_MODEL to activate; defaults to the owner model
+ * so this is behaviour-neutral until flipped (dark-launch). The owner brain stays on aiModel().
+ */
+export function portalModel(): string {
+  return env.OPENAI_PORTAL_MODEL ?? aiModel();
 }
 
 export type AiPrice = { inputPer1M: number; outputPer1M: number; currency: string };
@@ -41,10 +51,12 @@ export type AiPrice = { inputPer1M: number; outputPer1M: number; currency: strin
  * STANDARD (uncached) input rate; OpenAI prompt-caching makes the real bill a bit lower, so
  * the card's cost is a slight upper bound. Update here if OpenAI changes pricing, or override
  * per-account with OPENAI_PRICE_*_PER_1M.
- *   gpt-5.4: $2.50 in / $15.00 out (cached input $0.25) — developers.openai.com, 2026-06.
+ *   gpt-5.4:      $2.50 in / $15.00 out (cached input $0.25) — developers.openai.com, 2026-06.
+ *   gpt-5.4-mini: $0.75 in / $4.50 out — ~3.3x cheaper; the portal-assistant tier.
  */
 const MODEL_PRICING: Record<string, AiPrice> = {
   "gpt-5.4": { inputPer1M: 2.5, outputPer1M: 15, currency: "USD" },
+  "gpt-5.4-mini": { inputPer1M: 0.75, outputPer1M: 4.5, currency: "USD" },
 };
 
 /**
