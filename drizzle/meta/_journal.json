@@ -358,6 +358,13 @@
       "when": 1781429293582,
       "tag": "0050_profile_suggestions",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1781431223296,
+      "tag": "0051_push_subscriptions",
+      "breakpoints": true
     }
   ]
 }

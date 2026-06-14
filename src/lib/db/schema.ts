@@ -2156,6 +2156,39 @@ export type ProfileSuggestion = typeof profileSuggestions.$inferSelect;
 export type NewProfileSuggestion = typeof profileSuggestions.$inferInsert;
 
 /* =============================================================================
+ * Web Push subscriptions (CHEF-14) — one row per browser/device push endpoint.
+ *
+ * createNotification() (the bell) stays the floor; notifyUser() additionally
+ * enqueues a web_push outbox event, and the deliver-push worker sends to every
+ * ACTIVE subscription for that user. endpoint is globally unique (one row per
+ * browser); re-subscribe upserts + self-heals failureCount/disabledAt. Dead
+ * endpoints (410/404) are pruned by the delivery worker.
+ * ===========================================================================*/
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent"),
+    failureCount: integer("failure_count").notNull().default(0),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    endpointUnique: uniqueIndex("push_subscriptions_endpoint_unique").on(t.endpoint),
+    userIdx: index("push_subscriptions_user_idx").on(t.userId),
+  }),
+);
+
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+
+/* =============================================================================
  * Client change requests (PR-KLANT-1) — sibling of profile_change_requests.
  *
  * Klant edits contact + shift-location fields directly (instant save). But

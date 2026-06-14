@@ -17,6 +17,7 @@ import { and, desc, eq, isNull, lt } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { notifications } from "@/lib/db/schema";
+import { enqueueIntegrationEvent } from "@/lib/integrations/outbox";
 
 export type CreateNotificationArgs = {
   userId: string;
@@ -60,6 +61,48 @@ export async function createNotification(
     );
     return { ok: false };
   }
+}
+
+export type NotifyUserArgs = CreateNotificationArgs & {
+  /** Also deliver a Web Push to the user's devices (CHEF-14, via the outbox). */
+  push?: boolean;
+};
+
+/**
+ * createNotification + (optional) phone delivery. The bell row is the floor
+ * (best-effort, inline); when `push` is set we ALSO enqueue a web_push outbox
+ * event keyed on the notification id (idempotent), which the deliver-push
+ * worker sends to the user's active subscriptions. No external call inline
+ * (house rule) — the enqueue is best-effort and never breaks the mutation.
+ */
+export async function notifyUser(args: NotifyUserArgs): Promise<{ ok: boolean; id?: string }> {
+  const { push, ...notif } = args;
+  const res = await createNotification(notif);
+  if (!res.ok || !res.id) return res;
+  if (push) {
+    try {
+      await enqueueIntegrationEvent({
+        provider: "web_push",
+        eventType: "notify.push",
+        entityType: notif.entityType ?? "notification",
+        entityId: res.id,
+        payload: {
+          userId: notif.userId,
+          title: notif.title,
+          body: notif.body ?? "",
+          url: notif.actionUrl ?? "/chef",
+          type: notif.type,
+        },
+        idempotencyKey: `notify.push:${res.id}`,
+      });
+    } catch (err) {
+      console.error(
+        "[notifications] push enqueue failed:",
+        err instanceof Error ? err.message : "unknown",
+      );
+    }
+  }
+  return res;
 }
 
 /**
