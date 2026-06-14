@@ -29,7 +29,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-type PushPayload = { userId: string; title: string; body?: string; url?: string; type?: string };
+type PushPayload = {
+  /** single-recipient (notify.push) */
+  userId?: string;
+  /** fan-out (board.new_post) */
+  userIds?: string[];
+  title: string;
+  body?: string;
+  url?: string;
+  type?: string;
+};
 
 function authorized(req: Request): boolean {
   const secret = env.CRON_SECRET;
@@ -64,34 +73,33 @@ export async function GET(req: Request): Promise<Response> {
     const batch = await claimPendingBatch({ provider: "web_push", limit: 50 });
     for (const row of batch) {
       const p = row.payloadJson as PushPayload;
-      if (!(await shouldSendToUser(p.userId, `push:${p.type ?? "all"}`))) {
-        await markSent(row.id);
-        webPush.skipped++;
-        continue;
-      }
-      const subs = await listActiveSubscriptions(p.userId);
-      if (subs.length === 0) {
-        await markSent(row.id);
-        webPush.skipped++;
-        continue;
-      }
+      // notify.push carries one userId; board.new_post fans out to userIds[].
+      const targets = p.userIds ?? (p.userId ? [p.userId] : []);
       const json = JSON.stringify({ title: p.title, body: p.body ?? "", url: p.url ?? "/chef", tag: p.type });
+      const eventKey = `push:${p.type ?? "all"}`;
+      let anyAttempt = false;
       let anyOk = false;
-      for (const s of subs) {
-        try {
-          await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, json);
-          anyOk = true;
-        } catch (err) {
-          const code = (err as { statusCode?: number }).statusCode;
-          if (code === 404 || code === 410) {
-            await pruneDeadSubscription(s.endpoint);
-            webPush.pruned++;
+      for (const uid of targets) {
+        if (!(await shouldSendToUser(uid, eventKey))) continue;
+        const subs = await listActiveSubscriptions(uid);
+        for (const s of subs) {
+          anyAttempt = true;
+          try {
+            await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, json);
+            anyOk = true;
+          } catch (err) {
+            const code = (err as { statusCode?: number }).statusCode;
+            if (code === 404 || code === 410) {
+              await pruneDeadSubscription(s.endpoint);
+              webPush.pruned++;
+            }
           }
         }
       }
-      if (anyOk) {
-        await markSent(row.id);
-        webPush.sent++;
+      if (anyOk || !anyAttempt) {
+        await markSent(row.id); // delivered, or nobody to deliver to (not a failure)
+        if (anyOk) webPush.sent++;
+        else webPush.skipped++;
       } else {
         await markFailed(row.id, "web push: no subscription accepted");
         webPush.failed++;

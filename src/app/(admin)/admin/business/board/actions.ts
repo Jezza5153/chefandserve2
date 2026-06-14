@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { recordAuditFromRequest } from "@/lib/audit";
 import {
+  announceBoardPost,
   createBoardPost,
   requestBoardImageUpload,
   setPinned,
@@ -33,6 +34,8 @@ export async function createPostAction(fd: FormData) {
     resourceId: id,
     after: { pinned, audience },
   });
+  // Fan out the new post to chefs (bell + phone push), no-op unless BOARD_ENABLED.
+  await announceBoardPost({ postId: id, body });
   revalidatePath(PATH);
   redirect(`${PATH}?ok=created`);
 }

@@ -4,7 +4,7 @@
  * chef-facing feed + the new-post fan-out (so the owner can prepare posts before
  * going live). Free-text body is DATA — always escaped on render, never fed to AI.
  */
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 import { db } from "@/lib/db/client";
@@ -12,9 +12,11 @@ import {
   boardPostImages,
   boardPosts,
   boardReactions,
+  chefs,
   type BoardPost,
 } from "@/lib/db/schema";
 import { env } from "@/lib/env";
+import { createNotificationsFanOut, enqueueIntegrationEvent } from "@/lib/integrations";
 import { boardImageKey, getDownloadUrl, getUploadUrl, isAllowedFile } from "@/lib/r2";
 
 /** The fixed emoji palette chefs can react with (keeps it tidy + abuse-resistant). */
@@ -169,6 +171,58 @@ export async function toggleReaction(args: {
       .onConflictDoNothing();
   }
   return { ok: true };
+}
+
+/* ----- new-post fan-out (in-app + phone push) — BOARD-3 -------------------- */
+
+/** Active chefs with a portal account — the audience for a new-post ping. */
+async function activeChefUserIds(): Promise<string[]> {
+  const rows = await db
+    .select({ userId: chefs.userId })
+    .from(chefs)
+    .where(and(eq(chefs.status, "active"), isNotNull(chefs.userId)));
+  return rows.map((r) => r.userId).filter((x): x is string => Boolean(x));
+}
+
+/**
+ * Announce a fresh board post: an in-app bell row per active chef (one bulk
+ * insert, best-effort) + ONE web_push outbox event (idempotency key per post)
+ * that the deliver-push worker fans out to phones. No-op unless boardEnabled().
+ * Free-text excerpt is escaped on render + never fed to AI.
+ */
+export async function announceBoardPost(args: { postId: string; body: string }): Promise<void> {
+  if (!boardEnabled()) return;
+  const userIds = await activeChefUserIds();
+  if (userIds.length === 0) return;
+  const excerpt = args.body.trim().slice(0, 120) + (args.body.trim().length > 120 ? "…" : "");
+
+  await createNotificationsFanOut(userIds, {
+    type: "board_new_post",
+    title: "Nieuw op het prikbord",
+    body: excerpt,
+    actionUrl: "/chef/board",
+    entityType: "board_post",
+    entityId: args.postId,
+  });
+
+  try {
+    await enqueueIntegrationEvent({
+      provider: "web_push",
+      eventType: "board.new_post",
+      entityType: "board_post",
+      entityId: args.postId,
+      payload: {
+        userIds,
+        title: "Nieuw op het prikbord",
+        body: excerpt,
+        url: "/chef/board",
+        type: "board_new_post",
+      },
+      idempotencyKey: `board.new_post:${args.postId}`,
+    });
+  } catch (err) {
+    console.error("[board] push fan-out enqueue failed:", err instanceof Error ? err.message : "unknown");
+  }
 }
 
 /** Admin: presign an image upload for an existing post (browser PUTs directly to R2). */
