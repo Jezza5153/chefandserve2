@@ -63,6 +63,7 @@ export const CATALOG: CatalogPerm[] = [
 
   /* ===== BUSINESS — owner-class (owner + super_admin; NOT planner) ===== */
   { key: "cockpit.read", resource: "cockpit", action: "read", class: "business", label: "Cockpit (bedrijfsoverzicht) bekijken" },
+  { key: "assistant.use", resource: "assistant", action: "use", class: "business", label: "AI-assistent gebruiken" },
   { key: "clients.read", resource: "clients", action: "read", class: "business", label: "Klanten bekijken" },
   { key: "clients.write", resource: "clients", action: "write", class: "business", label: "Klanten bewerken" },
   { key: "hours.read", resource: "hours", action: "read", class: "business", label: "Uren bekijken" },
@@ -136,6 +137,7 @@ const OWNER_PLANNER_PERMS = [
 
 const OWNER_ONLY_PERMS = [
   "cockpit.read",
+  "assistant.use",
   "clients.read", "clients.write",
   "hours.read", "hours.approve",
   "payroll.read", "payroll.export",
@@ -186,6 +188,7 @@ export const GATE_MAP: GateMapping[] = [
 
   /* ---- owner-only class ---- */
   { id: "cockpit", oldGate: "owner", perm: "cockpit.read", routes: ["/admin/business"] },
+  { id: "assistant", oldGate: "owner", perm: "assistant.use", routes: ["/admin/assistant"] },
   { id: "reporting", oldGate: "owner", perm: "cockpit.read", routes: ["/admin/business/reporting"] },
   { id: "clients", oldGate: "owner", perm: "clients.write", routes: ["/admin/business/clients", "/admin/business/clients/[id]"] },
   { id: "hours.list", oldGate: "owner", perm: "hours.read", routes: ["/admin/business/hours"] },
