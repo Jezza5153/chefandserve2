@@ -34,6 +34,8 @@ const KLANT_CASES: EvalCase[] = [
   { q: "hoeveel hebben we de afgelopen maand besteed?", expect: "onze.uren" },
   { q: "staan er nog aanvragen open?", expect: "onze.aanvragen" },
   { q: "welke chefs wachten op mijn feedback?", expect: "onze.aanvragen" },
+  // dienst_detail: needs a shiftId, so resolving via onze.diensten first is also acceptable.
+  { q: "wie staat er op mijn dienst van zaterdag en is de chef al bevestigd?", expect: ["onze.dienst_detail", "onze.diensten"] },
 ];
 
 async function runPersona(label: string, systemPrompt: string, tools: ToolSpec[], cases: EvalCase[]) {
@@ -45,9 +47,17 @@ async function runPersona(label: string, systemPrompt: string, tools: ToolSpec[]
     let ok = false;
     try {
       const step = await brain.plan({ messages: [{ role: "user", content: c.q }], tools });
-      chosen = step.kind === "tool_call" ? step.tool : `final: ${step.text.slice(0, 40)}…`;
+      // Parallel-aware (the brain batches independent tools into a `tool_calls` step
+      // since #82) — mirror the owner eval's any-of handling.
+      const called =
+        step.kind === "tool_calls"
+          ? step.calls.map((tc) => tc.tool)
+          : step.kind === "tool_call"
+            ? [step.tool]
+            : [];
+      chosen = called.length ? called.join(", ") : "final (no tool)";
       const expected = Array.isArray(c.expect) ? c.expect : [c.expect];
-      ok = step.kind === "tool_call" && expected.includes(step.tool);
+      ok = called.some((t) => expected.includes(t));
     } catch (e) {
       chosen = `error: ${e instanceof Error ? e.message : String(e)}`;
     }

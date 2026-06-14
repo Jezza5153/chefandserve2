@@ -8,6 +8,7 @@ import { z } from "zod";
 import { defineTool } from "@/lib/ai/tools/registry";
 import type { ToolContext } from "@/lib/ai/types";
 import { clientMyShifts, clientMyHours, clientMyRequests, clientMyTemplates } from "@/lib/ai/read-model/client-self";
+import { clientShiftDetail } from "@/lib/ai/read-model/client-shift-detail";
 
 function requireClientId(ctx: ToolContext): string {
   if (ctx.actor.subject?.kind !== "client" || !ctx.actor.subject.entityId) {
@@ -67,6 +68,25 @@ export const clientMyTemplatesTool = defineTool({
           ? "Jullie hebben geen vaste diensten lopen."
           : `${data.templates.length} vaste dienst(en): ${data.templates.map((t) => `${t.role} (${t.pattern})`).join("; ")}.`,
     };
+  },
+});
+
+export const clientShiftDetailTool = defineTool({
+  name: "onze.dienst_detail",
+  title: "Dienst-detail",
+  description:
+    "De volledige stand van ÉÉN van jullie diensten: wanneer, rol, status, bezetting (ingevuld/nodig) en het team (welke chef(s), met plaatsings- en uren-status). Voor 'wie staat er woensdag op de dienst?' of 'is de chef voor zaterdag al bevestigd?'. Read-only — alleen jullie eigen dienst; gebruik onze.diensten voor de shiftId.",
+  risk: "read",
+  permission: null,
+  input: z.object({ shiftId: z.string().min(1, "shiftId is verplicht") }),
+  run: async (input, ctx) => {
+    const data = await clientShiftDetail(requireClientId(ctx), input.shiftId);
+    if (!data) throw new Error("die dienst bestaat niet of hoort niet bij jullie");
+    const who =
+      data.team.length === 0
+        ? "nog geen chef bevestigd"
+        : data.team.map((t) => `${t.chef} (${t.status})`).join(", ");
+    return { data, summary: `${data.wanneer} · ${data.rol} · ${data.status} · bezetting ${data.bezetting} · ${who}.` };
   },
 });
 
