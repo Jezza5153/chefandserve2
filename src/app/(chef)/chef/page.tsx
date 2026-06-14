@@ -12,7 +12,7 @@
  * Empty states designed (no gray voids).
  */
 
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import Link from "next/link";
 
 import { ActionCard, ActionRow } from "@/components/dashboard/ActionCard";
@@ -31,6 +31,7 @@ import {
 import { getChefForecastEarnings } from "@/lib/domain/chef-forecast";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { chefOpenShiftsEnabled, listOpenShiftsForChef } from "@/lib/domain/shift-interests";
+import { getChefSummaryForChef } from "@/lib/domain/ratings";
 import { formatShiftRole } from "@/lib/labels";
 import { requireAuth } from "@/lib/permissions";
 
@@ -198,6 +199,14 @@ export default async function ChefHomePage() {
   });
   const openShiftsOn = chefOpenShiftsEnabled();
   const openCount = openShiftsOn ? (await listOpenShiftsForChef(chef.id)).length : 0;
+
+  // Mijn cijfers — afgerond + beoordeling (rating respects the ≥5 V1 rule).
+  const rating = await getChefSummaryForChef(chef.id);
+  const [doneRow] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(placements)
+    .where(and(eq(placements.chefId, chef.id), eq(placements.status, "completed")));
+  const doneCount = Number(doneRow?.n ?? 0);
 
   /* ---------------- render ---------------- */
   return (
@@ -481,6 +490,34 @@ export default async function ChefHomePage() {
             ))}
           </ul>
         )}
+      </section>
+
+      {/* MIJN CIJFERS — trots/prestatie (afgerond + beoordeling, ≥5-regel) */}
+      <section className="mt-10">
+        <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">Mijn cijfers</h2>
+        <div className="mt-3 flex gap-3">
+          <div className="flex-1 rounded-lg border border-ink-200 bg-white p-4">
+            <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Afgerond</p>
+            <p className="mt-1 text-2xl font-semibold text-ink-900">{doneCount}</p>
+            <p className="text-xs text-ink-500">{doneCount === 1 ? "dienst" : "diensten"}</p>
+          </div>
+          <div className="flex-1 rounded-lg border border-ink-200 bg-white p-4">
+            <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Beoordeling</p>
+            {rating.hasFeedback && rating.averageRating != null ? (
+              <>
+                <p className="mt-1 text-2xl font-semibold text-ink-900">
+                  {rating.averageRating.toFixed(1)}★
+                </p>
+                <p className="text-xs text-ink-500">{rating.ratingCount} beoordelingen</p>
+              </>
+            ) : (
+              <>
+                <p className="mt-1 text-2xl font-semibold text-ink-400">—</p>
+                <p className="text-xs text-ink-500">zichtbaar vanaf 5 beoordelingen</p>
+              </>
+            )}
+          </div>
+        </div>
       </section>
     </div>
   );
