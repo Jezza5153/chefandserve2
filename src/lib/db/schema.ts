@@ -2257,6 +2257,34 @@ export type BoardPostImage = typeof boardPostImages.$inferSelect;
 export type BoardReaction = typeof boardReactions.$inferSelect;
 
 /* =============================================================================
+ * Shift interests (CHEF-OPEN) — "rooster: vraag een dienst aan". A chef raises
+ * their hand on an OPEN shift; the planner still curates the actual placement
+ * (express-interest, NOT self-assign — preserves premium matching). One row per
+ * (shift, chef); withdrawnAt null = active interest.
+ * ===========================================================================*/
+export const shiftInterests = pgTable(
+  "shift_interests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    shiftId: text("shift_id")
+      .notNull()
+      .references(() => shifts.id, { onDelete: "cascade" }),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    interestUnique: uniqueIndex("shift_interests_unique").on(t.shiftId, t.chefId),
+    shiftIdx: index("shift_interests_shift_idx").on(t.shiftId),
+    chefIdx: index("shift_interests_chef_idx").on(t.chefId),
+  }),
+);
+
+export type ShiftInterest = typeof shiftInterests.$inferSelect;
+
+/* =============================================================================
  * Client change requests (PR-KLANT-1) — sibling of profile_change_requests.
  *
  * Klant edits contact + shift-location fields directly (instant save). But

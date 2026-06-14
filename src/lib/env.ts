@@ -182,6 +182,10 @@ const serverSchema = z.object({
   // chefs see nothing + no mass notification fires until the owner opts in.
   BOARD_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-OPEN — chefs browse open shifts + raise their hand ("vraag een dienst aan").
+  // Default off; express-interest only (planner still curates the placement).
+  CHEF_OPEN_SHIFTS_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
