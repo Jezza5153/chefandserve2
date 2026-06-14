@@ -27,6 +27,7 @@ import {
 } from "@/lib/db/schema";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { getChefSummaryForChef } from "@/lib/domain/ratings";
+import { listPendingSuggestions } from "@/lib/domain/profile-suggestions";
 import { formatChefRole } from "@/lib/labels";
 import { sendEmail } from "@/lib/email";
 import {
@@ -275,6 +276,7 @@ export default async function ChefProfilePage({
 
   // PR-KLANT-5: own rating summary (average only at N>=5, no comments).
   const ratingSummary = await getChefSummaryForChef(chef.id);
+  const pendingSuggestions = await listPendingSuggestions(chef.id);
 
   const flashOk =
     sp.ok === "saved"
@@ -302,6 +304,34 @@ export default async function ChefProfilePage({
         andere moeten via Chef &amp; Serve om te voorkomen dat tarieven per
         ongeluk wijzigen.
       </p>
+
+      {/* CV-AI-1: nudge to the "maak je profiel compleet" surface */}
+      <a
+        href="/chef/profile/compleet"
+        className={`mt-4 flex items-center justify-between gap-3 rounded-lg border p-4 ${
+          pendingSuggestions.length > 0
+            ? "border-sky-300 bg-sky-50/60"
+            : "border-ink-200 bg-white"
+        }`}
+      >
+        <span className="text-sm text-ink-800">
+          {pendingSuggestions.length > 0 ? (
+            <>
+              We hebben{" "}
+              <strong>
+                {pendingSuggestions.length}{" "}
+                {pendingSuggestions.length === 1 ? "voorstel" : "voorstellen"}
+              </strong>{" "}
+              uit je CV — bekijk en vul je profiel aan.
+            </>
+          ) : (
+            <>Maak je profiel compleet voor meer passende shifts.</>
+          )}
+        </span>
+        <span className="shrink-0 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy">
+          Bekijken →
+        </span>
+      </a>
 
       {flashOk ? (
         <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
