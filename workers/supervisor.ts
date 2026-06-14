@@ -107,6 +107,10 @@ const JOBS: Job[] = [
   // and stage them as pending suggestions for owner/chef review (nothing applied).
   // Idempotent (decided fields skipped per CV hash). GATED via CV_AI_PROFILING_ENABLED.
   { name: "cv-profiling", schedule: "30 4 * * *", script: "cv-profiling.ts" },
+  // Web Push delivery (every 2 min). Thin: POSTs /api/cron/deliver-push which drains
+  // the web_push outbox to chefs' phones (VAPID). Idempotent (claimed rows not re-sent).
+  // GATED via WEB_PUSH_ENABLED + VAPID keys. Default OFF.
+  { name: "push-deliver", schedule: "*/2 * * * *", script: "push-deliver.ts" },
 ];
 
 function ts(): string {

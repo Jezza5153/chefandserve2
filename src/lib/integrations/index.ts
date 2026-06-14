@@ -28,12 +28,14 @@ export {
 export {
   createNotification,
   createNotificationsFanOut,
+  notifyUser,
   getUnreadCount,
   listRecent,
   markAllRead,
   markRead,
   pruneOld as pruneOldNotifications,
   type CreateNotificationArgs,
+  type NotifyUserArgs,
 } from "./notifications";
 
 export {

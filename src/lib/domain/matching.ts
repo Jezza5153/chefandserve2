@@ -24,7 +24,7 @@ import {
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { sendEmail, formatShiftWhen } from "@/lib/email";
 import { env } from "@/lib/env";
-import { createNotification, recordEmailMessage } from "@/lib/integrations";
+import { createNotification, notifyUser, recordEmailMessage } from "@/lib/integrations";
 import { ChefProposedKlantEmail } from "@/emails/ChefProposedKlantEmail";
 import { ShiftProposedEmail } from "@/emails/ShiftProposedEmail";
 
@@ -561,6 +561,21 @@ export async function sendProposalNotifications(placementId: string): Promise<vo
         userId: chef.userId ?? undefined,
       });
     }
+  }
+
+  // 1b. Chef in-app + phone (CHEF-14): the new-shift alert lands on their phone
+  //     (push is dark until WEB_PUSH_ENABLED; the bell row always lands).
+  if (chef?.userId) {
+    await notifyUser({
+      userId: chef.userId,
+      type: "shift_proposed",
+      title: `Nieuwe shift bij ${client?.companyName ?? "een klant"}`,
+      body: `${shift.roleNeeded} — ${formatShiftWhen(shift.startsAt, shift.endsAt)}`,
+      actionUrl: `/chef/shifts/${placementId}`,
+      entityType: "placements",
+      entityId: placementId,
+      push: true,
+    });
   }
 
   // 2. Klant email + notification (PR-KLANT-3) — they see the proposed chef on

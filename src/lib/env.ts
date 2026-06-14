@@ -165,6 +165,14 @@ const serverSchema = z.object({
   // Default off; chefs.enrich_from_cv tool + nightly sweep no-op until set.
   CV_AI_PROFILING_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-14 — Web Push. All optional → the feature stays dark until the owner
+  // generates a VAPID keypair (`npx web-push generate-vapid-keys`) + flips the flag.
+  // VAPID_PUBLIC_KEY must equal NEXT_PUBLIC_VAPID_PUBLIC_KEY (client uses the latter).
+  WEB_PUSH_ENABLED: z.enum(["true", "false"]).optional(),
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
@@ -174,6 +182,8 @@ const clientSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url(),
   /** Optional — when present, the login page renders the Turnstile widget. */
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().optional(),
+  /** CHEF-14 — VAPID public key for Web Push subscribe (safe to expose). */
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().optional(),
 });
 
 /* ----------------------------- parse ------------------------------------ */
@@ -186,6 +196,7 @@ const processClientEnv = {
   NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
 };
 
 /* ----------------------------- runtime parse logic ---------------------- */

@@ -35,6 +35,7 @@ import {
 } from "@/lib/hours-labels";
 import {
   createNotification,
+  notifyUser,
   enqueueIntegrationEvent,
   recordEmailMessage,
 } from "@/lib/integrations";
@@ -364,7 +365,7 @@ export async function rejectHoursRow(args: {
   const editUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/chef/hours/${ctx.placementId}`;
 
   if (ctx.chefUserId) {
-    await createNotification({
+    await notifyUser({
       userId: ctx.chefUserId,
       type: "hours_rejected_by_admin",
       title: "Chef & Serve heeft je uren teruggezet",
@@ -372,6 +373,7 @@ export async function rejectHoursRow(args: {
       actionUrl: "/chef/hours",
       entityType: "shift_hours",
       entityId: args.hoursId,
+      push: true,
     });
   }
   if (ctx.clientUserId) {
