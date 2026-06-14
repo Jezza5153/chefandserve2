@@ -28,6 +28,9 @@ import {
   computeChefAmountCents,
   formatEuro,
 } from "@/lib/hours-labels";
+import { getChefForecastEarnings } from "@/lib/domain/chef-forecast";
+import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
+import { chefOpenShiftsEnabled, listOpenShiftsForChef } from "@/lib/domain/shift-interests";
 import { formatShiftRole } from "@/lib/labels";
 import { requireAuth } from "@/lib/permissions";
 
@@ -176,6 +179,26 @@ export default async function ChefHomePage() {
     (u) => new Date(u.s.startsAt).getTime() > now.getTime() && new Date(u.s.startsAt) <= horizon,
   );
 
+  // Cockpit KPIs (forecast · profielvolledigheid · open diensten).
+  const forecast = await getChefForecastEarnings(chef.id);
+  const completeness = getProfileCompleteness({
+    vakniveau: chef.vakniveau,
+    city: chef.city,
+    segments: chef.segments,
+    yearsExperience: chef.yearsExperience,
+    hourlyRateMinCents: chef.hourlyRateMinCents,
+    hourlyRateMaxCents: chef.hourlyRateMaxCents,
+    email: chef.email,
+    phone: chef.phone,
+    specialties: chef.specialties,
+    languages: chef.languages,
+    postcode: chef.postcode,
+    transportMode: chef.transportMode,
+    preferences: chef.preferences,
+  });
+  const openShiftsOn = chefOpenShiftsEnabled();
+  const openCount = openShiftsOn ? (await listOpenShiftsForChef(chef.id)).length : 0;
+
   /* ---------------- render ---------------- */
   return (
     <div>
@@ -207,6 +230,46 @@ export default async function ChefHomePage() {
           </span>
         </Link>
       ) : null}
+
+      {/* COCKPIT — forecast · profiel · open diensten (compact KPI tiles) */}
+      <div className="mt-6 flex gap-3">
+        <Link
+          href="/chef/earnings"
+          className="min-w-0 flex-1 rounded-lg border border-ink-200 bg-white p-4 hover:border-burgundy/40"
+        >
+          <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Verwacht</p>
+          <p className="mt-1 truncate text-xl font-semibold text-ink-900">
+            {forecast.totalShifts > 0
+              ? `${forecast.hasRange ? "vanaf " : ""}${formatEuro(forecast.totalMinCents)}`
+              : "—"}
+          </p>
+          <p className="truncate text-xs text-ink-500">
+            {forecast.totalShifts > 0 ? `${forecast.totalShifts} shift(s) · ${forecast.daysAhead}d` : "nog niet ingepland"}
+          </p>
+        </Link>
+        <Link
+          href="/chef/profile/compleet"
+          className="min-w-0 flex-1 rounded-lg border border-ink-200 bg-white p-4 hover:border-burgundy/40"
+        >
+          <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Profiel</p>
+          <p className="mt-1 text-xl font-semibold text-ink-900">{completeness.score}%</p>
+          <p className="truncate text-xs text-ink-500">
+            {completeness.score >= 80 ? "compleet" : "maak compleet →"}
+          </p>
+        </Link>
+        {openShiftsOn ? (
+          <Link
+            href="/chef/open"
+            className="min-w-0 flex-1 rounded-lg border border-ink-200 bg-white p-4 hover:border-burgundy/40"
+          >
+            <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Open</p>
+            <p className="mt-1 text-xl font-semibold text-ink-900">{openCount}</p>
+            <p className="truncate text-xs text-ink-500">
+              {openCount > 0 ? "meld je aan →" : "geen nu"}
+            </p>
+          </Link>
+        ) : null}
+      </div>
 
       {/* VANDAAG */}
       {todayShifts.length > 0 && (
