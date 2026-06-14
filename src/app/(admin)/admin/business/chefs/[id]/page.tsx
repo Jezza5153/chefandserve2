@@ -333,6 +333,22 @@ export default async function ChefDetailPage({
     revalidatePath(`/admin/business/chefs/${id}`);
   }
 
+  // CHEF-15: owner-controlled WhatsApp recipient toggle (chefs cannot opt out).
+  async function toggleWhatsapp(formData: FormData) {
+    "use server";
+    const session = await requirePermission("chefs", "write");
+    const enable = String(formData.get("enable") ?? "") === "true";
+    await db.update(chefs).set({ whatsappEnabled: enable, updatedAt: new Date() }).where(eq(chefs.id, id));
+    await recordAuditFromRequest({
+      userId: session.user.id,
+      action: "chefs.whatsapp_toggled",
+      resource: "chefs",
+      resourceId: id,
+      after: { whatsappEnabled: enable },
+    });
+    revalidatePath(`/admin/business/chefs/${id}`);
+  }
+
   async function updateBasics(formData: FormData) {
     "use server";
     const session = await requirePermission("chefs", "write");
@@ -586,6 +602,35 @@ export default async function ChefDetailPage({
         approveProfileChange={approveProfileChange}
         rejectProfileChange={rejectProfileChange}
       />
+
+      {/* CHEF-15: owner-controlled WhatsApp recipient toggle (chefs can't opt out). */}
+      <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+              WhatsApp-meldingen
+            </h2>
+            <p className="mt-1 text-sm text-ink-700">
+              {chef.whatsappEnabled
+                ? "Deze chef ontvangt WhatsApp-meldingen."
+                : "Deze chef ontvangt GEEN WhatsApp-meldingen."}{" "}
+              Jij bepaalt dit — de chef kan het zelf niet uitzetten.
+            </p>
+          </div>
+          <form action={toggleWhatsapp} className="shrink-0">
+            <input type="hidden" name="enable" value={chef.whatsappEnabled ? "false" : "true"} />
+            <button
+              className={`rounded-full px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] ${
+                chef.whatsappEnabled
+                  ? "border border-ink-300 bg-white text-ink-700 hover:bg-bg-gray"
+                  : "bg-burgundy text-white hover:bg-burgundy/90"
+              }`}
+            >
+              {chef.whatsappEnabled ? "Uitzetten" : "Aanzetten"}
+            </button>
+          </form>
+        </div>
+      </section>
 
       {/* CV-AI-1: AI-proposed profile enrichments from the chef's CV (owner review) */}
       <CvSuggestions

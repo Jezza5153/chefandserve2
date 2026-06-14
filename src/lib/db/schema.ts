@@ -833,6 +833,10 @@ export const chefs = pgTable("chefs", {
 
   /* ----- PR-2: structured Jotform intake (feeds matching + filters) ----- */
   transportMode: transportModeEnum("transport_mode"),
+  /** OWNER-controlled WhatsApp toggle (CHEF-15). The owner chooses who receives
+   *  WhatsApp; chefs cannot opt out. Default on; the deliver-push WhatsApp branch
+   *  skips a chef when this is false. (Gated globally by CHEF_WHATSAPP_ENABLED.) */
+  whatsappEnabled: boolean("whatsapp_enabled").notNull().default(true),
   /** Multi-pick "what you like most": bbq/breakfast/banqueting/beachclub/early_shifts/hotels/restaurants/michelin/flexible. */
   preferences: text("preferences").array(),
   employmentType: employmentTypeEnum("employment_type"),

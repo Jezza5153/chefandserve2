@@ -123,12 +123,14 @@ export async function GET(req: Request): Promise<Response> {
         continue;
       }
       const [chef] = await db
-        .select({ phone: chefs.phone })
+        .select({ phone: chefs.phone, whatsappEnabled: chefs.whatsappEnabled })
         .from(chefs)
         .where(eq(chefs.userId, p.userId))
         .limit(1);
-      if (!chef?.phone) {
-        await markSent(row.id); // no phone on file — nothing to do, not a failure
+      // No phone, or the OWNER turned WhatsApp off for this chef (CHEF-15 —
+      // owner curates recipients; chefs cannot opt out) → nothing to do.
+      if (!chef?.phone || !chef.whatsappEnabled) {
+        await markSent(row.id);
         whatsapp.skipped++;
         continue;
       }
