@@ -837,6 +837,8 @@ export const chefs = pgTable("chefs", {
    *  WhatsApp; chefs cannot opt out. Default on; the deliver-push WhatsApp branch
    *  skips a chef when this is false. (Gated globally by CHEF_WHATSAPP_ENABLED.) */
   whatsappEnabled: boolean("whatsapp_enabled").notNull().default(true),
+  /** Last time the chef opened /chef/board — drives the "nieuw" marker (CHEF-OPEN). */
+  boardSeenAt: timestamp("board_seen_at", { withTimezone: true }),
   /** Multi-pick "what you like most": bbq/breakfast/banqueting/beachclub/early_shifts/hotels/restaurants/michelin/flexible. */
   preferences: text("preferences").array(),
   employmentType: employmentTypeEnum("employment_type"),

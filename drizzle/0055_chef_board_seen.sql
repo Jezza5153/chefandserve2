@@ -1,0 +1,1 @@
+ALTER TABLE "chefs" ADD COLUMN "board_seen_at" timestamp with time zone;

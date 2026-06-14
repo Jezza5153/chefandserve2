@@ -386,6 +386,13 @@
       "when": 1781447833417,
       "tag": "0054_chef_whatsapp_enabled",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1781448064308,
+      "tag": "0055_chef_board_seen",
+      "breakpoints": true
     }
   ]
 }
