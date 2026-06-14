@@ -21,6 +21,7 @@ import {
   shifts,
 } from "@/lib/db/schema";
 import { addPlacementComment, listVisibleComments } from "@/lib/domain/comments";
+import { listInterestedChefs } from "@/lib/domain/shift-interests";
 import { saveMatchIntel } from "@/lib/domain/intel";
 import { completePlacement } from "@/lib/domain/hours-admin";
 import {
@@ -100,6 +101,9 @@ export default async function ShiftDetailPage({
     confirmedCount < shift.headcount
       ? await findMatchesForShift(id, { limit: 10 })
       : [];
+
+  // CHEF-OPEN: chefs who raised their hand via "Open diensten" (express-interest).
+  const interestedChefs = await listInterestedChefs(id);
 
   // PR-1.5 "Vul deze dienst" — enrich candidates with proof signals (current
   // data only: full chef row for rate/contact/completeness + worked-here count
@@ -874,6 +878,40 @@ export default async function ShiftDetailPage({
           completePlacementAction={completePlacementAction}
         />
       )}
+
+      {/* CHEF-OPEN: chefs who raised their hand via "Open diensten" (shown
+          independently of the algorithmic suggestions). */}
+      {interestedChefs.length > 0 ? (
+        <section className="mt-6 rounded-lg border border-emerald-300 bg-emerald-50/40 p-5">
+          <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+            Chefs met interesse ({interestedChefs.length})
+          </h2>
+          <p className="mt-1 text-sm text-ink-700">
+            Deze chefs meldden zich aan via &quot;Open diensten&quot;. Stel er één voor om te bevestigen.
+          </p>
+          <ul className="mt-3 space-y-2">
+            {interestedChefs.map((c) => (
+              <li
+                key={c.chefId}
+                className="flex items-center justify-between gap-3 rounded-lg border border-ink-200 bg-white p-3"
+              >
+                <Link
+                  href={`/admin/business/chefs/${c.chefId}`}
+                  className="text-sm font-medium text-ink-900 hover:text-burgundy"
+                >
+                  {c.name}
+                </Link>
+                <form action={propose}>
+                  <input type="hidden" name="chefId" value={c.chefId} />
+                  <button className="rounded-full bg-burgundy px-4 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy/90">
+                    Voorstel
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {/* Match suggestions */}
       {matches.length > 0 && (

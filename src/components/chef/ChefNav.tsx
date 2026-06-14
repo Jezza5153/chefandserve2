@@ -24,6 +24,7 @@ const PRIMARY: NavItem[] = [
 ];
 
 const MORE: NavItem[] = [
+  { label: "Open diensten", href: "/chef/open", icon: "plus-circle" },
   { label: "Verdiensten", href: "/chef/earnings", icon: "wallet" },
   { label: "Mijn profiel", href: "/chef/profile", icon: "user-round" },
   { label: "Meldingen", href: "/chef/notifications", icon: "bell" },

@@ -372,6 +372,13 @@
       "when": 1781432294282,
       "tag": "0052_board",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1781437110630,
+      "tag": "0053_shift_interests",
+      "breakpoints": true
     }
   ]
 }
