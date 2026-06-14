@@ -15,7 +15,8 @@ import {
 } from "@/lib/db/schema";
 import { isValidEmail } from "@/lib/forms/validation";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
-import { buildClientTrends, getClientSummary } from "@/lib/domain/client-history";
+import { buildClientTrends, getClientRecentShifts, getClientSummary } from "@/lib/domain/client-history";
+import { clientDocTypes, listClientDocuments } from "@/lib/domain/client-documents";
 import { computeClientHealth } from "@/lib/domain/client-health";
 import { getClientIntelSnapshot } from "@/lib/domain/intel";
 import { getClientDailySeries } from "@/lib/domain/metrics-history";
@@ -29,8 +30,9 @@ import { enqueueIntegrationEvent, recordEmailMessage } from "@/lib/integrations"
 import { requirePermission } from "@/lib/permissions";
 import { DetailShell } from "@/components/ui/DetailShell";
 import { BasicsForm } from "./_components/BasicsForm";
-import { Binnenkort } from "./_components/Binnenkort";
 import { ChangeRequestsSection } from "./_components/ChangeRequestsSection";
+import { ClientDocumentsSection } from "./_components/ClientDocumentsSection";
+import { ClientShiftsSection } from "./_components/ClientShiftsSection";
 import { ClientTypeSection } from "./_components/ClientTypeSection";
 import { ClientHealthCard } from "./_components/ClientHealthCard";
 import { KlantBreinCard } from "./_components/KlantBreinCard";
@@ -87,11 +89,15 @@ export default async function ClientDetailPage({
 
   // KPI-3: Klant 360 — live point-in-time summary + 8-week snapshot trends.
   // PR-INTEL: booking patterns + chef relationships (weekday histogram, role mix, vaste chefs).
-  const [clientSummary, clientSeries, snapshot] = await Promise.all([
-    getClientSummary(id),
-    getClientDailySeries(id, 90),
-    getClientIntelSnapshot(id),
-  ]);
+  const [clientSummary, clientSeries, snapshot, recentShifts, clientDocs, docTypes] =
+    await Promise.all([
+      getClientSummary(id),
+      getClientDailySeries(id, 90),
+      getClientIntelSnapshot(id),
+      getClientRecentShifts(id),
+      listClientDocuments(id),
+      clientDocTypes(id),
+    ]);
   if (!snapshot) notFound();
   const clientTrends = buildClientTrends(clientSeries);
   // Klant 360 verdict — "goede klant?" (computed inline; summary + status already loaded).
@@ -513,7 +519,14 @@ export default async function ClientDetailPage({
         clientChangeFieldLabel={clientChangeFieldLabel}
       />
 
-      <Binnenkort />
+      {/* K2: live drill-down — recent/upcoming shifts + documents & onboarding readiness.
+          Facturen + betaalstatus stays out (invoicing chat's lane). */}
+      <ClientShiftsSection shifts={recentShifts} clientId={id} />
+      <ClientDocumentsSection
+        documents={clientDocs}
+        onboardingStatus={client.onboardingStatus}
+        hasRie={docTypes.has("rie_document")}
+      />
     </DetailShell>
   );
 }
