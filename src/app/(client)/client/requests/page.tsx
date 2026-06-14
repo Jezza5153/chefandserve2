@@ -185,6 +185,14 @@ export default async function ClientRequestsPage({
                       <p className="mt-1 text-xs text-ink-700">
                         {requestStatusNextStep(s.status)}
                       </p>
+                      {s.convertedToShiftId ? (
+                        <Link
+                          href={`/client/shifts/${s.convertedToShiftId}`}
+                          className="mt-1 inline-block font-ui text-[10px] uppercase tracking-[0.15em] text-burgundy hover:underline"
+                        >
+                          Omgezet naar dienst — bekijk dienst →
+                        </Link>
+                      ) : null}
                     </div>
                     <RequestStatusBadge status={s.status} />
                   </div>
