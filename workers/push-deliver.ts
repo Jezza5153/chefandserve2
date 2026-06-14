@@ -15,11 +15,13 @@ import { log } from "./_lib";
 
 const APP = process.env.NEXT_PUBLIC_APP_URL ?? "https://chefandserve2.vercel.app";
 const SECRET = process.env.CRON_SECRET;
-const ENABLED = process.env.WEB_PUSH_ENABLED === "true";
+// Drains BOTH web_push and whatsapp outbox events — run if either channel is on.
+const ENABLED =
+  process.env.WEB_PUSH_ENABLED === "true" || process.env.CHEF_WHATSAPP_ENABLED === "true";
 
 async function main(): Promise<void> {
   if (!ENABLED) {
-    log("push-deliver: disabled (WEB_PUSH_ENABLED != true) → skip");
+    log("push-deliver: disabled (WEB_PUSH_ENABLED & CHEF_WHATSAPP_ENABLED off) → skip");
     return;
   }
   if (!SECRET) {

@@ -66,6 +66,8 @@ export async function createNotification(
 export type NotifyUserArgs = CreateNotificationArgs & {
   /** Also deliver a Web Push to the user's devices (CHEF-14, via the outbox). */
   push?: boolean;
+  /** Also deliver a WhatsApp message (CHEF-15): a Meta-approved template + params. */
+  whatsapp?: { template: string; params: Record<string, string | number> };
 };
 
 /**
@@ -76,7 +78,7 @@ export type NotifyUserArgs = CreateNotificationArgs & {
  * (house rule) — the enqueue is best-effort and never breaks the mutation.
  */
 export async function notifyUser(args: NotifyUserArgs): Promise<{ ok: boolean; id?: string }> {
-  const { push, ...notif } = args;
+  const { push, whatsapp, ...notif } = args;
   const res = await createNotification(notif);
   if (!res.ok || !res.id) return res;
   if (push) {
@@ -98,6 +100,28 @@ export async function notifyUser(args: NotifyUserArgs): Promise<{ ok: boolean; i
     } catch (err) {
       console.error(
         "[notifications] push enqueue failed:",
+        err instanceof Error ? err.message : "unknown",
+      );
+    }
+  }
+  if (whatsapp) {
+    try {
+      await enqueueIntegrationEvent({
+        provider: "whatsapp",
+        eventType: "notify.whatsapp",
+        entityType: notif.entityType ?? "notification",
+        entityId: res.id,
+        payload: {
+          userId: notif.userId,
+          template: whatsapp.template,
+          params: whatsapp.params,
+          type: notif.type,
+        },
+        idempotencyKey: `notify.whatsapp:${res.id}`,
+      });
+    } catch (err) {
+      console.error(
+        "[notifications] whatsapp enqueue failed:",
         err instanceof Error ? err.message : "unknown",
       );
     }

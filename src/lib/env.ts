@@ -173,6 +173,10 @@ const serverSchema = z.object({
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().optional(),
 
+  // CHEF-15 — WhatsApp delivery for chef notifications (via sent.dm). Default off;
+  // needs SENT_DM_API_KEY + Meta-approved templates. The high-urgency safety net.
+  CHEF_WHATSAPP_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
