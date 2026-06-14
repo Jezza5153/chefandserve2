@@ -75,6 +75,8 @@ const SAMPLE: Record<string, unknown> = {
   "contacts.log": { targetType: "chef", targetId: "x", channel: "phone", note: "test notitie" },
   "clients.decide_shift_request": { requestId: "x", decision: "rejected" },
   "placements.reply": { placementId: "x", body: "test bericht" },
+  "placements.complete": { placementId: "x" },
+  "chefs.request_profile_data": { chefId: "x", fields: ["BSN"] },
   "intake.convert": { submissionId: "x", kind: "chef" },
   "chefs.enrich_from_cv": { chefId: "x" },
   "chefs.reachability": { chefId: "x" },

@@ -14,7 +14,7 @@ import {
   hoursSendReminder,
 } from "@/lib/ai/tools/hours";
 import { shiftsOpenSoon, insightsLeaderboards, integrationsHealth } from "@/lib/ai/tools/ops";
-import { placementsPropose, placementsConfirm, placementsCancel } from "@/lib/ai/tools/placements";
+import { placementsPropose, placementsConfirm, placementsCancel, placementsComplete } from "@/lib/ai/tools/placements";
 import { chefsFind, clientsFind, shiftsFind } from "@/lib/ai/tools/directory";
 import { emailSend } from "@/lib/ai/tools/comms";
 import { remindersCreate, remindersList, remindersComplete } from "@/lib/ai/tools/reminders";
@@ -33,6 +33,7 @@ import {
   chefsEnrichFromCv,
   chefsReachability,
   chefsPendingCvSuggestions,
+  chefsRequestProfileData,
 } from "@/lib/ai/tools/chef-profile";
 import { rosterOverview, rosterPublish, rosterAutofill, rosterCopyLastWeek } from "@/lib/ai/tools/roster";
 import { clientsHistory, clientsHealth, clientsReachability, clientsShiftTemplates } from "@/lib/ai/tools/clients";
@@ -139,6 +140,7 @@ export const ALL_TOOLS: AnyTool[] = [
   placementsPropose,
   placementsConfirm,
   placementsCancel,
+  placementsComplete,
   placementsReply,
   rosterPublish,
   rosterAutofill,
@@ -149,6 +151,7 @@ export const ALL_TOOLS: AnyTool[] = [
   chefsSendAvailabilityReminder,
   contactsLog,
   clientsDecideShiftRequest,
+  chefsRequestProfileData,
   intakeConvert,
   onboardingRequestMissing,
   // personal — Maarten's own to-remember list

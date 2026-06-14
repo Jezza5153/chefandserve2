@@ -21,6 +21,7 @@ import {
   listPendingSuggestions,
   writeCvSuggestions,
 } from "@/lib/domain/profile-suggestions";
+import { createProfileDataRequest } from "@/lib/domain/profile-data-requests";
 
 export const chefsWorkSummary = defineTool({
   name: "chefs.work_summary",
@@ -191,6 +192,35 @@ export const chefsPendingCvSuggestions = defineTool({
         })),
       },
       summary,
+    };
+  },
+});
+
+export const chefsRequestProfileData = defineTool({
+  name: "chefs.request_profile_data",
+  title: "Ontbrekende chef-gegevens opvragen",
+  description:
+    "Vraagt een chef per e-mail (of WhatsApp) om specifieke ontbrekende gegevens aan te vullen (bijv. BSN, IBAN, ID-kopie, dienstverband). Pairt met chefs.profile_completeness — gebruik dat eerst om te zien wat mist, en noem dan precies welke velden je opvraagt. De chef krijgt een portaal-link. Bevestiging vereist.",
+  risk: "outbound",
+  permission: { resource: "chefs", action: "write" },
+  input: z.object({
+    chefId: z.string().min(1, "chefId is verplicht"),
+    fields: z.array(z.string().min(1)).min(1, "geef minstens één veld op dat je opvraagt"),
+    channel: z.enum(["email", "whatsapp"]).optional(),
+  }),
+  describeAction: (input) =>
+    `Chef ${input.chefId} per ${input.channel ?? "e-mail"} vragen om aan te vullen: ${input.fields.join(", ")}.`,
+  run: async (input, ctx) => {
+    const res = await createProfileDataRequest({
+      chefId: input.chefId,
+      requestedFields: input.fields,
+      channel: input.channel ?? "email",
+      createdBy: ctx.actor.requestedByUserId,
+    });
+    if (!res.ok) throw new Error(res.error ?? "kon het verzoek niet versturen");
+    return {
+      data: { id: res.id, fields: input.fields },
+      summary: `Verzoek verstuurd — de chef is gevraagd om ${input.fields.length} ontbrekend(e) veld(en) aan te vullen.`,
     };
   },
 });
