@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
-type Pending = { tool: string; input: unknown; summary: string; token: string };
+type Pending = { tool: string; input: unknown; summary: string; token: string; risk?: string };
 
 type ApiResponse = {
   disabled?: boolean;
@@ -14,11 +14,25 @@ type ApiResponse = {
     | { kind: "final"; text: string }
     | {
         kind: "awaiting_confirmation";
-        confirmation: { summary: string; token: string };
+        confirmation: { summary: string; token: string; risk?: string };
         pending: { tool: string; input: unknown };
       };
   result?: { status: string; summary?: string; reason?: string; error?: string };
 };
+
+/** Map the action's risk tier → a consequence-legible badge in the confirm-gate. */
+function riskBadge(risk?: string): { label: string; cls: string } | null {
+  switch (risk) {
+    case "financial":
+      return { label: "Financieel — onomkeerbaar", cls: "bg-red-100 text-red-800" };
+    case "outbound":
+      return { label: "Verstuurt een bericht", cls: "bg-orange-100 text-orange-800" };
+    case "self":
+      return { label: "Wijziging", cls: "bg-amber-100 text-amber-800" };
+    default:
+      return null;
+  }
+}
 
 /**
  * The owner assistant's chat surface. Used by both the dedicated /admin/assistant page
@@ -179,6 +193,7 @@ export function AssistantChat({
         input: o.pending.input,
         summary: o.confirmation.summary,
         token: o.confirmation.token,
+        risk: o.confirmation.risk,
       });
     }
   }
@@ -306,8 +321,29 @@ export function AssistantChat({
             ) : null}
           </div>
         ))}
+        {busy && !pending && msgs[msgs.length - 1]?.role === "user" && (
+          <div className="text-left" aria-live="polite">
+            <span className="inline-flex items-center gap-1 rounded-lg bg-ink-100 px-3 py-2 text-sm text-ink-500">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-400 [animation-delay:-0.3s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-400 [animation-delay:-0.15s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-400" />
+            </span>
+          </div>
+        )}
         {pending && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+          <div
+            className={`rounded-lg border p-3 text-sm ${
+              pending.risk === "financial" ? "border-red-300 bg-red-50" : "border-amber-300 bg-amber-50"
+            }`}
+          >
+            {(() => {
+              const badge = riskBadge(pending.risk);
+              return badge ? (
+                <span className={`mb-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${badge.cls}`}>
+                  {badge.label}
+                </span>
+              ) : null;
+            })()}
             <p className="text-ink-900">{pending.summary}</p>
             <div className="mt-2 flex gap-2">
               <button

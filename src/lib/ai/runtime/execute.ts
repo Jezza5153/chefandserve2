@@ -72,7 +72,11 @@ export async function executeTool(
     }
     if (!verifyConfirmToken({ ...tokenArgs, token: ctx.confirmation })) {
       await audit("blocked", { reason: "bad_confirmation" });
-      return { status: "denied", reason: "Bevestiging ongeldig of verlopen — vraag het opnieuw." };
+      return {
+        status: "denied",
+        reason:
+          "Bevestiging verlopen of ongeldig — vraag de AI om de actie opnieuw op te stellen. De gegevens kunnen inmiddels veranderd zijn, dus check ze nog even voor je bevestigt.",
+      };
     }
   }
 
