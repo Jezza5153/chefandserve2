@@ -1,0 +1,1 @@
+ALTER TABLE "client_submissions" ADD COLUMN "converted_to_shift_id" uuid;

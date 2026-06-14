@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -6,12 +6,15 @@ import { db } from "@/lib/db/client";
 import { recordAuditFromRequest } from "@/lib/audit";
 import {
   chefSubmissions,
+  clients,
   clientSubmissions,
+  shifts,
 } from "@/lib/db/schema";
 import {
   convertChefSubmission,
   convertClientSubmission,
 } from "@/lib/domain/conversions";
+import { createNotification } from "@/lib/integrations";
 import { isErasedResubmission } from "@/lib/domain/privacy-subject";
 import { requirePermission } from "@/lib/permissions";
 
@@ -21,11 +24,22 @@ type Params = { kind: "chef" | "client"; id: string };
 
 export default async function InboxDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<Params>;
+  searchParams: Promise<{ ok?: string; err?: string }>;
 }) {
   await requirePermission("inbox", "triage");
   const { kind, id } = await params;
+  const sp = await searchParams;
+  const flash =
+    sp.ok === "fulfilled"
+      ? { tone: "ok" as const, msg: "✓ Aanvraag gemarkeerd als opgepakt — de klant is op de hoogte." }
+      : sp.err === "bad-shift"
+        ? { tone: "err" as const, msg: "Die dienst bestaat niet of hoort niet bij deze klant." }
+        : sp.err === "stale"
+          ? { tone: "err" as const, msg: "Deze aanvraag is al verwerkt." }
+          : null;
 
   if (kind !== "chef" && kind !== "client") notFound();
 
@@ -161,6 +175,87 @@ export default async function InboxDetailPage({
     }
   }
 
+  // K3: a portal request from an EXISTING klant doesn't need a new client record —
+  // the office just makes a shift for it. Mark the submission opgepakt (+ optionally
+  // link the shift) so the klant's "Mijn aanvragen" resolves instead of sitting at
+  // 'triaged' forever. Atomic status advance; reject 0 rows (stale).
+  async function markFulfilledByShift(formData: FormData) {
+    "use server";
+    const session = await requirePermission("inbox", "triage");
+    const shiftIdRaw = String(formData.get("shiftId") ?? "").trim();
+
+    const [sub] = await db
+      .select({ clientId: clientSubmissions.clientId })
+      .from(clientSubmissions)
+      .where(eq(clientSubmissions.id, id))
+      .limit(1);
+    if (!sub) redirect(`/admin/business/inbox/client/${id}?err=gone`);
+
+    // If a shift id is supplied, it must exist and belong to this klant.
+    let linkedShiftId: string | null = null;
+    if (shiftIdRaw) {
+      const [s] = await db
+        .select({ id: shifts.id, clientId: shifts.clientId })
+        .from(shifts)
+        .where(eq(shifts.id, shiftIdRaw))
+        .limit(1);
+      if (!s || (sub!.clientId && s.clientId !== sub!.clientId)) {
+        redirect(`/admin/business/inbox/client/${id}?err=bad-shift`);
+      }
+      linkedShiftId = s.id;
+    }
+
+    const flipped = await db
+      .update(clientSubmissions)
+      .set({
+        status: "converted",
+        convertedToShiftId: linkedShiftId,
+        triagedAt: new Date(),
+        triagedBy: session.user.id,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(clientSubmissions.id, id),
+          inArray(clientSubmissions.status, ["new", "triaged"]),
+        ),
+      )
+      .returning({ id: clientSubmissions.id });
+    if (flipped.length === 0) redirect(`/admin/business/inbox/client/${id}?err=stale`);
+
+    await recordAuditFromRequest({
+      userId: session.user.id,
+      action: "intake.fulfilled_by_shift",
+      resource: "client_submission",
+      resourceId: id,
+      after: { shiftId: linkedShiftId },
+    });
+
+    // Tell the klant their request is picked up (best-effort — never blocks the flip).
+    if (sub!.clientId) {
+      const [c] = await db
+        .select({ userId: clients.userId })
+        .from(clients)
+        .where(eq(clients.id, sub!.clientId))
+        .limit(1);
+      if (c?.userId) {
+        await createNotification({
+          userId: c.userId,
+          type: "request_fulfilled",
+          title: "Je aanvraag is opgepakt",
+          body: linkedShiftId
+            ? "We hebben je personeelsaanvraag omgezet naar een dienst. Bekijk 'm in je overzicht."
+            : "We hebben je personeelsaanvraag opgepakt en nemen contact op.",
+          actionUrl: linkedShiftId ? `/client/shifts/${linkedShiftId}` : "/client/requests",
+          entityType: "client_submission",
+          entityId: id,
+        });
+      }
+    }
+
+    redirect(`/admin/business/inbox/client/${id}?ok=fulfilled`);
+  }
+
   /* ----- view -------------------------------------------------------- */
   return (
     <div className="mx-auto max-w-3xl">
@@ -172,6 +267,18 @@ export default async function InboxDetailPage({
           ← Terug naar inbox
         </Link>
       </div>
+
+      {flash ? (
+        <p
+          className={`mb-6 rounded border px-4 py-2 text-sm ${
+            flash.tone === "ok"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-burgundy/30 bg-burgundy/5 text-burgundy"
+          }`}
+        >
+          {flash.msg}
+        </p>
+      ) : null}
 
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -268,6 +375,37 @@ export default async function InboxDetailPage({
                 Afwijzen
               </button>
             </div>
+          </form>
+        </section>
+      )}
+
+      {/* K3: resolve a portal request without minting a new client — the klant
+          already exists; the office just made (or will make) a shift for it.
+          Advances the submission to 'converted' + optionally links the shift so
+          the klant's "Mijn aanvragen" shows "Omgezet naar dienst". */}
+      {kind === "client" && row.status !== "converted" && row.status !== "rejected" && (
+        <section className="mt-4 rounded-lg border border-ink-200 bg-white p-5">
+          <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+            Aanvraag opgepakt?
+          </h2>
+          <p className="mt-1 text-sm text-ink-700">
+            Markeer deze aanvraag als opgepakt — voor een bestaande klant die alleen een
+            dienst nodig heeft (geen nieuw klant-record). Plak optioneel de dienst-ID zodat
+            de klant in zijn portaal &ldquo;Omgezet naar dienst&rdquo; ziet.
+          </p>
+          <form action={markFulfilledByShift} className="mt-3 flex flex-wrap gap-2">
+            <input
+              type="text"
+              name="shiftId"
+              placeholder="Dienst-ID (optioneel)"
+              className="flex-1 rounded border border-ink-200 bg-white px-3 py-2 text-sm placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
+            />
+            <button
+              type="submit"
+              className="rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
+            >
+              Markeer opgepakt
+            </button>
           </form>
         </section>
       )}

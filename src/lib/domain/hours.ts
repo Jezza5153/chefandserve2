@@ -103,6 +103,23 @@ export async function approveHoursRow(args: {
   const allowedFrom: HoursStatus[] = args.fromStatuses
     ? [...args.fromStatuses]
     : ["client_signed"];
+
+  // K3 money guard: rates are snapshotted on the row at submit and don't change.
+  // Approving a row with a missing/zero chef OR client rate would book €0 to
+  // payroll + invoicing — refuse it (the rate must be fixed first). Pre-read is
+  // safe (rates are immutable here); the atomic transition below still guards status.
+  const [rateRow] = await db
+    .select({
+      chefRateCents: shiftHours.chefRateCents,
+      clientRateCents: shiftHours.clientRateCents,
+    })
+    .from(shiftHours)
+    .where(eq(shiftHours.id, args.hoursId))
+    .limit(1);
+  if (rateRow && (!rateRow.chefRateCents || !rateRow.clientRateCents)) {
+    return { ok: false, reason: "no_rate" };
+  }
+
   // Atomic: the status transition + its audit row commit together (withTx).
   // Side effects (outbox/notifications/emails) stay post-commit, below.
   const auditBase = await stampFromRequest({

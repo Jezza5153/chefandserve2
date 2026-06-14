@@ -35,7 +35,7 @@ import {
   chefsPendingCvSuggestions,
 } from "@/lib/ai/tools/chef-profile";
 import { rosterOverview, rosterPublish, rosterAutofill, rosterCopyLastWeek } from "@/lib/ai/tools/roster";
-import { clientsHistory, clientsHealth } from "@/lib/ai/tools/clients";
+import { clientsHistory, clientsHealth, clientsReachability, clientsShiftTemplates } from "@/lib/ai/tools/clients";
 import { plannerCockpitTool, shiftsSuggestChefs, shiftsMargin } from "@/lib/ai/tools/staffing";
 import { contactsTimeline, contactsLog } from "@/lib/ai/tools/contacts";
 import { chefsSemanticSearch, clientsSemanticSearch } from "@/lib/ai/tools/semantic";
@@ -101,6 +101,8 @@ export const ALL_TOOLS: AnyTool[] = [
   shiftsCreate,
   clientsHistory,
   clientsHealth,
+  clientsReachability,
+  clientsShiftTemplates,
   clientsShiftRequests,
   chefsHistoryAtClient,
   chefsIntelSnapshot,

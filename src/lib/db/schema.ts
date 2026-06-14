@@ -738,6 +738,13 @@ export const clientSubmissions = pgTable(
     }),
     /** Set when status='converted'. Phase 2's clients.id (text uuid). */
     convertedToClientId: text("converted_to_client_id"),
+    /**
+     * K3: set when the office turns a portal request into an actual shift —
+     * lets "Mijn aanvragen" resolve to "Omgezet naar dienst → bekijk" instead
+     * of sitting at 'triaged' forever. Nullable (most submissions never link a
+     * shift); status reuses 'converted'.
+     */
+    convertedToShiftId: uuid("converted_to_shift_id"),
     rejectedReason: text("rejected_reason"),
 
     /* ----- PR-KLANT-2: klant self-cancel of a pending portal submission ----- */
