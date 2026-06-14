@@ -181,7 +181,6 @@ export async function approveHoursRow(args: {
       chefEmail: chefs.email,
       chefUserId: chefs.userId,
       clientName: clients.companyName,
-      clientEmail: clients.email,
       clientUserId: clients.userId,
       shiftStart: shifts.startsAt,
     })
@@ -239,28 +238,35 @@ export async function approveHoursRow(args: {
       });
     }
   }
-  if (ctx.clientEmail) {
-    const send = await sendEmail({
-      to: ctx.clientEmail,
-      subject: `Uren afgerond voor ${shiftDate} — factuur volgt`,
-      react: HoursApprovedKlantEmail({
-        recipientName: ctx.clientName,
-        chefName: ctx.chefName,
-        shiftDate,
-        workedHoursLabel: formatWorkedMinutes(row.workedMinutes),
-        clientAmountEur: clientAmount,
-      }),
-    });
-    if (send.ok) {
-      await recordEmailMessage({
-        providerMessageId: send.id,
-        toEmail: ctx.clientEmail,
-        template: "HoursApprovedKlantEmail",
-        eventKey: "hours_approved",
-        entityType: "shift_hours",
-        entityId: row.id,
-        userId: ctx.clientUserId ?? undefined,
+  // Klant mail → the single recipient seam (contact-role routing), never a
+  // hard-coded client.email. Transactional/always-on (not opt-out-able).
+  {
+    const to = await recipientsForClient(row.clientId, "hours_approved");
+    if (to.length > 0) {
+      const send = await sendEmail({
+        to,
+        subject: `Uren afgerond voor ${shiftDate} — factuur volgt`,
+        react: HoursApprovedKlantEmail({
+          recipientName: ctx.clientName,
+          chefName: ctx.chefName,
+          shiftDate,
+          workedHoursLabel: formatWorkedMinutes(row.workedMinutes),
+          clientAmountEur: clientAmount,
+        }),
       });
+      if (send.ok) {
+        for (const addr of to) {
+          await recordEmailMessage({
+            providerMessageId: send.id,
+            toEmail: addr,
+            template: "HoursApprovedKlantEmail",
+            eventKey: "hours_approved",
+            entityType: "shift_hours",
+            entityId: row.id,
+            userId: ctx.clientUserId ?? undefined,
+          });
+        }
+      }
     }
   }
 
@@ -357,11 +363,11 @@ export async function rejectHoursRow(args: {
   const [ctx] = await db
     .select({
       placementId: shiftHours.placementId,
+      clientId: shiftHours.clientId,
       chefName: chefs.fullName,
       chefEmail: chefs.email,
       chefUserId: chefs.userId,
       clientName: clients.companyName,
-      clientEmail: clients.email,
       clientUserId: clients.userId,
       shiftStart: shifts.startsAt,
     })
@@ -430,29 +436,36 @@ export async function rejectHoursRow(args: {
       });
     }
   }
-  if (ctx.clientEmail) {
-    const send = await sendEmail({
-      to: ctx.clientEmail,
-      subject: `Uren-correctie voor ${ctx.chefName} op ${shiftDate}`,
-      react: HoursRejectedByAdminEmail({
-        recipientName: ctx.clientName,
-        recipientRole: "klant",
-        chefName: ctx.chefName,
-        clientName: ctx.clientName,
-        shiftDate,
-        adminNote: args.adminNotes.trim(),
-      }),
-    });
-    if (send.ok) {
-      await recordEmailMessage({
-        providerMessageId: send.id,
-        toEmail: ctx.clientEmail,
-        template: "HoursRejectedByAdminEmail",
-        eventKey: "hours_admin_rejected",
-        entityType: "shift_hours",
-        entityId: args.hoursId,
-        userId: ctx.clientUserId ?? undefined,
+  // Klant mail → the single recipient seam (contact-role routing), never a
+  // hard-coded client.email. Transactional/always-on (not opt-out-able).
+  {
+    const to = await recipientsForClient(ctx.clientId, "hours_admin_rejected");
+    if (to.length > 0) {
+      const send = await sendEmail({
+        to,
+        subject: `Uren-correctie voor ${ctx.chefName} op ${shiftDate}`,
+        react: HoursRejectedByAdminEmail({
+          recipientName: ctx.clientName,
+          recipientRole: "klant",
+          chefName: ctx.chefName,
+          clientName: ctx.clientName,
+          shiftDate,
+          adminNote: args.adminNotes.trim(),
+        }),
       });
+      if (send.ok) {
+        for (const addr of to) {
+          await recordEmailMessage({
+            providerMessageId: send.id,
+            toEmail: addr,
+            template: "HoursRejectedByAdminEmail",
+            eventKey: "hours_admin_rejected",
+            entityType: "shift_hours",
+            entityId: args.hoursId,
+            userId: ctx.clientUserId ?? undefined,
+          });
+        }
+      }
     }
   }
 

@@ -230,6 +230,19 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | PR-KLANT-5 | Rating loop + tags + N≥5 rule + email | ✅ live (migration 0024 · ratings table + chefs.average_rating/rating_count rollup · rating-tags.ts vocab · domain/ratings.ts (submit + recompute + 3 visibility-scoped readers: admin-all / chef-N≥5 / klant-none) · /client/shifts/[shiftId]/rate stars+tags form · RatingPendingKlantEmail + bell + dashboard card on approveHoursRow · admin chef-detail feedback section · chef-profile N≥5 summary) |
 | PR-KLANT-DOCS | CLAUDE.md + WORKFLOW link-complete + MEMORY resume-header | ✅ shipped |
 
+### Klant audit-remediation (K1–K4, 2026-06-14) — ✅ shipped
+
+> From a file:line-verified klant-side audit. All merged to main; migration 0056 applied dev + prod (`ep-icy-scene`).
+
+| PR | Description | Status |
+|---|---|---|
+| K1 (#171) | Audit quick-wins: cockpit CTA `?status=open`→`?tab=open`; **AVG** — dropped email/phone from `findChefs`/`findClients` (`ai/read-model/directory.ts`) so the AI directory never returns contact PII; `ok=rated` rating flash on the klant hub; dashboard `myPending` ActionCard CTA; client nav Agenda+Meldingen entries. | ✅ live (eval green) |
+| K2 (#172) | Owner client drill-down — killed the static `Binnenkort` placeholder. `getClientRecentShifts` (`client-history.ts`, shift-centric + grouped-Map, neon-http-safe) → "Recente & aankomende shifts" on `/admin/business/clients/[id]`; "Documenten & onboarding" section (`listClientDocuments` + RI&E readiness chip from `clientDocTypes`); global shifts list `/admin/business/shifts` now accepts **`?clientId=`** (scopes rows/counts/pills/heading). | ✅ live |
+| K3 (#174) | Request→shift handoff resolves ("Mijn aanvragen" no longer stuck at triaged). Migration **0056** `client_submissions.converted_to_shift_id`; inbox `[kind]/[id]` "Markeer als opgepakt — omgezet naar dienst" action (atomic new/triaged→converted + optional validated shift link + klant notify); `/client/requests` shows "Omgezet naar dienst →"; `approveHoursRow` zero-rate guard (`reason:"no_rate"`). `smoke-k3` 5/0. | ✅ live (dev+prod migrated) |
+| K4 (#174) | AI klant access. Tools **`clients.reachability`** (portal/push/email booleans + recipient COUNT, never addresses — AVG) + **`clients.shift_templates`** (reuses `clientMyTemplates`); **`clients.decide_shift_request`** added to eval `DESTRUCTIVE` + a SAFETY case (model reads `clients.shift_requests` before deciding). Census +2 read tools. `eval-ai` 80/80. | ✅ live (eval green) |
+
+⚠ **K3 lost-commit footgun:** PR #173 squash-merged EMPTY (the K3 branch wasn't ahead of main at merge time — branch-state artifact from `--delete-branch` + reset churn during the K2→K3 hop). Caught by verifying `origin/main` lacked the K3 markers post-merge; recovered the work from the local commit + recombined with K4 into #174. **Lesson:** after a squash-merge, verify the content actually landed (`git show origin/main:<file> | grep <marker>`) — don't trust the "MERGED" state alone.
+
 ### Klant-2 — native klant intake + JotForm retirement + IDOR fix (no migration)
 
 | PR | Description | Status |
