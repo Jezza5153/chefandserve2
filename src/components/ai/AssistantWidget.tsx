@@ -32,7 +32,7 @@ export function AssistantWidget({
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3 print:hidden">
       {open && (
-        <div className="flex h-[520px] max-h-[calc(100vh-7rem)] w-[380px] max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-xl border border-ink-200 bg-bg-gray shadow-2xl">
+        <div className="flex h-[70vh] max-h-[520px] w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-xl border border-ink-200 bg-bg-gray shadow-2xl sm:h-[520px] sm:max-h-[calc(100vh-7rem)] sm:w-[380px]">
           <div className="flex items-center justify-between border-b border-ink-200 bg-white px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="grid h-7 w-7 place-items-center rounded-full bg-burgundy text-white">
