@@ -90,6 +90,7 @@ export const CATALOG: CatalogPerm[] = [
   { key: "forms.write", resource: "forms", action: "write", class: "business", label: "Formulieren bouwen" },
   { key: "reminders.read", resource: "reminders", action: "read", class: "business", label: "Herinneringen bekijken" },
   { key: "reminders.write", resource: "reminders", action: "write", class: "business", label: "Herinneringen beheren" },
+  { key: "board.read", resource: "board", action: "read", class: "business", label: "Prikbord bekijken" },
   { key: "board.write", resource: "board", action: "write", class: "business", label: "Prikbord beheren" },
   { key: "inbox.read", resource: "inbox", action: "read", class: "business", label: "Inbox bekijken" },
   { key: "inbox.triage", resource: "inbox", action: "triage", class: "business", label: "Inbox triageren (omzetten/afwijzen)" },
@@ -132,7 +133,7 @@ const OWNER_PLANNER_PERMS = [
   "forms.read", "forms.write",
   "reminders.read", "reminders.write",
   "inbox.read", "inbox.triage",
-  "board.write",
+  "board.read", "board.write",
 ];
 
 const OWNER_ONLY_PERMS = [

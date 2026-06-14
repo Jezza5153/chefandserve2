@@ -16,7 +16,10 @@ import { getChefWorkSummary, getChefFeedbackSummary } from "@/lib/domain/chef-hi
 import { buildChefTrends } from "@/lib/domain/chef-trends";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { getChefDailySeries } from "@/lib/domain/metrics-history";
+import { hasActiveSubscription } from "@/lib/domain/push-subscriptions";
 import { formatChefRole, formatSegment, formatClientType } from "@/lib/labels";
+import { env } from "@/lib/env";
+import { whatsAppConfigured } from "@/lib/whatsapp";
 
 /** id → name/role/status, or null if the chef doesn't exist. */
 async function loadChef(chefId: string) {
@@ -143,4 +146,38 @@ export async function chefProfileCompleteness(chefId: string) {
     preferences: chef.preferences,
   });
   return { chef: { id: chef.id, name: chef.fullName }, ...c };
+}
+
+/**
+ * Reachability — can we actually reach this chef, and via which channels?
+ * Owner observability over the comms surfaces (in-app bell / web push /
+ * WhatsApp). Booleans only — no phone/email values returned (AVG).
+ */
+export async function chefReachability(chefId: string) {
+  const [chef] = await db
+    .select({
+      name: chefs.fullName,
+      email: chefs.email,
+      phone: chefs.phone,
+      whatsappEnabled: chefs.whatsappEnabled,
+      userId: chefs.userId,
+    })
+    .from(chefs)
+    .where(eq(chefs.id, chefId))
+    .limit(1);
+  if (!chef) return null;
+  const push = chef.userId ? await hasActiveSubscription(chef.userId) : false;
+  const whatsapp =
+    Boolean(chef.phone) &&
+    chef.whatsappEnabled &&
+    env.CHEF_WHATSAPP_ENABLED === "true" &&
+    whatsAppConfigured();
+  return {
+    chef: { id: chefId, name: chef.name },
+    inApp: Boolean(chef.userId), // portal account → bell + (if subscribed) push
+    push,
+    whatsapp,
+    email: Boolean(chef.email),
+    whatsappOwnerEnabled: chef.whatsappEnabled, // owner toggle state (CHEF-15)
+  };
 }

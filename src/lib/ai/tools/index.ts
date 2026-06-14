@@ -31,6 +31,8 @@ import {
   chefsTrends,
   chefsProfileCompleteness,
   chefsEnrichFromCv,
+  chefsReachability,
+  chefsPendingCvSuggestions,
 } from "@/lib/ai/tools/chef-profile";
 import { rosterOverview, rosterPublish, rosterAutofill, rosterCopyLastWeek } from "@/lib/ai/tools/roster";
 import { clientsHistory, clientsHealth } from "@/lib/ai/tools/clients";
@@ -40,7 +42,8 @@ import { chefsSemanticSearch, clientsSemanticSearch } from "@/lib/ai/tools/seman
 import { knowledgeSearch } from "@/lib/ai/tools/knowledge";
 import { auditSearch, documentsListForChef, documentsExpiring, privacyListRequests, emailStatus, payrollRead } from "@/lib/ai/tools/oversight";
 import { briefingDaily } from "@/lib/ai/tools/briefing";
-import { shiftsDetail } from "@/lib/ai/tools/shift-detail";
+import { shiftsDetail, shiftsInterestedChefs } from "@/lib/ai/tools/shift-detail";
+import { boardRecent } from "@/lib/ai/tools/board";
 import { chefsHistoryAtClient } from "@/lib/ai/tools/chef-client-history";
 import { risksScan } from "@/lib/ai/tools/risks";
 import { intakeList, intakeConvert } from "@/lib/ai/tools/intake";
@@ -71,6 +74,7 @@ export const ALL_TOOLS: AnyTool[] = [
   clientsFind,
   shiftsFind,
   shiftsDetail,
+  shiftsInterestedChefs,
   rosterOverview,
   chefsListProfileChanges,
   chefsWorkSummary,
@@ -78,6 +82,9 @@ export const ALL_TOOLS: AnyTool[] = [
   chefsTrends,
   chefsProfileCompleteness,
   chefsEnrichFromCv,
+  chefsReachability,
+  chefsPendingCvSuggestions,
+  boardRecent,
   chefsAvailability,
   intakeList,
   onboardingMissing,

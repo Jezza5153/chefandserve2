@@ -64,6 +64,10 @@ assert("shifts.open_soon present (read)", byName.get("shifts.open_soon")?.risk =
 assert("insights.leaderboards present (read)", byName.get("insights.leaderboards")?.risk === "read");
 assert("integrations.health present (read)", byName.get("integrations.health")?.risk === "read");
 assert("chefs.enrich_from_cv present (self)", byName.get("chefs.enrich_from_cv")?.risk === "self");
+assert("shifts.interested_chefs present (read)", byName.get("shifts.interested_chefs")?.risk === "read");
+assert("chefs.reachability present (read)", byName.get("chefs.reachability")?.risk === "read");
+assert("chefs.pending_cv_suggestions present (read)", byName.get("chefs.pending_cv_suggestions")?.risk === "read");
+assert("board.recent present (read)", byName.get("board.recent")?.risk === "read");
 assert("reminders.create present (self, no confirm)", byName.get("reminders.create")?.risk === "self");
 assert("reminders.list present (read)", byName.get("reminders.list")?.risk === "read");
 assert("memory.remember present (self)", byName.get("memory.remember")?.risk === "self");

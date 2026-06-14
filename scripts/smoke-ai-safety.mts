@@ -75,6 +75,10 @@ const SAMPLE: Record<string, unknown> = {
   "placements.reply": { placementId: "x", body: "test bericht" },
   "intake.convert": { submissionId: "x", kind: "chef" },
   "chefs.enrich_from_cv": { chefId: "x" },
+  "chefs.reachability": { chefId: "x" },
+  "chefs.pending_cv_suggestions": { chefId: "x" },
+  "shifts.interested_chefs": { shiftId: "x" },
+  "board.recent": {},
   "inboxes.grant_access": { inboxId: "x", userEmail: "test@example.nl" },
   "inboxes.revoke_access": { inboxId: "x", userEmail: "test@example.nl" },
   "shifts.create": {
