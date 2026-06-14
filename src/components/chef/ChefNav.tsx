@@ -27,6 +27,7 @@ const MORE: NavItem[] = [
   { label: "Verdiensten", href: "/chef/earnings", icon: "wallet" },
   { label: "Mijn profiel", href: "/chef/profile", icon: "user-round" },
   { label: "Meldingen", href: "/chef/notifications", icon: "bell" },
+  { label: "Prikbord", href: "/chef/board", icon: "message" },
   { label: "Onboarding", href: "/chef/onboarding", icon: "check-circle" },
   { label: "Privacy", href: "/chef/privacy", icon: "shield-check" },
 ];

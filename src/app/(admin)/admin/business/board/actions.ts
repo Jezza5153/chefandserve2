@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { recordAuditFromRequest } from "@/lib/audit";
 import {
   createBoardPost,
+  requestBoardImageUpload,
   setPinned,
   softDeletePost,
   type BoardAudience,
@@ -49,6 +50,16 @@ export async function deletePostAction(fd: FormData) {
   });
   revalidatePath(PATH);
   redirect(`${PATH}?ok=deleted`);
+}
+
+export async function presignBoardImageAction(args: {
+  postId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+}) {
+  await gate();
+  return requestBoardImageUpload(args);
 }
 
 export async function togglePinAction(fd: FormData) {
