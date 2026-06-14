@@ -243,6 +243,18 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 
 ⚠ **K3 lost-commit footgun:** PR #173 squash-merged EMPTY (the K3 branch wasn't ahead of main at merge time — branch-state artifact from `--delete-branch` + reset churn during the K2→K3 hop). Caught by verifying `origin/main` lacked the K3 markers post-merge; recovered the work from the local commit + recombined with K4 into #174. **Lesson:** after a squash-merge, verify the content actually landed (`git show origin/main:<file> | grep <marker>`) — don't trust the "MERGED" state alone.
 
+### Klant audit-remediation Waves (W1–W5, 2026-06-14) — from a 5-dimension adversarial audit
+
+> An exhaustive multi-agent klant-side audit (portal UX · owner mgmt · domain correctness · AI coverage · comms wiring) surfaced 18 confirmed in-lane gaps (+2 cross-lane, flagged not built: client invoice "wat nu?" line + an AI klant-ratings tool → invoicing/clients lane). Built as 5 waves; every PR adversarially diff-reviewed.
+
+| PR | Description | Status |
+|---|---|---|
+| W1 (#175) | **hours.ts klant-email seam (correctness/AVG).** `approveHoursRow`+`rejectHoursRow` hard-coded `ctx.clientEmail` → now `recipientsForClient()` (role routing + opt-out gate), mirroring `rating_pending`. New `ClientEmailEvent` keys `hours_approved`/`hours_admin_rejected` (transactional/always-on). | ✅ live (review clean) |
+| W2 (#176) | **Klant notification + consent integrity on shift-confirm.** Klant `createNotification` added to BOTH confirm cascades (placement-transition.ts + admin shift page; chef already got one); dedicated mutable `shift_confirmed` event (was routed via 'generic'); klant web-push opt-in on `/client/notifications` (reuses parameterized chef `PushOptIn`). | ✅ live (review clean) |
+| W3 (#177) | **Owner clients-list triage cockpit.** Batched `getClientHealthVerdicts(ids)` → health-at-a-glance column + health sort; per-klant inbox drill-down (`/admin/business/inbox?clientId=`); `nextActions` ("volgende stap") on `ClientHealthVerdict`/card. `smoke-client-health-batch` 7/0 (batched==single-client). | ✅ live (review fixed 3 sort-preservation bugs) |
+| W4 (#178) | **Klant AI `onze.dienst_detail`** — own-data-scoped shift detail (WHERE clientId, client_visible comments only, no internal notes) + read-model + CLIENT_TOOLS reg + prompt. Fixed pre-existing portal-eval rot (tool_calls/parallel). smoke-ai-portal 49/0 (incl. cross-klant IDOR); portal eval 11/11; owner eval 80/80 LOCAL. | ⏳ **PR open — CI eval gate red on OpenAI "exceeded quota" (billing, not a regression).** Locally verified. **Owner action:** top up OpenAI quota → re-run the eval gate → merge #178. See [[openai-quota-gates-eval]]. |
+| W5 (#179) | **Glance-layer UX.** Dashboard cards gained "wat gebeurt er nu?" subtitles (`ActionCard.subtitle`); empty-state CTAs on /client/{shifts,week,templates,requests} → /client/request; mobile-scroll header nav (11 items: 1 swipeable row on mobile, wraps on md+). | ✅ live (copy/CSS only) |
+
 ### Klant-2 — native klant intake + JotForm retirement + IDOR fix (no migration)
 
 | PR | Description | Status |
