@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { aiConfirmSecret, aiEnabled, aiModel } from "@/lib/ai/config";
+import { aiConfirmSecret, aiEnabled, portalModel } from "@/lib/ai/config";
 import { createOpenAiBrain } from "@/lib/ai/runtime/openai-brain";
 import { CHEF_SYSTEM_PROMPT, CLIENT_SYSTEM_PROMPT } from "@/lib/ai/runtime/portal-prompts";
 import { runChefAssistant, runClientAssistant } from "@/lib/ai/runtime/assistant";
@@ -98,7 +98,9 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     const systemPrompt = kind === "chef" ? CHEF_SYSTEM_PROMPT : CLIENT_SYSTEM_PROMPT;
-    const brain = createOpenAiBrain({ apiKey: env.OPENAI_API_KEY, model: aiModel(), systemPrompt, onUsage });
+    // Portals route only 4-6 scoped tools → a cheaper tier (portalModel) is indistinguishable
+    // and ~3.3x cheaper (AI audit). Owner brain stays on aiModel(). OPENAI_FALLBACK_MODEL covers a stumble.
+    const brain = createOpenAiBrain({ apiKey: env.OPENAI_API_KEY, model: portalModel(), systemPrompt, onUsage });
     const runWith = (b: typeof brain) => {
       const run = {
         userId: session.user.id,
@@ -133,7 +135,7 @@ export async function POST(req: Request): Promise<Response> {
     }
     if (promptTokens > 0 || completionTokens > 0) {
       try {
-        await recordAiUsage({ model: aiModel(), promptTokens, completionTokens, now: new Date() });
+        await recordAiUsage({ model: portalModel(), promptTokens, completionTokens, now: new Date() });
       } catch (e) {
         console.error("[ai/portal/chat] usage tally failed:", e instanceof Error ? e.message : e);
       }

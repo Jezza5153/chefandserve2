@@ -69,13 +69,16 @@ const serverSchema = z.object({
   //   AI_ENABLED        — master switch for the assistant surfaces (dashboard/WhatsApp/voice).
   //   AI_CONFIRM_SECRET — HMAC key that signs action-confirmation tokens; the executor
   //                       throws at call time if a confirm-gated tool runs without it.
-  //   OPENAI_MODEL      — chat/agent model id (e.g. gpt-4o); embeddings use OPENAI_API_KEY above.
+  //   OPENAI_MODEL      — owner chat/agent model id (e.g. gpt-4o); embeddings use OPENAI_API_KEY above.
+  //   OPENAI_PORTAL_MODEL — model for the chef/klant portal assistants (4-6 tools each). Set to a
+  //                       cheaper tier (e.g. gpt-5.4-mini); unset → falls back to OPENAI_MODEL.
   AI_ENABLED: z.enum(["true", "false"]).optional(),
   AI_CONFIRM_SECRET: z
     .string()
     .min(32, "AI_CONFIRM_SECRET must be ≥32 chars (openssl rand -base64 32)")
     .optional(),
   OPENAI_MODEL: z.string().optional(),
+  OPENAI_PORTAL_MODEL: z.string().optional(),
   //   OPENAI_PRICE_INPUT_PER_1M / _OUTPUT_PER_1M — kosten per 1M tokens (EUR) voor het
   //   actieve model. Beide gezet → de AI-tokenkaart toont echte kosten; leeg → alleen tokens.
   OPENAI_PRICE_INPUT_PER_1M: z.coerce.number().nonnegative().optional(),
