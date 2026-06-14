@@ -8,6 +8,7 @@ import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { chefs } from "@/lib/db/schema";
+import { getChefForecastEarnings } from "@/lib/domain/chef-forecast";
 import { getChefPatterns } from "@/lib/domain/intel";
 import { formatEuro } from "@/lib/hours-labels";
 import { formatChefRole } from "@/lib/labels";
@@ -15,6 +16,13 @@ import { requireAuth } from "@/lib/permissions";
 
 export const metadata = { title: "Verdiensten" };
 export const dynamic = "force-dynamic";
+
+/** "€X" when the rate is pinned, "€X – €Y" when only the chef's band is known. */
+function forecastAmount(minCents: number, maxCents: number): string {
+  return maxCents > minCents
+    ? `${formatEuro(minCents)} – ${formatEuro(maxCents)}`
+    : formatEuro(minCents);
+}
 
 const FULL_DAY: Record<string, string> = {
   Ma: "maandag",
@@ -39,6 +47,7 @@ export default async function ChefEarningsPage() {
   }
 
   const patterns = await getChefPatterns(chef.id);
+  const forecast = await getChefForecastEarnings(chef.id);
   const maxDay = Math.max(1, ...patterns.preferredDays.map((d) => d.count));
   const hasData = patterns.preferredDays.some((d) => d.count > 0);
 
@@ -67,6 +76,52 @@ export default async function ChefEarningsPage() {
           <p className="text-xs text-ink-500">recent goedgekeurd</p>
         </div>
       </div>
+
+      {/* Forward view — verwachte verdiensten uit bevestigde shifts. */}
+      <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
+            Verwacht · komende {forecast.daysAhead} dagen
+          </p>
+          {forecast.totalShifts > 0 ? (
+            <p className="text-2xl font-semibold text-ink-900">
+              {forecastAmount(forecast.totalMinCents, forecast.totalMaxCents)}
+            </p>
+          ) : null}
+        </div>
+        {forecast.totalShifts === 0 ? (
+          <p className="mt-2 text-sm text-ink-500">
+            Nog geen bevestigde shifts ingepland. Zodra je ingeroosterd bent, zie je
+            hier wat je verwacht te verdienen.
+          </p>
+        ) : (
+          <>
+            <ul className="mt-3 divide-y divide-ink-100">
+              {forecast.weeks.map((w) => (
+                <li
+                  key={w.weekStart}
+                  className="flex items-center justify-between gap-3 py-2 text-sm"
+                >
+                  <span className="text-ink-700">
+                    {w.label}{" "}
+                    <span className="text-ink-400">
+                      · {w.shifts} {w.shifts === 1 ? "dienst" : "diensten"}
+                    </span>
+                  </span>
+                  <span className="shrink-0 font-mono text-ink-900">
+                    {forecastAmount(w.minCents, w.maxCents)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-xs text-ink-500">
+              Schatting op basis van je bevestigde shifts. Klanten kunnen nog
+              annuleren en pauzes zijn hier nog niet afgetrokken — het echte bedrag
+              kan dus lager uitvallen.
+            </p>
+          </>
+        )}
+      </section>
 
       {!hasData ? (
         <p className="mt-6 rounded-lg border border-ink-200 bg-white p-6 text-center text-sm text-ink-500">
