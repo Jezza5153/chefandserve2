@@ -227,6 +227,112 @@ export async function getClientRecentShifts(clientId: string, limit = 10): Promi
   return shiftRows.map((s) => ({ ...s, chefNames: byShift.get(s.shiftId) ?? [] }));
 }
 
+/**
+ * Batched health verdicts for the owner clients-list cockpit (Wave 3). Computes the
+ * same ClientHealthInput signals as getClientSummary, but for MANY clients in a handful
+ * of grouped queries + Maps (never a per-row projection subquery — neon-http renders those
+ * uncorrelated/always-0). Returns one ClientHealthVerdict per requested id. A smoke
+ * (scripts/smoke-client-health-batch.mts) cross-checks this against the single-client
+ * getClientHealth() to guard against drift from getClientSummary's predicates.
+ */
+export async function getClientHealthVerdicts(
+  clientIds: string[],
+): Promise<Map<string, ClientHealthVerdict>> {
+  const out = new Map<string, ClientHealthVerdict>();
+  if (clientIds.length === 0) return out;
+
+  const [statusRows, shiftStatRows, moneyRows, chefRows, ratingRows, signoffRows] = await Promise.all([
+    db
+      .select({ id: clients.id, status: clients.status })
+      .from(clients)
+      .where(inArray(clients.id, clientIds)),
+    db
+      .select({
+        clientId: shifts.clientId,
+        completed: sql<number>`count(*) filter (where ${shifts.status} = 'completed')::int`,
+        upcoming: sql<number>`count(*) filter (where ${shifts.startsAt} > now())::int`,
+      })
+      .from(shifts)
+      .where(inArray(shifts.clientId, clientIds))
+      .groupBy(shifts.clientId),
+    db
+      .select({
+        clientId: shiftHours.clientId,
+        spend: sql<number>`coalesce(sum(round(${shiftHours.workedMinutes} / 60.0 * ${shiftHours.clientRateCents})), 0)::int`,
+        loon: sql<number>`coalesce(sum(round(${shiftHours.workedMinutes} / 60.0 * ${shiftHours.chefRateCents})), 0)::int`,
+      })
+      .from(shiftHours)
+      .where(and(inArray(shiftHours.clientId, clientIds), inArray(shiftHours.status, [...FINAL_HOURS_STATUSES])))
+      .groupBy(shiftHours.clientId),
+    // completed placements per (client, chef) → fold to repeatChefs (chefs with ≥2).
+    db
+      .select({
+        clientId: shifts.clientId,
+        chefId: placements.chefId,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(placements)
+      .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+      .where(and(inArray(shifts.clientId, clientIds), eq(placements.status, "completed")))
+      .groupBy(shifts.clientId, placements.chefId),
+    db
+      .select({ clientId: ratings.clientId, n: sql<number>`count(*)::int` })
+      .from(ratings)
+      .where(inArray(ratings.clientId, clientIds))
+      .groupBy(ratings.clientId),
+    db
+      .select({
+        clientId: shiftHours.clientId,
+        pending: sql<number>`count(*) filter (where ${shiftHours.clientSignedAt} is null and ${shiftHours.submittedAt} is not null)::int`,
+        avgMin: sql<
+          number | null
+        >`avg(extract(epoch from (${shiftHours.clientSignedAt} - ${shiftHours.submittedAt})) / 60) filter (where ${shiftHours.clientSignedAt} is not null and ${shiftHours.submittedAt} is not null)`,
+      })
+      .from(shiftHours)
+      .where(inArray(shiftHours.clientId, clientIds))
+      .groupBy(shiftHours.clientId),
+  ]);
+
+  const statusById = new Map(statusRows.map((r) => [r.id, r.status]));
+  const shiftStatById = new Map(shiftStatRows.map((r) => [r.clientId, r]));
+  const moneyById = new Map(moneyRows.map((r) => [r.clientId, r]));
+  const ratingById = new Map(ratingRows.map((r) => [r.clientId, r.n]));
+  const signoffById = new Map(signoffRows.map((r) => [r.clientId, r]));
+  // repeatChefs: per client, count chefs with ≥2 completed placements.
+  const repeatByClient = new Map<string, number>();
+  const chefCountByClient = new Map<string, Map<string, number>>();
+  for (const r of chefRows) {
+    const m = chefCountByClient.get(r.clientId) ?? new Map<string, number>();
+    m.set(r.chefId, r.n);
+    chefCountByClient.set(r.clientId, m);
+  }
+  for (const [cid, m] of chefCountByClient) {
+    repeatByClient.set(cid, [...m.values()].filter((n) => n >= 2).length);
+  }
+
+  for (const id of clientIds) {
+    const ss = shiftStatById.get(id);
+    const money = moneyById.get(id);
+    const so = signoffById.get(id);
+    const avgMin = so?.avgMin != null ? Number(so.avgMin) : null;
+    out.set(
+      id,
+      computeClientHealth({
+        status: statusById.get(id) ?? "prospect",
+        completedShifts: ss?.completed ?? 0,
+        upcomingShifts: ss?.upcoming ?? 0,
+        marginCents: (money?.spend ?? 0) - (money?.loon ?? 0),
+        spendCents: money?.spend ?? 0,
+        repeatChefs: repeatByClient.get(id) ?? 0,
+        ratingsGiven: ratingById.get(id) ?? 0,
+        pendingSignoff: so?.pending ?? 0,
+        signoffAvgHours: avgMin != null ? Math.round((avgMin / 60) * 10) / 10 : null,
+      }),
+    );
+  }
+  return out;
+}
+
 /* ----- trends over the snapshot (pure) ------------------------------------ */
 
 export type ClientTrends = {

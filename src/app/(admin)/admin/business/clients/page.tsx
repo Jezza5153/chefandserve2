@@ -3,21 +3,33 @@ import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { clients } from "@/lib/db/schema";
+import { getClientHealthVerdicts } from "@/lib/domain/client-history";
+import type { ClientHealthLevel } from "@/lib/domain/client-health";
 import { requirePermission } from "@/lib/permissions";
 
 export const metadata = { title: "Klanten" };
 
 type FilterStatus = "all" | "prospect" | "active" | "paused" | "archived";
+type SortKey = "recent" | "health";
+
+// Triage order: what needs attention first.
+const LEVEL_RANK: Record<ClientHealthLevel, number> = { aandacht: 0, goed: 1, sterk: 2 };
+const LEVEL_DOT: Record<ClientHealthLevel, string> = {
+  aandacht: "bg-amber-500",
+  goed: "bg-ink-400",
+  sterk: "bg-emerald-500",
+};
 
 export default async function ClientsListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: FilterStatus; q?: string }>;
+  searchParams: Promise<{ status?: FilterStatus; q?: string; sort?: SortKey }>;
 }) {
   await requirePermission("clients", "write");
   const params = await searchParams;
   const status: FilterStatus = params.status ?? "active";
   const q = params.q?.trim() ?? "";
+  const sort: SortKey = params.sort === "health" ? "health" : "recent";
 
   const whereParts = [isNull(clients.deletedAt)];
   if (status !== "all") whereParts.push(eq(clients.status, status));
@@ -48,6 +60,18 @@ export default async function ClientsListPage({
     .where(and(...whereParts))
     .orderBy(desc(clients.joinedAt))
     .limit(200);
+
+  // Wave 3: health-at-a-glance for the visible rows (batched — one helper, a few
+  // grouped queries). Lets the owner triage who needs attention without drilling in.
+  const verdicts = await getClientHealthVerdicts(rows.map((r) => r.id));
+  const sortedRows =
+    sort === "health"
+      ? [...rows].sort((a, b) => {
+          const ra = LEVEL_RANK[verdicts.get(a.id)?.level ?? "goed"];
+          const rb = LEVEL_RANK[verdicts.get(b.id)?.level ?? "goed"];
+          return ra - rb; // stable: keeps joinedAt-desc within a level
+        })
+      : rows;
 
   const counts = await db
     .select({ status: clients.status, n: sql<number>`count(*)::int` })
@@ -82,7 +106,7 @@ export default async function ClientsListPage({
             key={s}
             label={`${statusLabel(s)} (${countByStatus(s)})`}
             active={status === s}
-            href={qs({ status: s, q })}
+            href={qs({ status: s, q, sort })}
           />
         ))}
         <form
@@ -92,6 +116,7 @@ export default async function ClientsListPage({
           {status !== "active" && (
             <input type="hidden" name="status" value={status} />
           )}
+          {sort === "health" && <input type="hidden" name="sort" value="health" />}
           <input
             type="search"
             name="q"
@@ -108,7 +133,7 @@ export default async function ClientsListPage({
         </form>
       </div>
 
-      {rows.length === 0 ? (
+      {sortedRows.length === 0 ? (
         <div className="mt-10 rounded-lg border border-ink-200 bg-white p-10 text-center">
           <p className="font-serif text-xl text-ink-900">
             Geen klanten gevonden
@@ -127,44 +152,71 @@ export default async function ClientsListPage({
             <thead className="bg-bg-gray text-left">
               <tr>
                 <Th>Bedrijf</Th>
-                <Th>Contactpersoon</Th>
+                <th className="px-4 py-3 font-ui text-[10px] uppercase tracking-[0.2em] text-burgundy">
+                  <Link
+                    href={qs({ status, q, sort: sort === "health" ? "recent" : "health" })}
+                    className="hover:underline"
+                    title="Sorteer op gezondheid (aandacht eerst)"
+                  >
+                    Gezondheid {sort === "health" ? "▾" : "⇅"}
+                  </Link>
+                </th>
                 <Th>Segment</Th>
                 <Th>Stad</Th>
-                <Th>Contact</Th>
                 <Th>Status</Th>
+                <Th>Aanvragen</Th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
-                <tr
-                  key={r.id}
-                  className={i < rows.length - 1 ? "border-b border-ink-200" : ""}
-                >
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/business/clients/${r.id}`}
-                      className="font-serif text-sm text-ink-900 hover:text-burgundy hover:underline"
-                    >
-                      {r.companyName}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-ink-700">
-                    {r.contactName ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-ink-700">
-                    {r.segment ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-ink-700">
-                    {r.city ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-ink-700">
-                    {r.email ?? r.phone ?? "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={r.status} />
-                  </td>
-                </tr>
-              ))}
+              {sortedRows.map((r, i) => {
+                const v = verdicts.get(r.id);
+                return (
+                  <tr
+                    key={r.id}
+                    className={i < sortedRows.length - 1 ? "border-b border-ink-200" : ""}
+                  >
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/admin/business/clients/${r.id}`}
+                        className="font-serif text-sm text-ink-900 hover:text-burgundy hover:underline"
+                      >
+                        {r.companyName}
+                      </Link>
+                      <p className="mt-0.5 text-[11px] text-ink-500">
+                        {r.contactName ?? r.email ?? "—"}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {v ? (
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2 w-2 shrink-0 rounded-full ${LEVEL_DOT[v.level]}`} aria-hidden="true" />
+                          <span className="text-xs text-ink-700">{v.headline}</span>
+                          {v.watchpoints[0] ? (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                              {v.watchpoints[0]}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-ink-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-ink-700">{r.segment ?? "—"}</td>
+                    <td className="px-4 py-3 text-xs text-ink-700">{r.city ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={r.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/admin/business/inbox?clientId=${r.id}`}
+                        className="font-ui text-[10px] uppercase tracking-[0.15em] text-burgundy hover:underline"
+                      >
+                        Aanvragen →
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -234,10 +286,11 @@ function statusLabel(s: FilterStatus): string {
   );
 }
 
-function qs({ status, q }: { status: FilterStatus; q: string }) {
+function qs({ status, q, sort }: { status: FilterStatus; q: string; sort?: SortKey }) {
   const sp = new URLSearchParams();
   if (status !== "active") sp.set("status", status);
   if (q) sp.set("q", q);
+  if (sort === "health") sp.set("sort", "health");
   const s = sp.toString();
   return `/admin/business/clients${s ? `?${s}` : ""}`;
 }

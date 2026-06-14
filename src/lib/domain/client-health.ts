@@ -37,6 +37,8 @@ export interface ClientHealthVerdict {
   strengths: string[];
   /** Attention signals — amber chips. */
   watchpoints: string[];
+  /** Suggested operator next-steps derived from the watchpoints — "volgende stap" chips. */
+  nextActions: string[];
 }
 
 const SLOW_SIGNOFF_HOURS = 72; // >3 days submit→sign = friction worth flagging
@@ -44,6 +46,7 @@ const SLOW_SIGNOFF_HOURS = 72; // >3 days submit→sign = friction worth flaggin
 export function computeClientHealth(input: ClientHealthInput): ClientHealthVerdict {
   const strengths: string[] = [];
   const watchpoints: string[] = [];
+  const nextActions: string[] = [];
 
   // ---- strengths ----------------------------------------------------------
   if (input.completedShifts >= 10) strengths.push(`Trouwe klant — ${input.completedShifts} diensten afgerond`);
@@ -61,13 +64,16 @@ export function computeClientHealth(input: ClientHealthInput): ClientHealthVerdi
   let serious = false;
   if (input.spendCents > 0 && input.marginCents < 0) {
     watchpoints.push("Marge negatief — tarieven nakijken");
+    nextActions.push("Tarieven aanpassen");
     serious = true;
   } else if (input.spendCents > 0 && marginRatio < 0.1) {
     watchpoints.push("Dunne marge");
+    nextActions.push("Tarieven nakijken");
   }
 
   if (input.pendingSignoff > 0) {
     watchpoints.push(`${input.pendingSignoff} uurbriefje(s) wachten op handtekening`);
+    nextActions.push("Klant aan tekenen herinneren");
     if (input.pendingSignoff >= 3) serious = true;
   }
   if (input.signoffAvgHours != null && input.signoffAvgHours > SLOW_SIGNOFF_HOURS) {
@@ -76,9 +82,11 @@ export function computeClientHealth(input: ClientHealthInput): ClientHealthVerdi
   // dormant: has history but nothing planned.
   if (input.completedShifts >= 3 && input.upcomingShifts === 0) {
     watchpoints.push("Geen nieuwe diensten gepland — even contact opnemen?");
+    nextActions.push("Contact opnemen");
   }
   if (input.completedShifts >= 3 && input.ratingsGiven === 0) {
     watchpoints.push("Geeft geen feedback op chefs");
+    nextActions.push("Om feedback vragen");
   }
   if (input.status === "paused") watchpoints.push("Status: gepauzeerd");
   if (input.status === "inactive" || input.status === "archived") {
@@ -103,5 +111,5 @@ export function computeClientHealth(input: ClientHealthInput): ClientHealthVerdi
         ? "Er is iets dat aandacht vraagt — zie hieronder."
         : "Prima klant, niets bijzonders op te merken.";
 
-  return { level, headline, summary, strengths, watchpoints };
+  return { level, headline, summary, strengths, watchpoints, nextActions };
 }
