@@ -97,7 +97,7 @@ export async function sendPlacementConfirmedEmails(placementId: string): Promise
   const shiftWhen = formatShiftWhen(shift.startsAt, shift.endsAt);
 
   if (clientRow) {
-    const klantTo = await recipientsForClient(clientRow.id, "generic");
+    const klantTo = await recipientsForClient(clientRow.id, "shift_confirmed");
     if (klantTo.length > 0) {
       const send = await sendEmail({
         to: klantTo,
@@ -127,6 +127,20 @@ export async function sendPlacementConfirmedEmails(placementId: string): Promise
           });
         }
       }
+    }
+    // Klant in-app note — every user-visible event → createNotification(). The chef
+    // gets one below; the klant must too (this was missing). Always fires (the bell
+    // is the inline floor); the email above respects the klant's opt-out.
+    if (clientRow.userId) {
+      await createNotification({
+        userId: clientRow.userId,
+        type: "shift_confirmed",
+        title: `Chef bevestigd voor ${shift.roleNeeded}`,
+        body: `${chef.fullName} is bevestigd voor je shift.`,
+        actionUrl: `/client/shifts/${shift.id}`,
+        entityType: "placement",
+        entityId: placementId,
+      });
     }
   }
 

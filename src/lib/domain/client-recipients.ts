@@ -19,6 +19,7 @@ import { shouldSendToUser } from "@/lib/integrations/prefs";
 /** Event keys that map to klant contact roles. */
 export type ClientEmailEvent =
   | "chef_proposed"
+  | "shift_confirmed"
   | "hours_ready_to_sign"
   | "hours_approved"
   | "hours_admin_rejected"
@@ -31,6 +32,7 @@ export type ClientEmailEvent =
 /** Which client_contacts role(s) an event prefers in V2. */
 const EVENT_ROLE_MAP: Record<ClientEmailEvent, Array<typeof clientContacts.$inferSelect.role>> = {
   chef_proposed: ["planning", "onsite"],
+  shift_confirmed: ["planning", "onsite"],
   hours_ready_to_sign: ["hours_approval"],
   // Hours-approved ("afgerond, factuur volgt") + admin-rejected ("uren-correctie") are
   // transactional financial confirmations tied to money owed — like billing mail, they
@@ -58,6 +60,11 @@ export const CLIENT_NOTIFICATION_PREFS: ReadonlyArray<{
     event: "chef_proposed",
     label: "Voorgestelde chef",
     description: "Mail wanneer we een chef voor je shift voorstellen.",
+  },
+  {
+    event: "shift_confirmed",
+    label: "Chef bevestigd",
+    description: "Mail wanneer een chef definitief voor je shift is bevestigd.",
   },
   {
     event: "hours_ready_to_sign",

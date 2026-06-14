@@ -457,14 +457,14 @@ export default async function ShiftDetailPage({
             );
             const shiftWhen = formatShiftWhen(shift.startsAt, shift.endsAt);
 
-            // KLANT email — PR-AUDIT-2: route via recipientsForClient (single
-            // seam + billing/contact routing). Operational confirmation that
-            // the klant can't opt out of → "generic" (always sends).
+            // KLANT email — route via recipientsForClient (single seam +
+            // billing/contact routing) on the dedicated "shift_confirmed" event
+            // (klant-mutable, role-routed). Mirrors sendPlacementConfirmedEmails.
             if (clientRow) {
               const { recipientsForClient } = await import(
                 "@/lib/domain/client-recipients"
               );
-              const klantTo = await recipientsForClient(clientRow.id, "generic");
+              const klantTo = await recipientsForClient(clientRow.id, "shift_confirmed");
               if (klantTo.length > 0) {
                 const send = await sendEmail({
                   to: klantTo,
@@ -494,6 +494,19 @@ export default async function ShiftDetailPage({
                     });
                   }
                 }
+              }
+              // Klant in-app note — every user-visible event → createNotification()
+              // (was missing; only the chef got one). Always fires (bell = floor).
+              if (clientRow.userId) {
+                await createNotification({
+                  userId: clientRow.userId,
+                  type: "shift_confirmed",
+                  title: `Chef bevestigd voor ${shift.roleNeeded}`,
+                  body: `${chef.fullName} is bevestigd voor je shift.`,
+                  actionUrl: `/client/shifts/${shift.id}`,
+                  entityType: "placement",
+                  entityId: placementId,
+                });
               }
             }
 
