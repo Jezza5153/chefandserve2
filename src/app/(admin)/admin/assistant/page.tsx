@@ -2,7 +2,7 @@
  * /admin/assistant — the owner assistant's dashboard channel. Owner / super_admin only.
  * Dormant until AI_ENABLED + OPENAI_API_KEY are set (the chat shows a hint).
  */
-import { requireRole } from "@/lib/permissions";
+import { requirePermission } from "@/lib/permissions";
 import { aiEnabled } from "@/lib/ai/config";
 import { AssistantChat } from "@/components/ai/AssistantChat";
 
@@ -10,7 +10,8 @@ export const metadata = { title: "Assistent", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 export default async function AssistantPage() {
-  await requireRole("owner");
+  // owner + super_admin only (assistant.use is owner-only; super_admin bypasses).
+  await requirePermission("assistant", "use");
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <div>
