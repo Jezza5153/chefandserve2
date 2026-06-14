@@ -221,11 +221,19 @@ export async function acceptSuggestion(args: {
   suggestionId: string;
   decidedBy: string;
   actorKind: "owner" | "chef";
+  /** When set, the claim only matches a suggestion owned by this chef (chef-side ownership). */
+  expectChefId?: string;
 }): Promise<AcceptResult> {
   const [claimed] = await db
     .update(profileSuggestions)
     .set({ status: "accepted", decidedBy: args.decidedBy, decidedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(profileSuggestions.id, args.suggestionId), eq(profileSuggestions.status, "pending")))
+    .where(
+      and(
+        eq(profileSuggestions.id, args.suggestionId),
+        eq(profileSuggestions.status, "pending"),
+        args.expectChefId ? eq(profileSuggestions.chefId, args.expectChefId) : undefined,
+      ),
+    )
     .returning({
       chefId: profileSuggestions.chefId,
       field: profileSuggestions.field,
@@ -275,11 +283,18 @@ export async function acceptSuggestion(args: {
 export async function dismissSuggestion(args: {
   suggestionId: string;
   decidedBy: string;
+  expectChefId?: string;
 }): Promise<{ ok: boolean }> {
   const [row] = await db
     .update(profileSuggestions)
     .set({ status: "dismissed", decidedBy: args.decidedBy, decidedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(profileSuggestions.id, args.suggestionId), eq(profileSuggestions.status, "pending")))
+    .where(
+      and(
+        eq(profileSuggestions.id, args.suggestionId),
+        eq(profileSuggestions.status, "pending"),
+        args.expectChefId ? eq(profileSuggestions.chefId, args.expectChefId) : undefined,
+      ),
+    )
     .returning({ id: profileSuggestions.id });
   return { ok: Boolean(row) };
 }
