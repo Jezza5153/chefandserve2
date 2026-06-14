@@ -14,13 +14,13 @@
  */
 
 import { config } from "dotenv";
-import { eq, inArray, like } from "drizzle-orm";
+import { eq, inArray, like, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 
 config({ path: ".env.local" });
 
-import { chefs, clients, placements, ratings, shiftHourCorrections, shiftHours, shifts } from "./schema";
+import { chefs, clients, clientSubmissions, placements, ratings, shiftHourCorrections, shiftHours, shifts, users } from "./schema";
 
 const DB_URL = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
 if (!DB_URL) throw new Error("DATABASE_URL_UNPOOLED or DATABASE_URL required");
@@ -209,8 +209,11 @@ async function clearDemoData() {
     if (demoPlacementIds.length) await dbClient.delete(ratings).where(inArray(ratings.placementId, demoPlacementIds));
   }
   await dbClient.delete(shifts).where(like(shifts.notes, `%${DEMO_MARKER}%`)); // cascades placements
-  await dbClient.delete(chefs).where(like(chefs.notes, `%${DEMO_MARKER}%`));
+  await dbClient.delete(clientSubmissions).where(like(clientSubmissions.notes, `%${DEMO_MARKER}%`));
+  await dbClient.delete(chefs).where(like(chefs.notes, `%${DEMO_MARKER}%`)); // chefs/clients.userId → set null on user delete
   await dbClient.delete(clients).where(like(clients.notes, `%${DEMO_MARKER}%`));
+  // Demo login accounts last (chefs/clients above already released their userId FK).
+  await dbClient.delete(users).where(like(users.seedKey, `${DEMO_MARKER}%`));
 }
 
 async function seedDemo() {
@@ -234,6 +237,20 @@ async function seedDemo() {
       DEMO_CLIENTS.map((c) => ({ ...c, notes: DEMO_MARKER })),
     )
     .returning({ id: clients.id, companyName: clients.companyName });
+
+  // Login-able accounts so the demo can impersonate a chef + a klant ("Bekijk als"
+  // from /admin/system/users) and walk all three portals from one super_admin login.
+  console.log("  → inserting demo login accounts (1 chef + 1 klant) for impersonation...");
+  const [chefUser] = await dbClient
+    .insert(users)
+    .values({ email: "demo-chef@chefandserve.demo", kind: "chef", status: "active", name: insertedChefs[0].fullName, seedKey: `${DEMO_MARKER}:chef` })
+    .returning({ id: users.id });
+  const [klantUser] = await dbClient
+    .insert(users)
+    .values({ email: "demo-klant@chefandserve.demo", kind: "client", status: "active", name: insertedClients[1].companyName, seedKey: `${DEMO_MARKER}:klant` })
+    .returning({ id: users.id });
+  await dbClient.update(chefs).set({ userId: chefUser.id }).where(eq(chefs.id, insertedChefs[0].id));
+  await dbClient.update(clients).set({ userId: klantUser.id }).where(eq(clients.id, insertedClients[1].id));
 
   console.log("  → inserting demo shifts + placements (rich roster spread)...");
 
@@ -319,7 +336,130 @@ async function seedDemo() {
   });
   if (dedupPlace.length) await dbClient.insert(placements).values(dedupPlace);
 
+  /* ----- Past completed shifts → hours + ratings ---------------------------
+     Lights up the MONEY KPIs (omzet/loonkost/marge from admin_approved hours),
+     the "uren te tekenen" (klant) + "uren te keuren" (owner) work-queues, and
+     chef ratings. [daysAgo, clientIdx, chefIdx, role, hoursStatus]. Chef 0 (the
+     linked demo chef) + client 1 (the linked demo klant) are seeded with their
+     own approved earnings / pending-to-sign hours so their portals look alive. */
+  console.log("  → inserting past completed shifts + hours + ratings...");
+  type HStat = "submitted" | "client_signed" | "admin_approved";
+  const pastSpecs: Array<[number, number, number, string, HStat]> = [
+    [3, 1, 0, "sous_chef", "submitted"], // Hotel (linked klant) + Sander (linked chef) → klant 'uren te tekenen'
+    [5, 0, 0, "sous_chef", "admin_approved"], // Sander earnings
+    [7, 1, 2, "chef_de_cuisine", "admin_approved"],
+    [9, 2, 1, "chef_de_partie", "client_signed"], // owner 'uren te keuren'
+    [11, 3, 4, "sous_chef", "admin_approved"],
+    [13, 0, 3, "patissier", "admin_approved"],
+    [15, 1, 5, "chef_de_partie", "submitted"], // another klant 'te tekenen'
+    [17, 2, 0, "sous_chef", "admin_approved"], // Sander earnings
+    [20, 3, 2, "chef_de_cuisine", "client_signed"],
+    [24, 0, 7, "chef_de_partie", "admin_approved"],
+  ];
+  const pastShiftRows = pastSpecs.map(([daysAgo, cidx, , role]) => {
+    const dk = addDays(t, -daysAgo);
+    const [clientRateCents, chefRateCents] = RATES[role] ?? [4000, 2900];
+    return {
+      clientId: cl[cidx].id,
+      startsAt: at(dk, 17),
+      endsAt: at(dk, 23),
+      roleNeeded: role as (typeof shifts.$inferInsert)["roleNeeded"],
+      segment: "hotel" as (typeof shifts.$inferInsert)["segment"],
+      headcount: 1,
+      city: "Amsterdam",
+      location: cl[cidx].companyName ?? "Amsterdam",
+      clientRateCents,
+      chefRateCents,
+      status: "completed" as (typeof shifts.$inferInsert)["status"],
+      notes: DEMO_MARKER,
+    };
+  });
+  const pastShifts = await dbClient.insert(shifts).values(pastShiftRows).returning({ id: shifts.id });
+
+  const pastPlaceRows = pastSpecs.map(([daysAgo, , chidx], i) => {
+    const dk = addDays(t, -daysAgo);
+    return {
+      shiftId: pastShifts[i].id,
+      chefId: ch[chidx].id,
+      status: "completed" as const,
+      proposedAt: at(dk, 9),
+      respondedAt: at(dk, 10),
+      confirmedAt: at(dk, 11),
+      completedAt: at(dk, 23),
+      notes: DEMO_MARKER,
+    };
+  });
+  const pastPlacements = await dbClient.insert(placements).values(pastPlaceRows).returning({ id: placements.id });
+
+  const hoursRows = pastSpecs.map(([daysAgo, cidx, chidx, role, hstatus], i) => {
+    const dk = addDays(t, -daysAgo);
+    const [clientRateCents, chefRateCents] = RATES[role] ?? [4000, 2900];
+    const end = at(dk, 23);
+    return {
+      placementId: pastPlacements[i].id,
+      shiftId: pastShifts[i].id,
+      chefId: ch[chidx].id,
+      clientId: cl[cidx].id,
+      startedAt: at(dk, 17),
+      endedAt: end,
+      breakMinutes: 30,
+      workedMinutes: 330, // 6h − 30min break
+      chefRateCents,
+      clientRateCents,
+      status: hstatus,
+      submittedAt: new Date(end.getTime() + 2 * 3_600_000),
+      clientSignedAt: hstatus === "submitted" ? null : new Date(end.getTime() + 20 * 3_600_000),
+      adminApprovedAt: hstatus === "admin_approved" ? new Date(end.getTime() + 26 * 3_600_000) : null,
+    };
+  });
+  await dbClient.insert(shiftHours).values(hoursRows);
+
+  // Ratings on the fully-approved placements → owner ratings KPI + chef averages.
+  const TAGS = [["professioneel", "flexibel"], ["sterke communicatie"], ["op tijd", "netjes"], ["teamspeler"]];
+  const ratingRows = pastSpecs
+    .map(([, cidx, chidx, , hstatus], i) => ({ cidx, chidx, hstatus, i }))
+    .filter((r) => r.hstatus === "admin_approved")
+    .map((r, n) => ({
+      placementId: pastPlacements[r.i].id,
+      chefId: ch[r.chidx].id,
+      clientId: cl[r.cidx].id,
+      stars: n % 3 === 0 ? 5 : 4,
+      tags: TAGS[n % TAGS.length],
+      comment: n % 2 === 0 ? "Sterke dienst, graag weer." : null,
+    }));
+  if (ratingRows.length) await dbClient.insert(ratings).values(ratingRows);
+
+  // Recompute the chef rating rollup for demo chefs (raw inserts skip the domain recompute).
+  await dbClient
+    .update(chefs)
+    .set({
+      averageRating: sql`(SELECT round(avg(stars)::numeric, 2) FROM ratings WHERE chef_id = ${chefs.id})`,
+      ratingCount: sql`(SELECT count(*)::int FROM ratings WHERE chef_id = ${chefs.id})`,
+    })
+    .where(like(chefs.notes, `%${DEMO_MARKER}%`));
+
+  // One pending portal request for the linked klant → /client/requests + owner inbox + the K3 flow.
+  await dbClient.insert(clientSubmissions).values({
+    externalId: `demo-${t}-okura`,
+    source: "client_portal",
+    clientId: cl[1].id,
+    companyName: insertedClients[1].companyName,
+    contactName: "Mark Jansen",
+    roleRequested: "sous_chef",
+    segment: "hotel",
+    headcount: 2,
+    dateNeeded: addDays(t, 9),
+    status: "triaged",
+    rawPayload: { demo: true },
+    notes: DEMO_MARKER,
+  });
+
+  const approvedCount = ratingRows.length;
   console.log("\n✓ Demo seed complete.");
+  console.log(`  login accounts: chef demo-chef@chefandserve.demo + klant demo-klant@chefandserve.demo (impersonate via Bekijk als)`);
+  console.log(`  past shifts:    ${pastShifts.length} completed (hours + ratings)`);
+  console.log(`  hours:          ${hoursRows.length} (${approvedCount} approved → omzet/marge · rest in te-tekenen/te-keuren queues)`);
+  console.log(`  ratings:        ${ratingRows.length}`);
   console.log(`  chefs:      ${insertedChefs.length}`);
   console.log(`  clients:    ${insertedClients.length}`);
   console.log(`  shifts:     ${insertedShifts.length} (today + week + month)`);
