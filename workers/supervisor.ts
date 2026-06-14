@@ -102,6 +102,11 @@ const JOBS: Job[] = [
   // klant); planner reviews & publishes in the morning. Idempotent (covered slots
   // skipped). GATED via AI_PREPLAN_ENABLED. Default OFF.
   { name: "ai-preplan", schedule: "30 5 * * *", script: "ai-preplan.ts" },
+  // Nightly CV → profile-suggestion sweep (daily 04:30 Amsterdam). Thin: POSTs
+  // /api/cron/cv-profiling — for each chef with a CV, extract structured fields
+  // and stage them as pending suggestions for owner/chef review (nothing applied).
+  // Idempotent (decided fields skipped per CV hash). GATED via CV_AI_PROFILING_ENABLED.
+  { name: "cv-profiling", schedule: "30 4 * * *", script: "cv-profiling.ts" },
 ];
 
 function ts(): string {
