@@ -202,6 +202,10 @@ const serverSchema = z.object({
   // proposals that lapsed un-responded (notify-only, no status change). Default off.
   OFFER_EXPIRY_SWEEP_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-PR5 — when on, matching SOFT-scores the chef's own travel-radius + avoid
+  // preferences (captured in PR-1). Default off → live planner ranking unchanged.
+  MATCHING_PREFS_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });

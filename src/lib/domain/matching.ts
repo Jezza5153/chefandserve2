@@ -22,6 +22,8 @@ import {
   type Chef,
 } from "@/lib/db/schema";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
+import { type LatLng } from "@/lib/domain/geo";
+import { estimateTravel } from "@/lib/domain/travel";
 import { sendEmail, formatShiftWhen } from "@/lib/email";
 import { env } from "@/lib/env";
 import { createNotification, notifyUser, recordEmailMessage } from "@/lib/integrations";
@@ -124,6 +126,19 @@ const PREFERENCE_SIGNALS: Record<
   michelin: { segments: ["michelin"], label: "Michelin" },
 };
 
+type SignalDef = { segments?: string[]; clientTypes?: string[]; clientTags?: string[]; label: string };
+
+/** Does a (preference|avoid) signal match this shift's segment / klanttype / tags? */
+function signalHits(
+  sig: SignalDef,
+  shift: { segment: string | null; clientType: string | null; clientTags: string[] | null },
+): boolean {
+  const segHit = !!(sig.segments && shift.segment && sig.segments.includes(shift.segment));
+  const typeHit = !!(sig.clientTypes && shift.clientType && sig.clientTypes.includes(shift.clientType));
+  const tagHit = !!(sig.clientTags && shift.clientTags && sig.clientTags.some((t) => shift.clientTags!.includes(t)));
+  return segHit || typeHit || tagHit;
+}
+
 function matchedPreferenceLabels(
   preferences: string[],
   shift: { segment: string | null; clientType: string | null; clientTags: string[] | null },
@@ -131,17 +146,76 @@ function matchedPreferenceLabels(
   const out: string[] = [];
   for (const pref of preferences) {
     const sig = PREFERENCE_SIGNALS[pref];
-    if (!sig) continue;
-    const segHit = !!(sig.segments && shift.segment && sig.segments.includes(shift.segment));
-    const typeHit = !!(sig.clientTypes && shift.clientType && sig.clientTypes.includes(shift.clientType));
-    const tagHit = !!(
-      sig.clientTags &&
-      shift.clientTags &&
-      sig.clientTags.some((t) => shift.clientTags!.includes(t))
-    );
-    if (segHit || typeHit || tagHit) out.push(sig.label);
+    if (sig && signalHits(sig, shift)) out.push(sig.label);
   }
   return out;
+}
+
+/* ----- CHEF-PR5: chef AVOID signals (inverse of preferences). Provable keys only —
+ * zorg / late_night have no reliable structured counterpart, so they're absent
+ * (same "never invent a reason we can't prove" rule as PREFERENCE_SIGNALS). */
+const AVOID_SIGNALS: Record<string, SignalDef> = {
+  ontbijt: { clientTags: ["ontbijt"], label: "ontbijt" },
+  banqueting: { segments: ["banqueting"], clientTags: ["banqueting"], label: "banqueting" },
+  events: { clientTypes: ["event_venue"], segments: ["event"], label: "evenementen" },
+};
+
+function toLL(lat: string | null | undefined, lng: string | null | undefined): LatLng | null {
+  if (lat == null || lng == null) return null;
+  const a = Number(lat);
+  const b = Number(lng);
+  return Number.isFinite(a) && Number.isFinite(b) ? { lat: a, lng: b } : null;
+}
+
+/**
+ * CHEF-PR5: SOFT, flag-gated adjustment for the chef's own travel-radius + avoid
+ * preferences (the prefs captured in PR-1, finally enforced). Default OFF
+ * (MATCHING_PREFS_ENABLED) → returns `base` unchanged, so live planner ranking does
+ * NOT shift until the flag flips. Penalties are multiplicative + soft — a far/avoided
+ * chef ranks lower but still appears; never a hard exclude (planner stays in control).
+ */
+function prefsAdjust(
+  base: number,
+  chef: {
+    latitude?: string | null;
+    longitude?: string | null;
+    travelRadiusKm?: number | null;
+    avoidPreferences?: string[] | null;
+  },
+  shift: {
+    segment: string | null;
+    clientType?: string | null;
+    clientTags?: string[] | null;
+    latitude?: string | null;
+    longitude?: string | null;
+  },
+): { score: number; reasons: string[]; warnings: string[] } {
+  if (env.MATCHING_PREFS_ENABLED !== "true") return { score: base, reasons: [], warnings: [] };
+  const reasons: string[] = [];
+  const warnings: string[] = [];
+  let factor = 1;
+  const s = { segment: shift.segment, clientType: shift.clientType ?? null, clientTags: shift.clientTags ?? null };
+
+  for (const a of chef.avoidPreferences ?? []) {
+    const sig = AVOID_SIGNALS[a];
+    if (sig && signalHits(sig, s)) {
+      factor *= 0.4;
+      warnings.push(`Chef vermijdt liever: ${sig.label}`);
+      break;
+    }
+  }
+  const cll = toLL(chef.latitude, chef.longitude);
+  const sll = toLL(shift.latitude, shift.longitude);
+  if (chef.travelRadiusKm != null && chef.travelRadiusKm > 0 && cll && sll) {
+    const km = estimateTravel({ from: cll, to: sll, mode: null }).km;
+    if (km > chef.travelRadiusKm) {
+      factor *= 0.6;
+      warnings.push(`Buiten reisafstand (${Math.round(km)} > ${chef.travelRadiusKm} km)`);
+    } else {
+      reasons.push("Binnen reisafstand");
+    }
+  }
+  return { score: Math.round(base * factor), reasons, warnings };
 }
 
 /**
@@ -233,7 +307,18 @@ function buildReasonsAndWarnings(
 /** Chef fields needed to score a single shift (subset of the full row). */
 export type ScorableChef = Pick<
   Chef,
-  "vakniveau" | "yearsExperience" | "city" | "status" | "segments" | "languages" | "preferences"
+  | "vakniveau"
+  | "yearsExperience"
+  | "city"
+  | "status"
+  | "segments"
+  | "languages"
+  | "preferences"
+  // CHEF-PR5: own travel-radius + avoid prefs (soft, flag-gated in prefsAdjust)
+  | "latitude"
+  | "longitude"
+  | "travelRadiusKm"
+  | "avoidPreferences"
 >;
 
 /** Shift fields needed to score + explain a single match. */
@@ -245,6 +330,9 @@ export type ScorableShift = {
   languageRequired?: string | null;
   clientType?: string | null;
   clientTags?: string[] | null;
+  // CHEF-PR5: for the chef's travel-radius check
+  latitude?: string | null;
+  longitude?: string | null;
 };
 
 export type ChefShiftScore = {
@@ -271,9 +359,14 @@ export function scoreChefForShift(
   const s = segmentScore(chef.segments, shift.segment);
   const e = experienceBonus(chef.yearsExperience, shift.segment);
   const composite = v * 0.5 + s * 0.3 + e * 0.2;
-  const score = Math.round(composite * 100);
   const { reasons, warnings } = buildReasonsAndWarnings(chef, shift, v, s);
-  return { score, reasons, warnings };
+  // CHEF-PR5: soft, flag-gated travel-radius + avoid-pref adjustment (default off = no-op).
+  const adj = prefsAdjust(Math.round(composite * 100), chef, shift);
+  return {
+    score: adj.score,
+    reasons: [...reasons, ...adj.reasons],
+    warnings: [...warnings, ...adj.warnings],
+  };
 }
 
 /**
@@ -444,7 +537,6 @@ export async function findMatchesForShift(
     // Composite — weighted product. Vakniveau is the gate.
     if (v === 0 && !options.includeOverqualified) continue;
     const composite = v * 0.5 + s * 0.3 + e * 0.2;
-    const score = Math.round(composite * 100);
 
     const { reasons, warnings } = buildReasonsAndWarnings(
       chef,
@@ -461,12 +553,21 @@ export async function findMatchesForShift(
       s,
     );
 
+    // CHEF-PR5: soft, flag-gated travel-radius + avoid-pref adjustment (default off = no-op).
+    const adj = prefsAdjust(Math.round(composite * 100), chef, {
+      segment: shift.segment,
+      clientType: matchClient?.clientType ?? null,
+      clientTags: matchClient?.clientTags ?? null,
+      latitude: shift.latitude,
+      longitude: shift.longitude,
+    });
+
     results.push({
       chef,
-      score,
+      score: adj.score,
       scoreBreakdown: { vakniveau: v, segment: s, experience: e },
-      reasons,
-      warnings,
+      reasons: [...reasons, ...adj.reasons],
+      warnings: [...warnings, ...adj.warnings],
     });
   }
 
