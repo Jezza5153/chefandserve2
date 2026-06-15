@@ -194,6 +194,10 @@ const serverSchema = z.object({
   // shifts stay planner-curated interest-only.
   EMERGENCY_CLAIM_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-PR2 — offer lifecycle: hours a proposal stays open before it counts as
+  // "verlopen" (derived). Default 24; numeric string.
+  OFFER_EXPIRY_HOURS: z.string().optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });

@@ -391,6 +391,8 @@ export async function claimEmergencyShift(args: {
       .set({ status: "filled", updatedAt: new Date() })
       .where(and(eq(shifts.id, args.shiftId), inArray(shifts.status, ["request", "open"])))
       .catch(() => {});
+    // Losing-chef message: tell everyone who raised their hand that it's gone.
+    await notifyShiftFilledToInterested(args.shiftId, args.chefId).catch(() => {});
   }
 
   await notifyEmergencyClaim(args.chefId, args.shiftId, placementId).catch((e) =>
@@ -398,6 +400,38 @@ export async function claimEmergencyShift(args: {
   );
 
   return { ok: true, placementId };
+}
+
+/** Losing-chef message: notify everyone with active interest (minus the winner)
+ *  that the shift is filled, so nobody keeps waiting on a gone dienst. */
+async function notifyShiftFilledToInterested(shiftId: string, winnerChefId: string): Promise<void> {
+  const shift = await db.query.shifts.findFirst({ where: eq(shifts.id, shiftId) });
+  if (!shift) return;
+  const client = await db.query.clients.findFirst({ where: eq(clients.id, shift.clientId) });
+  const when = amsterdamDayKey(shift.startsAt);
+  const losers = await db
+    .select({ userId: chefs.userId })
+    .from(shiftInterests)
+    .innerJoin(chefs, eq(chefs.id, shiftInterests.chefId))
+    .where(
+      and(
+        eq(shiftInterests.shiftId, shiftId),
+        isNull(shiftInterests.withdrawnAt),
+        ne(shiftInterests.chefId, winnerChefId),
+      ),
+    );
+  for (const l of losers) {
+    if (!l.userId) continue;
+    await notifyUser({
+      userId: l.userId,
+      type: "shift_filled",
+      title: "Dienst is vervuld",
+      body: `${shift.roleNeeded} bij ${client?.companyName ?? "een klant"} — ${when} is door een andere chef opgepakt.`,
+      actionUrl: "/chef/open",
+      entityType: "shifts",
+      entityId: shiftId,
+    }).catch(() => {});
+  }
 }
 
 /** Owner alert + chef confirmation for a claimed emergency shift (best-effort). */

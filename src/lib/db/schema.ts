@@ -1517,6 +1517,11 @@ export const placements = pgTable(
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    /** CHEF-PR2 offer lifecycle: when the chef first OPENED this proposal. */
+    seenAt: timestamp("seen_at", { withTimezone: true }),
+    /** CHEF-PR2 offer lifecycle: response deadline, set on propose. Past this
+     *  while still 'proposed' = derived "verlopen" (no status/enum change). */
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
 
     /* ----- audit ----- */
     proposedBy: text("proposed_by").references(() => users.id, {

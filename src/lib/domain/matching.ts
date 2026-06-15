@@ -518,6 +518,9 @@ export async function proposePlacement(
   }
 
   const now = new Date();
+  // CHEF-PR2 offer lifecycle: the proposal stays open for OFFER_EXPIRY_HOURS
+  // (default 24); past that while still 'proposed' it reads as "verlopen".
+  const expiresAt = new Date(now.getTime() + (Number(env.OFFER_EXPIRY_HOURS) || 24) * 3_600_000);
   // Insert-or-reset on the unique (chefId, shiftId) target. A prior
   // rejected/cancelled row is reset to a clean `proposed` state; concurrent
   // inserts converge on the same row instead of throwing 23505.
@@ -530,6 +533,7 @@ export async function proposePlacement(
       proposedBy: options.proposedBy,
       matchScore: options.matchScore ?? null,
       notes: options.notes ?? null,
+      expiresAt,
     })
     .onConflictDoUpdate({
       target: [placements.chefId, placements.shiftId],
@@ -544,6 +548,9 @@ export async function proposePlacement(
         confirmedAt: null,
         cancelledAt: null,
         completedAt: null,
+        // A fresh offer is unseen again, with a fresh deadline.
+        seenAt: null,
+        expiresAt,
         updatedAt: now,
       },
     })
