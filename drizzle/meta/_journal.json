@@ -428,6 +428,13 @@
       "when": 1781556358635,
       "tag": "0060_chef_pr3_arrival_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1781557538672,
+      "tag": "0061_agenda_events_and_indexes",
+      "breakpoints": true
     }
   ]
 }
