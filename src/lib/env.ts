@@ -206,6 +206,11 @@ const serverSchema = z.object({
   // preferences (captured in PR-1). Default off → live planner ranking unchanged.
   MATCHING_PREFS_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-PR3 — Aankomstzekerheid (Arrival Trust). When on, the PWA does an on-device
+  // 1km arrival check in the 20 min before a shift (sends only the result, never
+  // coordinates). Default off — go-live needs an AVG/DPIA sign-off.
+  ARRIVAL_TRUST_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });

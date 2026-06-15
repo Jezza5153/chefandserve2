@@ -13,8 +13,10 @@ import { and, eq, isNull } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { ArrivalTrust } from "./ArrivalTrust";
 import { CancelShiftSection } from "./CancelShiftSection";
 import { RejectWithReason } from "./RejectWithReason";
+import { arrivalTrustEnabled } from "@/lib/domain/arrival";
 import { db } from "@/lib/db/client";
 import {
   chefs,
@@ -593,6 +595,19 @@ export default async function ChefShiftDetailPage({
           address={shift.location ?? `${client.address ?? ""} ${client.city ?? ""}`.trim()}
         />
       )}
+
+      {/* CHEF-PR3: Arrival Trust — on-device 1 km check in the 20 min pre-shift (dark behind flag) */}
+      {arrivalTrustEnabled() &&
+        ["accepted", "confirmed"].includes(placement.status) &&
+        shift.latitude != null &&
+        shift.longitude != null && (
+          <ArrivalTrust
+            shiftId={shift.id}
+            startsAtMs={new Date(shift.startsAt).getTime()}
+            lat={Number(shift.latitude)}
+            lng={Number(shift.longitude)}
+          />
+        )}
 
       {/* Decision form (proposed only) */}
       {placement.status === "proposed" ? (
