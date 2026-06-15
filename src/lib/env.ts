@@ -189,6 +189,11 @@ const serverSchema = z.object({
   // Default off; express-interest only (planner still curates the placement).
   CHEF_OPEN_SHIFTS_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-PR2 — first-qualified-wins for EMERGENCY shifts only. When on, a chef can
+  // instantly claim a shift flagged is_emergency (confirmed). Default off; normal
+  // shifts stay planner-curated interest-only.
+  EMERGENCY_CLAIM_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });

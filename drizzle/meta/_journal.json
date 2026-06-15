@@ -407,6 +407,13 @@
       "when": 1781543332340,
       "tag": "0057_chef_pr1_availability_prefs",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1781544845298,
+      "tag": "0058_chef_pr2_emergency_flag",
+      "breakpoints": true
     }
   ]
 }

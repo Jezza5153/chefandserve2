@@ -1184,6 +1184,11 @@ export const shifts = pgTable("shifts", {
   mealIncluded: boolean("meal_included"),
   startFlexible: boolean("start_flexible"),
 
+  /** CHEF-PR2: spoeddienst — when true + EMERGENCY_CLAIM_ENABLED, the first
+   *  qualified chef can instantly claim the shift (confirmed) instead of the
+   *  planner-curated interest flow. Default off; normal shifts unaffected. */
+  isEmergency: boolean("is_emergency").notNull().default(false),
+
   /* ----- lifecycle ----- */
   status: shiftStatusEnum("status").notNull().default("request"),
   /** INTERNAL admin-only — never shown to chef or client (PR-CHEF-2b). */
