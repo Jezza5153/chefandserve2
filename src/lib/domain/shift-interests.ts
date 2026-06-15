@@ -302,7 +302,16 @@ export type ClaimResult =
   | { ok: true; placementId: string }
   | {
       ok: false;
-      reason: "disabled" | "not_found" | "not_emergency" | "closed" | "blocked" | "conflict" | "already" | "full";
+      reason:
+        | "disabled"
+        | "not_found"
+        | "not_emergency"
+        | "closed"
+        | "opted_out"
+        | "blocked"
+        | "conflict"
+        | "already"
+        | "full";
     };
 
 export async function claimEmergencyShift(args: {
@@ -317,6 +326,12 @@ export async function claimEmergencyShift(args: {
   if (["cancelled", "completed", "filled"].includes(shift.status) || shift.startsAt <= new Date()) {
     return { ok: false, reason: "closed" };
   }
+
+  // CHEF-PR5: honour the chef's own emergency opt-in. The UI already hides
+  // "Accepteer nu" for opted-out chefs; this guards a direct POST too (defence
+  // in depth — never act against a stated preference).
+  const me = await db.query.chefs.findFirst({ where: eq(chefs.id, args.chefId) });
+  if (!me?.availableForEmergency) return { ok: false, reason: "opted_out" };
 
   // Qualification (app-side; the planner can still override). The hard
   // safety — no double-book, no oversubscription — is the atomic insert below.
