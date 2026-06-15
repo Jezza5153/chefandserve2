@@ -7,12 +7,14 @@
  * token-user MUST be owner/super_admin. Middleware lets calendar.ics through before auth.
  */
 
-import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db/client";
-import { clients, placements, roles, shifts, userRoles, users } from "@/lib/db/schema";
+import { agendaEvents, clients, placements, roles, shifts, userRoles, users } from "@/lib/db/schema";
 import { buildIcs, icsEtag, parseCalendarToken } from "@/lib/calendar/ics";
+import { agendaEventLabel } from "@/lib/domain/agenda-events";
 import { formatShiftRole } from "@/lib/labels";
 
 export const runtime = "nodejs";
@@ -114,9 +116,41 @@ export async function GET(req: Request) {
     for (const c of counts) countByShift.set(c.shiftId, c.n);
   }
 
+  // Manual one-off events (intake calls, follow-ups, …) — owner-only feed, so the
+  // owner's own titles are fine to surface. Free-text notes are deliberately NOT
+  // included; description stays to the kind + linked client (AVG-conservative).
+  const linkedClient = alias(clients, "linked_client");
+  const meRows = await db
+    .select({
+      id: agendaEvents.id,
+      type: agendaEvents.type,
+      title: agendaEvents.title,
+      startsAt: agendaEvents.startsAt,
+      endsAt: agendaEvents.endsAt,
+      status: agendaEvents.status,
+      companyName: linkedClient.companyName,
+    })
+    .from(agendaEvents)
+    .leftJoin(linkedClient, eq(linkedClient.id, agendaEvents.linkedClientId))
+    .where(and(gte(agendaEvents.startsAt, from), lte(agendaEvents.startsAt, to), ne(agendaEvents.status, "cancelled")));
+
+  const manualEvents = meRows.map((m) => {
+    const start = new Date(m.startsAt);
+    const end = m.endsAt ? new Date(m.endsAt) : new Date(start.getTime() + 30 * 60_000);
+    const label = agendaEventLabel(m.type);
+    return {
+      uid: "agenda-" + m.id + "@chefandserve",
+      summary: label + " - " + m.title,
+      description: m.companyName ? "Klant: " + m.companyName : label,
+      startsAt: start,
+      endsAt: end,
+      status: (m.status === "done" ? "CONFIRMED" : "TENTATIVE") as IcsStatus,
+    };
+  });
+
   const ics = buildIcs({
     calendarName: "Chef & Serve - Operations",
-    events: rows.map((r) => toEvent(r as ShiftRow, countByShift.get(r.id) ?? 0)),
+    events: [...rows.map((r) => toEvent(r as ShiftRow, countByShift.get(r.id) ?? 0)), ...manualEvents],
   });
 
   return new NextResponse(ics, {
