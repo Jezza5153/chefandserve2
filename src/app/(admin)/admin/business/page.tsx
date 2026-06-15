@@ -18,6 +18,8 @@ import { Icon, type IconName } from "@/components/admin/icons";
 import { shiftStatusChip } from "@/components/admin/shiftVisuals";
 import { OpsCard } from "@/components/dashboard/OpsCard";
 import { MoneyStrip } from "@/components/dashboard/MoneyStrip";
+import { DrawerShell } from "@/components/dashboard/drawer/DrawerShell";
+import { OpenShiftDrawer } from "@/components/dashboard/drawer/OpenShiftDrawer";
 import { db } from "@/lib/db/client";
 import {
   chefSubmissions,
@@ -60,7 +62,12 @@ export const dynamic = "force-dynamic";
 
 const FILLED_STATUSES = ["confirmed", "accepted"] as const;
 
-export default async function BusinessDashboardPage() {
+export default async function BusinessDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ drawer?: string; shiftId?: string; done?: string }>;
+}) {
+  const sp = await searchParams;
   const session = await requirePermission("cockpit", "read");
   const rosterSettings = await getRosterSettings(session.user.id);
   const intelSettings = {
@@ -305,8 +312,9 @@ export default async function BusinessDashboardPage() {
       icon: "alert-triangle",
       title: `${s.companyName ?? "Onbekende klant"} · ${dayLabel} ${hhmm(s.startsAt)}`,
       detail: open > 0 ? `mist ${open} chef${open === 1 ? "" : "s"} · ${cnt}/${s.headcount} bemand` : `${cnt}/${s.headcount} bemand`,
-      href: `/admin/business/shifts/${s.id}`,
-      cta: "Open dienst",
+      // DASH-2a: open the "Vul deze dienst" drawer in place (search-param driven) instead of a page jump.
+      href: `/admin/business?drawer=open-shift&shiftId=${s.id}`,
+      cta: "Vul deze dienst",
     });
   }
   if (acceptedNotConfirmed > 0)
@@ -345,6 +353,24 @@ export default async function BusinessDashboardPage() {
   return (
     <div className="-mx-6 -my-10 md:-mx-10 md:-my-12">
       <div className="px-6 py-7 md:px-10 md:py-8">
+
+        {/* Confirmation flash — every drawer action redirects here with ?done= */}
+        {sp.done && (
+          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">
+            {sp.done === "voorstel"
+              ? "✓ Voorgesteld — de chef krijgt de aanvraag. Gelogd."
+              : sp.done === "al-voorgesteld"
+                ? "Deze chef stond al op deze dienst."
+                : "✓ Gelogd."}
+          </div>
+        )}
+
+        {/* In-place drawer (search-param driven) — fix the signal without a page jump */}
+        {sp.drawer === "open-shift" && sp.shiftId && (
+          <DrawerShell title="Vul deze dienst" closeHref="/admin/business">
+            <OpenShiftDrawer shiftId={sp.shiftId} />
+          </DrawerShell>
+        )}
 
         {/* Top bar */}
         <div className="flex flex-wrap items-start justify-between gap-4">
