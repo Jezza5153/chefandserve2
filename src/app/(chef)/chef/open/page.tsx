@@ -69,6 +69,7 @@ const CLAIM_MSG: Record<string, string> = {
   not_emergency: "Deze dienst is geen spoeddienst.",
   not_found: "Dienst niet gevonden.",
   disabled: "Direct claimen is nu niet beschikbaar.",
+  opted_out: "Je staat niet open voor spoeddiensten — pas dit aan bij je voorkeuren.",
 };
 
 async function interestAction(fd: FormData) {
@@ -165,7 +166,7 @@ export default async function ChefOpenShiftsPage({
         ) : (
           open.map((s) => {
             const urgency = urgencyLabel(s.hoursUntilStart);
-            const claimable = s.isEmergency && emergencyOn;
+            const claimable = s.isEmergency && emergencyOn && (chef.availableForEmergency ?? false);
             return (
               <div
                 key={s.shiftId}
