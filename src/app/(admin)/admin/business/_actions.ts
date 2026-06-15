@@ -16,7 +16,7 @@ import { proposePlacement } from "@/lib/domain/matching";
 import { transitionPlacement } from "@/lib/domain/placement-transition";
 import { approveHoursRow } from "@/lib/domain/hours";
 import { db } from "@/lib/db/client";
-import { dashboardSignalState } from "@/lib/db/schema";
+import { contactLogs, dashboardSignalState } from "@/lib/db/schema";
 import { recordAuditFromRequest } from "@/lib/audit";
 
 /** Propose a chef for an open shift (outbound — chef gets the offer). */
@@ -102,4 +102,37 @@ export async function dismissSignal(formData: FormData) {
     });
   await recordAuditFromRequest({ action: "dashboard.signal.dismiss", resource: "dashboard", resourceId: signalKey, after: { reason } }).catch(() => {});
   redirect("/admin/business?done=opgelost");
+}
+
+/**
+ * Log a contact attempt with a chef from the fill drawer (call/app/note + outcome). Writes
+ * a contactLogs row tied to the shift — feeds the per-shift timeline and (later) matching.
+ * Mirrors the shift-detail page's logContact action.
+ */
+export async function logChefContactFromDashboard(formData: FormData) {
+  const session = await requirePermission("shifts", "write");
+  const chefId = String(formData.get("chefId") ?? "").trim();
+  const shiftId = String(formData.get("shiftId") ?? "").trim();
+  if (!chefId || !shiftId) throw new Error("chefId/shiftId ontbreekt");
+  const outcome = String(formData.get("outcome") ?? "note_only");
+  const channel = String(formData.get("channel") ?? "phone");
+  const note = String(formData.get("note") ?? "").trim() || null;
+
+  await db.insert(contactLogs).values({
+    actorUserId: session.user.id,
+    targetType: "chef",
+    targetId: chefId,
+    channel,
+    entityType: "shift",
+    entityId: shiftId,
+    outcome,
+    note,
+  });
+  await recordAuditFromRequest({
+    action: "contact_logs.created",
+    resource: "contact_logs",
+    resourceId: chefId,
+    after: { shiftId, outcome, channel },
+  }).catch(() => {});
+  redirect(`/admin/business?drawer=open-shift&shiftId=${shiftId}&done=contact-gelogd`);
 }
