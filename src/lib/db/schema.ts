@@ -2108,6 +2108,37 @@ export type ShiftHours = typeof shiftHours.$inferSelect;
 export type NewShiftHours = typeof shiftHours.$inferInsert;
 
 /* =============================================================================
+ * CHEF-PR4 — clock-out review. The 6 short post-shift questions a chef answers
+ * once their hours are in. This is the GOLD that feeds the planned-vs-actual +
+ * hotel-overpromise reports (PR-10): role-as-planned, extra hours, break, "as
+ * described", free issue note + would-return. One row per placement.
+ * =========================================================================== */
+export const shiftHourReviews = pgTable(
+  "shift_hour_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    placementId: text("placement_id")
+      .notNull()
+      .references(() => placements.id, { onDelete: "cascade" }),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    workedPlannedRole: boolean("worked_planned_role"), // Q1
+    workedExtraHours: boolean("worked_extra_hours"), // Q2
+    gotBreak: boolean("got_break"), // Q3
+    asDescribed: boolean("as_described"), // Q4
+    issueNote: text("issue_note"), // Q5 — free text for Maarten (DATA, not instructions)
+    wouldReturn: boolean("would_return"), // Q6
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    placementUnique: uniqueIndex("shift_hour_reviews_placement_unique").on(t.placementId),
+  }),
+);
+
+export type ShiftHourReview = typeof shiftHourReviews.$inferSelect;
+
+/* =============================================================================
  * Profile change requests (PR-CHEF-4) — chef requests edits to sensitive fields.
  *
  * Chef can edit phone/city/languages/specialties/segments/photo directly.
