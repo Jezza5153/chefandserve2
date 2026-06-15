@@ -3587,3 +3587,23 @@ export const inboxAccess = pgTable(
   (t) => ({ inboxUserUnique: uniqueIndex("inbox_access_inbox_user_unique").on(t.inboxId, t.userId) }),
 );
 export type InboxAccess = typeof inboxAccess.$inferSelect;
+
+/**
+ * Dashboard signal state (DASH-3b) — snooze/dismiss METADATA on a derived attention
+ * signal. NOT a duplicate issue store: the signal itself stays derived from live data;
+ * this row only suppresses/owns it. Keyed by a stable `signalKey` (kind, or kind:entityId).
+ * Dismiss carries a `fingerprint` of the signal at dismiss-time so it auto-clears when the
+ * underlying state changes (e.g. the count moves); snooze is purely time-based.
+ */
+export const dashboardSignalState = pgTable("dashboard_signal_state", {
+  signalKey: text("signal_key").primaryKey(),
+  /** Hidden while snoozeUntil > now. */
+  snoozeUntil: timestamp("snooze_until", { withTimezone: true }),
+  /** Set on "Klaar — reden"; required reason for the dismiss. */
+  dismissedReason: text("dismissed_reason"),
+  /** Signal fingerprint at dismiss-time; dismiss auto-clears when the live fingerprint differs. */
+  fingerprint: text("fingerprint"),
+  updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export type DashboardSignalState = typeof dashboardSignalState.$inferSelect;

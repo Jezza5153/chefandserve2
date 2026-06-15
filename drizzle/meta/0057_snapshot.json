@@ -1,5 +1,5 @@
 {
-  "id": "daa5f488-17d2-4199-bdb7-36cd6cfa6b93",
+  "id": "3b1e2184-2a09-45d7-8cae-ae6502eb75a0",
   "prevId": "a0632c6c-376a-424b-90a2-2ebdeeaff664",
   "version": "7",
   "dialect": "postgresql",
@@ -2207,37 +2207,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "travel_radius_km": {
-          "name": "travel_radius_km",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "available_for_emergency": {
-          "name": "available_for_emergency",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "avoid_preferences": {
-          "name": "avoid_preferences",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "min_start_hour": {
-          "name": "min_start_hour",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "availability_notes": {
-          "name": "availability_notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "status": {
           "name": "status",
           "type": "chef_status",
@@ -3960,6 +3929,70 @@
           "tableTo": "users",
           "columnsFrom": [
             "actor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.dashboard_signal_state": {
+      "name": "dashboard_signal_state",
+      "schema": "",
+      "columns": {
+        "signal_key": {
+          "name": "signal_key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "snooze_until": {
+          "name": "snooze_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dismissed_reason": {
+          "name": "dismissed_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fingerprint": {
+          "name": "fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "dashboard_signal_state_updated_by_users_id_fk": {
+          "name": "dashboard_signal_state_updated_by_users_id_fk",
+          "tableFrom": "dashboard_signal_state",
+          "tableTo": "users",
+          "columnsFrom": [
+            "updated_by"
           ],
           "columnsTo": [
             "id"

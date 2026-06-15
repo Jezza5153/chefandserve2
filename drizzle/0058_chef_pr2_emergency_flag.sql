@@ -1,1 +1,0 @@
-ALTER TABLE "shifts" ADD COLUMN "is_emergency" boolean DEFAULT false NOT NULL;
