@@ -40,6 +40,9 @@ export function RejectWithReason({ placementId, respondAction }: Props) {
             { v: "verkeerd_tijdstip", l: "Verkeerd tijdstip" },
             { v: "al_bezet", l: "Al bezet" },
             { v: "type_keuken", l: "Type keuken" },
+            { v: "geen_ontbijt", l: "Geen ontbijt" },
+            { v: "geen_hotel", l: "Geen hotel" },
+            { v: "klant_nee", l: "Liever niet deze klant" },
             { v: "tarief", l: "Tarief" },
             { v: "anders", l: "Anders" },
           ].map((r) => (

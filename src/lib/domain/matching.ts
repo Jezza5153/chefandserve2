@@ -228,6 +228,54 @@ function buildReasonsAndWarnings(
   return { reasons, warnings };
 }
 
+/* ----- CHEF-PR1: score ONE chef against ONE shift (chef-facing) ----------- */
+
+/** Chef fields needed to score a single shift (subset of the full row). */
+export type ScorableChef = Pick<
+  Chef,
+  "vakniveau" | "yearsExperience" | "city" | "status" | "segments" | "languages" | "preferences"
+>;
+
+/** Shift fields needed to score + explain a single match. */
+export type ScorableShift = {
+  roleNeeded: string;
+  segment: string | null;
+  city: string | null;
+  minExperience?: number | null;
+  languageRequired?: string | null;
+  clientType?: string | null;
+  clientTags?: string[] | null;
+};
+
+export type ChefShiftScore = {
+  /** 0-100 composite, SAME formula as findMatchesForShift. */
+  score: number;
+  /** Klant-safe positive reasons ("Waarom krijg ik deze shift?"). */
+  reasons: string[];
+  /** Internal-only warnings — never render to chef OR klant. */
+  warnings: string[];
+};
+
+/**
+ * Score one chef against one shift, reusing the exact scoring helpers +
+ * weights that findMatchesForShift uses (vakniveau 0.5 · segment 0.3 ·
+ * experience 0.2). Pure + synchronous so the open-shifts list can call it per
+ * row without extra DB round-trips. Powers the chef-facing fit% + "waarom" on
+ * /chef/open (CHEF-PR1). Stable signature so AI/Phase-9 can swap the scorer.
+ */
+export function scoreChefForShift(
+  chef: ScorableChef,
+  shift: ScorableShift,
+): ChefShiftScore {
+  const v = vakniveauScore(chef.vakniveau, shift.roleNeeded);
+  const s = segmentScore(chef.segments, shift.segment);
+  const e = experienceBonus(chef.yearsExperience, shift.segment);
+  const composite = v * 0.5 + s * 0.3 + e * 0.2;
+  const score = Math.round(composite * 100);
+  const { reasons, warnings } = buildReasonsAndWarnings(chef, shift, v, s);
+  return { score, reasons, warnings };
+}
+
 /**
  * Klant-facing "Waarom voorgesteld?" reasons for ONE placement. Returns only
  * the positive, clientVisible reasons — never internal warnings. Used by the
@@ -470,6 +518,9 @@ export async function proposePlacement(
   }
 
   const now = new Date();
+  // CHEF-PR2 offer lifecycle: the proposal stays open for OFFER_EXPIRY_HOURS
+  // (default 24); past that while still 'proposed' it reads as "verlopen".
+  const expiresAt = new Date(now.getTime() + (Number(env.OFFER_EXPIRY_HOURS) || 24) * 3_600_000);
   // Insert-or-reset on the unique (chefId, shiftId) target. A prior
   // rejected/cancelled row is reset to a clean `proposed` state; concurrent
   // inserts converge on the same row instead of throwing 23505.
@@ -482,6 +533,7 @@ export async function proposePlacement(
       proposedBy: options.proposedBy,
       matchScore: options.matchScore ?? null,
       notes: options.notes ?? null,
+      expiresAt,
     })
     .onConflictDoUpdate({
       target: [placements.chefId, placements.shiftId],
@@ -496,6 +548,9 @@ export async function proposePlacement(
         confirmedAt: null,
         cancelledAt: null,
         completedAt: null,
+        // A fresh offer is unseen again, with a fresh deadline.
+        seenAt: null,
+        expiresAt,
         updatedAt: now,
       },
     })

@@ -898,6 +898,23 @@ export const chefs = pgTable("chefs", {
   likesMost: text("likes_most"), // "what you like to do most"
   recentVenues: text("recent_venues"), // recent restaurants / hotels
 
+  /* ----- CHEF-PR1: availability 2.0 + preferred-work (chef-authored) ------
+   * Heartbeat-simple preferences the chef sets themselves. Captured + displayed
+   * in PR-1; matching enforcement (radius / avoid-list) lands in a later PR.
+   * `chef_availability` ("no row = available") stays the only hard signal —
+   * these never block a chef on their own. Distinct from Maarten's `notes`.
+   */
+  /** Max one-way travel the chef wants (km). null = no preference. */
+  travelRadiusKm: integer("travel_radius_km"),
+  /** Chef opted in to spoed / last-minute shifts. */
+  availableForEmergency: boolean("available_for_emergency").notNull().default(false),
+  /** Work-types the chef does NOT want (e.g. "zorg", "ontbijt"). Array. */
+  avoidPreferences: text("avoid_preferences").array(),
+  /** Earliest start the chef wants, hour 0-23 (e.g. 7 = "niet voor 07:00"). */
+  minStartHour: integer("min_start_hour"),
+  /** Chef's own free-text availability/preference notes. */
+  availabilityNotes: text("availability_notes"),
+
   /* ----- lifecycle ----- */
   status: chefStatusEnum("status").notNull().default("onboarding"),
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1166,6 +1183,11 @@ export const shifts = pgTable("shifts", {
   parkingAvailable: boolean("parking_available"),
   mealIncluded: boolean("meal_included"),
   startFlexible: boolean("start_flexible"),
+
+  /** CHEF-PR2: spoeddienst — when true + EMERGENCY_CLAIM_ENABLED, the first
+   *  qualified chef can instantly claim the shift (confirmed) instead of the
+   *  planner-curated interest flow. Default off; normal shifts unaffected. */
+  isEmergency: boolean("is_emergency").notNull().default(false),
 
   /* ----- lifecycle ----- */
   status: shiftStatusEnum("status").notNull().default("request"),
@@ -1495,6 +1517,11 @@ export const placements = pgTable(
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    /** CHEF-PR2 offer lifecycle: when the chef first OPENED this proposal. */
+    seenAt: timestamp("seen_at", { withTimezone: true }),
+    /** CHEF-PR2 offer lifecycle: response deadline, set on propose. Past this
+     *  while still 'proposed' = derived "verlopen" (no status/enum change). */
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
 
     /* ----- audit ----- */
     proposedBy: text("proposed_by").references(() => users.id, {

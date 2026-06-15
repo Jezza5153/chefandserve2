@@ -1,22 +1,22 @@
 /**
- * /chef/availability — chef sets which dates they're blocked.
+ * /chef/availability — heartbeat-simple availability + preferred-work (CHEF-PR1).
  *
- * PR-F2. Replaces the stub. Uses existing chef_availability table that
- * smart-match already reads (src/lib/domain/matching.ts blockedSet).
+ * Three layers, calm front:
+ *   1. Quick blocks — one tap to mark vandaag / morgen / dit weekend / deze week
+ *      NOT available, plus "herhaal vorige week" (copy last week's blocks forward).
+ *   2. Calendar — fine-grained block/unblock (the existing AvailabilityCalendar).
+ *   3. Voorkeuren — travel radius, spoed-bereikbaar, vroegste starttijd, wat je
+ *      wél/niet wil, payroll/zzp, vrije notitie. Feeds matching (enforcement later).
  *
- * UX:
- *   - Default state: all dates are AVAILABLE (no rows = available).
- *   - Click a date → toggles BLOCKED (writes a row with available=false).
- *   - Shift-click two dates → blocks the whole range.
- *   - Past dates are read-only.
+ * Model unchanged: chef_availability "no row = available"; blocks write
+ * available=false rows. Preferences write the CHEF-PR1 chefs columns.
  *
- * Security:
- *   - Page only renders for kind=chef sessions (middleware enforces).
- *   - Server actions look up the chef via session.user.id → chefs.userId.
- *     The user CANNOT write to a different chefId — the lookup is the auth.
+ * Security: server actions resolve the chef via session.user.id → chefs.userId.
+ * The user can NEVER write to a different chefId — the lookup IS the auth.
  */
 
 import { and, eq, gte, lte } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
@@ -31,6 +31,35 @@ export const metadata = { title: "Beschikbaarheid" };
 export const dynamic = "force-dynamic";
 
 const WEEKS_AHEAD = 8;
+
+/** What you LIKE — keys align with matching's PREFERENCE_SIGNALS so they score. */
+const LIKE_OPTIONS: [string, string][] = [
+  ["breakfast", "Ontbijt"],
+  ["hotels", "Hotels"],
+  ["restaurants", "Restaurants"],
+  ["banqueting", "Banqueting"],
+  ["beachclub", "Beachclub"],
+  ["early_shifts", "Vroege shifts"],
+  ["michelin", "Michelin"],
+  ["bbq", "BBQ"],
+];
+/** What you'd rather NOT do (matching enforcement lands in a later PR). */
+const AVOID_OPTIONS: [string, string][] = [
+  ["zorg", "Zorg / verpleeghuis"],
+  ["ontbijt", "Ontbijt"],
+  ["late_night", "Late nachten"],
+  ["banqueting", "Banqueting"],
+  ["events", "Evenementen"],
+];
+const START_HOUR_OPTIONS: [string, string][] = [
+  ["", "Geen voorkeur"],
+  ["6", "Niet voor 06:00"],
+  ["7", "Niet voor 07:00"],
+  ["8", "Niet voor 08:00"],
+  ["9", "Niet voor 09:00"],
+  ["10", "Niet voor 10:00"],
+  ["12", "Niet voor 12:00"],
+];
 
 /** Resolve the chef record bound to the current session. Throws on mismatch. */
 async function requireChefSelf(): Promise<{ chefId: string }> {
@@ -57,6 +86,24 @@ function parseIsoDate(iso: string): Date {
   return date;
 }
 
+/** UTC-midnight Date for "today" in Amsterdam (matches the calendar's day keys). */
+function amsTodayUtcMidnight(): Date {
+  const key = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date()); // en-CA → "YYYY-MM-DD"
+  return parseIsoDate(key);
+}
+
+function isoOf(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 async function toggleDate(isoDate: string, blocked: boolean): Promise<void> {
   "use server";
   const { chefId } = await requireChefSelf();
@@ -67,7 +114,6 @@ async function toggleDate(isoDate: string, blocked: boolean): Promise<void> {
   if (date < today) return;
 
   if (blocked) {
-    // Upsert a "blocked" row.
     await db
       .insert(chefAvailability)
       .values({ chefId, date, available: false })
@@ -90,7 +136,6 @@ async function toggleDate(isoDate: string, blocked: boolean): Promise<void> {
     resourceId: chefId,
     after: { date: isoDate, blocked },
   });
-
   await recordChefEvent({
     chefId,
     eventType: "availability_updated",
@@ -116,7 +161,6 @@ async function setRange(
   const effectiveStart = start < today ? today : start;
   if (effectiveStart > end) return;
 
-  // Build list of dates in range
   const dates: Date[] = [];
   const cursor = new Date(effectiveStart);
   while (cursor <= end) {
@@ -126,18 +170,14 @@ async function setRange(
   if (dates.length === 0) return;
 
   if (blocked) {
-    // Bulk upsert
     await db
       .insert(chefAvailability)
-      .values(
-        dates.map((d) => ({ chefId, date: d, available: false })),
-      )
+      .values(dates.map((d) => ({ chefId, date: d, available: false })))
       .onConflictDoUpdate({
         target: [chefAvailability.chefId, chefAvailability.date],
         set: { available: false },
       });
   } else {
-    // Unblock the range
     await db
       .delete(chefAvailability)
       .where(
@@ -153,14 +193,8 @@ async function setRange(
     action: "chef.availability_range_updated",
     resource: "chef_availability",
     resourceId: chefId,
-    after: {
-      startIso,
-      endIso,
-      blocked,
-      affectedDates: dates.length,
-    },
+    after: { startIso, endIso, blocked, affectedDates: dates.length },
   });
-
   await recordChefEvent({
     chefId,
     eventType: "availability_updated",
@@ -170,8 +204,139 @@ async function setRange(
   });
 }
 
+/** CHEF-PR1: one-tap "ik ben niet beschikbaar" for a named scope. */
+async function quickBlock(fd: FormData): Promise<void> {
+  "use server";
+  const scope = String(fd.get("scope") ?? "");
+  const base = amsTodayUtcMidnight();
+  const dow = base.getUTCDay(); // 0=Sun … 6=Sat
+  const add = (n: number) => {
+    const d = new Date(base);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d;
+  };
+  let start = base;
+  let end = base;
+  if (scope === "today") {
+    start = base;
+    end = base;
+  } else if (scope === "tomorrow") {
+    start = add(1);
+    end = add(1);
+  } else if (scope === "weekend") {
+    const toSat = (6 - dow + 7) % 7;
+    start = add(toSat);
+    end = add(toSat + 1);
+  } else if (scope === "week") {
+    const toSun = (7 - dow) % 7;
+    start = base;
+    end = add(toSun);
+  } else {
+    return;
+  }
+  await setRange(isoOf(start), isoOf(end), true);
+  revalidatePath("/chef/availability");
+}
+
+/** CHEF-PR1: copy last week's blocks (today-7 … yesterday) forward 7 days. */
+async function repeatLastWeek(): Promise<void> {
+  "use server";
+  const { chefId } = await requireChefSelf();
+  const base = amsTodayUtcMidnight();
+  const weekAgo = new Date(base);
+  weekAgo.setUTCDate(weekAgo.getUTCDate() - 7);
+  const yesterday = new Date(base);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+
+  const prev = await db
+    .select({ date: chefAvailability.date })
+    .from(chefAvailability)
+    .where(
+      and(
+        eq(chefAvailability.chefId, chefId),
+        eq(chefAvailability.available, false),
+        gte(chefAvailability.date, weekAgo),
+        lte(chefAvailability.date, yesterday),
+      ),
+    );
+
+  const newDates = prev
+    .map((r) => {
+      const d = new Date(r.date);
+      d.setUTCDate(d.getUTCDate() + 7);
+      return d;
+    })
+    .filter((d) => d >= base);
+
+  if (newDates.length > 0) {
+    await db
+      .insert(chefAvailability)
+      .values(newDates.map((d) => ({ chefId, date: d, available: false })))
+      .onConflictDoUpdate({
+        target: [chefAvailability.chefId, chefAvailability.date],
+        set: { available: false },
+      });
+    await recordAuditFromRequest({
+      action: "chef.availability_repeat_week",
+      resource: "chef_availability",
+      resourceId: chefId,
+      after: { affectedDates: newDates.length },
+    });
+  }
+  revalidatePath("/chef/availability");
+}
+
+/** CHEF-PR1: save chef-authored work preferences (feeds matching later). */
+async function savePreferences(fd: FormData): Promise<void> {
+  "use server";
+  const { chefId } = await requireChefSelf();
+  const num = (k: string): number | null => {
+    const v = String(fd.get(k) ?? "").trim();
+    if (!v) return null;
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : null;
+  };
+  const likes = fd.getAll("preferences").map(String).filter(Boolean);
+  const avoid = fd.getAll("avoid").map(String).filter(Boolean);
+  const empRaw = String(fd.get("employmentType") ?? "");
+  const employmentType = ["payroll", "zzp", "both"].includes(empRaw)
+    ? (empRaw as "payroll" | "zzp" | "both")
+    : null;
+  const notes = String(fd.get("availabilityNotes") ?? "").trim().slice(0, 1000) || null;
+
+  await db
+    .update(chefs)
+    .set({
+      travelRadiusKm: num("travelRadiusKm"),
+      minStartHour: num("minStartHour"),
+      availableForEmergency: fd.get("availableForEmergency") === "on",
+      preferences: likes.length ? likes : null,
+      avoidPreferences: avoid.length ? avoid : null,
+      employmentType,
+      availabilityNotes: notes,
+      updatedAt: new Date(),
+    })
+    .where(eq(chefs.id, chefId));
+
+  await recordAuditFromRequest({
+    action: "chef.work_preferences_updated",
+    resource: "chefs",
+    resourceId: chefId,
+    after: { likes: likes.length, avoid: avoid.length, travelRadiusKm: num("travelRadiusKm") },
+  });
+  revalidatePath("/chef/availability");
+}
+
+const QUICK: [string, string][] = [
+  ["today", "Vandaag"],
+  ["tomorrow", "Morgen"],
+  ["weekend", "Dit weekend"],
+  ["week", "Deze week"],
+];
+
 export default async function ChefAvailabilityPage() {
   const { chefId } = await requireChefSelf();
+  const chef = await db.query.chefs.findFirst({ where: eq(chefs.id, chefId) });
 
   // Load blocked rows for the next 8 weeks (anything else = available).
   const today = new Date();
@@ -180,7 +345,7 @@ export default async function ChefAvailabilityPage() {
   horizon.setUTCDate(horizon.getUTCDate() + WEEKS_AHEAD * 7);
 
   const rows = await db
-    .select({ date: chefAvailability.date, available: chefAvailability.available })
+    .select({ date: chefAvailability.date })
     .from(chefAvailability)
     .where(
       and(
@@ -190,39 +355,159 @@ export default async function ChefAvailabilityPage() {
         eq(chefAvailability.available, false),
       ),
     );
+  const blockedDates = rows.map((r) => isoOf(new Date(r.date)));
 
-  const blockedDates = rows.map((r) => {
-    // r.date is a Date (UTC midnight per schema mode: "date"). Format as ISO.
-    const d = new Date(r.date);
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(d.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  });
+  const likes = new Set(chef?.preferences ?? []);
+  const avoid = new Set(chef?.avoidPreferences ?? []);
+  const emp = chef?.employmentType ?? "";
+
+  const sectionLabel = "font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy";
+  const card = "rounded-lg border border-ink-200 bg-white p-4 md:p-6";
 
   return (
-    <div>
-      <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-        Beschikbaarheid
-      </p>
-      <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
-        Mijn agenda
-      </h1>
-      <p className="mt-4 text-sm leading-relaxed text-ink-700">
-        Standaard ben je elke dag beschikbaar. Blokkeer dagen voor vakantie of
-        andere afspraken — wij stellen je dan niet voor op shifts op die dagen.
-        Hoe beter je beschikbaarheid klopt, hoe beter Maarten je kan voorstellen.
-        Veranderingen zijn meteen actief.
-      </p>
+    <div className="space-y-8">
+      <div>
+        <p className={sectionLabel}>Beschikbaarheid</p>
+        <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">Mijn agenda</h1>
+        <p className="mt-3 text-sm leading-relaxed text-ink-700">
+          Standaard ben je elke dag beschikbaar. Geef snel door wanneer je{" "}
+          <strong>niet</strong> kunt — dan stellen we je niet voor. Veranderingen zijn meteen actief.
+        </p>
+      </div>
 
-      <div className="mt-8">
+      {/* 1 — Quick blocks */}
+      <section className={card}>
+        <p className={sectionLabel}>Snel niet-beschikbaar</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {QUICK.map(([scope, label]) => (
+            <form action={quickBlock} key={scope}>
+              <input type="hidden" name="scope" value={scope} />
+              <button className="rounded-full border border-burgundy/40 bg-burgundy/5 px-4 py-2 font-ui text-[11px] font-medium text-burgundy hover:bg-burgundy/10">
+                {label}
+              </button>
+            </form>
+          ))}
+          <form action={repeatLastWeek}>
+            <button className="rounded-full border border-ink-200 bg-bg-gray px-4 py-2 font-ui text-[11px] font-medium text-ink-700 hover:bg-ink-100">
+              ↻ Herhaal vorige week
+            </button>
+          </form>
+        </div>
+        <p className="mt-2 text-xs text-ink-500">
+          Weer beschikbaar maken? Tik de dag groen in de kalender hieronder.
+        </p>
+      </section>
+
+      {/* 2 — Calendar */}
+      <section>
         <AvailabilityCalendar
           weeks={WEEKS_AHEAD}
           initialBlockedDates={blockedDates}
           toggleDate={toggleDate}
           setRange={setRange}
         />
-      </div>
+      </section>
+
+      {/* 3 — Preferred work */}
+      <section className={card}>
+        <p className={sectionLabel}>Mijn voorkeuren</p>
+        <p className="mt-1 text-xs text-ink-500">
+          Helpt ons betere shifts voor te stellen — geen harde blokkade.
+        </p>
+        <form action={savePreferences} className="mt-4 space-y-5">
+          <fieldset>
+            <legend className="text-sm font-medium text-ink-900">Dit doe ik graag</legend>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {LIKE_OPTIONS.map(([key, label]) => (
+                <label
+                  key={key}
+                  className="flex cursor-pointer items-center gap-1.5 rounded-full border border-ink-200 px-3 py-1.5 text-xs text-ink-700 has-[:checked]:border-emerald-300 has-[:checked]:bg-emerald-50 has-[:checked]:text-emerald-800"
+                >
+                  <input type="checkbox" name="preferences" value={key} defaultChecked={likes.has(key)} className="accent-emerald-600" />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend className="text-sm font-medium text-ink-900">Liever niet</legend>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {AVOID_OPTIONS.map(([key, label]) => (
+                <label
+                  key={key}
+                  className="flex cursor-pointer items-center gap-1.5 rounded-full border border-ink-200 px-3 py-1.5 text-xs text-ink-700 has-[:checked]:border-burgundy/40 has-[:checked]:bg-burgundy/5 has-[:checked]:text-burgundy"
+                >
+                  <input type="checkbox" name="avoid" value={key} defaultChecked={avoid.has(key)} className="accent-burgundy" />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-medium text-ink-900">Max reisafstand (km)</span>
+              <input
+                type="number"
+                name="travelRadiusKm"
+                min={0}
+                max={300}
+                defaultValue={chef?.travelRadiusKm ?? ""}
+                placeholder="bijv. 30"
+                className="mt-1 w-full rounded-md border border-ink-200 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-ink-900">Vroegste starttijd</span>
+              <select
+                name="minStartHour"
+                defaultValue={chef?.minStartHour != null ? String(chef.minStartHour) : ""}
+                className="mt-1 w-full rounded-md border border-ink-200 px-3 py-2 text-sm"
+              >
+                {START_HOUR_OPTIONS.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <fieldset>
+            <legend className="text-sm font-medium text-ink-900">Dienstverband</legend>
+            <div className="mt-2 flex flex-wrap gap-4 text-sm text-ink-700">
+              {[["payroll", "Payroll"], ["zzp", "ZZP"], ["both", "Beide"]].map(([v, l]) => (
+                <label key={v} className="flex cursor-pointer items-center gap-1.5">
+                  <input type="radio" name="employmentType" value={v} defaultChecked={emp === v} className="accent-burgundy" />
+                  {l}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-700">
+            <input type="checkbox" name="availableForEmergency" defaultChecked={chef?.availableForEmergency ?? false} className="accent-burgundy" />
+            Ik ben oproepbaar voor spoeddiensten (last-minute)
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-ink-900">Notitie (optioneel)</span>
+            <textarea
+              name="availabilityNotes"
+              rows={2}
+              maxLength={1000}
+              defaultValue={chef?.availabilityNotes ?? ""}
+              placeholder="bijv. geen varkensvlees-keukens, alleen Utrecht/Amersfoort, minimaal 5 uur"
+              className="mt-1 w-full rounded-md border border-ink-200 px-3 py-2 text-sm"
+            />
+          </label>
+
+          <button className="rounded-full bg-burgundy px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy/90">
+            Voorkeuren opslaan
+          </button>
+        </form>
+      </section>
     </div>
   );
 }
