@@ -93,6 +93,7 @@ async function HoursToApprove() {
 async function ProposedNoResponse() {
   const rows = await db
     .select({
+      id: placements.id,
       shiftId: placements.shiftId,
       chefName: chefs.fullName,
       companyName: clients.companyName,
@@ -112,8 +113,8 @@ async function ProposedNoResponse() {
 
   return (
     <Wrap intro="Voorgesteld, nog geen reactie. Open de dienst om op te volgen (bellen/loggen komt in een volgende stap).">
-      {rows.map((r, i) => (
-        <Row key={i} title={r.chefName ?? "Chef"} sub={`${r.companyName ?? "Klant"} · ${formatShiftRole(r.roleNeeded)} · ${dateLabel(r.startsAt)}`}>
+      {rows.map((r) => (
+        <Row key={r.id} title={r.chefName ?? "Chef"} sub={`${r.companyName ?? "Klant"} · ${formatShiftRole(r.roleNeeded)} · ${dateLabel(r.startsAt)}`}>
           {/* No-fake-action rule: this is a link, so it reads "Bekijk", not "Los op". */}
           <Link
             href={`/admin/business/shifts/${r.shiftId}`}

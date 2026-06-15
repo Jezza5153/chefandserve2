@@ -112,7 +112,7 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
                   <input type="hidden" name="matchScore" value={m.score} />
                   <button
                     type="submit"
-                    className="shrink-0 rounded-full bg-burgundy px-3.5 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-white hover:bg-burgundy-900"
+                    className="shrink-0 rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-white hover:bg-burgundy-900"
                   >
                     Stel voor
                   </button>
@@ -142,14 +142,14 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
                   <input type="hidden" name="shiftId" value={shift.id} />
                   <input type="hidden" name="chefId" value={m.chef.id} />
                   <input type="hidden" name="channel" value="phone" />
-                  <select name="outcome" className="rounded border border-ink-200 bg-white px-1.5 py-1 text-[10px] text-ink-700">
+                  <select name="outcome" aria-label="Contactresultaat" className="rounded border border-ink-200 bg-white px-1.5 py-1 text-[10px] text-ink-700">
                     <option value="spoken">Gesproken</option>
                     <option value="no_answer">Geen gehoor</option>
                     <option value="callback_requested">Teruggebeld</option>
                     <option value="not_suitable">Niet passend</option>
                     <option value="note_only">Notitie</option>
                   </select>
-                  <input name="note" placeholder="notitie" className="w-20 rounded border border-ink-200 bg-white px-1.5 py-1 text-[10px] text-ink-700 placeholder-ink-400" />
+                  <input name="note" aria-label="Notitie bij contact" placeholder="notitie" className="w-20 rounded border border-ink-200 bg-white px-1.5 py-1 text-[10px] text-ink-700 placeholder-ink-400" />
                   <button
                     type="submit"
                     className="rounded-full border border-burgundy/40 bg-white px-2.5 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-burgundy hover:bg-burgundy/5"

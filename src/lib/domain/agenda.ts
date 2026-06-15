@@ -7,7 +7,7 @@
  * The manual one-off events (intake calls, ad-hoc reminders) land with the
  * agenda_events table in a later slice. Pure mapping is split out for smoke tests.
  */
-import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { clients, clientShiftChangeRequests, placements, shifts } from "@/lib/db/schema";
@@ -106,8 +106,8 @@ export async function getAgendaEvents(opts: {
   clientId?: string;
 }): Promise<AgendaEvent[]> {
   const shiftWhere = opts.clientId
-    ? and(gte(shifts.startsAt, opts.from), lte(shifts.startsAt, opts.to), eq(shifts.clientId, opts.clientId))
-    : and(gte(shifts.startsAt, opts.from), lte(shifts.startsAt, opts.to));
+    ? and(gte(shifts.startsAt, opts.from), lt(shifts.startsAt, opts.to), eq(shifts.clientId, opts.clientId))
+    : and(gte(shifts.startsAt, opts.from), lt(shifts.startsAt, opts.to));
 
   const rows = await db
     .select({
@@ -154,7 +154,7 @@ export async function getAgendaEvents(opts: {
     .from(clientShiftChangeRequests)
     .innerJoin(shifts, eq(shifts.id, clientShiftChangeRequests.shiftId))
     .leftJoin(clients, eq(clients.id, clientShiftChangeRequests.clientId))
-    .where(and(crWhere, gte(shifts.startsAt, opts.from), lte(shifts.startsAt, opts.to)));
+    .where(and(crWhere, gte(shifts.startsAt, opts.from), lt(shifts.startsAt, opts.to)));
   for (const cr of crRows) {
     events.push(
       changeRequestToAgendaEvent({
