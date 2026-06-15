@@ -4,7 +4,10 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { clients, placements, shifts } from "@/lib/db/schema";
 import { findMatchesForShift } from "@/lib/domain/matching";
+import { assertChefsDeployable, type DeployabilityGate } from "@/lib/domain/chef-deployability-gate";
+import { env } from "@/lib/env";
 import { formatShiftRole } from "@/lib/labels";
+import { OverrideDeployabilityBlock } from "@/components/OverrideDeployabilityBlock";
 import { proposeFromDashboard, logChefContactFromDashboard } from "@/app/(admin)/admin/business/_actions";
 
 /**
@@ -42,6 +45,12 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
   const open = Math.max(shift.headcount - filled, 0);
 
   const matches = await findMatchesForShift(shiftId, { limit: 6 });
+  // P3a: per-candidate deployability (flag-gated, one batched read). When off the Map is
+  // empty → every chef renders the normal one-click propose, behaviour unchanged.
+  const gateByChef: Map<string, DeployabilityGate> =
+    env.COMPLIANCE_HARDGATE_ENABLED === "true"
+      ? await assertChefsDeployable(matches.map((m) => m.chef.id))
+      : new Map();
   const hoursToStart = Math.round((new Date(shift.startsAt).getTime() - Date.now()) / 3_600_000);
   const startTxt = startLabel(shift.startsAt, shift.endsAt);
 
@@ -106,18 +115,33 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
                     </ul>
                   )}
                 </div>
-                <form action={proposeFromDashboard}>
-                  <input type="hidden" name="shiftId" value={shift.id} />
-                  <input type="hidden" name="chefId" value={m.chef.id} />
-                  <input type="hidden" name="matchScore" value={m.score} />
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-white hover:bg-burgundy-900"
-                  >
-                    Stel voor
-                  </button>
-                </form>
+                {/* P3a: blocked chefs lose the one-click button → override-with-reason panel (below). */}
+                {gateByChef.get(m.chef.id)?.deployable === false ? null : (
+                  <form action={proposeFromDashboard}>
+                    <input type="hidden" name="shiftId" value={shift.id} />
+                    <input type="hidden" name="chefId" value={m.chef.id} />
+                    <input type="hidden" name="matchScore" value={m.score} />
+                    <button
+                      type="submit"
+                      className="shrink-0 rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-white hover:bg-burgundy-900"
+                    >
+                      Stel voor
+                    </button>
+                  </form>
+                )}
               </div>
+
+              {/* P3a compliance hard-gate: blocked chef → red blocker chips + override-with-reason. */}
+              {gateByChef.get(m.chef.id)?.deployable === false && (
+                <div className="mt-2">
+                  <OverrideDeployabilityBlock
+                    action={proposeFromDashboard}
+                    hidden={{ shiftId: shift.id, chefId: m.chef.id, matchScore: m.score }}
+                    blockers={gateByChef.get(m.chef.id)!.blockers}
+                    cta="Stel voor"
+                  />
+                </div>
+              )}
               {/* Contact + outcome logging (DASH-5) — feeds the per-shift timeline */}
               <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-ink-100 pt-2">
                 {m.chef.phone && (

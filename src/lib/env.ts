@@ -230,6 +230,13 @@ const serverSchema = z.object({
   // tables (Belastingdienst loontabellen etc.) before flipping.
   MONEY_EXPLAINER_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // P3a — compliance HARD-GATE. When on, proposePlacement refuses a chef whose
+  // deployability verdict is 'blocked' (archived/inactive · ID verlopen · missing
+  // payroll/identity essentials) unless a human overrides WITH a reason (audited as
+  // placements.compliance_override). AI can never override. Default off → live
+  // proposal behaviour unchanged until the owner is ready to enforce it.
+  COMPLIANCE_HARDGATE_ENABLED: z.enum(["true", "false"]).optional(),
+
   // CHEF-PR4b — owner clock-out digest. When on, a daily ticker POSTs
   // /api/cron/clockout-digest, which surfaces planned-vs-actual overruns + the
   // PR-4a review flags as ONE owner notification (notify-only, owner-only,

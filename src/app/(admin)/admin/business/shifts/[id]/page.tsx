@@ -28,6 +28,8 @@ import {
   findMatchesForShift,
   proposePlacement,
 } from "@/lib/domain/matching";
+import { assertChefsDeployable } from "@/lib/domain/chef-deployability-gate";
+import { env } from "@/lib/env";
 import {
   cancelShiftAndPlacements,
   recomputeShiftStatus,
@@ -113,6 +115,12 @@ export default async function ShiftDetailPage({
     ? await db.select().from(chefs).where(inArray(chefs.id, candidateChefIds))
     : [];
   const chefById = new Map(candChefs.map((c) => [c.id, c]));
+  // P3a compliance hard-gate (flag-gated): per-candidate deployability for the override
+  // panel. Off → empty Map → MatchSuggestions renders the normal one-click propose.
+  const deployByChef =
+    env.COMPLIANCE_HARDGATE_ENABLED === "true" && candidateChefIds.length
+      ? await assertChefsDeployable(candidateChefIds)
+      : undefined;
   const workedHereRows = candidateChefIds.length
     ? await db
         .select({ chefId: placements.chefId, n: sql<number>`count(*)::int` })
@@ -338,10 +346,21 @@ export default async function ShiftDetailPage({
       : undefined;
     if (!chefId) throw new Error("chefId missing");
 
-    const { placementId, status } = await proposePlacement(id, chefId, {
+    // P3a compliance override (auth-resolved actor, never form data); absent → block.
+    const overrideReason = String(formData.get("overrideReason") ?? "").trim();
+    const override = overrideReason ? { overriddenBy: session.user.id, reason: overrideReason } : undefined;
+
+    const res = await proposePlacement(id, chefId, {
       proposedBy: session.user.id,
       matchScore,
+      override,
     });
+
+    // P3a: blocked chef + no valid override → flash so the override panel re-renders.
+    if (res.status === "blocked") {
+      redirect(`/admin/business/shifts/${id}?info=geblokkeerd`);
+    }
+    const { placementId, status } = res;
 
     // Already-active placement → friendly notice, no second audit/notify.
     if (status === "already_proposed") {
@@ -940,6 +959,7 @@ export default async function ShiftDetailPage({
           logContact={logContact}
           toggleClientChef={toggleClientChef}
           pairIntelByChef={pairIntelByChef}
+          deployByChef={deployByChef}
         />
       )}
 

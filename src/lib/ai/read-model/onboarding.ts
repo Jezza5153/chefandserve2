@@ -10,7 +10,8 @@ import { db } from "@/lib/db/client";
 import { chefDocuments, chefs } from "@/lib/db/schema";
 import { getOnboardingReadiness } from "@/lib/domain/profile-completeness";
 
-const CHEF_COLS = {
+/** Exported so the deployability gate (P3a) reuses the EXACT readiness inputs. */
+export const CHEF_COLS = {
   id: chefs.id,
   fullName: chefs.fullName,
   firstName: chefs.firstName,
@@ -29,9 +30,10 @@ const CHEF_COLS = {
   employmentType: chefs.employmentType,
 };
 
-type ChefRow = { [K in keyof typeof CHEF_COLS]: unknown } & { id: string; fullName: string };
+export type ChefRow = { [K in keyof typeof CHEF_COLS]: unknown } & { id: string; fullName: string };
 
-function readinessFor(c: ChefRow, docTypes: Set<string>) {
+/** Exported so the deployability gate (P3a) maps a chef row → readiness identically. */
+export function readinessFor(c: ChefRow, docTypes: Set<string>) {
   return getOnboardingReadiness({
     firstName: c.firstName as string | null,
     surname: c.surname as string | null,
