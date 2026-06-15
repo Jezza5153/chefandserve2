@@ -115,6 +115,11 @@ const JOBS: Job[] = [
   // alerts the owner about proposals that lapsed un-responded (notify-only, no status
   // change). Per-placement throttle (6 days). GATED via OFFER_EXPIRY_SWEEP_ENABLED. Default OFF.
   { name: "offer-expiry", schedule: "0 */6 * * *", script: "offer-expiry.ts" },
+  // CHEF-PR4b owner clock-out digest (daily 08:00, after the 07:00 daily-briefing).
+  // Thin: POSTs /api/cron/clockout-digest which surfaces planned-vs-actual overruns
+  // + PR-4a review flags as ONE owner notification (notify-only, owner-only, one per
+  // day). GATED via CLOCKOUT_DIGEST_ENABLED. Default OFF.
+  { name: "clockout-digest", schedule: "0 8 * * *", script: "clockout-digest.ts" },
 ];
 
 function ts(): string {
