@@ -1083,6 +1083,11 @@ export const clients = pgTable("clients", {
   onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
   onboardingFormVersion: integer("onboarding_form_version"),
 
+  /** CHEF-PR3: reusable per-hotel "niet-onderhandelbaar" checklist shown to the
+   *  chef on every shift brief for this client (e.g. "15 min eerder", "schone
+   *  jas", "eigen messen"). Plain strings; admin-populated (set UI is admin-lane). */
+  nonNegotiables: jsonb("non_negotiables").$type<string[]>(),
+
   createdBy: text("created_by").references(() => users.id, {
     onDelete: "set null",
   }),
