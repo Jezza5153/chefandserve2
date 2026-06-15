@@ -22,6 +22,8 @@ import {
   type Chef,
 } from "@/lib/db/schema";
 import { getReliabilityForChefs, type ChefReliabilitySignal } from "@/lib/chef-events";
+import { recordAuditCore } from "@/lib/audit";
+import { assertChefDeployable } from "@/lib/domain/chef-deployability-gate";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { skillTagLabel, skillTagOverlap } from "@/lib/domain/skill-tags";
 import { type LatLng } from "@/lib/domain/geo";
@@ -660,10 +662,16 @@ export async function findMatchesForShift(
  * (proposed/accepted/confirmed) row already exists — nothing changed, no
  * second notification fires. `proposed` covers a fresh row AND a re-proposal
  * that reset a prior rejected/cancelled row back to `proposed`. */
-export type ProposeResult = {
-  placementId: string;
-  status: "proposed" | "already_proposed";
-};
+export type ProposeResult =
+  | { placementId: string; status: "proposed" | "already_proposed" }
+  /** P3a: the chef is not deployable (hard blockers) and no valid override was given.
+   *  No placement was created. `blockers` are PII-free Dutch labels. */
+  | { status: "blocked"; blockers: string[] };
+
+/** P3a override: a human explicitly proposes a non-deployable chef WITH a reason
+ *  (audited). overriddenBy is the auth-resolved actor — NEVER from form data. */
+export type ProposeOverride = { overriddenBy: string; reason: string };
+const OVERRIDE_MIN_REASON = 10;
 
 /**
  * Propose a chef for a shift. IDEMPOTENT against the
@@ -683,7 +691,7 @@ export type ProposeResult = {
 export async function proposePlacement(
   shiftId: string,
   chefId: string,
-  options: { proposedBy: string; matchScore?: number; notes?: string },
+  options: { proposedBy: string; matchScore?: number; notes?: string; override?: ProposeOverride },
 ): Promise<ProposeResult> {
   // Friendly guard: a still-active row means the chef is already on the table
   // for this shift. Don't reset it, don't notify twice — just report it back.
@@ -697,6 +705,24 @@ export async function proposePlacement(
     ["proposed", "accepted", "confirmed"].includes(existing[0].status)
   ) {
     return { placementId: existing[0].id, status: "already_proposed" };
+  }
+
+  // P3a compliance HARD-GATE (dark-launched). A chef whose deployability verdict is
+  // 'blocked' (archived/inactive · ID verlopen · missing payroll-identity) can't be
+  // proposed unless a human overrides WITH a reason (audited below). Flag default off →
+  // no extra query, behaviour unchanged.
+  let overrodeBlock = false;
+  let overrideBlockers: string[] = [];
+  if (env.COMPLIANCE_HARDGATE_ENABLED === "true") {
+    const gate = await assertChefDeployable(chefId);
+    if (!gate.deployable) {
+      const reason = options.override?.reason?.trim() ?? "";
+      if (!options.override || reason.length < OVERRIDE_MIN_REASON) {
+        return { status: "blocked", blockers: gate.blockers };
+      }
+      overrodeBlock = true;
+      overrideBlockers = gate.blockers;
+    }
   }
 
   const now = new Date();
@@ -738,6 +764,19 @@ export async function proposePlacement(
       },
     })
     .returning({ id: placements.id });
+
+  // P3a: record the compliance override (a human proposed a blocked chef with a
+  // reason). A second audit row alongside the normal propose trail — never on the AI
+  // path (AI tools can't supply an override). Labels only, no PII.
+  if (overrodeBlock && options.override) {
+    await recordAuditCore({
+      userId: options.override.overriddenBy,
+      action: "placements.compliance_override",
+      resource: "placements",
+      resourceId: placement.id,
+      after: { reason: options.override.reason.trim(), blockers: overrideBlockers, phase: "propose" },
+    }).catch((e) => console.error("[propose] override audit failed:", e));
+  }
 
   // Move shift to "open" if it was still in "request"
   await db

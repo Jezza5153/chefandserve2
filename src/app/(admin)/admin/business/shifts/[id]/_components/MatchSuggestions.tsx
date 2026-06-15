@@ -9,8 +9,10 @@ import {
   type CandidateSignals,
 } from "@/lib/domain/staffing-intelligence";
 import type { MatchResult } from "@/lib/domain/matching";
+import type { DeployabilityGate } from "@/lib/domain/chef-deployability-gate";
 import type { Chef, Shift } from "@/lib/db/schema";
 import { formatChefRole } from "@/lib/labels";
+import { OverrideDeployabilityBlock } from "@/components/OverrideDeployabilityBlock";
 
 type TravelMargin = { t: TravelEstimate; margin: MarginEstimate } | null;
 
@@ -44,6 +46,7 @@ export function MatchSuggestions({
   logContact,
   toggleClientChef,
   pairIntelByChef,
+  deployByChef,
 }: {
   matches: MatchResult[];
   rankedMatches: MatchResult[];
@@ -56,6 +59,8 @@ export function MatchSuggestions({
   logContact: (formData: FormData) => Promise<void>;
   toggleClientChef: (formData: FormData) => Promise<void>;
   pairIntelByChef: Map<string, PairIntelBadge>;
+  /** P3a compliance gate per chef (flag-gated; empty Map when off → no change). */
+  deployByChef?: Map<string, DeployabilityGate>;
 }) {
   return (
     <section className="mt-10">
@@ -81,6 +86,9 @@ export function MatchSuggestions({
               : [];
           const phoneDigits = c?.phone?.replace(/\D/g, "") ?? "";
           const tm = travelFor(m.chef.id);
+          // P3a compliance hard-gate (distinct from sig.isBlocked, which is klant-blocked).
+          const compGate = deployByChef?.get(m.chef.id);
+          const compBlocked = compGate?.deployable === false;
           return (
             <li
               key={m.chef.id}
@@ -175,14 +183,28 @@ export function MatchSuggestions({
                     </p>
                   )}
                 </div>
-                <form action={propose}>
-                  <input type="hidden" name="chefId" value={m.chef.id} />
-                  <input type="hidden" name="matchScore" value={m.score} />
-                  <button type="submit" className="shrink-0 rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900">
-                    Voorstel
-                  </button>
-                </form>
+                {/* P3a: a compliance-blocked chef loses the one-click button → override panel below. */}
+                {!compBlocked && (
+                  <form action={propose}>
+                    <input type="hidden" name="chefId" value={m.chef.id} />
+                    <input type="hidden" name="matchScore" value={m.score} />
+                    <button type="submit" className="shrink-0 rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900">
+                      Voorstel
+                    </button>
+                  </form>
+                )}
               </div>
+
+              {/* P3a compliance hard-gate: blocked chef → red blocker chips + override-with-reason. */}
+              {compBlocked && compGate && (
+                <div className="mt-3">
+                  <OverrideDeployabilityBlock
+                    action={propose}
+                    hidden={{ chefId: m.chef.id, matchScore: m.score }}
+                    blockers={compGate.blockers}
+                  />
+                </div>
+              )}
               {/* Contact actions (one-click + log) */}
               <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink-100 pt-3">
                 {phoneDigits && (

@@ -787,6 +787,7 @@ function DoneFlash({ done }: { done: string }) {
     snoozed: { msg: "Signaal gesnoozed — komt over 4 uur terug.", tone: "info" },
     opgelost: { msg: "✓ Gemarkeerd als opgelost. Komt terug als de situatie verandert.", tone: "good" },
     "reden-vereist": { msg: "Geef een reden op om een signaal als opgelost te markeren.", tone: "warn" },
+    geblokkeerd: { msg: "Niet voorgesteld — deze chef is niet inzetbaar. Los het blokkeerpunt op, of geef vrij met reden.", tone: "warn" },
   };
   const f = MAP[done] ?? { msg: "✓ Gelogd.", tone: "good" as const };
   const cls =

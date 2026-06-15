@@ -27,10 +27,23 @@ export const placementsPropose = defineTool({
   }),
   describeAction: (input) => `Chef ${input.chefId} voorstellen voor dienst ${input.shiftId}.`,
   run: async (input, ctx) => {
-    const { placementId, status } = await proposePlacement(input.shiftId, input.chefId, {
+    const result = await proposePlacement(input.shiftId, input.chefId, {
       proposedBy: ctx.actor.requestedByUserId,
       ...(input.matchScore != null ? { matchScore: input.matchScore } : {}),
     });
+    // P3a: a blocked chef is NOT proposable from the AI path — the tool can't supply an
+    // override (no field in its input schema), so the model can never bypass compliance.
+    // Surface PII-free Dutch labels only.
+    if (result.status === "blocked") {
+      return {
+        data: { status: "blocked", blockers: result.blockers },
+        summary:
+          "Niet voorgesteld — deze chef is op dit moment niet inzetbaar: " +
+          result.blockers.join(", ") +
+          ". Een mens moet dit met reden vrijgeven; ik kan dat niet zelf.",
+      };
+    }
+    const { placementId, status } = result;
     if (status === "already_proposed") {
       return { data: { id: placementId, status }, summary: "Deze chef is al voorgesteld voor deze dienst." };
     }

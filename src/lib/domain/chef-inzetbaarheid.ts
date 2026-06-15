@@ -62,27 +62,48 @@ const STATUS_LABEL: Record<string, string> = {
   archived: "gearchiveerd",
 };
 
-export function computeChefInzetbaarheid(
-  input: InzetbaarheidInput,
-): InzetbaarheidVerdict {
-  const blockers: string[] = [];
-  const warnings: string[] = [];
+/** The HARD-blocker subset of the verdict — the deployability gate (P3a). */
+export type DeployabilityGate = {
+  /** true when there are no hard blockers (status/ID/payroll-identity). */
+  deployable: boolean;
+  /** Dutch blocker labels (PII-free — field names, never values). */
+  blockers: string[];
+};
 
-  // ---- HARD blockers: deploying would be irresponsible -------------------
+/**
+ * PURE: the HARD blockers that make deploying a chef irresponsible — the exact subset
+ * of computeChefInzetbaarheid that drives level==='blocked'. The single source of truth
+ * for both the chef-detail verdict card AND the propose-time hard-gate
+ * (assertChefDeployable), so the two can never drift. Only status/ID/payroll-identity
+ * block; soft "almost" signals (profileScore, no-shows, churn, idExpiringSoon) never do.
+ */
+export function evaluateChefBlockers(input: {
+  status: string;
+  onboardingMissingCritical: string[];
+  idExpired: boolean;
+}): DeployabilityGate {
+  const blockers: string[] = [];
   if (input.status === "archived") {
     blockers.push("Gearchiveerd");
   } else if (input.status === "inactive") {
     blockers.push("Status: inactief");
   }
-
   if (input.idExpired) {
     blockers.push("ID-bewijs verlopen");
   }
-
   // Payroll/identity essentials — can't pay or legally deploy without these.
   for (const missing of input.onboardingMissingCritical) {
     blockers.push(`Ontbreekt: ${missing}`);
   }
+  return { deployable: blockers.length === 0, blockers };
+}
+
+export function computeChefInzetbaarheid(
+  input: InzetbaarheidInput,
+): InzetbaarheidVerdict {
+  // ---- HARD blockers: deploying would be irresponsible (shared with the gate) ----
+  const blockers = [...evaluateChefBlockers(input).blockers];
+  const warnings: string[] = [];
 
   // ---- SOFT warnings: deployable, but flag it ----------------------------
   if (input.status === "paused") {

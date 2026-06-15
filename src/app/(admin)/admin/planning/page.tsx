@@ -74,7 +74,11 @@ export default async function PlanningPage({
     const chefId = String(formData.get("chefId") ?? "").trim();
     const matchScore = formData.get("matchScore") ? Number(formData.get("matchScore")) : undefined;
     if (!shiftId || !chefId) throw new Error("shiftId/chefId ontbreekt");
-    const res = await proposePlacement(shiftId, chefId, { proposedBy: session.user.id, matchScore });
+    // P3a override (auth-resolved actor, never form data); absent → domain gate blocks.
+    const overrideReason = String(formData.get("overrideReason") ?? "").trim();
+    const override = overrideReason ? { overriddenBy: session.user.id, reason: overrideReason } : undefined;
+    const res = await proposePlacement(shiftId, chefId, { proposedBy: session.user.id, matchScore, override });
+    if (res.status === "blocked") redirect("/admin/planning?ok=geblokkeerd");
     redirect(`/admin/planning?ok=${res.status === "already_proposed" ? "al-voorgesteld" : "voorstel"}`);
   }
 

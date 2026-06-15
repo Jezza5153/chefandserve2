@@ -30,7 +30,16 @@ export async function proposeFromDashboard(formData: FormData) {
   const matchScore = Number.isFinite(rawScore) ? Math.max(0, Math.min(100, rawScore)) : undefined;
   if (!shiftId || !chefId) throw new Error("shiftId/chefId ontbreekt");
 
-  const res = await proposePlacement(shiftId, chefId, { proposedBy: session.user.id, matchScore });
+  // P3a compliance override: a human may propose a blocked chef WITH a reason. The
+  // actor is auth-resolved (session.user.id) — NEVER the form. Absent reason → the
+  // domain gate blocks and we flash "geblokkeerd" so the override panel re-renders.
+  const overrideReason = String(formData.get("overrideReason") ?? "").trim();
+  const override = overrideReason ? { overriddenBy: session.user.id, reason: overrideReason } : undefined;
+
+  const res = await proposePlacement(shiftId, chefId, { proposedBy: session.user.id, matchScore, override });
+  if (res.status === "blocked") {
+    redirect("/admin/business?done=geblokkeerd");
+  }
   redirect(`/admin/business?done=${res.status === "already_proposed" ? "al-voorgesteld" : "voorstel"}`);
 }
 
