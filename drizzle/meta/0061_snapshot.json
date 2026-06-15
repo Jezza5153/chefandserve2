@@ -1,9 +1,215 @@
 {
-  "id": "bbc0bab4-8011-4fe4-add3-ea434bf06852",
+  "id": "2b750110-b9f9-40e3-94cb-d5633cb8e0a3",
   "prevId": "809cac46-054e-4ef0-8b25-2a80b05020ac",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.agenda_events": {
+      "name": "agenda_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "type": {
+          "name": "type",
+          "type": "agenda_event_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ends_at": {
+          "name": "ends_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "linked_client_id": {
+          "name": "linked_client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "linked_chef_id": {
+          "name": "linked_chef_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "linked_shift_id": {
+          "name": "linked_shift_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "assigned_to": {
+          "name": "assigned_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "agenda_event_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'open'"
+        },
+        "checklist": {
+          "name": "checklist",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "agenda_events_starts_idx": {
+          "name": "agenda_events_starts_idx",
+          "columns": [
+            {
+              "expression": "starts_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agenda_events_client_idx": {
+          "name": "agenda_events_client_idx",
+          "columns": [
+            {
+              "expression": "linked_client_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "agenda_events_linked_client_id_clients_id_fk": {
+          "name": "agenda_events_linked_client_id_clients_id_fk",
+          "tableFrom": "agenda_events",
+          "tableTo": "clients",
+          "columnsFrom": [
+            "linked_client_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agenda_events_linked_chef_id_chefs_id_fk": {
+          "name": "agenda_events_linked_chef_id_chefs_id_fk",
+          "tableFrom": "agenda_events",
+          "tableTo": "chefs",
+          "columnsFrom": [
+            "linked_chef_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agenda_events_linked_shift_id_shifts_id_fk": {
+          "name": "agenda_events_linked_shift_id_shifts_id_fk",
+          "tableFrom": "agenda_events",
+          "tableTo": "shifts",
+          "columnsFrom": [
+            "linked_shift_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agenda_events_assigned_to_users_id_fk": {
+          "name": "agenda_events_assigned_to_users_id_fk",
+          "tableFrom": "agenda_events",
+          "tableTo": "users",
+          "columnsFrom": [
+            "assigned_to"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agenda_events_created_by_users_id_fk": {
+          "name": "agenda_events_created_by_users_id_fk",
+          "tableFrom": "agenda_events",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.ai_conversations": {
       "name": "ai_conversations",
       "schema": "",
@@ -3958,7 +4164,29 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "contact_logs_entity_idx": {
+          "name": "contact_logs_entity_idx",
+          "columns": [
+            {
+              "expression": "entity_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "contact_logs_actor_user_id_users_id_fk": {
           "name": "contact_logs_actor_user_id_users_id_fk",
@@ -6884,6 +7112,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "placements_status_idx": {
+          "name": "placements_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -9216,124 +9459,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.shift_hour_reviews": {
-      "name": "shift_hour_reviews",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "placement_id": {
-          "name": "placement_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "chef_id": {
-          "name": "chef_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "worked_planned_role": {
-          "name": "worked_planned_role",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "worked_extra_hours": {
-          "name": "worked_extra_hours",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "got_break": {
-          "name": "got_break",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "as_described": {
-          "name": "as_described",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "issue_note": {
-          "name": "issue_note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "would_return": {
-          "name": "would_return",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "shift_hour_reviews_placement_unique": {
-          "name": "shift_hour_reviews_placement_unique",
-          "columns": [
-            {
-              "expression": "placement_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "shift_hour_reviews_placement_id_placements_id_fk": {
-          "name": "shift_hour_reviews_placement_id_placements_id_fk",
-          "tableFrom": "shift_hour_reviews",
-          "tableTo": "placements",
-          "columnsFrom": [
-            "placement_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "shift_hour_reviews_chef_id_chefs_id_fk": {
-          "name": "shift_hour_reviews_chef_id_chefs_id_fk",
-          "tableFrom": "shift_hour_reviews",
-          "tableTo": "chefs",
-          "columnsFrom": [
-            "chef_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.shift_hours": {
       "name": "shift_hours",
       "schema": "",
@@ -9555,6 +9680,42 @@
             },
             {
               "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "shift_hours_shift_id_idx": {
+          "name": "shift_hours_shift_id_idx",
+          "columns": [
+            {
+              "expression": "shift_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "shift_hours_submitted_idx": {
+          "name": "shift_hours_submitted_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "submitted_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -10893,6 +11054,26 @@
     }
   },
   "enums": {
+    "public.agenda_event_status": {
+      "name": "agenda_event_status",
+      "schema": "public",
+      "values": [
+        "open",
+        "done",
+        "cancelled"
+      ]
+    },
+    "public.agenda_event_type": {
+      "name": "agenda_event_type",
+      "schema": "public",
+      "values": [
+        "intake_call",
+        "follow_up",
+        "onboarding_task",
+        "contract_start",
+        "internal_reminder"
+      ]
+    },
     "public.ai_feedback_verdict": {
       "name": "ai_feedback_verdict",
       "schema": "public",

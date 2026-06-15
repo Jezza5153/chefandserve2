@@ -1553,6 +1553,8 @@ export const placements = pgTable(
       t.chefId,
       t.shiftId,
     ),
+    /** Hot filter — dashboard/queue/agenda COUNT by status (proposed/accepted/confirmed). */
+    statusIdx: index("placements_status_idx").on(t.status),
   }),
 );
 
@@ -1975,7 +1977,10 @@ export const contactLogs = pgTable("contact_logs", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (t) => ({
+  /** Per-entity lookup — the shift timeline pulls contacts by (entityType, entityId). */
+  entityIdx: index("contact_logs_entity_idx").on(t.entityType, t.entityId),
+}));
 
 /* ----- Type exports ------------------------------------------------------ */
 export type IntegrationConnection =
@@ -2092,6 +2097,10 @@ export const shiftHours = pgTable(
     chefIdx: index("shift_hours_chef_idx").on(t.chefId, t.status),
     /** Klant queue query. */
     clientIdx: index("shift_hours_client_idx").on(t.clientId, t.status),
+    /** Per-shift lookup (timeline drawer + agenda). */
+    shiftIdIdx: index("shift_hours_shift_id_idx").on(t.shiftId),
+    /** Klant-timeout query: status='submitted' AND submittedAt < cutoff. */
+    submittedIdx: index("shift_hours_submitted_idx").on(t.status, t.submittedAt),
     /** Sanity: end > start, no negative break. */
     endAfterStart: check(
       "shift_hours_end_after_start",
@@ -3681,3 +3690,47 @@ export const dashboardSignalState = pgTable("dashboard_signal_state", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 export type DashboardSignalState = typeof dashboardSignalState.$inferSelect;
+
+/**
+ * Agenda events (P2b/P2d) — the MANUAL, one-off ops-agenda entries that aren't derived
+ * from another row: intake calls, follow-ups, onboarding tasks, contract starts, internal
+ * reminders. (Shifts + change-requests stay DERIVED — see getAgendaEvents.) Optional
+ * checklist (P2d intake/prep). Ownership via assignedTo + status, mirroring signal-state.
+ */
+export const agendaEventTypeEnum = pgEnum("agenda_event_type", [
+  "intake_call",
+  "follow_up",
+  "onboarding_task",
+  "contract_start",
+  "internal_reminder",
+]);
+export const agendaEventStatusEnum = pgEnum("agenda_event_status", ["open", "done", "cancelled"]);
+
+export const agendaEvents = pgTable(
+  "agenda_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: agendaEventTypeEnum("type").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    title: text("title").notNull(),
+    notes: text("notes"),
+    /** Optional links for lens-filtering + deep links. */
+    linkedClientId: text("linked_client_id").references(() => clients.id, { onDelete: "set null" }),
+    linkedChefId: text("linked_chef_id").references(() => chefs.id, { onDelete: "set null" }),
+    linkedShiftId: text("linked_shift_id").references(() => shifts.id, { onDelete: "set null" }),
+    /** Ownership (who's handling it) + lifecycle. */
+    assignedTo: text("assigned_to").references(() => users.id, { onDelete: "set null" }),
+    status: agendaEventStatusEnum("status").notNull().default("open"),
+    /** P2d intake/prep checklist: [{ label, done }]. */
+    checklist: jsonb("checklist").$type<{ label: string; done: boolean }[]>(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    startsIdx: index("agenda_events_starts_idx").on(t.startsAt),
+    clientIdx: index("agenda_events_client_idx").on(t.linkedClientId),
+  }),
+);
+export type AgendaEventRow = typeof agendaEvents.$inferSelect;
