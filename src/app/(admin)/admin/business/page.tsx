@@ -1,10 +1,14 @@
 /**
- * /admin/business — the staffing cockpit (Cockpit UX phase, "V3").
+ * /admin/business — the staffing dashboard (the operator's control room).
  *
  * Owner home screen: bezetting/loonkost overzicht → Vandaag & morgen table →
  * Aandacht-nodig queue (ranked, named, per-row CTA) + Chef spotlight → KPI strip
  * → system footer. Reuses the shipped helpers (roster-format intel, profile-
  * completeness, dashboard-intel ranking) and is honest about missing data.
+ *
+ * NB: the user-facing name is "Dashboard" (nav + title); the route, the
+ * `cockpit.read` permission and the AI-tool internals deliberately keep the
+ * "cockpit" identifier (renaming them is churn with no user benefit).
  */
 
 import Link from "next/link";
@@ -51,7 +55,7 @@ import {
   type ShiftIntelInput,
 } from "@/lib/roster-format";
 
-export const metadata = { title: "Cockpit" };
+export const metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
 
 const FILLED_STATUSES = ["confirmed", "accepted"] as const;

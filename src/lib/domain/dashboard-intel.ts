@@ -51,6 +51,11 @@ export function rankAttentionItems(items: AttentionItem[]): AttentionItem[] {
   return [...items].sort((a, b) => PRIORITY[a.kind] - PRIORITY[b.kind]);
 }
 
+/** The rank of a kind (lower = more urgent). Re-used by the dashboard-cards contract. */
+export function priorityOf(kind: AttentionKind): number {
+  return PRIORITY[kind];
+}
+
 /* ----- KPI trend (▲/▼ only when meaningful) ------------------------------- */
 
 export type DeltaMode = "arrow" | "plain" | "hidden";
