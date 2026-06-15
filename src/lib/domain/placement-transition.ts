@@ -19,6 +19,7 @@ import { recordAuditCore } from "@/lib/audit";
 import { chefs, clients, placements, shifts } from "@/lib/db/schema";
 import { recomputeShiftStatus } from "@/lib/domain/shift-status";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
+import { sendReplacementHandover } from "@/lib/domain/replacement-handover";
 import { sendEmail, formatShiftWhen } from "@/lib/email";
 import { env } from "@/lib/env";
 import { createNotification, recordEmailMessage } from "@/lib/integrations";
@@ -42,8 +43,17 @@ export async function transitionPlacement(args: {
 }): Promise<TransitionResult> {
   const now = new Date();
   let changed = false;
+  let priorStatus: string | null = null;
 
   await withTx(async (tx) => {
+    // Capture the prior status in-tx (for the replacement-handover decision).
+    const [before] = await tx
+      .select({ status: placements.status })
+      .from(placements)
+      .where(eq(placements.id, args.placementId))
+      .limit(1);
+    priorStatus = before?.status ?? null;
+
     const updated = await tx
       .update(placements)
       .set({
@@ -80,6 +90,15 @@ export async function transitionPlacement(args: {
   if (args.newStatus === "confirmed") {
     await sendPlacementConfirmedEmails(args.placementId).catch((e) => {
       console.error("[transitionPlacement] confirm emails failed:", e);
+    });
+  }
+
+  // CHEF-PR2 (R2#13): a committed chef (accepted/confirmed) just got pulled off →
+  // tell them not to show up + stop arrival monitoring. Dark-launched + idempotent;
+  // best-effort, never throws into the transition.
+  if (args.newStatus === "cancelled") {
+    await sendReplacementHandover({ placementId: args.placementId, priorStatus }).catch((e) => {
+      console.error("[transitionPlacement] replacement handover failed:", e);
     });
   }
   return { ok: true, changed: true };

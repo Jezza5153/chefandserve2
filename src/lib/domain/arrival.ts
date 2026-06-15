@@ -74,6 +74,32 @@ export async function recordArrivalEvent(args: {
   return { ok: true };
 }
 
+/**
+ * CHEF-PR2 (R2#13): force-stop arrival monitoring for a placement, regardless of
+ * the placement's current status. Used by replacement-handover — by the time a
+ * confirmed chef is pulled off the shift the placement is already 'cancelled', so
+ * recordArrivalEvent's accepted/confirmed gate wouldn't apply. Only flips an
+ * EXISTING active row to 'stopped' (never creates one). No-op when there's nothing
+ * being monitored. Safe to call unconditionally (idempotent).
+ */
+export async function stopArrivalMonitoring(args: {
+  chefId: string;
+  shiftId: string;
+}): Promise<{ stopped: boolean }> {
+  const now = new Date();
+  const updated = await db
+    .update(shiftArrivalChecks)
+    .set({ status: "stopped", stoppedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(shiftArrivalChecks.shiftId, args.shiftId),
+        eq(shiftArrivalChecks.chefId, args.chefId),
+      ),
+    )
+    .returning({ id: shiftArrivalChecks.id });
+  return { stopped: updated.length > 0 };
+}
+
 async function notifyNearby(chefId: string, shiftId: string): Promise<void> {
   const chef = await db.query.chefs.findFirst({ where: eq(chefs.id, chefId) });
   const shift = await db.query.shifts.findFirst({ where: eq(shifts.id, shiftId) });
