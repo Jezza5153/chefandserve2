@@ -43,6 +43,8 @@ import {
   type AttentionTone,
 } from "@/lib/domain/dashboard-intel";
 import { loadSignalStates, isSignalHidden } from "@/lib/domain/dashboard-signal-state";
+import { toCard, type CardType } from "@/lib/domain/dashboard-cards";
+import { AutoRefresh } from "@/components/admin/AutoRefresh";
 import { snoozeSignal, dismissSignal } from "./_actions";
 import { formatShiftRole } from "@/lib/labels";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
@@ -352,6 +354,22 @@ export default async function BusinessDashboardPage({
   const ranked = rankedAll.filter((it) => !isSignalHidden(signalStates.get(it.signalKey ?? ""), it.fingerprint, now));
   const visible = ranked.slice(0, 6);
 
+  // DASH-4: control-room banner — "vandaag onder controle / N aandachtspunten" + Fix-first.
+  const sev = {
+    spoed: ranked.filter((r) => r.kind === "critical_shift").length,
+    open: ranked.filter((r) => r.kind === "open_shift" || r.kind === "underfilled_shift").length,
+    bevestigen: ranked.filter((r) => r.kind === "accepted_unconfirmed").length,
+    uren: ranked.filter((r) => r.kind === "hours_to_approve").length,
+  };
+  const breakdown = [
+    sev.spoed && `${sev.spoed} spoed`,
+    sev.open && `${sev.open} open`,
+    sev.bevestigen && `${sev.bevestigen} te bevestigen`,
+    sev.uren && `${sev.uren} uren`,
+  ].filter(Boolean).join(" · ");
+  const fixFirstHref = ranked[0]?.href;
+  const lastUpdated = now.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
+
   /* ---- header bits ---- */
   const roles = session.user.roles;
   const roleLabel = roles.includes("owner") ? "Eigenaar" : roles.includes("super_admin") ? "Beheerder" : "Team";
@@ -415,6 +433,44 @@ export default async function BusinessDashboardPage({
           <ToolbarLink href="/admin/business/payroll" icon="upload" label="Exporteren" />
         </div>
 
+        {/* DASH-4: control-room banner — instant safe/not-safe read + Fix-first */}
+        <div
+          className={`mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-5 py-4 ${
+            ranked.length === 0
+              ? "border-emerald-200 bg-emerald-50"
+              : sev.spoed > 0
+                ? "border-red-300 bg-red-50"
+                : "border-amber-300 bg-amber-50"
+          }`}
+        >
+          <div className="min-w-0">
+            <p
+              className={`font-serif text-lg ${
+                ranked.length === 0 ? "text-emerald-800" : sev.spoed > 0 ? "text-red-800" : "text-amber-900"
+              }`}
+            >
+              {ranked.length === 0
+                ? "Vandaag onder controle"
+                : `Vandaag: ${ranked.length} ${plural(ranked.length, "aandachtspunt", "aandachtspunten")}`}
+            </p>
+            <p className="mt-0.5 text-xs text-ink-600">
+              {ranked.length === 0 ? "Geen open risico's — alles loopt op schema." : breakdown || "verspreide signalen"}
+              <span className="text-ink-400"> · laatst bijgewerkt {lastUpdated}</span>
+            </p>
+          </div>
+          {fixFirstHref && (
+            <Link
+              href={fixFirstHref}
+              className="shrink-0 rounded-full bg-burgundy px-4 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.14em] text-white hover:bg-burgundy-900"
+            >
+              Pak het belangrijkste op →
+            </Link>
+          )}
+        </div>
+
+        {/* Keep the rail + banner quietly current; strip the ?done= toast after ~6s. */}
+        <AutoRefresh seconds={60} clearParam="done" />
+
         {/* Rooster overzicht — bezetting / loonkost */}
         <section className="mt-6">
           <div className="flex items-baseline justify-between">
@@ -462,11 +518,25 @@ export default async function BusinessDashboardPage({
                 )}
               </div>
               {visible.length === 0 ? (
-                <div className="mt-3 rounded-lg bg-bg-gray px-3 py-4">
-                  <p className="text-sm text-ink-900">Geen urgente acties.</p>
-                  <p className="mt-0.5 text-xs text-ink-500">
-                    {horizonShifts.length === 0 ? "Er staan nog geen diensten gepland." : "Alles loopt op schema."}
+                <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-4">
+                  <p className="text-sm font-medium text-emerald-800">✓ Alles onder controle</p>
+                  <p className="mt-0.5 text-xs text-ink-600">
+                    {horizonShifts.length === 0
+                      ? "Er staan nog geen diensten gepland."
+                      : "Geen open risico's. Een blik op vandaag & morgen:"}
                   </p>
+                  {horizonShifts.length > 0 && (
+                    <ul className="mt-2 space-y-1 text-xs text-ink-700">
+                      <li>· {todayShifts.length} {plural(todayShifts.length, "dienst", "diensten")} vandaag</li>
+                      <li>· {tomorrowShifts.length} {plural(tomorrowShifts.length, "dienst", "diensten")} morgen</li>
+                    </ul>
+                  )}
+                  <Link
+                    href="/admin/business/roster"
+                    className="mt-2 inline-block font-ui text-[11px] uppercase tracking-[0.14em] text-burgundy hover:underline"
+                  >
+                    Bekijk het rooster →
+                  </Link>
                 </div>
               ) : (
                 <div className="mt-3 divide-y divide-ink-100">
@@ -686,13 +756,25 @@ function DoneFlash({ done }: { done: string }) {
   return <div className={`mb-4 rounded-lg border px-4 py-2.5 text-sm ${cls}`}>{f.msg}</div>;
 }
 
+const CARD_TYPE_CHIP: Record<CardType, { label: string; cls: string }> = {
+  fire: { label: "Spoed", cls: "bg-red-100 text-red-700" },
+  risk: { label: "Risico", cls: "bg-amber-100 text-amber-800" },
+  money: { label: "Geld", cls: "bg-emerald-100 text-emerald-700" },
+  task: { label: "Taak", cls: "bg-blue-100 text-blue-700" },
+  opportunity: { label: "Kans", cls: "bg-emerald-100 text-emerald-700" },
+};
+
 function AttentionRow({ item }: { item: AttentionItem }) {
+  const chip = CARD_TYPE_CHIP[toCard(item).cardType];
   return (
     <div className="-mx-2 rounded px-2 py-2 hover:bg-bg-gray">
       <Link href={item.href} className="flex items-start gap-3 py-1">
         <span className={`mt-0.5 ${TONE_ICON_CLASS[item.tone]}`}><Icon name={item.icon} className="h-[18px] w-[18px]" /></span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm text-ink-900">{item.title}</p>
+          <div className="flex items-center gap-1.5">
+            <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${chip.cls}`}>{chip.label}</span>
+            <p className="truncate text-sm text-ink-900">{item.title}</p>
+          </div>
           {item.detail && <p className="text-xs text-ink-500">{item.detail}</p>}
         </div>
         {item.cta && <span className="mt-0.5 shrink-0 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-burgundy">{item.cta}</span>}
