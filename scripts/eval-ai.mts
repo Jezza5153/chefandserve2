@@ -123,6 +123,9 @@ const GOLDEN: RouteCase[] = [
   { id: "G-backlog", q: "Welke klanten tekenen hun uren niet af — waar blijven uurbriefjes hangen?", expect: ["clients.signoff_backlog"] },
   { id: "G-trend", q: "Hoe ontwikkelt mijn marge zich — deze maand vergeleken met vorige?", expect: ["reports.platform_kpi", "business.overview"] },
   { id: "G-atrisk", q: "Welke goede chefs dreigen af te haken — wie moet ik reactiveren?", expect: ["chefs.at_risk"] },
+  // CHEF-PR10: planned-vs-actual + client-overpromise read tools (clock-out review payoff).
+  { id: "G-overpromise", q: "Welke hotels beloven meer dan ze waarmaken — waar lopen shifts steeds uit of willen chefs niet terug?", expect: ["clients.overpromise"] },
+  { id: "G-pva", q: "Waar liepen de afgelopen diensten uit — gepland versus werkelijk gewerkt?", expect: ["reports.planned_vs_actual", "clients.overpromise"] },
   // AI-W3: close-the-loop act tools (read→act parity). The model resolves the entity first.
   { id: "G-reqdata", q: "Vraag chef Daniel om zijn ontbrekende BSN en IBAN aan te vullen.", expect: ["chefs.request_profile_data", "chefs.find", "chefs.profile_completeness"] },
   { id: "G-complete", q: "De dienst van zaterdag bij Hotel Okura is gedraaid — markeer Daniel's plaatsing als afgerond.", expect: ["placements.complete", "shifts.detail", "shifts.find"] },
