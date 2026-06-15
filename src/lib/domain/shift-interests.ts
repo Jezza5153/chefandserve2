@@ -184,6 +184,8 @@ export async function listOpenShiftsForChef(chefId: string, daysAhead = 28): Pro
       languageRequired: r.languageRequired,
       clientType: r.clientType,
       clientTags: r.clientTags,
+      latitude: r.latitude,
+      longitude: r.longitude,
     });
 
     // Road-distance estimate (best-effort — needs both endpoints geocoded).
