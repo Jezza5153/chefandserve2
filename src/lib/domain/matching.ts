@@ -21,6 +21,7 @@ import {
   shifts,
   type Chef,
 } from "@/lib/db/schema";
+import { getReliabilityForChefs, type ChefReliabilitySignal } from "@/lib/chef-events";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { type LatLng } from "@/lib/domain/geo";
 import { estimateTravel } from "@/lib/domain/travel";
@@ -216,6 +217,49 @@ function prefsAdjust(
     }
   }
   return { score: Math.round(base * factor), reasons, warnings };
+}
+
+/**
+ * CHEF-PR6: SOFT, flag-gated reliability adjustment from behaviour signals
+ * (chef_events). Default OFF (MATCHING_RELIABILITY_ENABLED) → returns `base`
+ * unchanged. Multiplicative + soft — a flaky chef ranks lower but still appears
+ * (planner stays in control; never a hard exclude). AVG: the raw numbers stay
+ * INTERNAL — only warm/neutral reasons + internal warnings leave this function,
+ * never a "reliability 73%" surfaced to chefs.
+ */
+function reliabilityAdjust(
+  base: number,
+  rel: ChefReliabilitySignal | undefined,
+): { score: number; reasons: string[]; warnings: string[] } {
+  if (env.MATCHING_RELIABILITY_ENABLED !== "true" || !rel) {
+    return { score: base, reasons: [], warnings: [] };
+  }
+  const reasons: string[] = [];
+  const warnings: string[] = [];
+  let factor = 1;
+
+  // Cancellations are the red flag — graded so one slip ≠ a write-off.
+  if (rel.cancellations >= 3) {
+    factor *= 0.8;
+    warnings.push(`Meerdere annuleringen (${rel.cancellations})`);
+  } else if (rel.cancellations === 2) {
+    factor *= 0.9;
+    warnings.push("Eerder geannuleerd");
+  }
+
+  // Acceptance rate only matters once there's a meaningful sample (≥4 proposals).
+  if (rel.proposals >= 4 && rel.acceptanceRate != null) {
+    if (rel.acceptanceRate < 0.3) {
+      factor *= 0.92;
+      warnings.push("Reageert zelden met ja op voorstellen");
+    } else if (rel.acceptanceRate >= 0.75) {
+      factor *= 1.05;
+      reasons.push("Reageert betrouwbaar op voorstellen");
+    }
+  }
+
+  // Keep the boost from inflating past the 0..100 band the planner expects.
+  return { score: Math.min(100, Math.round(base * factor)), reasons, warnings };
 }
 
 /**
@@ -523,6 +567,13 @@ export async function findMatchesForShift(
     );
   const conflictSet = new Set(conflictRows.map((r) => r.chefId));
 
+  // CHEF-PR6: batch-load reliability for all candidates in ONE query (flag-gated;
+  // when MATCHING_RELIABILITY_ENABLED is off the map is unused, so skip the query).
+  const reliabilityByChef =
+    env.MATCHING_RELIABILITY_ENABLED === "true"
+      ? await getReliabilityForChefs(candidateChefs.map((c) => c.id))
+      : new Map<string, ChefReliabilitySignal>();
+
   // 5. Score remaining candidates
   const results: MatchResult[] = [];
   for (const chef of candidateChefs) {
@@ -562,12 +613,15 @@ export async function findMatchesForShift(
       longitude: shift.longitude,
     });
 
+    // CHEF-PR6: soft, flag-gated reliability adjustment from chef_events (default off = no-op).
+    const rel = reliabilityAdjust(adj.score, reliabilityByChef.get(chef.id));
+
     results.push({
       chef,
-      score: adj.score,
+      score: rel.score,
       scoreBreakdown: { vakniveau: v, segment: s, experience: e },
-      reasons: [...reasons, ...adj.reasons],
-      warnings: [...warnings, ...adj.warnings],
+      reasons: [...reasons, ...adj.reasons, ...rel.reasons],
+      warnings: [...warnings, ...adj.warnings, ...rel.warnings],
     });
   }
 

@@ -6,7 +6,7 @@
  * Derived signals (responseSeconds, delayFromShiftEndMin, workedVsScheduledMin)
  * are optional — set them only when meaningful for that event.
  */
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { chefEvents } from "@/lib/db/schema";
@@ -108,4 +108,55 @@ export async function getChefReliability(chefId: string): Promise<ChefReliabilit
     hoursSubmitted: count("hours_submitted"),
     avgResponseMinutes: avgResp != null ? Math.round(avgResp / 60) : null,
   };
+}
+
+/** The two reliability signals the matcher folds in — kept minimal for batch loading. */
+export type ChefReliabilitySignal = {
+  /** accepted / (accepted + rejected); null when there are no proposals yet. */
+  acceptanceRate: number | null;
+  proposals: number;
+  /** shift_cancelled_by_chef count — the reliability red flag. */
+  cancellations: number;
+};
+
+/**
+ * CHEF-PR6: batch reliability for many chefs in ONE grouped query — the matcher
+ * scores dozens of candidates per shift, so the per-chef getChefReliability() (2
+ * queries each) would be O(N) round-trips. Returns a Map keyed by chefId; a chef
+ * with no events is simply absent (caller treats absence as "no signal"). Read-only.
+ */
+export async function getReliabilityForChefs(
+  chefIds: string[],
+): Promise<Map<string, ChefReliabilitySignal>> {
+  const out = new Map<string, ChefReliabilitySignal>();
+  if (chefIds.length === 0) return out;
+
+  const rows = await db
+    .select({
+      chefId: chefEvents.chefId,
+      eventType: chefEvents.eventType,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(chefEvents)
+    .where(inArray(chefEvents.chefId, chefIds))
+    .groupBy(chefEvents.chefId, chefEvents.eventType);
+
+  const acc = new Map<string, { accepted: number; rejected: number; cancellations: number }>();
+  for (const r of rows) {
+    const a = acc.get(r.chefId) ?? { accepted: 0, rejected: 0, cancellations: 0 };
+    if (r.eventType === "proposal_accepted") a.accepted = r.count;
+    else if (r.eventType === "proposal_rejected") a.rejected = r.count;
+    else if (r.eventType === "shift_cancelled_by_chef") a.cancellations = r.count;
+    acc.set(r.chefId, a);
+  }
+
+  for (const [chefId, a] of acc.entries()) {
+    const proposals = a.accepted + a.rejected;
+    out.set(chefId, {
+      acceptanceRate: proposals > 0 ? a.accepted / proposals : null,
+      proposals,
+      cancellations: a.cancellations,
+    });
+  }
+  return out;
 }
