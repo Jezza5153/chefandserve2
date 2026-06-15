@@ -27,6 +27,10 @@ export type AttentionItem = {
   detail?: string;
   href: string;
   cta?: string;
+  /** Stable identity for snooze/dismiss state (DASH-3b): `kind` or `kind:entityId`. */
+  signalKey?: string;
+  /** Snapshot of the signal at render-time; a dismiss auto-clears when this changes. */
+  fingerprint?: string;
 };
 
 /** Lower = more urgent (rendered first). */

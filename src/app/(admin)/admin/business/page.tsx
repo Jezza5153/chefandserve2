@@ -42,6 +42,8 @@ import {
   type AttentionItem,
   type AttentionTone,
 } from "@/lib/domain/dashboard-intel";
+import { loadSignalStates, isSignalHidden } from "@/lib/domain/dashboard-signal-state";
+import { snoozeSignal, dismissSignal } from "./_actions";
 import { formatShiftRole } from "@/lib/labels";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { getRosterSettings } from "@/lib/domain/user-settings";
@@ -323,24 +325,31 @@ export default async function BusinessDashboardPage({
       // DASH-2a: open the "Vul deze dienst" drawer in place (search-param driven) instead of a page jump.
       href: `/admin/business?drawer=open-shift&shiftId=${s.id}`,
       cta: "Vul deze dienst",
+      signalKey: `${kind}:${s.id}`,
+      fingerprint: `${health}:${cnt}/${s.headcount}`,
     });
   }
   if (acceptedNotConfirmed > 0)
-    items.push({ kind: "accepted_unconfirmed", tone: "amber", icon: "alert-triangle", title: `${acceptedNotConfirmed} ${plural(acceptedNotConfirmed, "shift wacht", "shifts wachten")} op bevestiging`, detail: "chef zei ja — bevestig met de klant", href: "/admin/business?drawer=queue&kind=accepted_unconfirmed", cta: "Bevestigen" });
+    items.push({ kind: "accepted_unconfirmed", tone: "amber", icon: "alert-triangle", title: `${acceptedNotConfirmed} ${plural(acceptedNotConfirmed, "shift wacht", "shifts wachten")} op bevestiging`, detail: "chef zei ja — bevestig met de klant", href: "/admin/business?drawer=queue&kind=accepted_unconfirmed", cta: "Bevestigen", signalKey: "accepted_unconfirmed", fingerprint: String(acceptedNotConfirmed) });
   if (proposedAwaiting > 0)
-    items.push({ kind: "proposed_no_response", tone: "blue", icon: "info", title: `${proposedAwaiting} ${plural(proposedAwaiting, "chef voorgesteld", "chefs voorgesteld")}`, detail: "wacht op reactie van de chef", href: "/admin/business?drawer=queue&kind=proposed_no_response", cta: "Opvolgen" });
+    items.push({ kind: "proposed_no_response", tone: "blue", icon: "info", title: `${proposedAwaiting} ${plural(proposedAwaiting, "chef voorgesteld", "chefs voorgesteld")}`, detail: "wacht op reactie van de chef", href: "/admin/business?drawer=queue&kind=proposed_no_response", cta: "Opvolgen", signalKey: "proposed_no_response", fingerprint: String(proposedAwaiting) });
   if (hoursToApprove > 0)
-    items.push({ kind: "hours_to_approve", tone: "amber", icon: "clock", title: `${hoursToApprove} ${plural(hoursToApprove, "urenbriefje", "urenbriefjes")} te keuren`, detail: "klant heeft getekend", href: "/admin/business?drawer=queue&kind=hours_to_approve", cta: "Keur uren" });
+    items.push({ kind: "hours_to_approve", tone: "amber", icon: "clock", title: `${hoursToApprove} ${plural(hoursToApprove, "urenbriefje", "urenbriefjes")} te keuren`, detail: "klant heeft getekend", href: "/admin/business?drawer=queue&kind=hours_to_approve", cta: "Keur uren", signalKey: "hours_to_approve", fingerprint: String(hoursToApprove) });
   const pendingChanges = pendingProfileChanges + pendingClientChanges;
   if (pendingChanges > 0)
-    items.push({ kind: "change_request", tone: "blue", icon: "info", title: `${pendingChanges} ${plural(pendingChanges, "profielupdate wacht", "profielupdates wachten")}`, detail: "wijzigingsverzoeken ter beoordeling", href: pendingProfileChanges >= pendingClientChanges ? "/admin/business/chefs" : "/admin/business/clients", cta: "Bekijken" });
+    items.push({ kind: "change_request", tone: "blue", icon: "info", title: `${pendingChanges} ${plural(pendingChanges, "profielupdate wacht", "profielupdates wachten")}`, detail: "wijzigingsverzoeken ter beoordeling", href: pendingProfileChanges >= pendingClientChanges ? "/admin/business/chefs" : "/admin/business/clients", cta: "Bekijken", signalKey: "change_request", fingerprint: String(pendingChanges) });
   const inboxCount = newChefSubs + newClientSubs;
   if (inboxCount > 0)
-    items.push({ kind: "inbox", tone: "blue", icon: "inbox", title: `${inboxCount} nieuwe ${plural(inboxCount, "aanmelding", "aanmeldingen")}`, detail: `${newChefSubs} chef · ${newClientSubs} klant`, href: "/admin/business/inbox", cta: "Open inbox" });
+    items.push({ kind: "inbox", tone: "blue", icon: "inbox", title: `${inboxCount} nieuwe ${plural(inboxCount, "aanmelding", "aanmeldingen")}`, detail: `${newChefSubs} chef · ${newClientSubs} klant`, href: "/admin/business/inbox", cta: "Open inbox", signalKey: "inbox", fingerprint: String(inboxCount) });
   if (missingDataCount > 0)
-    items.push({ kind: "missing_data", tone: "amber", icon: "user-round", title: `${missingDataCount} chef-${plural(missingDataCount, "profiel", "profielen")} onvolledig`, detail: "postcode of tarief ontbreekt", href: "/admin/business/chefs?data=incomplete", cta: "Aanvullen" });
+    items.push({ kind: "missing_data", tone: "amber", icon: "user-round", title: `${missingDataCount} chef-${plural(missingDataCount, "profiel", "profielen")} onvolledig`, detail: "postcode of tarief ontbreekt", href: "/admin/business/chefs?data=incomplete", cta: "Aanvullen", signalKey: "missing_data", fingerprint: String(missingDataCount) });
 
-  const ranked = rankAttentionItems(items);
+  // DASH-3b: drop snoozed/dismissed signals (the snooze auto-reappears; the dismiss
+  // auto-reappears the moment its fingerprint changes). `ranked` is the live, non-hidden
+  // set, so every downstream count reflects what actually needs attention now.
+  const rankedAll = rankAttentionItems(items);
+  const signalStates = await loadSignalStates();
+  const ranked = rankedAll.filter((it) => !isSignalHidden(signalStates.get(it.signalKey ?? ""), it.fingerprint, now));
   const visible = ranked.slice(0, 6);
 
   /* ---- header bits ---- */
@@ -362,16 +371,8 @@ export default async function BusinessDashboardPage({
     <div className="-mx-6 -my-10 md:-mx-10 md:-my-12">
       <div className="px-6 py-7 md:px-10 md:py-8">
 
-        {/* Confirmation flash — every drawer action redirects here with ?done= */}
-        {sp.done && (
-          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">
-            {sp.done === "voorstel"
-              ? "✓ Voorgesteld — de chef krijgt de aanvraag. Gelogd."
-              : sp.done === "al-voorgesteld"
-                ? "Deze chef stond al op deze dienst."
-                : "✓ Gelogd."}
-          </div>
-        )}
+        {/* Confirmation flash — every drawer/rail action redirects here with ?done= */}
+        {sp.done && <DoneFlash done={sp.done} />}
 
         {/* In-place drawers (search-param driven) — fix the signal without a page jump */}
         {sp.drawer === "open-shift" && sp.shiftId && (
@@ -663,16 +664,66 @@ const TONE_ICON_CLASS: Record<AttentionTone, string> = {
   grey: "text-ink-500",
 };
 
+function DoneFlash({ done }: { done: string }) {
+  const MAP: Record<string, { msg: string; tone: "good" | "warn" | "info" }> = {
+    voorstel: { msg: "✓ Voorgesteld — de chef krijgt de aanvraag. Gelogd.", tone: "good" },
+    "al-voorgesteld": { msg: "Deze chef stond al op deze dienst.", tone: "info" },
+    bevestigd: { msg: "✓ Bevestigd — chef en klant zijn op de hoogte. Gelogd.", tone: "good" },
+    "niet-bevestigd": { msg: "Niets gewijzigd — de dienst was al bevestigd of veranderd.", tone: "warn" },
+    "uren-goedgekeurd": { msg: "✓ Uren goedgekeurd — klaar voor de loonadministratie.", tone: "good" },
+    "uren-mislukt": { msg: "Uren konden niet worden goedgekeurd — open het urenbriefje.", tone: "warn" },
+    snoozed: { msg: "Signaal gesnoozed — komt over 4 uur terug.", tone: "info" },
+    opgelost: { msg: "✓ Gemarkeerd als opgelost. Komt terug als de situatie verandert.", tone: "good" },
+    "reden-vereist": { msg: "Geef een reden op om een signaal als opgelost te markeren.", tone: "warn" },
+  };
+  const f = MAP[done] ?? { msg: "✓ Gelogd.", tone: "good" as const };
+  const cls =
+    f.tone === "good"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : f.tone === "warn"
+        ? "border-amber-300 bg-amber-50 text-amber-800"
+        : "border-ink-200 bg-bg-gray text-ink-700";
+  return <div className={`mb-4 rounded-lg border px-4 py-2.5 text-sm ${cls}`}>{f.msg}</div>;
+}
+
 function AttentionRow({ item }: { item: AttentionItem }) {
   return (
-    <Link href={item.href} className="-mx-2 flex items-start gap-3 rounded px-2 py-3 hover:bg-bg-gray">
-      <span className={`mt-0.5 ${TONE_ICON_CLASS[item.tone]}`}><Icon name={item.icon} className="h-[18px] w-[18px]" /></span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm text-ink-900">{item.title}</p>
-        {item.detail && <p className="text-xs text-ink-500">{item.detail}</p>}
-      </div>
-      {item.cta && <span className="mt-0.5 shrink-0 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-burgundy">{item.cta}</span>}
-    </Link>
+    <div className="-mx-2 rounded px-2 py-2 hover:bg-bg-gray">
+      <Link href={item.href} className="flex items-start gap-3 py-1">
+        <span className={`mt-0.5 ${TONE_ICON_CLASS[item.tone]}`}><Icon name={item.icon} className="h-[18px] w-[18px]" /></span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-ink-900">{item.title}</p>
+          {item.detail && <p className="text-xs text-ink-500">{item.detail}</p>}
+        </div>
+        {item.cta && <span className="mt-0.5 shrink-0 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-burgundy">{item.cta}</span>}
+      </Link>
+      {/* DASH-3b: snooze (time-based) + dismiss-with-reason (auto-reappears on change) */}
+      {item.signalKey && (
+        <div className="mt-1 flex flex-wrap items-center gap-2 pl-[30px]">
+          <form action={snoozeSignal}>
+            <input type="hidden" name="signalKey" value={item.signalKey} />
+            <input type="hidden" name="hours" value="4" />
+            <button type="submit" className="font-ui text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400 hover:text-burgundy">
+              Snooze 4u
+            </button>
+          </form>
+          <span className="text-[10px] text-ink-200">·</span>
+          <form action={dismissSignal} className="flex items-center gap-1">
+            <input type="hidden" name="signalKey" value={item.signalKey} />
+            <input type="hidden" name="fingerprint" value={item.fingerprint ?? ""} />
+            <input
+              name="reason"
+              required
+              placeholder="reden…"
+              className="w-24 rounded border border-ink-200 bg-white px-1.5 py-0.5 text-[10px] text-ink-700 placeholder-ink-400 focus:border-burgundy focus:outline-none"
+            />
+            <button type="submit" className="font-ui text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400 hover:text-emerald-700">
+              Klaar
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
   );
 }
 
