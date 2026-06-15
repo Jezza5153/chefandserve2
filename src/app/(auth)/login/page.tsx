@@ -1,20 +1,22 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
+import { eq } from "drizzle-orm";
 
 import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 import { auth, signIn } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { recordAuditFromRequest } from "@/lib/audit";
-import { errorLog } from "@/lib/db/schema";
+import { errorLog, users } from "@/lib/db/schema";
 import { env } from "@/lib/env";
 import { defaultLandingFor } from "@/lib/permissions";
 import {
   checkRateLimit,
   extractClientIp,
 } from "@/lib/rate-limit";
+import { buildCookieValue, TWOFA_COOKIE_NAME } from "@/lib/totp-cookie";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 
 /**
@@ -119,6 +121,29 @@ async function passwordLogin(formData: FormData) {
       totp,
       redirect: false,
     });
+    // signIn already verified password + TOTP (or a recovery code). Mint the
+    // 2FA-verified cookie NOW so the middleware 2FA gate is satisfied — otherwise
+    // the user gets bounced straight to /verify-2fa to re-enter the SAME code they
+    // just typed. Bound to the user's enrolledAt (so an admin 2FA-reset still
+    // invalidates it), exactly like the /verify-2fa page does.
+    const [u] = await db
+      .select({ id: users.id, totpEnrolledAt: users.totpEnrolledAt })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    if (u) {
+      const enrolledAtMs = u.totpEnrolledAt
+        ? new Date(u.totpEnrolledAt).getTime()
+        : Date.now();
+      const cookie = await buildCookieValue({ userId: u.id, enrolledAtMs });
+      (await cookies()).set(TWOFA_COOKIE_NAME, cookie.value, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: cookie.maxAge,
+        path: "/",
+      });
+    }
     redirect("/admin");
   } catch (err) {
     // CredentialsSignin or other AuthError → generic error. Don't reveal

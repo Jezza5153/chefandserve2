@@ -93,6 +93,7 @@ export const authConfig: NextAuthConfig = {
 
         // 2. Verify TOTP. Try numeric code first, fall back to recovery code.
         let totpOk = false;
+        let factorType: "totp" | "recovery" = "totp";
         const cleaned = totpRaw.replace(/\s+/g, "");
         if (/^\d{6}$/.test(cleaned)) {
           try {
@@ -105,10 +106,13 @@ export const authConfig: NextAuthConfig = {
         if (!totpOk) {
           // Recovery code path — atomic single-use consume
           totpOk = await verifyAndConsume(dbUser.id, totpRaw);
+          if (totpOk) factorType = "recovery";
         }
         if (!totpOk) return null;
 
-        // Audit (best-effort)
+        // Audit (best-effort) — record the factor so a recovery-code login (the
+        // "lost authenticator" escape hatch) is visible in the trail, matching
+        // what /verify-2fa records.
         await db
           .insert(auditLog)
           .values({
@@ -116,6 +120,7 @@ export const authConfig: NextAuthConfig = {
             action: "auth.password_signin",
             resource: "users",
             resourceId: dbUser.id,
+            after: { factorType },
           })
           .catch(() => {});
 
