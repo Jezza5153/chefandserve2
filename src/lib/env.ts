@@ -211,6 +211,11 @@ const serverSchema = z.object({
   // coordinates). Default off — go-live needs an AVG/DPIA sign-off.
   ARRIVAL_TRUST_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-PR8 — Money Explainer (/chef/money). Bruto/netto/ZZP INDICATIE calculator.
+  // Default off — owner must verify the assumption table against current official
+  // tables (Belastingdienst loontabellen etc.) before flipping.
+  MONEY_EXPLAINER_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
