@@ -353,7 +353,7 @@ export default async function BusinessDashboardPage({
   // auto-reappears the moment its fingerprint changes). `ranked` is the live, non-hidden
   // set, so every downstream count reflects what actually needs attention now.
   const rankedAll = rankAttentionItems(items);
-  const signalStates = await loadSignalStates();
+  const signalStates = await loadSignalStates(session.user.id);
   const ranked = rankedAll.filter((it) => !isSignalHidden(signalStates.get(it.signalKey ?? ""), it.fingerprint, now));
   const visible = ranked.slice(0, 6);
 
@@ -808,6 +808,9 @@ const CARD_TYPE_CHIP: Record<CardType, { label: string; cls: string }> = {
 
 function AttentionRow({ item }: { item: AttentionItem }) {
   const chip = CARD_TYPE_CHIP[toCard(item).cardType];
+  // Dismiss only on per-shift signals (their fingerprint auto-clears correctly); aggregates snooze-only.
+  const dismissable =
+    item.kind === "critical_shift" || item.kind === "open_shift" || item.kind === "underfilled_shift";
   return (
     <div className="-mx-2 rounded px-2 py-2 hover:bg-bg-gray">
       <Link href={item.href} className="flex items-start gap-3 py-1">
@@ -821,7 +824,10 @@ function AttentionRow({ item }: { item: AttentionItem }) {
         </div>
         {item.cta && <span className="mt-0.5 shrink-0 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-burgundy">{item.cta}</span>}
       </Link>
-      {/* DASH-3b: snooze (time-based) + dismiss-with-reason (auto-reappears on change) */}
+      {/* DASH-3b: snooze (time-based, all signals) + dismiss-with-reason. Dismiss is shown
+          ONLY for per-shift signals, whose fingerprint (health:cnt/headcount) auto-clears
+          correctly; count-aggregate signals get snooze only (their bare-count fingerprint
+          would keep a dismiss alive even when the underlying items change — HARDEN-3). */}
       {item.signalKey && (
         <div className="mt-1 flex flex-wrap items-center gap-2 pl-[30px]">
           <form action={snoozeSignal}>
@@ -831,20 +837,25 @@ function AttentionRow({ item }: { item: AttentionItem }) {
               Snooze 4u
             </button>
           </form>
-          <span className="text-[10px] text-ink-200">·</span>
-          <form action={dismissSignal} className="flex items-center gap-1">
-            <input type="hidden" name="signalKey" value={item.signalKey} />
-            <input type="hidden" name="fingerprint" value={item.fingerprint ?? ""} />
-            <input
-              name="reason"
-              required
-              placeholder="reden…"
-              className="w-24 rounded border border-ink-200 bg-white px-1.5 py-0.5 text-[10px] text-ink-700 placeholder-ink-400 focus:border-burgundy focus:outline-none"
-            />
-            <button type="submit" className="font-ui text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400 hover:text-emerald-700">
-              Klaar
-            </button>
-          </form>
+          {dismissable && (
+            <>
+              <span className="text-[10px] text-ink-200">·</span>
+              <form action={dismissSignal} className="flex items-center gap-1">
+                <input type="hidden" name="signalKey" value={item.signalKey} />
+                <input type="hidden" name="fingerprint" value={item.fingerprint ?? ""} />
+                <input
+                  name="reason"
+                  required
+                  aria-label="Reden waarom dit is afgehandeld"
+                  placeholder="reden…"
+                  className="w-24 rounded border border-ink-200 bg-white px-1.5 py-0.5 text-[10px] text-ink-700 placeholder-ink-400 focus:border-burgundy focus:outline-none"
+                />
+                <button type="submit" className="font-ui text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400 hover:text-emerald-700">
+                  Klaar
+                </button>
+              </form>
+            </>
+          )}
         </div>
       )}
     </div>
