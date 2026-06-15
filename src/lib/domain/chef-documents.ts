@@ -99,17 +99,20 @@ export async function requestChefDocumentUpload(args: {
 /**
  * Return all non-deleted documents for a chef, with fresh download URLs.
  */
-export async function listChefDocuments(chefId: string): Promise<
-  Array<{
-    id: string;
-    type: DocumentType;
-    filename: string;
-    mimeType: string | null;
-    sizeBytes: number | null;
-    downloadUrl: string;
-    createdAt: Date;
-  }>
-> {
+export type ChefDocumentListItem = {
+  id: string;
+  type: DocumentType;
+  filename: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  downloadUrl: string;
+  createdAt: Date;
+  /** CHEF-PR7: trust signals surfaced on the chef "Mijn documenten" area. */
+  expiresAt: Date | null;
+  verifiedAt: Date | null;
+};
+
+export async function listChefDocuments(chefId: string): Promise<ChefDocumentListItem[]> {
   const rows = await db
     .select()
     .from(chefDocuments)
@@ -118,31 +121,39 @@ export async function listChefDocuments(chefId: string): Promise<
     )
     .orderBy(chefDocuments.createdAt);
 
+  const base = (r: (typeof rows)[number], downloadUrl: string): ChefDocumentListItem => ({
+    id: r.id,
+    type: r.type as DocumentType,
+    filename: r.filename,
+    mimeType: r.mimeType,
+    sizeBytes: r.sizeBytes,
+    downloadUrl,
+    createdAt: r.createdAt,
+    expiresAt: r.expiresAt ?? null,
+    verifiedAt: r.verifiedAt ?? null,
+  });
+
   if (!r2IsConfigured()) {
     // Without R2, we can't generate download URLs. Skip them.
-    return rows.map((r) => ({
-      id: r.id,
-      type: r.type as DocumentType,
-      filename: r.filename,
-      mimeType: r.mimeType,
-      sizeBytes: r.sizeBytes,
-      downloadUrl: "",
-      createdAt: r.createdAt,
-    }));
+    return rows.map((r) => base(r, ""));
   }
 
   // Generate fresh signed URLs (each call gets a new one — short TTL is fine)
-  return Promise.all(
-    rows.map(async (r) => ({
-      id: r.id,
-      type: r.type as DocumentType,
-      filename: r.filename,
-      mimeType: r.mimeType,
-      sizeBytes: r.sizeBytes,
-      downloadUrl: await getDownloadUrl(r.r2Key),
-      createdAt: r.createdAt,
-    })),
-  );
+  return Promise.all(rows.map(async (r) => base(r, await getDownloadUrl(r.r2Key))));
+}
+
+/** Ownership-checked soft-delete for the chef's own documents area (CHEF-PR7). */
+export async function deleteOwnChefDocument(args: {
+  documentId: string;
+  chefId: string;
+  actingUserId: string;
+}): Promise<{ ok: boolean }> {
+  const doc = await db.query.chefDocuments.findFirst({
+    where: eq(chefDocuments.id, args.documentId),
+  });
+  if (!doc || doc.chefId !== args.chefId) return { ok: false }; // auth IS the lookup
+  const res = await softDeleteChefDocument(args.documentId, args.actingUserId);
+  return { ok: res.ok };
 }
 
 /**
