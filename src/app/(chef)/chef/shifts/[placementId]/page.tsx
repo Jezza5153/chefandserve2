@@ -9,7 +9,7 @@
  *   - When cancel fires: outbox event + emails to Maarten (routable) + klant
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -398,6 +398,35 @@ export default async function ChefShiftDetailPage({
     where: eq(clients.id, shift.clientId),
   });
 
+  // CHEF-PR2 offer lifecycle: stamp first-open so the planner sees "gezien".
+  // Best-effort, atomic (only while still proposed + unseen).
+  if (placement.status === "proposed" && !placement.seenAt) {
+    await db
+      .update(placements)
+      .set({ seenAt: new Date() })
+      .where(
+        and(
+          eq(placements.id, placement.id),
+          eq(placements.status, "proposed"),
+          isNull(placements.seenAt),
+        ),
+      )
+      .catch(() => {});
+  }
+
+  // Offer-status chip for an open proposal (verstuurd/gezien · reageer binnen / verlopen).
+  const offerStatus = ((): { label: string; warn: boolean } | null => {
+    if (placement.status !== "proposed") return null;
+    const exp = placement.expiresAt ? new Date(placement.expiresAt) : null;
+    if (exp && exp.getTime() < Date.now()) return { label: "Reactietijd verlopen", warn: true };
+    const seen = placement.seenAt ? "Gezien" : "Verstuurd";
+    if (exp) {
+      const hrs = Math.max(0, Math.round((exp.getTime() - Date.now()) / 3_600_000));
+      return { label: `${seen} · reageer binnen ${hrs} u`, warn: hrs <= 4 };
+    }
+    return { label: seen, warn: false };
+  })();
+
   // Messages Chef & Serve made visible to the chef on this placement (the admin
   // "Zichtbaar voor chef" thread — previously never rendered to the chef).
   const messages = await listVisibleComments(placement.id, { kind: "chef" });
@@ -430,9 +459,20 @@ export default async function ChefShiftDetailPage({
         </Link>
       </div>
 
-      <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-        {placement.status === "proposed" ? "Shift-voorstel" : "Shift"}
-      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+          {placement.status === "proposed" ? "Shift-voorstel" : "Shift"}
+        </p>
+        {offerStatus && (
+          <span
+            className={`rounded-full px-2 py-0.5 font-ui text-[10px] font-medium ${
+              offerStatus.warn ? "bg-burgundy/10 text-burgundy" : "bg-bg-gray text-ink-600"
+            }`}
+          >
+            {offerStatus.label}
+          </span>
+        )}
+      </div>
       <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
         {formatShiftRole(shift.roleNeeded)}
         {shift.segment && (
