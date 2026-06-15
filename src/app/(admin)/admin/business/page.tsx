@@ -21,6 +21,7 @@ import { MoneyStrip } from "@/components/dashboard/MoneyStrip";
 import { DrawerShell } from "@/components/dashboard/drawer/DrawerShell";
 import { OpenShiftDrawer } from "@/components/dashboard/drawer/OpenShiftDrawer";
 import { QueueDrawer, type QueueKind } from "@/components/dashboard/drawer/QueueDrawer";
+import { TimelineDrawer } from "@/components/dashboard/drawer/TimelineDrawer";
 import { db } from "@/lib/db/client";
 import {
   chefSubmissions,
@@ -381,6 +382,11 @@ export default async function BusinessDashboardPage({
         {sp.drawer === "queue" && sp.kind && QUEUE_KINDS.includes(sp.kind as QueueKind) && (
           <DrawerShell title={QUEUE_TITLE[sp.kind as QueueKind]} closeHref="/admin/business">
             <QueueDrawer kind={sp.kind as QueueKind} />
+          </DrawerShell>
+        )}
+        {sp.drawer === "timeline" && sp.shiftId && (
+          <DrawerShell title="Tijdlijn" closeHref="/admin/business">
+            <TimelineDrawer shiftId={sp.shiftId} />
           </DrawerShell>
         )}
 

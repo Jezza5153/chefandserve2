@@ -123,12 +123,20 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
         </ul>
       )}
 
-      <Link
-        href={`/admin/business/shifts/${shift.id}`}
-        className="inline-flex items-center gap-1 font-ui text-[11px] font-medium uppercase tracking-[0.14em] text-burgundy hover:underline"
-      >
-        Volledige matchlijst &amp; dienstdetail →
-      </Link>
+      <div className="flex flex-wrap items-center gap-4 pt-1">
+        <Link
+          href={`/admin/business/shifts/${shift.id}`}
+          className="inline-flex items-center gap-1 font-ui text-[11px] font-medium uppercase tracking-[0.14em] text-burgundy hover:underline"
+        >
+          Volledige matchlijst &amp; dienstdetail →
+        </Link>
+        <Link
+          href={`/admin/business?drawer=timeline&shiftId=${shift.id}`}
+          className="inline-flex items-center gap-1 font-ui text-[11px] font-medium uppercase tracking-[0.14em] text-ink-600 hover:text-burgundy hover:underline"
+        >
+          Tijdlijn
+        </Link>
+      </div>
     </div>
   );
 }
