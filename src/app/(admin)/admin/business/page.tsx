@@ -45,6 +45,8 @@ import {
 import { loadSignalStates, isSignalHidden } from "@/lib/domain/dashboard-signal-state";
 import { toCard, type CardType } from "@/lib/domain/dashboard-cards";
 import { AutoRefresh } from "@/components/admin/AutoRefresh";
+import { CommandBar } from "@/components/dashboard/CommandBar";
+import { aiEnabled } from "@/lib/ai/config";
 import { snoozeSignal, dismissSignal } from "./_actions";
 import { formatShiftRole } from "@/lib/labels";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
@@ -369,6 +371,9 @@ export default async function BusinessDashboardPage({
   ].filter(Boolean).join(" · ");
   const fixFirstHref = ranked[0]?.href;
   const lastUpdated = now.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
+  // Command bar only when the assistant is actually available (dashboard viewers are
+  // owner/super_admin, so the role half of `showAssistant` is already satisfied).
+  const aiAvailable = aiEnabled();
 
   /* ---- header bits ---- */
   const roles = session.user.roles;
@@ -432,6 +437,9 @@ export default async function BusinessDashboardPage({
           <ToolbarLink href="/admin/business/inbox" icon="message" label="Berichten" />
           <ToolbarLink href="/admin/business/payroll" icon="upload" label="Exporteren" />
         </div>
+
+        {/* DASH-5b: operations command bar — type an intent, the assistant resolves it */}
+        {aiAvailable && <CommandBar />}
 
         {/* DASH-4: control-room banner — instant safe/not-safe read + Fix-first */}
         <div
