@@ -273,8 +273,9 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | DASH-5 (#201,#202) | Fill-drawer **contact logging** (`contactLogs`, App/Mail) + **operations command bar** ("Wat wil je oplossen?" → `cs-ai:ask`). | ✅ |
 | DASH-6a (#203) | **Revenue-at-risk** card (unfilled slots × clientRate × hours) → "Vul nu". | ✅ |
 | harden (#205) | Adversarial-review fixes, **code-only no migration**: snooze/dismiss now **per-viewer** (userId-prefixed `signalKey`, no schema change) · audit rows carry the actor · dismiss only on per-shift signals (count-aggregate fingerprints would never clear) · `return redirect` · clamp matchScore · `aria-label`. + `smoke-dashboard-signal-state.ts` (11). | ✅ |
+| Phase 2 Agenda — P2a (#209) · P2b+P2c (#211) · harden (#213) · **P2-finish/P2d (#218)** | Owner operations-agenda at `/admin/business/agenda`: day/week/maand grid (`agenda.ts` `getAgendaEvents`) + token-authed ICS feed (`calendar.ics`, RFC5545+HMAC). **Manual one-off events** (`agenda_events` table — intake_call/follow_up/onboarding_task/contract_start/internal_reminder · checklist jsonb · linked client/chef/shift + assignedTo) via `agenda-events.ts` (create / setStatus atomic / toggleChecklist last-write-wins) + "Nieuwe afspraak" form + inline checklist cards + **client-lens & chef-lens**; ICS folds in manual events (no free-text notes — AVG). `smoke-agenda.ts` 43/0. | ✅ SHIPPED (migration **0061** on `ep-icy-scene`; type-check+lint+build green; prod deploy Ready) |
 
-**Drawer pattern:** `/admin/business?drawer=open-shift|queue|timeline&shiftId=…|kind=…`; server-rendered content + client `DrawerShell`; actions in `business/_actions.ts` redirect to `?done=` → `DoneFlash`. New audit keys: `dashboard.signal.snooze`/`dismiss`. **DEFERRED:** DASH-6b channel-aware notif-prefs (naive `shouldSendToUser`-in-`createNotification` conflates the klant "Mail-voorkeuren" keys with in-app — needs an `inapp:` namespace) · Phase 2 owner Agenda (P2a–d) · the per-user signal-state as a real migration (the prefix fix made it unnecessary).
+**Drawer pattern:** `/admin/business?drawer=open-shift|queue|timeline&shiftId=…|kind=…`; server-rendered content + client `DrawerShell`; actions in `business/_actions.ts` redirect to `?done=` → `DoneFlash`. New audit keys: `dashboard.signal.snooze`/`dismiss` · `agenda_event.created`/`completed`/`cancelled`. **DEFERRED:** DASH-6b channel-aware notif-prefs (naive `shouldSendToUser`-in-`createNotification` conflates the klant "Mail-voorkeuren" keys with in-app — needs an `inapp:` namespace) · the per-user signal-state as a real migration (the prefix fix made it unnecessary). Phases 3–5 (Ready/Safe/Sane/Matched · Emergency · AI-in-ops) are next; Phase 3 chef-availability is owned by the parallel chat. ⚠ migration 0061 applied to prod via `db.execute(sql.raw())` after `drizzle-kit migrate` silently no-op'd the DDL — [[drizzle-kit-prod-migrate-silent-noop]].
 
 ### AI system-audit refinement (W0–W4 + portal-mini, 2026-06-15) — from a 6-dimension multi-agent AI audit
 
@@ -367,6 +368,8 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 
 **AI / RAG (live)**: per-row `embedding` vector(1536) on `chefs`/`clients`/`shifts` (manual `manual_pgvector_prep.sql` — powers `*.semantic_search`) · **`ai_embeddings`** chunked notes-RAG store (`vector(1536)` + HNSW cosine · `tenant_scope`/`visibility`/`redaction_version`/`content_hash` · soft-supersede via `superseded_at`; manual `manual_ai_embeddings.sql`, NOT in Drizzle schema) · AI reminders/memory/token-usage as jsonb bags in `business_settings`
 
+**Owner Dashboard/Agenda (live)**: `dashboard_signal_state` (snooze/dismiss metadata on derived signals; per-viewer via userId-prefixed `signalKey`, migration 0057) · **`agenda_events`** (manual one-off agenda entries: `agenda_event_type`/`agenda_event_status` enums · `checklist` jsonb · linked client/chef/shift + assignedTo · migration 0061)
+
 ### Tables (planned per active plan)
 
 **PR-CHEF-0**: `integration_connections` · `integration_outbox` · `integration_runs` · `external_refs` · `email_messages` · `email_events` · `notifications` · `contact_logs`
@@ -424,6 +427,9 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | 0043_match_intel.sql | `match_intel` (chef×klant pair-memory: note + would_rehire/return + ai_why_works/fails, uniek per paar) + `placements.chef_return_signal` (post-shift duim) (PR-INTEL-P4) | ✅ applied to **DEV + PROD** (`ep-icy-scene`, before deploy + verified) |
 | `manual_pgvector_prep.sql` | **manual (non-Drizzle)** — pgvector extension + per-row `embedding` vector(1536) on chefs/clients/shifts + HNSW cosine | applied |
 | `manual_ai_embeddings.sql` | **manual (non-Drizzle)** — `ai_embeddings` chunked notes-RAG store: `vector(1536)` + HNSW cosine + `tenant_scope`/`visibility`/`redaction_version`/`content_hash` + soft-supersede. Apply via `scripts/apply-ai-embeddings.mts` | applied (2026-06-08, prod) |
+| 0044..0058 | dashboard intel · planner workbench/scale · AI waves · chef PR-1+2 (`chefs`/`placements`/`shifts` cols) · `dashboard_signal_state` (0057) | applied |
+| 0059_chef_pr3_client_non_negotiables.sql · 0060_chef_pr3_arrival_checks.sql | chef PR-3 (parallel chat): per-hotel non-negotiables + arrival checks | applied (parallel chat) |
+| 0061_agenda_events_and_indexes.sql | `agenda_events` + `agenda_event_type`/`agenda_event_status` enums + 4 perf indexes (`placements.status`, `shift_hours(shift_id)`+`(status,submitted_at)`, `contact_logs(entity_type,entity_id)`); SQL idempotent (CREATE TYPE guarded). Renumbered from 0059 after chef chats took 0059/0060 (P2-finish) | ✅ applied to **DEV + PROD** (`ep-icy-scene`) — note: applied via `db.execute(sql.raw())`, `drizzle-kit migrate` silently no-op'd the DDL ([[drizzle-kit-prod-migrate-silent-noop]]) |
 
 ---
 
