@@ -1556,6 +1556,44 @@ export const placements = pgTable(
   }),
 );
 
+/* =============================================================================
+ * CHEF-PR3 — Arrival Trust (Aankomstzekerheid). PRIVACY-FIRST: the PWA checks the
+ * 1 km radius ON THE CHEF'S PHONE and sends only the RESULT. This table stores the
+ * arrival *event* — NEVER coordinates, NEVER a route. One row per (shift, chef),
+ * dark behind ARRIVAL_TRUST_ENABLED. AVG defence: temporary (20 min pre-shift →
+ * clock-in), tied to a specific client shift, on-device, 1 km signal only.
+ * =========================================================================== */
+export const chefArrivalStatusEnum = pgEnum("chef_arrival_status", [
+  "monitoring", // 20-min window opened; watching on-device
+  "nearby", // within 1 km — owner + klant get a "chef is in de buurt" notice
+  "no_signal", // window passed with no location event
+  "permission_missing", // chef hasn't allowed location
+  "stopped", // clock-in / cancelled / replaced — monitoring ended
+]);
+
+export const shiftArrivalChecks = pgTable(
+  "shift_arrival_checks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    shiftId: text("shift_id")
+      .notNull()
+      .references(() => shifts.id, { onDelete: "cascade" }),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    status: chefArrivalStatusEnum("status").notNull().default("monitoring"),
+    activatedAt: timestamp("activated_at", { withTimezone: true }).notNull().defaultNow(),
+    nearbyConfirmedAt: timestamp("nearby_confirmed_at", { withTimezone: true }),
+    stoppedAt: timestamp("stopped_at", { withTimezone: true }),
+    // NO latitude/longitude/route — by design; the "<1km" result is the only signal.
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    shiftChefUnique: uniqueIndex("shift_arrival_shift_chef_unique").on(t.shiftId, t.chefId),
+  }),
+);
+
 /**
  * Chef×klant pair-memory — PR-INTEL-P4, the "match-intelligence" layer (the
  * relationship the user flagged as the missing piece). One row per (chef, klant):
