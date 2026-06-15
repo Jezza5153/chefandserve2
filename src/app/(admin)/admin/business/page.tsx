@@ -134,6 +134,7 @@ export default async function BusinessDashboardPage({
         clientId: shifts.clientId,
         companyName: clients.companyName,
         chefRateCents: shifts.chefRateCents,
+        clientRateCents: shifts.clientRateCents,
       })
       .from(shifts)
       .leftJoin(clients, eq(clients.id, shifts.clientId))
@@ -375,6 +376,26 @@ export default async function BusinessDashboardPage({
   // owner/super_admin, so the role half of `showAssistant` is already satisfied).
   const aiAvailable = aiEnabled();
 
+  // DASH-6a: revenue-at-risk — unfilled slots today+tomorrow × client rate × hours.
+  // Honest: only counts shifts with a known client rate (rateless ones can't be valued).
+  let revenueAtRiskCents = 0;
+  let unfilledShiftCount = 0;
+  for (const s of horizonShifts) {
+    const cntFilled = Math.min(countByShift.get(s.id) ?? 0, s.headcount);
+    const openSlots = Math.max(s.headcount - cntFilled, 0);
+    if (openSlots > 0) {
+      unfilledShiftCount += 1;
+      if (s.clientRateCents) {
+        const hours = (new Date(s.endsAt).getTime() - new Date(s.startsAt).getTime()) / 3_600_000;
+        revenueAtRiskCents += openSlots * s.clientRateCents * hours;
+      }
+    }
+  }
+  // The most urgent unfilled shift to send "Vul nu" at (its fill drawer); else the roster.
+  const topOpenShiftHref =
+    ranked.find((r) => r.kind === "critical_shift" || r.kind === "open_shift" || r.kind === "underfilled_shift")?.href ??
+    "/admin/business/roster";
+
   /* ---- header bits ---- */
   const roles = session.user.roles;
   const roleLabel = roles.includes("owner") ? "Eigenaar" : roles.includes("super_admin") ? "Beheerder" : "Team";
@@ -603,6 +624,18 @@ export default async function BusinessDashboardPage({
         <div className="mt-6">
           <h2 className="mb-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-500">Omzet &amp; marge</h2>
           <MoneyStrip week={roll.week} month={roll.month} ytd={roll.ytd} />
+          {revenueAtRiskCents > 0 ? (
+            <Link
+              href={topOpenShiftHref}
+              className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50/60 px-4 py-2.5 hover:border-burgundy/40"
+            >
+              <span className="text-sm text-ink-700">
+                <strong className="text-ink-900">{formatEuro(revenueAtRiskCents)}</strong> omzet loopt risico —{" "}
+                {unfilledShiftCount} {plural(unfilledShiftCount, "onvervulde dienst", "onvervulde diensten")} vandaag &amp; morgen
+              </span>
+              <span className="shrink-0 font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">Vul nu →</span>
+            </Link>
+          ) : null}
           {unbilledCents > 0 ? (
             <Link
               href="/admin/business/invoices"
