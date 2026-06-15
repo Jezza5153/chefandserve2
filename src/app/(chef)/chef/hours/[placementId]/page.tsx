@@ -24,10 +24,12 @@ import { db } from "@/lib/db/client";
 import {
   chefs,
   clients,
+  shiftHourReviews,
   shiftHours,
   shifts,
   users,
 } from "@/lib/db/schema";
+import { submitClockOutReview } from "@/lib/domain/clock-out-review";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
 import {
@@ -249,12 +251,38 @@ function formatTime(d: Date | string): string {
   });
 }
 
+/** CHEF-PR4: capture the 6-question clock-out review (post-shift). */
+async function submitReview(formData: FormData) {
+  "use server";
+  const session = await requireAuth();
+  const chef = await db.query.chefs.findFirst({ where: eq(chefs.userId, session.user.id) });
+  const placementId = String(formData.get("placementId") ?? "");
+  if (!chef || !placementId) return;
+  const tri = (k: string): boolean | null => {
+    const v = String(formData.get(k) ?? "");
+    return v === "ja" ? true : v === "nee" ? false : null;
+  };
+  await submitClockOutReview({
+    chefId: chef.id,
+    placementId,
+    answers: {
+      workedPlannedRole: tri("workedPlannedRole"),
+      workedExtraHours: tri("workedExtraHours"),
+      gotBreak: tri("gotBreak"),
+      asDescribed: tri("asDescribed"),
+      issueNote: String(formData.get("issueNote") ?? ""),
+      wouldReturn: tri("wouldReturn"),
+    },
+  });
+  redirect(`/chef/hours/${placementId}?ok=review`);
+}
+
 export default async function ChefHoursFormPage({
   params,
   searchParams,
 }: {
   params: Promise<{ placementId: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
   const session = await requireAuth();
   const { placementId } = await params;
@@ -283,6 +311,18 @@ export default async function ChefHoursFormPage({
   const isEditable = ["draft", "client_rejected", "admin_rejected"].includes(
     row.h.status,
   );
+
+  // CHEF-PR4: the clock-out review is offered once the hours are in (not a draft).
+  const reviewable = ["submitted", "client_signed", "admin_approved", "exported"].includes(
+    row.h.status,
+  );
+  const [existingReview] = reviewable
+    ? await db
+        .select({ id: shiftHourReviews.id })
+        .from(shiftHourReviews)
+        .where(eq(shiftHourReviews.placementId, placementId))
+        .limit(1)
+    : [];
 
   const errorMsg =
     sp.error === "bad-times"
@@ -371,6 +411,65 @@ export default async function ChefHoursFormPage({
           errorMsg={errorMsg}
         />
       )}
+
+      {/* CHEF-PR4: clock-out review — offered once the hours are in */}
+      {reviewable &&
+        (existingReview || sp.ok === "review" ? (
+          <div className="mt-8 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+            ✓ Bedankt voor je terugkoppeling — dit helpt ons betere shifts te kiezen.
+          </div>
+        ) : (
+          <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
+            <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
+              Hoe ging je shift?
+            </p>
+            <p className="mt-1 text-xs text-ink-500">
+              6 korte vragen — helpt ons betere shifts kiezen en beschermt jou.
+            </p>
+            <form action={submitReview} className="mt-4 space-y-4">
+              <input type="hidden" name="placementId" value={placementId} />
+              {(
+                [
+                  ["workedPlannedRole", "Heb je de geplande rol gewerkt?"],
+                  ["workedExtraHours", "Heb je extra uren gewerkt?"],
+                  ["gotBreak", "Heb je pauze gehad?"],
+                  ["asDescribed", "Was de shift zoals afgesproken?"],
+                  ["wouldReturn", "Zou je hier weer werken?"],
+                ] as [string, string][]
+              ).map(([key, q]) => (
+                <fieldset key={key} className="flex flex-wrap items-center justify-between gap-2">
+                  <legend className="text-sm text-ink-800">{q}</legend>
+                  <div className="flex gap-1.5">
+                    {["ja", "nee"].map((v) => (
+                      <label
+                        key={v}
+                        className="cursor-pointer rounded-full border border-ink-200 px-3 py-1 text-xs text-ink-700 has-[:checked]:border-burgundy has-[:checked]:bg-burgundy has-[:checked]:text-white"
+                      >
+                        <input type="radio" name={key} value={v} className="sr-only" />
+                        {v === "ja" ? "Ja" : "Nee"}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              ))}
+              <label className="block">
+                <span className="text-sm text-ink-800">
+                  Iets dat Maarten moet weten? (optioneel)
+                </span>
+                <textarea
+                  name="issueNote"
+                  rows={2}
+                  maxLength={1000}
+                  placeholder="bijv. ze lieten me langer doorwerken, geen pauze mogelijk"
+                  className="mt-1 w-full rounded-md border border-ink-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <button className="rounded-full bg-burgundy px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy/90">
+                Versturen
+              </button>
+            </form>
+          </section>
+        ))}
     </div>
   );
 }
