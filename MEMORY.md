@@ -259,6 +259,22 @@ linkage. The hotel (klant) phase is **fully shipped** (PR-KLANT-0…5 + DOCS).
 | auth one-screen login (#190) | **Killed the double-2FA prompt**: `/login` (email+password+code) verified all three but never minted `cs_2fa_verified`, so middleware bounced to `/verify-2fa` to re-enter the SAME code. Now mints the cookie right after `signIn("password-totp")` (identical binding/options to /verify-2fa; admin 2FA-reset still invalidates). + audits `factorType` (totp/recovery). Adversarially reviewed — no bypass. | ✅ SHIPPED (type-check 0 · build · not AI) |
 | demo owner logins (prod provision) | `scripts/provision-demo-owners.ts` (untracked, prod-host-guarded, password via env) flipped **maarten@ + gina@ → active + password `eminem123` + enrolled TOTP** on PROD (ep-icy-scene). Bypasses magic-link (their placeholder mailboxes don't receive). Verified loginReady=true (status/password/TOTP all valid). Login = e-mail + eminem123 + 6-digit code (authenticator) or recovery code. **Demo-only — rotate/reset 2FA before launch.** TOTP stays mandatory (model unchanged). | ✅ done (prod) |
 
+### Owner Dashboard v2 — the operations control room (cockpit→"Dashboard", 2026-06-15)
+
+> Plan: `~/.claude/plans/eager-churning-lampson.md`. Turned `/admin/business` from a read-only cockpit into an action board: **Signal → Context → Action → Confirmation**, no dead cards. Built in an **isolated git worktree** (`/private/tmp/wt-dash2`) because the main tree is contested by the parallel chef-availability chat. [[shared-tree-co-edit-hazard]] [[tsx-mts-export-link-error]]
+
+| PR | Description | Status |
+|---|---|---|
+| DASH-1 (#192) | Rename **Cockpit→Dashboard** (user-facing label only; `cockpit.read`/route/AI-internals stable) + `src/lib/domain/dashboard-cards.ts` contract (`toCard`, CardType fire/risk/money/task/opportunity) + smoke (92). | ✅ |
+| DASH-2 (#193,#194) | **Search-param-driven drawers** (DrawerShell client overlay + mobile bottom-sheet). "Vul deze dienst" open-shift drawer → `findMatchesForShift` → **Stel voor**; queue drawers → **Bevestig/Keur uren/Opvolg**. Reuse the atomic domain fns (`proposePlacement`/`transitionPlacement`/`approveHoursRow`); `?done=` flash. | ✅ |
+| DASH-3 (#196,#197) | Per-shift **timeline** drawer (`shift-timeline.ts` — pure assembly of placements/hours/comments/contactLogs). **Snooze + dismiss-with-reason** + `dashboard_signal_state` (migration **0057**, on dev+**prod**). | ✅ |
+| DASH-4 (#199) | Control-room **banner** (onder controle / N aandachtspunten) + **Fix-first** + card-type chips + alive empty state + AutoRefresh. | ✅ |
+| DASH-5 (#201,#202) | Fill-drawer **contact logging** (`contactLogs`, App/Mail) + **operations command bar** ("Wat wil je oplossen?" → `cs-ai:ask`). | ✅ |
+| DASH-6a (#203) | **Revenue-at-risk** card (unfilled slots × clientRate × hours) → "Vul nu". | ✅ |
+| harden (#205) | Adversarial-review fixes, **code-only no migration**: snooze/dismiss now **per-viewer** (userId-prefixed `signalKey`, no schema change) · audit rows carry the actor · dismiss only on per-shift signals (count-aggregate fingerprints would never clear) · `return redirect` · clamp matchScore · `aria-label`. + `smoke-dashboard-signal-state.ts` (11). | ✅ |
+
+**Drawer pattern:** `/admin/business?drawer=open-shift|queue|timeline&shiftId=…|kind=…`; server-rendered content + client `DrawerShell`; actions in `business/_actions.ts` redirect to `?done=` → `DoneFlash`. New audit keys: `dashboard.signal.snooze`/`dismiss`. **DEFERRED:** DASH-6b channel-aware notif-prefs (naive `shouldSendToUser`-in-`createNotification` conflates the klant "Mail-voorkeuren" keys with in-app — needs an `inapp:` namespace) · Phase 2 owner Agenda (P2a–d) · the per-user signal-state as a real migration (the prefix fix made it unnecessary).
+
 ### AI system-audit refinement (W0–W4 + portal-mini, 2026-06-15) — from a 6-dimension multi-agent AI audit
 
 > A multi-agent audit of the whole owner-AI (UX · KPI coverage · routing · missing tools · registry/safety + a model-tier analyst). 32 confirmed findings → these waves. Census ~99 tools. **All AI-touching PRs merged on key-free evidence (type-check + smoke-ai-{tools,safety,portal} + adversarial review); the CI eval gate is OpenAI-quota-blocked — the staged GOLDEN/SAFETY routing cases run the moment quota returns.** [[openai-quota-gates-eval]]
