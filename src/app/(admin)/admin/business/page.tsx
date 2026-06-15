@@ -20,6 +20,7 @@ import { OpsCard } from "@/components/dashboard/OpsCard";
 import { MoneyStrip } from "@/components/dashboard/MoneyStrip";
 import { DrawerShell } from "@/components/dashboard/drawer/DrawerShell";
 import { OpenShiftDrawer } from "@/components/dashboard/drawer/OpenShiftDrawer";
+import { QueueDrawer, type QueueKind } from "@/components/dashboard/drawer/QueueDrawer";
 import { db } from "@/lib/db/client";
 import {
   chefSubmissions,
@@ -65,9 +66,15 @@ const FILLED_STATUSES = ["confirmed", "accepted"] as const;
 export default async function BusinessDashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ drawer?: string; shiftId?: string; done?: string }>;
+  searchParams: Promise<{ drawer?: string; shiftId?: string; kind?: string; done?: string }>;
 }) {
   const sp = await searchParams;
+  const QUEUE_KINDS: QueueKind[] = ["accepted_unconfirmed", "hours_to_approve", "proposed_no_response"];
+  const QUEUE_TITLE: Record<QueueKind, string> = {
+    accepted_unconfirmed: "Te bevestigen",
+    hours_to_approve: "Uren te keuren",
+    proposed_no_response: "Wacht op reactie",
+  };
   const session = await requirePermission("cockpit", "read");
   const rosterSettings = await getRosterSettings(session.user.id);
   const intelSettings = {
@@ -318,11 +325,11 @@ export default async function BusinessDashboardPage({
     });
   }
   if (acceptedNotConfirmed > 0)
-    items.push({ kind: "accepted_unconfirmed", tone: "amber", icon: "alert-triangle", title: `${acceptedNotConfirmed} ${plural(acceptedNotConfirmed, "shift wacht", "shifts wachten")} op bevestiging`, detail: "chef zei ja — bevestig met de klant", href: "/admin/business/shifts", cta: "Bevestigen" });
+    items.push({ kind: "accepted_unconfirmed", tone: "amber", icon: "alert-triangle", title: `${acceptedNotConfirmed} ${plural(acceptedNotConfirmed, "shift wacht", "shifts wachten")} op bevestiging`, detail: "chef zei ja — bevestig met de klant", href: "/admin/business?drawer=queue&kind=accepted_unconfirmed", cta: "Bevestigen" });
   if (proposedAwaiting > 0)
-    items.push({ kind: "proposed_no_response", tone: "blue", icon: "info", title: `${proposedAwaiting} ${plural(proposedAwaiting, "chef voorgesteld", "chefs voorgesteld")}`, detail: "wacht op reactie van de chef", href: "/admin/business/shifts?tab=open", cta: "Opvolgen" });
+    items.push({ kind: "proposed_no_response", tone: "blue", icon: "info", title: `${proposedAwaiting} ${plural(proposedAwaiting, "chef voorgesteld", "chefs voorgesteld")}`, detail: "wacht op reactie van de chef", href: "/admin/business?drawer=queue&kind=proposed_no_response", cta: "Opvolgen" });
   if (hoursToApprove > 0)
-    items.push({ kind: "hours_to_approve", tone: "amber", icon: "clock", title: `${hoursToApprove} ${plural(hoursToApprove, "urenbriefje", "urenbriefjes")} te keuren`, detail: "klant heeft getekend", href: "/admin/business/hours?filter=wacht_op_mij", cta: "Keur uren" });
+    items.push({ kind: "hours_to_approve", tone: "amber", icon: "clock", title: `${hoursToApprove} ${plural(hoursToApprove, "urenbriefje", "urenbriefjes")} te keuren`, detail: "klant heeft getekend", href: "/admin/business?drawer=queue&kind=hours_to_approve", cta: "Keur uren" });
   const pendingChanges = pendingProfileChanges + pendingClientChanges;
   if (pendingChanges > 0)
     items.push({ kind: "change_request", tone: "blue", icon: "info", title: `${pendingChanges} ${plural(pendingChanges, "profielupdate wacht", "profielupdates wachten")}`, detail: "wijzigingsverzoeken ter beoordeling", href: pendingProfileChanges >= pendingClientChanges ? "/admin/business/chefs" : "/admin/business/clients", cta: "Bekijken" });
@@ -365,10 +372,15 @@ export default async function BusinessDashboardPage({
           </div>
         )}
 
-        {/* In-place drawer (search-param driven) — fix the signal without a page jump */}
+        {/* In-place drawers (search-param driven) — fix the signal without a page jump */}
         {sp.drawer === "open-shift" && sp.shiftId && (
           <DrawerShell title="Vul deze dienst" closeHref="/admin/business">
             <OpenShiftDrawer shiftId={sp.shiftId} />
+          </DrawerShell>
+        )}
+        {sp.drawer === "queue" && sp.kind && QUEUE_KINDS.includes(sp.kind as QueueKind) && (
+          <DrawerShell title={QUEUE_TITLE[sp.kind as QueueKind]} closeHref="/admin/business">
+            <QueueDrawer kind={sp.kind as QueueKind} />
           </DrawerShell>
         )}
 
