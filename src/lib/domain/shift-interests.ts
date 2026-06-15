@@ -83,6 +83,8 @@ export type OpenShift = {
   mealIncluded: boolean | null;
   parkingAvailable: boolean | null;
   startFlexible: boolean | null;
+  /** CHEF-PR2: spoeddienst — claimable first-qualified-wins (when flag on). */
+  isEmergency: boolean;
 };
 
 /**
@@ -125,6 +127,8 @@ export async function listOpenShiftsForChef(chefId: string, daysAhead = 28): Pro
       mealIncluded: shifts.mealIncluded,
       parkingAvailable: shifts.parkingAvailable,
       startFlexible: shifts.startFlexible,
+      // CHEF-PR2: spoeddienst flag
+      isEmergency: shifts.isEmergency,
     })
     .from(shifts)
     .innerJoin(clients, eq(clients.id, shifts.clientId))
@@ -212,6 +216,7 @@ export async function listOpenShiftsForChef(chefId: string, daysAhead = 28): Pro
       mealIncluded: r.mealIncluded,
       parkingAvailable: r.parkingAvailable,
       startFlexible: r.startFlexible,
+      isEmergency: r.isEmergency,
     });
   }
   return out;

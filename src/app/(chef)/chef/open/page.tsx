@@ -6,12 +6,15 @@
 import { eq } from "drizzle-orm";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
 import { chefs } from "@/lib/db/schema";
 import {
   askAboutOpenShift,
   chefOpenShiftsEnabled,
+  claimEmergencyShift,
+  emergencyClaimEnabled,
   expressInterest,
   listOpenShiftsForChef,
   withdrawInterest,
@@ -56,6 +59,18 @@ function formatKm(km: number): string {
   return km < 10 ? `~${km.toFixed(0)} km` : `~${Math.round(km)} km`;
 }
 
+/** Friendly banner copy for a failed claim (?claim=<reason>). */
+const CLAIM_MSG: Record<string, string> = {
+  full: "Helaas — deze spoeddienst is net door een andere chef opgepakt.",
+  conflict: "Je hebt al een shift die hiermee overlapt.",
+  blocked: "Je hebt deze dag geblokkeerd in je beschikbaarheid.",
+  already: "Je staat al op deze dienst.",
+  closed: "Deze dienst kan niet meer geclaimd worden.",
+  not_emergency: "Deze dienst is geen spoeddienst.",
+  not_found: "Dienst niet gevonden.",
+  disabled: "Direct claimen is nu niet beschikbaar.",
+};
+
 async function interestAction(fd: FormData) {
   "use server";
   const session = await requireAuth();
@@ -87,9 +102,30 @@ async function askAction(fd: FormData) {
   revalidatePath("/chef/open");
 }
 
-export default async function ChefOpenShiftsPage() {
+async function claimAction(fd: FormData) {
+  "use server";
+  const session = await requireAuth();
+  const chef = await db.query.chefs.findFirst({ where: eq(chefs.userId, session.user.id) });
+  const shiftId = String(fd.get("shiftId") ?? "");
+  if (!chef || !shiftId) return;
+  const result = await claimEmergencyShift({ chefId: chef.id, shiftId });
+  if (result.ok) {
+    // Confirmed — straight to the shift so they see address + contact.
+    redirect(`/chef/shifts/${result.placementId}`);
+  }
+  // Failed (full/conflict/blocked/…) — back to the list with a reason banner.
+  redirect(`/chef/open?claim=${result.reason}`);
+}
+
+export default async function ChefOpenShiftsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ claim?: string }>;
+}) {
   const session = await requireAuth("/chef/open");
   const chef = await db.query.chefs.findFirst({ where: eq(chefs.userId, session.user.id) });
+  const emergencyOn = emergencyClaimEnabled();
+  const claimError = CLAIM_MSG[(await searchParams).claim ?? ""] ?? null;
 
   if (!chefOpenShiftsEnabled() || !chef) {
     return (
@@ -112,7 +148,14 @@ export default async function ChefOpenShiftsPage() {
       <p className="mt-2 text-sm text-ink-600">
         Diensten waar nog plek is. Geef aan dat je interesse hebt — wij koppelen terug en
         bevestigen het definitief.
+        {emergencyOn ? " Spoeddiensten ⚡ kun je meteen vastleggen." : ""}
       </p>
+
+      {claimError && (
+        <p className="mt-4 rounded-lg border border-burgundy/30 bg-burgundy/5 px-4 py-3 text-sm text-burgundy">
+          {claimError}
+        </p>
+      )}
 
       <div className="mt-6 space-y-3">
         {open.length === 0 ? (
@@ -122,14 +165,23 @@ export default async function ChefOpenShiftsPage() {
         ) : (
           open.map((s) => {
             const urgency = urgencyLabel(s.hoursUntilStart);
+            const claimable = s.isEmergency && emergencyOn;
             return (
-              <div key={s.shiftId} className="rounded-lg border border-ink-200 bg-white p-4">
+              <div
+                key={s.shiftId}
+                className={`rounded-lg border bg-white p-4 ${claimable ? "border-burgundy/50 ring-1 ring-burgundy/20" : "border-ink-200"}`}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
                         {formatChefRole(s.role)}
                       </p>
+                      {claimable && (
+                        <span className="rounded-full bg-burgundy px-2 py-0.5 font-ui text-[10px] font-semibold uppercase tracking-[0.12em] text-white">
+                          ⚡ Spoed
+                        </span>
+                      )}
                       {s.fitScore != null && (
                         <span
                           className={`rounded-full px-2 py-0.5 font-ui text-[10px] font-semibold ring-1 ${fitTone(s.fitScore)}`}
@@ -225,7 +277,14 @@ export default async function ChefOpenShiftsPage() {
                     </details>
                   </div>
 
-                  {s.interested ? (
+                  {claimable ? (
+                    <form action={claimAction} className="shrink-0">
+                      <input type="hidden" name="shiftId" value={s.shiftId} />
+                      <button className="rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy/90">
+                        ⚡ Accepteer nu
+                      </button>
+                    </form>
+                  ) : s.interested ? (
                     <form action={withdrawAction} className="shrink-0">
                       <input type="hidden" name="shiftId" value={s.shiftId} />
                       <button className="rounded-full border border-burgundy bg-burgundy/10 px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy">
