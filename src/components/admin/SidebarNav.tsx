@@ -25,6 +25,7 @@ const MAIN: Item[] = [
   { label: "Assistent", href: "/admin/assistant", icon: "message" },
   { label: "Rooster", href: "/admin/business/roster", icon: "calendar-days" },
   { label: "Planning", href: "/admin/planning", icon: "dashboard" },
+  { label: "Agenda", href: "/admin/business/agenda", icon: "calendar" },
   { label: "Diensten", href: "/admin/business/shifts", icon: "list" },
   { label: "Chefs", href: "/admin/business/chefs", icon: "users" },
   { label: "Klanten", href: "/admin/business/clients", icon: "building" },
