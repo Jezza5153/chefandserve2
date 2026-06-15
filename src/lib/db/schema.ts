@@ -2148,6 +2148,87 @@ export const shiftHourReviews = pgTable(
 export type ShiftHourReview = typeof shiftHourReviews.$inferSelect;
 
 /* =============================================================================
+ * CHEF-PR9b — chef vacation + expense REQUESTS.
+ *
+ * A chef asks; Maarten decides — a REQUEST, never an instant mutation (mirrors
+ * clientShiftChangeRequests). Payroll holds the real ledger, so these are intent
+ * records the owner approves/rejects with an audit trail. Free text (note /
+ * description) is DATA, not instructions.
+ * =========================================================================== */
+export const chefRequestStatusEnum = pgEnum("chef_request_status", [
+  "pending",
+  "approved",
+  "rejected",
+  "cancelled",
+]);
+export const chefVacationKindEnum = pgEnum("chef_vacation_kind", ["payout", "time_off"]);
+export const chefExpenseCategoryEnum = pgEnum("chef_expense_category", [
+  "reiskosten",
+  "parkeren",
+  "ov",
+  "kilometers",
+  "overig",
+]);
+
+export const chefVacationRequests = pgTable(
+  "chef_vacation_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    requestedBy: text("requested_by").references(() => users.id, { onDelete: "set null" }),
+    kind: chefVacationKindEnum("kind").notNull(),
+    /** Payout amount requested (cents) — only for kind='payout'. */
+    amountCents: integer("amount_cents"),
+    /** Time-off window — only for kind='time_off'. */
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    note: text("note"),
+    status: chefRequestStatusEnum("status").notNull().default("pending"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decidedBy: text("decided_by").references(() => users.id, { onDelete: "set null" }),
+    decisionNote: text("decision_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    chefIdx: index("chef_vacation_requests_chef_idx").on(t.chefId, t.status),
+  }),
+);
+
+export type ChefVacationRequest = typeof chefVacationRequests.$inferSelect;
+
+export const chefExpenseClaims = pgTable(
+  "chef_expense_claims",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    requestedBy: text("requested_by").references(() => users.id, { onDelete: "set null" }),
+    /** Optional link to the shift the cost relates to. */
+    shiftId: text("shift_id").references(() => shifts.id, { onDelete: "set null" }),
+    category: chefExpenseCategoryEnum("category").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    description: text("description"),
+    /** R2 key for the receipt photo (upload UI deferred; slot designed now). */
+    receiptR2Key: text("receipt_r2_key"),
+    status: chefRequestStatusEnum("status").notNull().default("pending"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decidedBy: text("decided_by").references(() => users.id, { onDelete: "set null" }),
+    decisionNote: text("decision_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    chefIdx: index("chef_expense_claims_chef_idx").on(t.chefId, t.status),
+  }),
+);
+
+export type ChefExpenseClaim = typeof chefExpenseClaims.$inferSelect;
+
+/* =============================================================================
  * Profile change requests (PR-CHEF-4) — chef requests edits to sensitive fields.
  *
  * Chef can edit phone/city/languages/specialties/segments/photo directly.
