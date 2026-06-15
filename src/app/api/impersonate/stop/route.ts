@@ -20,5 +20,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "bad_origin" }, { status: 403 });
   }
   await stopImpersonation(); // reads + clears cookies, audits the stop
-  return NextResponse.redirect(new URL("/admin/system", req.nextUrl.origin), { status: 303 });
+  // Land back on the users list (where the "Bekijk als" buttons are) so switching
+  // personas in a demo flows without a manual re-navigate. ?stopped=1 → success flash.
+  return NextResponse.redirect(new URL("/admin/system/users?stopped=1", req.nextUrl.origin), { status: 303 });
 }

@@ -95,12 +95,19 @@ export default async function UsersPage() {
       key: "email",
       header: "E-mail",
       cell: (u) => (
-        <Link
-          href={`/admin/system/users/${u.id}`}
-          className="text-ink-900 hover:text-burgundy hover:underline"
-        >
-          {u.email}
-        </Link>
+        <span className="flex items-center gap-1.5">
+          <Link
+            href={`/admin/system/users/${u.id}`}
+            className="text-ink-900 hover:text-burgundy hover:underline"
+          >
+            {u.email}
+          </Link>
+          {u.seedKey?.startsWith("[demo-fixture]") ? (
+            <span className="rounded-full bg-burgundy/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-burgundy" title="Demo-account — gebruik 'Bekijk als' voor de demo">
+              🧪 Demo
+            </span>
+          ) : null}
+        </span>
       ),
     },
     { key: "name", header: "Naam", cell: (u) => u.name ?? "—" },

@@ -172,8 +172,16 @@ export default async function Verify2FAPage({
         Twee-factor authenticatie
       </h1>
       <p className="mt-4 text-sm leading-relaxed text-ink-700">
-        Voer de 6-cijferige code uit je authenticator-app in. Geen toegang
-        tot je telefoon? Gebruik een recovery code (formaat <code>ABCD-EFGH-IJKL</code>).
+        Je bent ingelogd — dit is de laatste stap. Voer de 6-cijferige code uit je
+        authenticator-app in om af te ronden. Geen toegang tot je telefoon? Gebruik een
+        recovery code (formaat <code>ABCD-EFGH-IJKL</code>).
+      </p>
+      <p className="mt-2 text-xs text-ink-500">
+        Authenticator én recovery codes kwijt?{" "}
+        <a href="/login/lost-2fa" className="text-burgundy underline-offset-4 hover:underline">
+          Herstel je toegang
+        </a>
+        .
       </p>
 
       <form action={submit} className="mt-8 space-y-4">
