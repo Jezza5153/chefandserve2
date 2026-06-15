@@ -1,0 +1,1 @@
+ALTER TABLE "chefs" ADD COLUMN IF NOT EXISTS "skill_tags" text[];

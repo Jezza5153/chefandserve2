@@ -23,6 +23,7 @@ import {
 } from "@/lib/db/schema";
 import { getReliabilityForChefs, type ChefReliabilitySignal } from "@/lib/chef-events";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
+import { skillTagLabel, skillTagOverlap } from "@/lib/domain/skill-tags";
 import { type LatLng } from "@/lib/domain/geo";
 import { estimateTravel } from "@/lib/domain/travel";
 import { sendEmail, formatShiftWhen } from "@/lib/email";
@@ -260,6 +261,29 @@ function reliabilityAdjust(
 
   // Keep the boost from inflating past the 0..100 band the planner expects.
   return { score: Math.min(100, Math.round(base * factor)), reasons, warnings };
+}
+
+/**
+ * CHEF-PR5: SOFT, flag-gated skill-tag adjustment. When the chef's curated skill
+ * tags overlap the client's requirement tags, nudge the score up and add a
+ * klant-safe reason ("matcht klantwensen: …"). Default OFF (MATCHING_TAGS_ENABLED)
+ * → base unchanged. Never a hard exclude — a missing tag just means no boost.
+ */
+function tagsAdjust(
+  base: number,
+  chefSkillTags: string[] | null | undefined,
+  requirementTags: string[] | null | undefined,
+): { score: number; reasons: string[] } {
+  if (env.MATCHING_TAGS_ENABLED !== "true") return { score: base, reasons: [] };
+  const matched = skillTagOverlap(chefSkillTags, requirementTags);
+  if (matched.length === 0) return { score: base, reasons: [] };
+  // +6% per matched tag, capped at +18% so two-three good matches help but
+  // don't swamp the vakniveau/segment core.
+  const factor = 1 + Math.min(0.18, matched.length * 0.06);
+  return {
+    score: Math.min(100, Math.round(base * factor)),
+    reasons: [`Matcht klantwensen: ${matched.map(skillTagLabel).join(", ")}`],
+  };
 }
 
 /**
@@ -616,11 +640,14 @@ export async function findMatchesForShift(
     // CHEF-PR6: soft, flag-gated reliability adjustment from chef_events (default off = no-op).
     const rel = reliabilityAdjust(adj.score, reliabilityByChef.get(chef.id));
 
+    // CHEF-PR5: soft, flag-gated skill-tag ∩ client-requirement-tag boost (default off = no-op).
+    const tag = tagsAdjust(rel.score, chef.skillTags, matchClient?.clientTags);
+
     results.push({
       chef,
-      score: rel.score,
+      score: tag.score,
       scoreBreakdown: { vakniveau: v, segment: s, experience: e },
-      reasons: [...reasons, ...adj.reasons, ...rel.reasons],
+      reasons: [...reasons, ...adj.reasons, ...rel.reasons, ...tag.reasons],
       warnings: [...warnings, ...adj.warnings, ...rel.warnings],
     });
   }

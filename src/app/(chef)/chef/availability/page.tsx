@@ -23,6 +23,7 @@ import { db } from "@/lib/db/client";
 import { chefAvailability, chefs } from "@/lib/db/schema";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { recordChefEvent } from "@/lib/chef-events";
+import { sanitizeSkillTags, skillTagsByCategory } from "@/lib/domain/skill-tags";
 import { requireAuth } from "@/lib/permissions";
 
 import { AvailabilityCalendar } from "./_components/AvailabilityCalendar";
@@ -301,6 +302,7 @@ async function savePreferences(fd: FormData): Promise<void> {
     n == null ? null : Math.min(hi, Math.max(lo, n));
   const likes = fd.getAll("preferences").map(String).filter(Boolean);
   const avoid = fd.getAll("avoid").map(String).filter(Boolean);
+  const skills = sanitizeSkillTags(fd.getAll("skillTags").map(String));
   const empRaw = String(fd.get("employmentType") ?? "");
   const employmentType = ["payroll", "zzp", "both"].includes(empRaw)
     ? (empRaw as "payroll" | "zzp" | "both")
@@ -315,6 +317,7 @@ async function savePreferences(fd: FormData): Promise<void> {
       availableForEmergency: fd.get("availableForEmergency") === "on",
       preferences: likes.length ? likes : null,
       avoidPreferences: avoid.length ? avoid : null,
+      skillTags: skills.length ? skills : null,
       employmentType,
       availabilityNotes: notes,
       updatedAt: new Date(),
@@ -362,6 +365,7 @@ export default async function ChefAvailabilityPage() {
 
   const likes = new Set(chef?.preferences ?? []);
   const avoid = new Set(chef?.avoidPreferences ?? []);
+  const skills = new Set(chef?.skillTags ?? []);
   const emp = chef?.employmentType ?? "";
 
   const sectionLabel = "font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy";
@@ -444,6 +448,40 @@ export default async function ChefAvailabilityPage() {
                   <input type="checkbox" name="avoid" value={key} defaultChecked={avoid.has(key)} className="accent-burgundy" />
                   {label}
                 </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {/* CHEF-PR5: structured skill tags — what je goed kunt (helpt bij matching). */}
+          <fieldset>
+            <legend className="text-sm font-medium text-ink-900">Wat kun je goed?</legend>
+            <p className="mt-0.5 text-xs text-ink-500">
+              Kies je sterke punten — dit helpt ons je op passende shifts voor te stellen.
+            </p>
+            <div className="mt-2 space-y-3">
+              {skillTagsByCategory().map((group) => (
+                <div key={group.category}>
+                  <p className="font-ui text-[10px] uppercase tracking-[0.15em] text-ink-400">
+                    {group.label}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap gap-2">
+                    {group.tags.map((t) => (
+                      <label
+                        key={t.key}
+                        className="flex cursor-pointer items-center gap-1.5 rounded-full border border-ink-200 px-3 py-1.5 text-xs text-ink-700 has-[:checked]:border-emerald-500/50 has-[:checked]:bg-emerald-50 has-[:checked]:text-emerald-800"
+                      >
+                        <input
+                          type="checkbox"
+                          name="skillTags"
+                          value={t.key}
+                          defaultChecked={skills.has(t.key)}
+                          className="accent-emerald-600"
+                        />
+                        {t.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </fieldset>

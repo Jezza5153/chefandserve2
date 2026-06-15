@@ -816,6 +816,13 @@ export const chefs = pgTable("chefs", {
   segments: text("segments").array(),
   /** Free-text list of specialties (e.g. "patisserie, banketkok, Frans"). */
   specialties: text("specialties"),
+  /**
+   * CHEF-PR5: structured skill tags from a curated vocabulary
+   * (src/lib/domain/skill-tags.ts) — the chef self-selects what they can do.
+   * Distinct from the free-text `specialties`: these are controlled keys, so
+   * matching + AI can reason over them. Soft-scored vs client requirement tags.
+   */
+  skillTags: text("skill_tags").array(),
 
   /* ----- experience ----- */
   yearsExperience: integer("years_experience"),
