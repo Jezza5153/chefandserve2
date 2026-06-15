@@ -212,7 +212,7 @@ export async function listOpenShiftsForChef(chefId: string, daysAhead = 28): Pro
       distanceKm,
       hoursUntilStart: (r.startsAt.getTime() - now.getTime()) / 3_600_000,
       grossCents,
-      durationHours: Math.round(hours * 2) / 2,
+      durationHours: Math.max(0, Math.round(hours * 2) / 2),
       mealIncluded: r.mealIncluded,
       parkingAvailable: r.parkingAvailable,
       startFlexible: r.startFlexible,
@@ -364,7 +364,8 @@ export async function claimEmergencyShift(args: {
       SELECT count(*) FROM placements
       WHERE shift_id = ${args.shiftId}
         AND status IN ('draft','proposed','accepted','confirmed','completed')
-    ) < (SELECT headcount FROM shifts WHERE id = ${args.shiftId})
+    ) < (SELECT headcount FROM shifts WHERE id = ${args.shiftId}
+           AND status NOT IN ('cancelled','completed','filled'))
     ON CONFLICT (chef_id, shift_id) DO UPDATE
       SET status = 'confirmed', confirmed_at = now(), responded_at = now(),
           cancelled_at = NULL, completed_at = NULL

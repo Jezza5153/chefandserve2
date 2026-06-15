@@ -296,6 +296,9 @@ async function savePreferences(fd: FormData): Promise<void> {
     const n = parseInt(v, 10);
     return Number.isFinite(n) ? n : null;
   };
+  // Clamp to sane bounds so a fat-fingered or hostile value can't poison matching.
+  const clamp = (n: number | null, lo: number, hi: number): number | null =>
+    n == null ? null : Math.min(hi, Math.max(lo, n));
   const likes = fd.getAll("preferences").map(String).filter(Boolean);
   const avoid = fd.getAll("avoid").map(String).filter(Boolean);
   const empRaw = String(fd.get("employmentType") ?? "");
@@ -307,8 +310,8 @@ async function savePreferences(fd: FormData): Promise<void> {
   await db
     .update(chefs)
     .set({
-      travelRadiusKm: num("travelRadiusKm"),
-      minStartHour: num("minStartHour"),
+      travelRadiusKm: clamp(num("travelRadiusKm"), 0, 500),
+      minStartHour: clamp(num("minStartHour"), 0, 23),
       availableForEmergency: fd.get("availableForEmergency") === "on",
       preferences: likes.length ? likes : null,
       avoidPreferences: avoid.length ? avoid : null,
