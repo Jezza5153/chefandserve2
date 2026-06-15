@@ -35,7 +35,7 @@ export async function TimelineDrawer({ shiftId }: { shiftId: string }) {
         <ol className="relative space-y-3 border-l border-ink-200 pl-4">
           {events.map((e, i) => (
             <li key={i} className="relative">
-              <span className={`absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ${dot(e.tone)}`} />
+              <span aria-hidden="true" className={`absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ${dot(e.tone)}`} />
               <p className="text-sm text-ink-900">{e.label}</p>
               <p className="text-xs text-ink-500">{stamp(e.at)}</p>
             </li>

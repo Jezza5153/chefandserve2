@@ -8,7 +8,7 @@
  * (Email open/delivered events exist too via emailMessages+emailEvents; a future
  * wave can fold them in — kept out of v1 to keep the join lean.)
  */
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { chefs, contactLogs, placementComments, placements, shiftHours } from "@/lib/db/schema";
@@ -89,7 +89,9 @@ export async function getShiftTimeline(shiftId: string): Promise<TimelineEvent[]
   const contacts = await db
     .select({ createdAt: contactLogs.createdAt, channel: contactLogs.channel, outcome: contactLogs.outcome, note: contactLogs.note })
     .from(contactLogs)
-    .where(targets);
+    .where(targets)
+    .orderBy(desc(contactLogs.createdAt))
+    .limit(500);
   for (const ct of contacts) {
     const tail = [ct.outcome, ct.note ? `"${snippet(ct.note)}"` : null].filter(Boolean).join(" · ");
     push(events, ct.createdAt, `Contact via ${ct.channel}${tail ? ` — ${tail}` : ""}`);

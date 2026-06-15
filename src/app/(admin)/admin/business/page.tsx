@@ -592,7 +592,7 @@ export default async function BusinessDashboardPage({
                         <p className="truncate text-sm text-ink-900">{c.name}</p>
                         <p className="truncate text-xs text-ink-500">{c.status}</p>
                       </div>
-                      <span className={`h-2 w-2 rounded-full ${c.tone === "blue" ? "bg-blue-500" : "bg-amber-500"}`} />
+                      <span role="img" aria-label={c.tone === "blue" ? "Gegevens opgevraagd" : "Profiel onvolledig"} className={`h-2 w-2 rounded-full ${c.tone === "blue" ? "bg-blue-500" : "bg-amber-500"}`} />
                     </Link>
                   ))}
                 </div>
@@ -833,7 +833,7 @@ function AttentionRow({ item }: { item: AttentionItem }) {
           <form action={snoozeSignal}>
             <input type="hidden" name="signalKey" value={item.signalKey} />
             <input type="hidden" name="hours" value="4" />
-            <button type="submit" className="font-ui text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400 hover:text-burgundy">
+            <button type="submit" className="rounded px-2 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400 hover:bg-ink-100 hover:text-burgundy">
               Snooze 4u
             </button>
           </form>
@@ -848,9 +848,9 @@ function AttentionRow({ item }: { item: AttentionItem }) {
                   required
                   aria-label="Reden waarom dit is afgehandeld"
                   placeholder="reden…"
-                  className="w-24 rounded border border-ink-200 bg-white px-1.5 py-0.5 text-[10px] text-ink-700 placeholder-ink-400 focus:border-burgundy focus:outline-none"
+                  className="w-24 rounded border border-ink-200 bg-white px-1.5 py-1 text-[10px] text-ink-700 placeholder-ink-400 focus:border-burgundy focus:outline-none"
                 />
-                <button type="submit" className="font-ui text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400 hover:text-emerald-700">
+                <button type="submit" className="rounded px-2 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400 hover:bg-ink-100 hover:text-emerald-700">
                   Klaar
                 </button>
               </form>

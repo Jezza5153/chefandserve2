@@ -84,11 +84,12 @@ export default async function OwnerAgendaPage({
       </p>
 
       {/* View switcher */}
-      <div className="mt-5 inline-flex rounded-full border border-ink-200 bg-white p-0.5">
+      <div role="group" aria-label="Agendaweergave" className="mt-5 inline-flex rounded-full border border-ink-200 bg-white p-0.5">
         {(["dag", "week", "maand"] as View[]).map((v) => (
           <Link
             key={v}
             href={`/admin/business/agenda?view=${v}`}
+            aria-current={v === view ? "page" : undefined}
             className={`rounded-full px-4 py-1.5 font-ui text-[11px] font-medium uppercase tracking-[0.14em] ${
               v === view ? "bg-burgundy text-white" : "text-ink-600 hover:text-burgundy"
             }`}
@@ -115,7 +116,7 @@ export default async function OwnerAgendaPage({
                 {byDay.get(dayKey)!.map((e) => (
                   <li key={e.id}>
                     <Link href={e.href} className="flex items-start gap-3 px-5 py-3 hover:bg-bg-gray">
-                      <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${toneDot(e.tone)}`} />
+                      <span aria-hidden="true" className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${toneDot(e.tone)}`} />
                       <span className="w-14 shrink-0 font-ui text-[11px] tabular-nums text-ink-500">{timeLabel(e.startsAt)}</span>
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-2">
