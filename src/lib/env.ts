@@ -198,6 +198,10 @@ const serverSchema = z.object({
   // "verlopen" (derived). Default 24; numeric string.
   OFFER_EXPIRY_HOURS: z.string().optional(),
 
+  // CHEF-PR2 — offer-expiry sweep: when on, the cron alerts the owner about
+  // proposals that lapsed un-responded (notify-only, no status change). Default off.
+  OFFER_EXPIRY_SWEEP_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });

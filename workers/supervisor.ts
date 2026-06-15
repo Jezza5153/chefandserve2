@@ -111,6 +111,10 @@ const JOBS: Job[] = [
   // the web_push outbox to chefs' phones (VAPID). Idempotent (claimed rows not re-sent).
   // GATED via WEB_PUSH_ENABLED + VAPID keys. Default OFF.
   { name: "push-deliver", schedule: "*/2 * * * *", script: "push-deliver.ts" },
+  // CHEF-PR2 offer-expiry sweep (every 6h). Thin: POSTs /api/cron/offer-expiry which
+  // alerts the owner about proposals that lapsed un-responded (notify-only, no status
+  // change). Per-placement throttle (6 days). GATED via OFFER_EXPIRY_SWEEP_ENABLED. Default OFF.
+  { name: "offer-expiry", schedule: "0 */6 * * *", script: "offer-expiry.ts" },
 ];
 
 function ts(): string {
