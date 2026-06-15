@@ -5,7 +5,7 @@ import { db } from "@/lib/db/client";
 import { clients, placements, shifts } from "@/lib/db/schema";
 import { findMatchesForShift } from "@/lib/domain/matching";
 import { formatShiftRole } from "@/lib/labels";
-import { proposeFromDashboard } from "@/app/(admin)/admin/business/_actions";
+import { proposeFromDashboard, logChefContactFromDashboard } from "@/app/(admin)/admin/business/_actions";
 
 /**
  * "Vul deze dienst" — the lean fill view for an open/critical/underfilled shift.
@@ -118,6 +118,46 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
                   </button>
                 </form>
               </div>
+              {/* Contact + outcome logging (DASH-5) — feeds the per-shift timeline */}
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-ink-100 pt-2">
+                {m.chef.phone && (
+                  <a
+                    href={`https://wa.me/${m.chef.phone.replace(/\D/g, "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-full border border-ink-200 bg-white px-2.5 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-ink-700 hover:border-burgundy hover:text-burgundy"
+                  >
+                    App
+                  </a>
+                )}
+                {m.chef.email && (
+                  <a
+                    href={`mailto:${m.chef.email}`}
+                    className="rounded-full border border-ink-200 bg-white px-2.5 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-ink-700 hover:border-burgundy hover:text-burgundy"
+                  >
+                    Mail
+                  </a>
+                )}
+                <form action={logChefContactFromDashboard} className="flex items-center gap-1">
+                  <input type="hidden" name="shiftId" value={shift.id} />
+                  <input type="hidden" name="chefId" value={m.chef.id} />
+                  <input type="hidden" name="channel" value="phone" />
+                  <select name="outcome" className="rounded border border-ink-200 bg-white px-1.5 py-1 text-[10px] text-ink-700">
+                    <option value="spoken">Gesproken</option>
+                    <option value="no_answer">Geen gehoor</option>
+                    <option value="callback_requested">Teruggebeld</option>
+                    <option value="not_suitable">Niet passend</option>
+                    <option value="note_only">Notitie</option>
+                  </select>
+                  <input name="note" placeholder="notitie" className="w-20 rounded border border-ink-200 bg-white px-1.5 py-1 text-[10px] text-ink-700 placeholder-ink-400" />
+                  <button
+                    type="submit"
+                    className="rounded-full border border-burgundy/40 bg-white px-2.5 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-burgundy hover:bg-burgundy/5"
+                  >
+                    Log
+                  </button>
+                </form>
+              </div>
             </li>
           ))}
         </ul>
@@ -135,6 +175,13 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
           className="inline-flex items-center gap-1 font-ui text-[11px] font-medium uppercase tracking-[0.14em] text-ink-600 hover:text-burgundy hover:underline"
         >
           Tijdlijn
+        </Link>
+        {/* Client-update entry point — the full in-drawer flow (geruststellen / goedkeuring) lands in P4 */}
+        <Link
+          href={`/admin/business/shifts/${shift.id}`}
+          className="inline-flex items-center gap-1 font-ui text-[11px] font-medium uppercase tracking-[0.14em] text-ink-600 hover:text-burgundy hover:underline"
+        >
+          Klant bijwerken
         </Link>
       </div>
     </div>

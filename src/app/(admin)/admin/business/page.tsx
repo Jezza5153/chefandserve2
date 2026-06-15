@@ -742,6 +742,7 @@ function DoneFlash({ done }: { done: string }) {
     "niet-bevestigd": { msg: "Niets gewijzigd — de dienst was al bevestigd of veranderd.", tone: "warn" },
     "uren-goedgekeurd": { msg: "✓ Uren goedgekeurd — klaar voor de loonadministratie.", tone: "good" },
     "uren-mislukt": { msg: "Uren konden niet worden goedgekeurd — open het urenbriefje.", tone: "warn" },
+    "contact-gelogd": { msg: "✓ Contact gelogd — zichtbaar op de tijdlijn.", tone: "good" },
     snoozed: { msg: "Signaal gesnoozed — komt over 4 uur terug.", tone: "info" },
     opgelost: { msg: "✓ Gemarkeerd als opgelost. Komt terug als de situatie verandert.", tone: "good" },
     "reden-vereist": { msg: "Geef een reden op om een signaal als opgelost te markeren.", tone: "warn" },
