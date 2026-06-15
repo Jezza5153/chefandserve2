@@ -400,6 +400,13 @@
       "when": 1781463378617,
       "tag": "0056_client_submission_shift_link",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1781544920343,
+      "tag": "0057_dashboard_signal_state",
+      "breakpoints": true
     }
   ]
 }
