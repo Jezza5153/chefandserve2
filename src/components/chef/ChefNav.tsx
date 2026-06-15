@@ -17,16 +17,17 @@ import { Icon, type IconName } from "@/components/admin/icons";
 type NavItem = { label: string; href: string; icon: IconName };
 
 const PRIMARY: NavItem[] = [
-  { label: "Start", href: "/chef", icon: "dashboard" },
-  { label: "Shifts", href: "/chef/shifts", icon: "calendar-days" },
-  { label: "Uren", href: "/chef/hours", icon: "clock" },
+  // CHEF-PR0: 5-tab "shift command app" IA — Vandaag · Open · Beschikbaar · Geld · Profiel.
+  { label: "Vandaag", href: "/chef", icon: "dashboard" },
+  { label: "Open", href: "/chef/open", icon: "plus-circle" },
   { label: "Beschikbaar", href: "/chef/availability", icon: "calendar" },
+  { label: "Geld", href: "/chef/earnings", icon: "wallet" },
+  { label: "Profiel", href: "/chef/profile", icon: "user-round" },
 ];
 
 const MORE: NavItem[] = [
-  { label: "Open diensten", href: "/chef/open", icon: "plus-circle" },
-  { label: "Verdiensten", href: "/chef/earnings", icon: "wallet" },
-  { label: "Mijn profiel", href: "/chef/profile", icon: "user-round" },
+  { label: "Mijn shifts", href: "/chef/shifts", icon: "calendar-days" },
+  { label: "Uren", href: "/chef/hours", icon: "clock" },
   { label: "Meldingen", href: "/chef/notifications", icon: "bell" },
   { label: "Prikbord", href: "/chef/board", icon: "message" },
   { label: "Agenda-feed", href: "/chef/calendar", icon: "calendar-days" },
