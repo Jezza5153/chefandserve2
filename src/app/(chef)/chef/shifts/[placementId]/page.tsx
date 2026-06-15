@@ -29,7 +29,7 @@ import {
   enqueueIntegrationEvent,
   recordEmailMessage,
 } from "@/lib/integrations";
-import { tierForShift } from "@/lib/cancellation-severity";
+import { MAARTEN_PHONE, tierForShift } from "@/lib/cancellation-severity";
 import { formatShiftRole, formatSegment } from "@/lib/labels";
 import { recordChefEvent, diffSeconds } from "@/lib/chef-events";
 import { recipientsFor } from "@/lib/notifications";
@@ -504,6 +504,86 @@ export default async function ChefShiftDetailPage({
           <Row label="Info van Chef & Serve" value={shift.chefVisibleNotes} />
         ) : null}
       </div>
+
+      {/* CHEF-PR3: shift brief — requirements + per-hotel non-negotiables + Bel Maarten */}
+      {(shift.dressCode ||
+        shift.languageRequired ||
+        shift.minExperience != null ||
+        shift.kitchenType ||
+        shift.soloOrTeam ||
+        shift.serviceStyle ||
+        shift.parkingAvailable ||
+        shift.mealIncluded ||
+        shift.startFlexible ||
+        (client?.nonNegotiables?.length ?? 0) > 0) && (
+        <section className="mt-6 rounded-lg border border-ink-200 bg-white p-6">
+          <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">Brief</p>
+          <div className="mt-3 grid gap-3">
+            {shift.dressCode ? <Row label="Dresscode" value={shift.dressCode} /> : null}
+            {shift.languageRequired ? <Row label="Taal" value={shift.languageRequired} /> : null}
+            {shift.minExperience != null ? (
+              <Row label="Min. ervaring" value={`${shift.minExperience} jaar`} />
+            ) : null}
+            {shift.kitchenType ? <Row label="Keuken" value={shift.kitchenType} /> : null}
+            {shift.soloOrTeam ? (
+              <Row label="Inzet" value={shift.soloOrTeam === "solo" ? "Solo" : "In team"} />
+            ) : null}
+            {shift.serviceStyle ? (
+              <Row
+                label="Service"
+                value={
+                  shift.serviceStyle === "prep"
+                    ? "Mise en place"
+                    : shift.serviceStyle === "live"
+                      ? "Live service"
+                      : shift.serviceStyle === "buffet"
+                        ? "Buffet"
+                        : shift.serviceStyle === "fine_dining"
+                          ? "Fine dining"
+                          : shift.serviceStyle
+                }
+              />
+            ) : null}
+          </div>
+
+          {(shift.parkingAvailable || shift.mealIncluded || shift.startFlexible) && (
+            <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-ink-600">
+              {shift.parkingAvailable ? (
+                <span className="rounded-full bg-bg-gray px-2 py-0.5">🅿️ Parkeren</span>
+              ) : null}
+              {shift.mealIncluded ? (
+                <span className="rounded-full bg-bg-gray px-2 py-0.5">🍽️ Maaltijd inbegrepen</span>
+              ) : null}
+              {shift.startFlexible ? (
+                <span className="rounded-full bg-bg-gray px-2 py-0.5">🕒 Flexibele starttijd</span>
+              ) : null}
+            </div>
+          )}
+
+          {client?.nonNegotiables && client.nonNegotiables.length > 0 ? (
+            <div className="mt-4">
+              <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
+                Niet-onderhandelbaar{client.companyName ? ` bij ${client.companyName}` : ""}
+              </p>
+              <ul className="mt-1.5 space-y-1 text-sm text-ink-800">
+                {client.nonNegotiables.map((n) => (
+                  <li key={n} className="flex gap-2">
+                    <span className="text-burgundy">✓</span>
+                    <span>{n}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <p className="mt-4 text-xs text-ink-600">
+            Vraag of probleem vóór je shift?{" "}
+            <a href={`tel:${MAARTEN_PHONE}`} className="font-medium text-burgundy hover:underline">
+              Bel Maarten · {MAARTEN_PHONE}
+            </a>
+          </p>
+        </section>
+      )}
 
       {/* Contact card — only when accepted/confirmed (chef has earned the contact) */}
       {client && ["accepted", "confirmed"].includes(placement.status) && (
