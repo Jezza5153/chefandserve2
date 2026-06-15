@@ -147,10 +147,25 @@ export default async function ChefOpenShiftsPage() {
                       )}
                       {s.grossCents != null && (
                         <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800">
-                          ≈ {formatEuro(s.grossCents)} bruto
+                          ≈ {formatEuro(s.grossCents)} bruto · {s.durationHours} u
                         </span>
                       )}
                     </div>
+
+                    {/* CHEF-PR1 — what's included (real shift flags) */}
+                    {(s.mealIncluded || s.parkingAvailable || s.startFlexible) && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-600">
+                        {s.mealIncluded && (
+                          <span className="rounded-full bg-bg-gray px-2 py-0.5">🍽️ Maaltijd inbegrepen</span>
+                        )}
+                        {s.parkingAvailable && (
+                          <span className="rounded-full bg-bg-gray px-2 py-0.5">🅿️ Parkeren</span>
+                        )}
+                        {s.startFlexible && (
+                          <span className="rounded-full bg-bg-gray px-2 py-0.5">🕒 Flexibele starttijd</span>
+                        )}
+                      </div>
+                    )}
 
                     {s.reasons.length > 0 && (
                       <details className="mt-2">

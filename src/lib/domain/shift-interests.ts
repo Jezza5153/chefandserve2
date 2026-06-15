@@ -72,6 +72,12 @@ export type OpenShift = {
   hoursUntilStart: number;
   /** Gross indicatie in cents for the whole shift (hours × chef rate). */
   grossCents: number | null;
+  /** Shift length in hours (rounded to 0.5) — pairs with the gross for clarity. */
+  durationHours: number;
+  /** Perks from the shift (real flags; null = unknown). */
+  mealIncluded: boolean | null;
+  parkingAvailable: boolean | null;
+  startFlexible: boolean | null;
 };
 
 /**
@@ -110,6 +116,10 @@ export async function listOpenShiftsForChef(chefId: string, daysAhead = 28): Pro
       longitude: shifts.longitude,
       clientType: clients.clientType,
       clientTags: clients.clientTags,
+      // CHEF-PR1: rate-clarity perks (real shift flags)
+      mealIncluded: shifts.mealIncluded,
+      parkingAvailable: shifts.parkingAvailable,
+      startFlexible: shifts.startFlexible,
     })
     .from(shifts)
     .innerJoin(clients, eq(clients.id, shifts.clientId))
@@ -193,6 +203,10 @@ export async function listOpenShiftsForChef(chefId: string, daysAhead = 28): Pro
       distanceKm,
       hoursUntilStart: (r.startsAt.getTime() - now.getTime()) / 3_600_000,
       grossCents,
+      durationHours: Math.round(hours * 2) / 2,
+      mealIncluded: r.mealIncluded,
+      parkingAvailable: r.parkingAvailable,
+      startFlexible: r.startFlexible,
     });
   }
   return out;
