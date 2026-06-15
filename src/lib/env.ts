@@ -215,6 +215,11 @@ const serverSchema = z.object({
   // the client's requirement tags. Default off → live planner ranking unchanged.
   MATCHING_TAGS_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-PR2 (R2#13) — replacement handover. When on, cancelling a chef who was
+  // already accepted/confirmed tells them "ga niet naar de locatie" + stops their
+  // Arrival Trust monitoring. Default off (dark-launch; idempotent per placement).
+  REPLACEMENT_HANDOVER_ENABLED: z.enum(["true", "false"]).optional(),
+
   // CHEF-PR3 — Aankomstzekerheid (Arrival Trust). When on, the PWA does an on-device
   // 1km arrival check in the 20 min before a shift (sends only the result, never
   // coordinates). Default off — go-live needs an AVG/DPIA sign-off.
