@@ -216,6 +216,12 @@ const serverSchema = z.object({
   // tables (Belastingdienst loontabellen etc.) before flipping.
   MONEY_EXPLAINER_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-PR4b — owner clock-out digest. When on, a daily ticker POSTs
+  // /api/cron/clockout-digest, which surfaces planned-vs-actual overruns + the
+  // PR-4a review flags as ONE owner notification (notify-only, owner-only,
+  // one per day). Default off; the endpoint re-checks the flag.
+  CLOCKOUT_DIGEST_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
