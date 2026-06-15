@@ -10,7 +10,11 @@ import { db } from "@/lib/db/client";
 import { chefs } from "@/lib/db/schema";
 import { getChefForecastEarnings } from "@/lib/domain/chef-forecast";
 import { getChefPatterns } from "@/lib/domain/intel";
-import { formatEuro } from "@/lib/hours-labels";
+import {
+  getChefPaymentStatus,
+  getChefVacationEstimate,
+} from "@/lib/domain/chef-payments";
+import { formatEuro, formatWorkedMinutes } from "@/lib/hours-labels";
 import { formatChefRole } from "@/lib/labels";
 import { requireAuth } from "@/lib/permissions";
 
@@ -48,8 +52,15 @@ export default async function ChefEarningsPage() {
 
   const patterns = await getChefPatterns(chef.id);
   const forecast = await getChefForecastEarnings(chef.id);
+  const payments = await getChefPaymentStatus(chef.id);
+  const vacation = await getChefVacationEstimate(chef.id);
   const maxDay = Math.max(1, ...patterns.preferredDays.map((d) => d.count));
   const hasData = patterns.preferredDays.some((d) => d.count > 0);
+  const dayFmt = new Intl.DateTimeFormat("nl-NL", {
+    timeZone: "Europe/Amsterdam",
+    day: "numeric",
+    month: "short",
+  });
 
   return (
     <div>
@@ -122,6 +133,80 @@ export default async function ChefEarningsPage() {
           </>
         )}
       </section>
+
+      {/* CHEF-PR9a: "Wanneer word ik betaald?" — payout pipeline over the hours chain. */}
+      {payments.buckets.length > 0 ? (
+        <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className={LABEL}>Wanneer word ik betaald?</p>
+            {payments.inFlightCents > 0 ? (
+              <p className="text-sm text-ink-500">
+                Onderweg naar jou:{" "}
+                <strong className="text-ink-900">{formatEuro(payments.inFlightCents)}</strong>
+              </p>
+            ) : null}
+          </div>
+          <div className="mt-3 space-y-3">
+            {payments.buckets.map((b) => (
+              <div key={b.stage} className="rounded-md border border-ink-100 bg-bg-gray/40 p-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium text-ink-900">
+                    {b.label}{" "}
+                    <span className="text-ink-400">
+                      · {b.count} {b.count === 1 ? "dienst" : "diensten"}
+                    </span>
+                  </p>
+                  <span className="font-mono text-sm text-ink-900">{formatEuro(b.amountCents)}</span>
+                </div>
+                <p className="mt-1 text-xs text-ink-500">{b.nextStep}</p>
+                <ul className="mt-2 divide-y divide-ink-100">
+                  {b.lines.slice(0, 5).map((l) => (
+                    <li key={l.placementId} className="flex items-center justify-between gap-3 py-1.5 text-xs">
+                      <Link
+                        href={`/chef/hours/${l.placementId}`}
+                        className="min-w-0 truncate text-ink-700 hover:text-burgundy hover:underline"
+                      >
+                        {l.company ?? "een klant"}{" "}
+                        <span className="text-ink-400">
+                          · {dayFmt.format(l.startsAt)} · {formatWorkedMinutes(l.workedMinutes)}
+                        </span>
+                      </Link>
+                      <span className="shrink-0 font-mono text-ink-700">{formatEuro(l.amountCents)}</span>
+                    </li>
+                  ))}
+                  {b.lines.length > 5 ? (
+                    <li className="py-1.5 text-xs text-ink-400">
+                      + {b.lines.length - 5} meer
+                    </li>
+                  ) : null}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-ink-500">
+            Indicatie op basis van je ingediende uren en je tarief. Het kantoor en payroll
+            bevestigen het uiteindelijke bedrag en de uitbetaaldatum.
+          </p>
+        </section>
+      ) : null}
+
+      {/* CHEF-PR9a: vakantiegeld estimate — derived, INDICATIE only. */}
+      {vacation.basisCents > 0 ? (
+        <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className={LABEL}>Vakantiegeld (schatting)</p>
+            <p className="text-2xl font-semibold text-ink-900">
+              {formatEuro(vacation.accruedCents)}
+            </p>
+          </div>
+          <p className="mt-2 text-sm text-ink-700">
+            Ongeveer {vacation.pct}% over {formatEuro(vacation.basisCents)} aan goedgekeurde uren.
+            Dit is een <strong>indicatie</strong> — payroll houdt de officiële opbouw en
+            uitbetaling bij.
+          </p>
+          <p className="mt-1 text-xs text-ink-400">Aannames bijgewerkt: {vacation.assumptionsUpdated}</p>
+        </section>
+      ) : null}
 
       {!hasData ? (
         <p className="mt-6 rounded-lg border border-ink-200 bg-white p-6 text-center text-sm text-ink-500">
