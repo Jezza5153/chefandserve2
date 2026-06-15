@@ -29,6 +29,7 @@ const MORE: NavItem[] = [
   { label: "Mijn shifts", href: "/chef/shifts", icon: "calendar-days" },
   { label: "Uren", href: "/chef/hours", icon: "clock" },
   { label: "Geld uitgelegd", href: "/chef/money", icon: "wallet" },
+  { label: "Declaraties", href: "/chef/declaraties", icon: "banknote" },
   { label: "Meldingen", href: "/chef/notifications", icon: "bell" },
   { label: "Prikbord", href: "/chef/board", icon: "message" },
   { label: "Agenda-feed", href: "/chef/calendar", icon: "calendar-days" },
