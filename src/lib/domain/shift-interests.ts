@@ -18,9 +18,21 @@ import {
   shifts,
   users,
 } from "@/lib/db/schema";
+import { type LatLng } from "@/lib/domain/geo";
+import { scoreChefForShift } from "@/lib/domain/matching";
+import { estimateTravel, type TransportMode } from "@/lib/domain/travel";
 import { env } from "@/lib/env";
 import { createNotification } from "@/lib/integrations";
 import { amsterdamDayKey } from "@/lib/roster-format";
+
+/** Parse a numeric lat/lng pair (Drizzle returns numerics as strings). */
+function toLatLng(lat: string | null, lng: string | null): LatLng | null {
+  if (lat == null || lng == null) return null;
+  const a = Number(lat);
+  const b = Number(lng);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return { lat: a, lng: b };
+}
 
 const LIVE = ["draft", "proposed", "accepted", "confirmed"] as const;
 
@@ -49,14 +61,35 @@ export type OpenShift = {
   city: string | null;
   rateCents: number | null;
   interested: boolean;
+  /* ----- CHEF-PR1: chef-facing match signals (best-effort; null = unknown) -- */
+  /** 0-100 fit for THIS chef (matching.ts scorer). null if chef profile thin. */
+  fitScore: number | null;
+  /** Klant-safe positive reasons — "Waarom krijg ik deze shift?". */
+  reasons: string[];
+  /** One-way road-distance estimate in km (chef ↔ shift). null if no geo. */
+  distanceKm: number | null;
+  /** Hours until the shift starts — drives the urgency label. */
+  hoursUntilStart: number;
+  /** Gross indicatie in cents for the whole shift (hours × chef rate). */
+  grossCents: number | null;
 };
 
 /**
  * Open shifts a chef can raise their hand on: future, not cancelled/completed,
  * with open headcount, the chef not already placed, and not on a date the chef
  * blocked in their availability.
+ *
+ * CHEF-PR1: each card now carries chef-facing signals — fit% + klant-safe
+ * reasons (matching.ts scorer), a road-distance estimate (travel.ts), urgency
+ * (hours-until-start), and a gross money indicatie. All best-effort: a thin
+ * chef profile or missing geo simply yields null fields, never an error.
  */
 export async function listOpenShiftsForChef(chefId: string, daysAhead = 28): Promise<OpenShift[]> {
+  const chef = await db.query.chefs.findFirst({ where: eq(chefs.id, chefId) });
+  if (!chef) return [];
+  const chefLatLng = toLatLng(chef.latitude, chef.longitude);
+  const chefMode = (chef.transportMode ?? null) as TransportMode | null;
+
   const now = new Date();
   const horizon = new Date(now.getTime() + daysAhead * 24 * 3600 * 1000);
   const rows = await db
@@ -69,6 +102,14 @@ export async function listOpenShiftsForChef(chefId: string, daysAhead = 28): Pro
       city: shifts.city,
       rateCents: shifts.chefRateCents,
       headcount: shifts.headcount,
+      // CHEF-PR1: scoring + reasons inputs
+      segment: shifts.segment,
+      minExperience: shifts.minExperience,
+      languageRequired: shifts.languageRequired,
+      latitude: shifts.latitude,
+      longitude: shifts.longitude,
+      clientType: clients.clientType,
+      clientTags: clients.clientTags,
     })
     .from(shifts)
     .innerJoin(clients, eq(clients.id, shifts.clientId))
@@ -114,6 +155,30 @@ export async function listOpenShiftsForChef(chefId: string, daysAhead = 28): Pro
     if (placedSet.has(r.id)) continue;
     if (r.headcount - (live.get(r.id) ?? 0) <= 0) continue;
     if (blockedSet.has(amsterdamDayKey(r.startsAt))) continue;
+
+    // Fit + klant-safe reasons (same scorer/weights the planner sees).
+    const { score, reasons } = scoreChefForShift(chef, {
+      roleNeeded: r.role,
+      segment: r.segment,
+      city: r.city,
+      minExperience: r.minExperience,
+      languageRequired: r.languageRequired,
+      clientType: r.clientType,
+      clientTags: r.clientTags,
+    });
+
+    // Road-distance estimate (best-effort — needs both endpoints geocoded).
+    const shiftLatLng = toLatLng(r.latitude, r.longitude);
+    const distanceKm =
+      chefLatLng && shiftLatLng
+        ? estimateTravel({ from: chefLatLng, to: shiftLatLng, mode: chefMode }).km
+        : null;
+
+    // Gross money indicatie for the whole shift (hours × chef rate).
+    const hours = (r.endsAt.getTime() - r.startsAt.getTime()) / 3_600_000;
+    const grossCents =
+      r.rateCents != null && hours > 0 ? Math.round(r.rateCents * hours) : null;
+
     out.push({
       shiftId: r.id,
       clientName: r.clientName,
@@ -123,6 +188,11 @@ export async function listOpenShiftsForChef(chefId: string, daysAhead = 28): Pro
       city: r.city,
       rateCents: r.rateCents,
       interested: interestSet.has(r.id),
+      fitScore: score > 0 ? score : null,
+      reasons,
+      distanceKm,
+      hoursUntilStart: (r.startsAt.getTime() - now.getTime()) / 3_600_000,
+      grossCents,
     });
   }
   return out;

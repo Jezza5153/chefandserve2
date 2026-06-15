@@ -898,6 +898,23 @@ export const chefs = pgTable("chefs", {
   likesMost: text("likes_most"), // "what you like to do most"
   recentVenues: text("recent_venues"), // recent restaurants / hotels
 
+  /* ----- CHEF-PR1: availability 2.0 + preferred-work (chef-authored) ------
+   * Heartbeat-simple preferences the chef sets themselves. Captured + displayed
+   * in PR-1; matching enforcement (radius / avoid-list) lands in a later PR.
+   * `chef_availability` ("no row = available") stays the only hard signal —
+   * these never block a chef on their own. Distinct from Maarten's `notes`.
+   */
+  /** Max one-way travel the chef wants (km). null = no preference. */
+  travelRadiusKm: integer("travel_radius_km"),
+  /** Chef opted in to spoed / last-minute shifts. */
+  availableForEmergency: boolean("available_for_emergency").notNull().default(false),
+  /** Work-types the chef does NOT want (e.g. "zorg", "ontbijt"). Array. */
+  avoidPreferences: text("avoid_preferences").array(),
+  /** Earliest start the chef wants, hour 0-23 (e.g. 7 = "niet voor 07:00"). */
+  minStartHour: integer("min_start_hour"),
+  /** Chef's own free-text availability/preference notes. */
+  availabilityNotes: text("availability_notes"),
+
   /* ----- lifecycle ----- */
   status: chefStatusEnum("status").notNull().default("onboarding"),
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
