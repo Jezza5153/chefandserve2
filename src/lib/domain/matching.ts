@@ -520,7 +520,8 @@ export async function proposePlacement(
   const now = new Date();
   // CHEF-PR2 offer lifecycle: the proposal stays open for OFFER_EXPIRY_HOURS
   // (default 24); past that while still 'proposed' it reads as "verlopen".
-  const expiresAt = new Date(now.getTime() + (Number(env.OFFER_EXPIRY_HOURS) || 24) * 3_600_000);
+  const expiryHours = Math.max(1, Number(env.OFFER_EXPIRY_HOURS) || 24); // never instant-expired
+  const expiresAt = new Date(now.getTime() + expiryHours * 3_600_000);
   // Insert-or-reset on the unique (chefId, shiftId) target. A prior
   // rejected/cancelled row is reset to a clean `proposed` state; concurrent
   // inserts converge on the same row instead of throwing 23505.
