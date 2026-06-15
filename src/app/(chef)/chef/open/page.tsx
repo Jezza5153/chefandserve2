@@ -10,6 +10,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
 import { chefs } from "@/lib/db/schema";
 import {
+  askAboutOpenShift,
   chefOpenShiftsEnabled,
   expressInterest,
   listOpenShiftsForChef,
@@ -72,6 +73,17 @@ async function withdrawAction(fd: FormData) {
   const shiftId = String(fd.get("shiftId") ?? "");
   if (!chef || !shiftId) return;
   await withdrawInterest({ chefId: chef.id, shiftId });
+  revalidatePath("/chef/open");
+}
+
+async function askAction(fd: FormData) {
+  "use server";
+  const session = await requireAuth();
+  const chef = await db.query.chefs.findFirst({ where: eq(chefs.userId, session.user.id) });
+  const shiftId = String(fd.get("shiftId") ?? "");
+  const question = String(fd.get("question") ?? "");
+  if (!chef || !shiftId || !question.trim()) return;
+  await askAboutOpenShift({ chefId: chef.id, shiftId, question });
   revalidatePath("/chef/open");
 }
 
@@ -190,6 +202,27 @@ export default async function ChefOpenShiftsPage() {
                         Indicatie. Netto hangt af van loonheffing en je situatie.
                       </p>
                     )}
+
+                    {/* CHEF-PR1 — interesse, maar ik heb een vraag */}
+                    <details className="mt-2">
+                      <summary className="cursor-pointer font-ui text-[11px] font-medium text-ink-600">
+                        Een vraag over deze dienst?
+                      </summary>
+                      <form action={askAction} className="mt-1.5 flex flex-col gap-1.5 sm:flex-row">
+                        <input type="hidden" name="shiftId" value={s.shiftId} />
+                        <input
+                          type="text"
+                          name="question"
+                          required
+                          maxLength={500}
+                          placeholder="bijv. is parkeren dichtbij? mag ik eerder weg?"
+                          className="flex-1 rounded-md border border-ink-200 px-3 py-1.5 text-xs"
+                        />
+                        <button className="shrink-0 rounded-full border border-ink-300 bg-white px-3 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-ink-700 hover:bg-bg-gray">
+                          Stuur naar Maarten
+                        </button>
+                      </form>
+                    </details>
                   </div>
 
                   {s.interested ? (

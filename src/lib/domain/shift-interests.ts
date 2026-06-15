@@ -230,6 +230,48 @@ export async function withdrawInterest(args: { chefId: string; shiftId: string }
     .where(and(eq(shiftInterests.chefId, args.chefId), eq(shiftInterests.shiftId, args.shiftId)));
 }
 
+/**
+ * CHEF-PR1: "interesse, maar ik heb een vraag" — a chef asks Maarten about an
+ * open shift instead of silently raising/declining their hand. Schema-light:
+ * just an owner notification (no new tables). The chef's free text is DATA only
+ * — rendered in the notification body, never fed to any prompt; capped at 500.
+ */
+export async function askAboutOpenShift(args: {
+  chefId: string;
+  shiftId: string;
+  question: string;
+}): Promise<void> {
+  const q = args.question.trim().slice(0, 500);
+  if (!q || !env.MAARTEN_EMAIL) return;
+  const [owner] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, env.MAARTEN_EMAIL))
+    .limit(1);
+  if (!owner) return;
+  const [chef] = await db
+    .select({ name: chefs.fullName })
+    .from(chefs)
+    .where(eq(chefs.id, args.chefId))
+    .limit(1);
+  const [shift] = await db
+    .select({ role: shifts.roleNeeded, startsAt: shifts.startsAt, clientName: clients.companyName })
+    .from(shifts)
+    .innerJoin(clients, eq(clients.id, shifts.clientId))
+    .where(eq(shifts.id, args.shiftId))
+    .limit(1);
+  if (!chef || !shift) return;
+  await createNotification({
+    userId: owner.id,
+    type: "shift_question",
+    title: `${chef.name} heeft een vraag over een dienst`,
+    body: `${shift.role} bij ${shift.clientName} — ${amsterdamDayKey(shift.startsAt)}: "${q}"`,
+    actionUrl: `/admin/business/shifts/${args.shiftId}`,
+    entityType: "shifts",
+    entityId: args.shiftId,
+  });
+}
+
 export type InterestedChef = { chefId: string; name: string; since: Date };
 
 /** Active interests for a shift (planner view) — who raised their hand. */
