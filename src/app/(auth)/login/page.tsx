@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 import { eq } from "drizzle-orm";
 
+import { PasswordLogin } from "./PasswordLogin";
 import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 import { auth, signIn } from "@/lib/auth";
 import { db } from "@/lib/db/client";
@@ -264,58 +265,17 @@ export default async function LoginPage({
           />
         </div>
 
-        {/* Password + TOTP fields — hidden behind toggle so first-time
-            visitors aren't intimidated by them. Internal staff who have
-            completed the wizard click "Heb je al een wachtwoord?" to open. */}
-        <details
-          className="rounded border border-ink-200 bg-bg-gray px-4 py-3 text-sm"
-          // The browser remembers the open state per-page-load. For "remembered
-          // across visits" we'd need a tiny client component reading
-          // sessionStorage; not worth the round-trip in V1.
-        >
-          <summary className="cursor-pointer font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy hover:underline">
-            Heb je al een wachtwoord ingesteld?
-          </summary>
-          <div className="mt-4 space-y-3">
-            <p className="text-xs leading-relaxed text-ink-700">
-              Voor interne medewerkers met wachtwoord + 2FA. Chefs en klanten
-              gebruiken altijd de eenmalige inloglink hierboven.
-            </p>
-            <div>
-              <label
-                htmlFor="password"
-                className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy"
-              >
-                Wachtwoord
-              </label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                autoComplete="current-password"
-                className="w-full rounded border border-ink-200 bg-white px-3 py-2 font-mono text-base text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="totp"
-                className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy"
-              >
-                2FA-code (of recovery code)
-              </label>
-              <input
-                type="text"
-                id="totp"
-                name="totp"
-                inputMode="text"
-                maxLength={16}
-                autoComplete="one-time-code"
-                placeholder="123 456 of ABCD-EFGH-IJKL"
-                className="w-full rounded border border-ink-200 bg-white px-3 py-2 font-mono text-base tracking-wider text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
-              />
-            </div>
-          </div>
-        </details>
+        {/* Password + TOTP — collapsed by default so first-time chef/klant
+            visitors aren't intimidated. The submit button now lives WITH the
+            fields (PasswordLogin), so clicking it can't submit an empty password.
+            Auto-opens after a password-related error so the fields are visible. */}
+        <PasswordLogin
+          passwordAction={passwordLogin}
+          defaultOpen={
+            params.error === "bad-credentials" ||
+            params.error === "password-missing-fields"
+          }
+        />
 
         {errorMsg && (
           <p className="rounded border border-burgundy/30 bg-burgundy/5 px-4 py-2 text-sm text-burgundy">
@@ -327,23 +287,14 @@ export default async function LoginPage({
 
         {/* Primary action: magic-link. Most logins use this (chef + klant
             always; internal staff before wizard; internal staff who don't
-            want to type the password). */}
+            want to type the password). The password+2FA submit lives inside
+            PasswordLogin above, next to its fields. */}
         <button
           type="submit"
           formAction={sendMagicLink}
           className="w-full rounded-full bg-burgundy px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900"
         >
           Stuur eenmalige inloglink
-        </button>
-
-        {/* Secondary action: password+TOTP. Only useful after wizard is
-            complete AND the user toggled open the password fields above. */}
-        <button
-          type="submit"
-          formAction={passwordLogin}
-          className="w-full rounded-full border border-burgundy/40 bg-white px-6 py-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy transition-colors hover:bg-burgundy/5"
-        >
-          Inloggen met wachtwoord + 2FA
         </button>
       </form>
 
