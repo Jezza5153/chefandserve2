@@ -514,13 +514,29 @@ export type MatchResult = {
 };
 
 /**
+ * P3b: PURE — stable favorite-up / klant-blocked-down ordering layered on top of the
+ * composite score. Mirrors the shift-detail re-rank intent (getRankScore: favorite
+ * boost, blocked sink) but BLOCKED stays in the list (sink-visible, never excluded) so
+ * the planner can still see + override/un-block. Within a tier, higher score wins.
+ */
+export function applyFavoriteBlockedOrder<T extends { chef: { id: string }; score: number }>(
+  results: T[],
+  favoriteIds: Set<string>,
+  blockedIds: Set<string>,
+): T[] {
+  const tier = (id: string) => (favoriteIds.has(id) ? 2 : blockedIds.has(id) ? 0 : 1);
+  return [...results].sort((a, b) => tier(b.chef.id) - tier(a.chef.id) || b.score - a.score);
+}
+
+/**
  * Find the best chefs for a shift. Filters out:
  *   - Inactive / archived / soft-deleted chefs
  *   - Chefs explicitly blocked on shift date (chef_availability.available=false)
  *   - Chefs already placed on this shift (no double-rows)
  *   - Chefs with conflicting placements on the same day (overlap detection)
  *
- * Ranks remaining chefs by composite score. Returns top `limit` (default 10).
+ * Ranks remaining chefs by composite score (P3b: klant favorites up / blocked down when
+ * MATCHING_FAVORITES_ENABLED). Returns top `limit` (default 10).
  */
 export async function findMatchesForShift(
   shiftId: string,
@@ -537,6 +553,11 @@ export async function findMatchesForShift(
   const matchClient = await db.query.clients.findFirst({
     where: eq(clients.id, shift.clientId),
   });
+
+  // P3b: klant favorite/blocked sets (flag-gated). Empty when off → ordering unchanged.
+  const favEnabled = env.MATCHING_FAVORITES_ENABLED === "true";
+  const favoriteSet = new Set(favEnabled ? matchClient?.favoriteChefIds ?? [] : []);
+  const klantBlockedSet = new Set(favEnabled ? matchClient?.blockedChefIds ?? [] : []);
 
   // 1. Active chefs only (not soft-deleted)
   const candidateChefs = await db
@@ -649,13 +670,29 @@ export async function findMatchesForShift(
       chef,
       score: tag.score,
       scoreBreakdown: { vakniveau: v, segment: s, experience: e },
-      reasons: [...reasons, ...adj.reasons, ...rel.reasons, ...tag.reasons],
-      warnings: [...warnings, ...adj.warnings, ...rel.warnings],
+      // P3b annotations match the existing Dutch strings so the shift-detail
+      // allWarnings Set dedupes "door klant geblokkeerd" against staffing-intelligence.
+      reasons: [
+        ...reasons,
+        ...adj.reasons,
+        ...rel.reasons,
+        ...tag.reasons,
+        ...(favoriteSet.has(chef.id) ? ["klant-favoriet"] : []),
+      ],
+      warnings: [
+        ...warnings,
+        ...adj.warnings,
+        ...rel.warnings,
+        ...(klantBlockedSet.has(chef.id) ? ["door klant geblokkeerd"] : []),
+      ],
     });
   }
 
-  results.sort((a, b) => b.score - a.score);
-  return results.slice(0, limit);
+  // P3b: favorites up / klant-blocked down (sink-visible) when flagged; else score-only.
+  const ordered = favEnabled
+    ? applyFavoriteBlockedOrder(results, favoriteSet, klantBlockedSet)
+    : results.sort((a, b) => b.score - a.score);
+  return ordered.slice(0, limit);
 }
 
 /** Outcome of {@link proposePlacement}. `already_proposed` means a live

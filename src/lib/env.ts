@@ -211,6 +211,12 @@ const serverSchema = z.object({
   // Raw numbers stay INTERNAL (AVG): only warm reasons + internal warnings surface.
   MATCHING_RELIABILITY_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // P3b — when on, findMatchesForShift orders the klant's FAVORITE chefs up and
+  // BLOCKED chefs down (sink-visible, never excluded — the planner can still override/
+  // un-block), so the dashboard fill-drawer + planner + autofill respect the same
+  // favorite/blocked the shift-detail page already does. Default off → ranking unchanged.
+  MATCHING_FAVORITES_ENABLED: z.enum(["true", "false"]).optional(),
+
   // CHEF-PR5 — when on, matching SOFT-boosts chefs whose curated skill tags overlap
   // the client's requirement tags. Default off → live planner ranking unchanged.
   MATCHING_TAGS_ENABLED: z.enum(["true", "false"]).optional(),
