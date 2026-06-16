@@ -221,6 +221,13 @@ const serverSchema = z.object({
   // the client's requirement tags. Default off → live planner ranking unchanged.
   MATCHING_TAGS_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // P3c — when on, the dashboard "Vul deze dienst" drawer surfaces per-candidate marge
+  // (revenue − loon − reis, reusing estimateMargin) so the owner sees the financial
+  // signal — negative marge shows a red guard chip — at the one-click propose moment.
+  // Default off → drawer unchanged + zero extra compute. (The richer assign-time actions
+  // — assign-anyway+reason / ask-client-approval — are P3c-2.)
+  MATCHING_MARGIN_GUARD_ENABLED: z.enum(["true", "false"]).optional(),
+
   // CHEF-PR2 (R2#13) — replacement handover. When on, cancelling a chef who was
   // already accepted/confirmed tells them "ga niet naar de locatie" + stops their
   // Arrival Trust monitoring. Default off (dark-launch; idempotent per placement).
