@@ -16,7 +16,13 @@ import { notFound, redirect } from "next/navigation";
 import { ArrivalTrust } from "./ArrivalTrust";
 import { CancelShiftSection } from "./CancelShiftSection";
 import { RejectWithReason } from "./RejectWithReason";
+import { ShiftSignals } from "./ShiftSignals";
 import { arrivalTrustEnabled } from "@/lib/domain/arrival";
+import {
+  asShiftSignalKind,
+  recordShiftSignal,
+  shiftSignalsEnabled,
+} from "@/lib/domain/shift-signals";
 import { db } from "@/lib/db/client";
 import {
   chefs,
@@ -367,6 +373,24 @@ async function recordReturnSignal(formData: FormData) {
   redirect(`/chef/shifts/${placementId}`);
 }
 
+/* -------- server action: in-shift status signal (CHEF-PR3) ----------- */
+
+async function recordSignal(formData: FormData) {
+  "use server";
+  const session = await requireAuth();
+  const placementId = String(formData.get("placementId") ?? "");
+  const kind = asShiftSignalKind(String(formData.get("kind") ?? ""));
+  const detail = String(formData.get("detail") ?? "");
+  if (!placementId || !kind) redirect(`/chef/shifts/${placementId}`);
+
+  // Auth IS the lookup — resolve the caller's chef; the domain re-checks ownership.
+  const chef = await db.query.chefs.findFirst({ where: eq(chefs.userId, session.user.id) });
+  if (!chef) redirect("/chef");
+
+  await recordShiftSignal({ chefId: chef.id, placementId, kind: kind!, detail });
+  redirect(`/chef/shifts/${placementId}?ok=signal`);
+}
+
 /* -------- page ------------------------------------------------------- */
 
 export default async function ChefShiftDetailPage({
@@ -374,7 +398,7 @@ export default async function ChefShiftDetailPage({
   searchParams,
 }: {
   params: Promise<{ placementId: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
   const session = await requireAuth();
   const { placementId } = await params;
@@ -607,6 +631,20 @@ export default async function ChefShiftDetailPage({
             lat={Number(shift.latitude)}
             lng={Number(shift.longitude)}
           />
+        )}
+
+      {/* CHEF-PR3: in-shift one-tap status signals — accepted/confirmed + shift not over yet */}
+      {shiftSignalsEnabled() &&
+        ["accepted", "confirmed"].includes(placement.status) &&
+        new Date(shift.endsAt).getTime() > Date.now() && (
+          <>
+            {sp.ok === "signal" ? (
+              <p className="mt-8 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+                ✓ Doorgegeven aan Maarten.
+              </p>
+            ) : null}
+            <ShiftSignals placementId={placement.id} recordAction={recordSignal} />
+          </>
         )}
 
       {/* Decision form (proposed only) */}
