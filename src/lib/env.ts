@@ -226,6 +226,11 @@ const serverSchema = z.object({
   // Arrival Trust monitoring. Default off (dark-launch; idempotent per placement).
   REPLACEMENT_HANDOVER_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-PR3 — in-shift status signals (onderweg/vertraagd/hulp/onveilig/kan-niet-
+  // starten). When on, the one-tap buttons on the chef shift screen record a signal
+  // + notify the owner (safety = urgent push). Default off (dark-launch).
+  SHIFT_SIGNALS_ENABLED: z.enum(["true", "false"]).optional(),
+
   // CHEF-PR3 — Aankomstzekerheid (Arrival Trust). When on, the PWA does an on-device
   // 1km arrival check in the 20 min before a shift (sends only the result, never
   // coordinates). Default off — go-live needs an AVG/DPIA sign-off.

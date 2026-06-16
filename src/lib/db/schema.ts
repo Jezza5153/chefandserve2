@@ -1603,6 +1603,48 @@ export const shiftArrivalChecks = pgTable(
   }),
 );
 
+/* =============================================================================
+ * CHEF-PR3 — in-shift status signals. One-tap statuses a chef sends from the
+ * shift screen: onderweg / vertraagd / hulp nodig / "ik voel me niet veilig" /
+ * aangekomen-maar-kan-niet-starten. Pre-clock-in operational visibility + the
+ * safety net the plan calls for. Each fires an owner notification (safety =
+ * immediate). `detail` is a structured bucket key OR the chef's free note —
+ * DATA, never instructions. Feeds the owner's dispute view + shift timeline.
+ * =========================================================================== */
+export const shiftSignalKindEnum = pgEnum("shift_signal_kind", [
+  "onderweg",
+  "vertraagd",
+  "hulp",
+  "onveilig",
+  "kan_niet_starten",
+]);
+
+export const shiftSignals = pgTable(
+  "shift_signals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    placementId: text("placement_id")
+      .notNull()
+      .references(() => placements.id, { onDelete: "cascade" }),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    shiftId: text("shift_id")
+      .notNull()
+      .references(() => shifts.id, { onDelete: "cascade" }),
+    kind: shiftSignalKindEnum("kind").notNull(),
+    /** Structured bucket key (e.g. "min_30") or short free note — DATA, display only. */
+    detail: text("detail"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    placementIdx: index("shift_signals_placement_idx").on(t.placementId),
+    shiftIdx: index("shift_signals_shift_idx").on(t.shiftId),
+  }),
+);
+
+export type ShiftSignal = typeof shiftSignals.$inferSelect;
+
 /**
  * Chef×klant pair-memory — PR-INTEL-P4, the "match-intelligence" layer (the
  * relationship the user flagged as the missing piece). One row per (chef, klant):
