@@ -14,6 +14,7 @@ import {
 } from "@/lib/domain/chef-requests";
 import { formatEuro } from "@/lib/hours-labels";
 import { requirePermission } from "@/lib/permissions";
+import { getDownloadUrl, r2IsConfigured } from "@/lib/r2";
 
 export const metadata = { title: "Chef-verzoeken" };
 export const dynamic = "force-dynamic";
@@ -78,6 +79,22 @@ export default async function AdminChefRequestsPage() {
   const { vacation, expenses } = await listPendingChefRequests();
   const total = vacation.length + expenses.length;
 
+  // Presign receipt downloads (short-lived) for claims that attached a bon.
+  const receiptUrls = new Map<string, string>();
+  if (r2IsConfigured()) {
+    await Promise.all(
+      expenses
+        .filter((c) => c.receiptR2Key)
+        .map(async (c) => {
+          try {
+            receiptUrls.set(c.id, await getDownloadUrl(c.receiptR2Key!));
+          } catch {
+            /* skip a broken key — the claim still shows */
+          }
+        }),
+    );
+  }
+
   return (
     <div className="mx-auto max-w-4xl">
       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">Chef-verzoeken</p>
@@ -130,6 +147,21 @@ export default async function AdminChefRequestsPage() {
                       <p className="text-xs text-ink-500">
                         {CATEGORY_LABEL[c.category] ?? c.category} · {formatEuro(c.amountCents)}
                         {c.description ? ` · ${c.description}` : ""}
+                        {receiptUrls.has(c.id) ? (
+                          <>
+                            {" · "}
+                            <a
+                              href={receiptUrls.get(c.id)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-burgundy hover:underline"
+                            >
+                              📎 Bon bekijken
+                            </a>
+                          </>
+                        ) : c.receiptR2Key ? (
+                          " · bon bijgevoegd"
+                        ) : null}
                       </p>
                     </div>
                     <DecideButtons id={c.id} action={decideExpense} />

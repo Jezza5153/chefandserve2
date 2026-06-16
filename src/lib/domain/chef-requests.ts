@@ -157,6 +157,8 @@ export type ExpenseClaimInput = {
   amountCents: number;
   description?: string | null;
   shiftId?: string | null;
+  /** R2 key of an uploaded receipt photo (optional). */
+  receiptR2Key?: string | null;
 };
 
 export async function createExpenseClaim(
@@ -175,6 +177,7 @@ export async function createExpenseClaim(
       amountCents: cents,
       description: clamp(input.description),
       shiftId: input.shiftId ?? null,
+      receiptR2Key: input.receiptR2Key ?? null,
     })
     .returning({ id: chefExpenseClaims.id });
 
@@ -262,7 +265,7 @@ async function notifyChefOfDecision(
 /** Admin: all pending requests across chefs (for /admin/business/chef-requests). */
 export async function listPendingChefRequests(): Promise<{
   vacation: Array<{ id: string; chefName: string; kind: string; amountCents: number | null; startDate: string | null; endDate: string | null; note: string | null; createdAt: Date }>;
-  expenses: Array<{ id: string; chefName: string; category: string; amountCents: number; description: string | null; createdAt: Date }>;
+  expenses: Array<{ id: string; chefName: string; category: string; amountCents: number; description: string | null; receiptR2Key: string | null; createdAt: Date }>;
 }> {
   const vac = await db
     .select({
@@ -287,6 +290,7 @@ export async function listPendingChefRequests(): Promise<{
       category: chefExpenseClaims.category,
       amountCents: chefExpenseClaims.amountCents,
       description: chefExpenseClaims.description,
+      receiptR2Key: chefExpenseClaims.receiptR2Key,
       createdAt: chefExpenseClaims.createdAt,
     })
     .from(chefExpenseClaims)

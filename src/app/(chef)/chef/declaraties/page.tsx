@@ -17,6 +17,9 @@ import {
 import { getChefVacationEstimate } from "@/lib/domain/chef-payments";
 import { formatEuro } from "@/lib/hours-labels";
 import { requireAuth } from "@/lib/permissions";
+import { chefExpenseReceiptKey, getUploadUrl, isAllowedFile, r2IsConfigured } from "@/lib/r2";
+
+import { ReceiptUploadField } from "./ReceiptUploadField";
 
 export const metadata = { title: "Declaraties", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -75,14 +78,39 @@ async function submitExpense(formData: FormData) {
   const euro = parseFloat(String(formData.get("amountEuro") ?? "").replace(",", "."));
   const cat = String(formData.get("category") ?? "overig");
   const allowed = ["reiskosten", "parkeren", "ov", "kilometers", "overig"];
+  // Receipt is uploaded client-side first; only accept a key under THIS chef's
+  // own R2 prefix (defence-in-depth — never trust an arbitrary client key).
+  const rawKey = String(formData.get("receiptR2Key") ?? "").trim();
+  const receiptR2Key = rawKey.startsWith(`chefs/${chef.id}/expenses/`) ? rawKey : null;
   const res = await createExpenseClaim({
     chefId: chef.id,
     requestedBy: session.user.id,
     category: (allowed.includes(cat) ? cat : "overig") as ExpenseCategory,
     amountCents: Number.isFinite(euro) ? Math.round(euro * 100) : 0,
     description: String(formData.get("description") ?? ""),
+    receiptR2Key,
   });
   redirect(`/chef/declaraties?ok=${res.ok ? "expense" : "error"}`);
+}
+
+/** CHEF-PR9b: presigned PUT for an expense receipt (browser uploads direct to R2). */
+async function requestReceiptUpload(args: {
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+}): Promise<{ ok: true; uploadUrl: string; documentId: string } | { ok: false; error: string }> {
+  "use server";
+  const session = await requireAuth();
+  const chef = await db.query.chefs.findFirst({ where: eq(chefs.userId, session.user.id) });
+  if (!chef) return { ok: false, error: "Geen chef-profiel." };
+  if (!r2IsConfigured()) return { ok: false, error: "Uploads zijn nog niet beschikbaar." };
+  const allowed = isAllowedFile(args.mimeType, args.sizeBytes);
+  if (!allowed.ok) return { ok: false, error: allowed.reason };
+  const receiptId = crypto.randomUUID();
+  const r2Key = chefExpenseReceiptKey(chef.id, receiptId, args.filename);
+  const { url } = await getUploadUrl(r2Key, args.mimeType);
+  // documentId carries the r2Key back so the form can submit it with the claim.
+  return { ok: true, uploadUrl: url, documentId: r2Key };
 }
 
 type ExpenseCategory = "reiskosten" | "parkeren" | "ov" | "kilometers" | "overig";
@@ -188,11 +216,9 @@ export default async function ChefDeclaratiesPage({
               <span className="text-sm text-ink-800">Omschrijving (optioneel)</span>
               <textarea name="description" rows={2} maxLength={1000} className={inputCls} />
             </label>
+            <ReceiptUploadField requestUpload={requestReceiptUpload} />
             <button className={btnCls}>Declaratie indienen</button>
           </form>
-          <p className="mt-3 text-xs text-ink-400">
-            Bon meesturen kan binnenkort — bewaar je bonnetje tot dan.
-          </p>
         </section>
       </div>
 
