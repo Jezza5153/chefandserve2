@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { clients, placements, shifts } from "@/lib/db/schema";
 import { findMatchesForShift } from "@/lib/domain/matching";
 import { assertChefsDeployable, type DeployabilityGate } from "@/lib/domain/chef-deployability-gate";
+import { estimateTravel, estimateMargin, eur, type MarginEstimate, type TransportMode } from "@/lib/domain/travel";
 import { env } from "@/lib/env";
 import { formatShiftRole } from "@/lib/labels";
 import { OverrideDeployabilityBlock } from "@/components/OverrideDeployabilityBlock";
@@ -14,8 +15,10 @@ import { proposeFromDashboard, logChefContactFromDashboard } from "@/app/(admin)
  * "Vul deze dienst" — the lean fill view for an open/critical/underfilled shift.
  * Signal → Context (who/when/how-short + blocker) → Action (Stel voor, reusing
  * proposePlacement) → Confirmation (the action redirects to ?done=). The full,
- * intel-rich match list (travel/marge/pair-memory) stays on the shift-detail page,
- * linked at the bottom — this drawer is the quick one-click fill.
+ * intel-rich match list (travel/pair-memory) stays on the shift-detail page, linked at
+ * the bottom — this drawer is the quick one-click fill. P3c optionally surfaces per-
+ * candidate marge here too (MATCHING_MARGIN_GUARD_ENABLED) so the financial signal is at
+ * the fill moment.
  */
 export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
   const [shift] = await db
@@ -28,6 +31,11 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
       city: shifts.city,
       status: shifts.status,
       companyName: clients.companyName,
+      // P3c margin guard inputs (only read when MATCHING_MARGIN_GUARD_ENABLED).
+      clientRateCents: shifts.clientRateCents,
+      chefRateCents: shifts.chefRateCents,
+      latitude: shifts.latitude,
+      longitude: shifts.longitude,
     })
     .from(shifts)
     .leftJoin(clients, eq(clients.id, shifts.clientId))
@@ -53,6 +61,37 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
       : new Map();
   const hoursToStart = Math.round((new Date(shift.startsAt).getTime() - Date.now()) / 3_600_000);
   const startTxt = startLabel(shift.startsAt, shift.endsAt);
+
+  // P3c margin guard (flag-gated): per-candidate marge (revenue − loon − reis) surfaced
+  // at the choice moment, so the fill-drawer carries the financial signal the shift-detail
+  // page already shows. Pure compute on already-loaded data (chef rate/lat/lng live on
+  // m.chef) — no extra query. Off → empty Map → drawer unchanged + no compute.
+  const marginByChef = new Map<string, MarginEstimate>();
+  if (env.MATCHING_MARGIN_GUARD_ENABLED === "true") {
+    const shiftCoords =
+      shift.latitude && shift.longitude ? { lat: Number(shift.latitude), lng: Number(shift.longitude) } : null;
+    const shiftHours = (new Date(shift.endsAt).getTime() - new Date(shift.startsAt).getTime()) / 3_600_000;
+    for (const m of matches) {
+      const c = m.chef;
+      const travelCents =
+        shiftCoords && c.latitude && c.longitude
+          ? estimateTravel({
+              from: { lat: Number(c.latitude), lng: Number(c.longitude) },
+              to: shiftCoords,
+              mode: (c.transportMode as TransportMode | null) ?? "none",
+            }).costCents
+          : 0;
+      marginByChef.set(
+        c.id,
+        estimateMargin({
+          clientRateCents: shift.clientRateCents,
+          chefRateCents: c.hourlyRateMinCents ?? shift.chefRateCents,
+          hours: shiftHours,
+          travelCents,
+        }),
+      );
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -100,6 +139,19 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
                     {formatShiftRole(m.chef.vakniveau)} · {m.chef.city ?? "—"}
                     {m.chef.yearsExperience ? ` · ${m.chef.yearsExperience}j` : ""}
                   </p>
+                  {/* P3c: marge at the choice moment (negative = red guard). */}
+                  {marginByChef.has(m.chef.id) && (
+                    <p className="mt-1">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${marginTone(marginByChef.get(m.chef.id)!.tone)}`}>
+                        marge {eur(marginByChef.get(m.chef.id)!.marginCents)}
+                        {marginByChef.get(m.chef.id)!.tone === "negative"
+                          ? " — negatief"
+                          : marginByChef.get(m.chef.id)!.tone === "low"
+                            ? " (laag)"
+                            : ""}
+                      </span>
+                    </p>
+                  )}
                   {m.reasons.length > 0 && (
                     <ul className="mt-1.5 flex flex-wrap gap-1">
                       {m.reasons.slice(0, 4).map((r) => (
@@ -218,6 +270,12 @@ function startLabel(startsAt: Date | string, endsAt: Date | string): string {
   const day = s.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/Amsterdam" });
   const t = (d: Date) => d.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
   return `${day} ${t(s)}–${t(e)}`;
+}
+
+function marginTone(tone: MarginEstimate["tone"]): string {
+  if (tone === "negative") return "bg-red-100 text-red-700";
+  if (tone === "low") return "bg-amber-100 text-amber-800";
+  return "bg-emerald-100 text-emerald-700";
 }
 
 function scoreTone(score: number): string {
