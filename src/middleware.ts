@@ -101,13 +101,18 @@ export default auth(async (request: NextRequest & {
   //   3. User has totp_enabled=true (already enrolled via wizard)
   //   4. No valid cs_2fa_verified cookie for THIS user
   //   5. The current path needs auth (not /verify-2fa itself, not /login)
+  //   6. They did NOT sign in via the magic link — a magic-link login is
+  //      treated as 2FA-satisfied (control of the inbox IS the second factor),
+  //      so it goes straight in. 2FA is only carried on the password path,
+  //      where the TOTP code is entered inline at sign-in.
   if (
     TOTP_ENFORCE &&
     needsAuth &&
     path !== "/verify-2fa" &&
     !path.startsWith("/admin/account/setup") &&
     request.auth?.user?.kind === "internal" &&
-    request.auth.user.totpEnabled === true
+    request.auth.user.totpEnabled === true &&
+    request.auth.user.loginMethod !== "resend"
   ) {
     const cookie = request.cookies.get(TWOFA_COOKIE_NAME)?.value;
     const ok = await validateCookieValue({
