@@ -211,7 +211,7 @@ export const authConfig: NextAuthConfig = {
      * First sign-in: load user from DB, embed roles + permissionsVersion.
      * Subsequent requests: re-check permissionsVersion to detect role changes.
      */
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user, account, trigger }) {
       if (user?.email) {
         const dbUser = await loadUserWithRoles(user.email);
         if (!dbUser) return null; // shouldn't happen post signIn callback
@@ -226,6 +226,11 @@ export const authConfig: NextAuthConfig = {
         token.totpEnrolledAtMs = dbUser.totpEnrolledAt
           ? new Date(dbUser.totpEnrolledAt).getTime()
           : null;
+        // Which provider logged them in this session: "resend" (magic link) or
+        // "password-totp". The middleware uses this to skip /verify-2fa for
+        // magic-link logins (email possession = the factor). Set once at sign-in;
+        // preserved across subsequent JWT reads (account is only present here).
+        token.loginMethod = account?.provider ?? (token.loginMethod as string | undefined) ?? null;
         return token;
       }
 
@@ -300,6 +305,8 @@ export const authConfig: NextAuthConfig = {
           typeof token.totpEnrolledAtMs === "number"
             ? token.totpEnrolledAtMs
             : null;
+        session.user.loginMethod =
+          typeof token.loginMethod === "string" ? token.loginMethod : null;
       }
       return session;
     },

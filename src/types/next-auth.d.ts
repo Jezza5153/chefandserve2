@@ -24,6 +24,13 @@ declare module "next-auth" {
       /** PR-C0 — embedded in cs_2fa_verified cookie so admin reset invalidates it. */
       totpEnrolledAtMs: number | null;
       /**
+       * Which provider established this session: "resend" (magic link) or
+       * "password-totp" (password + 2FA). The middleware treats a magic-link
+       * session as 2FA-satisfied (email possession IS the factor) so it skips
+       * the /verify-2fa gate; the password path still carries its TOTP.
+       */
+      loginMethod?: string | null;
+      /**
        * Phase B impersonation — set ONLY on an effective (impersonated) session
        * by `applyImpersonation`. Present = a super_admin is viewing AS this user.
        * `null`/absent on every normal session. Phase B1 = view-only (writes 403).
@@ -44,5 +51,7 @@ declare module "next-auth/jwt" {
     totpEnabled?: boolean;
     hasPassword?: boolean;
     totpEnrolledAtMs?: number | null;
+    /** Provider that established the session ("resend" = magic link). */
+    loginMethod?: string | null;
   }
 }
