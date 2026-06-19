@@ -13,7 +13,9 @@
  *      worker never duplicates rows.
  *
  * The chef's "Uren in te dienen" card on /chef appears the next time they
- * load the dashboard, sourced from this row.
+ * load the dashboard, sourced from this row. CHEF-PR4 clock-out recovery: when
+ * CLOCK_OUT_RECOVERY_ENABLED=true, the chef ALSO gets an immediate in-app prompt
+ * to submit (instead of waiting for hours-reminders' first +24h nudge).
  *
  * Run manually: `tsx workers/complete-placements.ts`
  */
@@ -57,9 +59,13 @@ async function main() {
         s.ends_at      AS scheduled_end,
         s.chef_rate_cents AS shift_chef_rate,
         s.client_rate_cents AS shift_client_rate,
-        pl.chef_rate_cents AS placement_chef_rate
+        pl.chef_rate_cents AS placement_chef_rate,
+        c.company_name AS company_name,
+        ch.user_id     AS chef_user_id
       FROM shifts s
       INNER JOIN placements pl ON pl.id = ${p.placement_id}
+      LEFT JOIN clients c ON c.id = s.client_id
+      LEFT JOIN chefs ch ON ch.id = pl.chef_id
       WHERE s.id = ${p.shift_id}
     `) as Array<{
       shift_id: string;
@@ -69,6 +75,8 @@ async function main() {
       shift_chef_rate: number | null;
       shift_client_rate: number | null;
       placement_chef_rate: number | null;
+      company_name: string | null;
+      chef_user_id: string | null;
     }>;
 
     if (!info) continue;
@@ -102,12 +110,29 @@ async function main() {
     `;
     if ((inserted as Array<{ id: string }>).length > 0) {
       createdRows++;
-      await audit(
-        "shift_hours.draft_created",
-        "shift_hours",
-        (inserted as Array<{ id: string }>)[0].id,
-        { placementId: p.placement_id, chefId: p.chef_id, via: "worker" },
-      );
+      const hoursId = (inserted as Array<{ id: string }>)[0].id;
+      await audit("shift_hours.draft_created", "shift_hours", hoursId, {
+        placementId: p.placement_id,
+        chefId: p.chef_id,
+        via: "worker",
+      });
+
+      // CHEF-PR4 clock-out recovery: the draft (the "provisional clock-out") now
+      // exists, so prompt the chef to submit their hours RIGHT AWAY — instead of
+      // only on next dashboard load, with hours-reminders' first nudge 24h later.
+      // Fires once (only on a freshly-created draft). In-app; dark-launched.
+      if (process.env.CLOCK_OUT_RECOVERY_ENABLED === "true" && info.chef_user_id) {
+        const where = info.company_name ?? "een klant";
+        await sql`
+          INSERT INTO notifications (user_id, type, title, body, action_url, entity_type, entity_id)
+          VALUES (
+            ${info.chef_user_id}, 'hours_ready_to_submit',
+            'Je shift is afgerond — dien je uren in',
+            ${`${where}: vul je gewerkte uren in zodat ze getekend en uitbetaald kunnen worden.`},
+            ${`/chef/hours/${p.placement_id}`}, 'shift_hours', ${hoursId}
+          )
+        `.catch((e) => log(`clock-out-recovery: notify failed (${p.placement_id}): ${String(e)}`));
+      }
     }
   }
 

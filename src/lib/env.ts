@@ -248,6 +248,12 @@ const serverSchema = z.object({
   // Default off → notifications behave as before.
   DND_DURING_SHIFT_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-PR4 — clock-out recovery. When on, the complete-placements worker prompts
+  // the chef in-app to submit their hours the moment the draft (provisional) row is
+  // created — instead of only the +24h hours-reminders nudge. Default off (worker
+  // reads process.env directly; this entry documents + validates it).
+  CLOCK_OUT_RECOVERY_ENABLED: z.enum(["true", "false"]).optional(),
+
   // CHEF-PR3 — Aankomstzekerheid (Arrival Trust). When on, the PWA does an on-device
   // 1km arrival check in the 20 min before a shift (sends only the result, never
   // coordinates). Default off — go-live needs an AVG/DPIA sign-off.
