@@ -14,11 +14,33 @@ import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/permissions";
 import { proposePlacement } from "@/lib/domain/matching";
 import { transitionPlacement } from "@/lib/domain/placement-transition";
+import { resolveEscalation, standDown } from "@/lib/domain/emergencies";
 import { approveHoursRow } from "@/lib/domain/hours";
 import { db } from "@/lib/db/client";
 import { contactLogs, dashboardSignalState } from "@/lib/db/schema";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { userSignalKey } from "@/lib/domain/dashboard-signal-state";
+
+/** P4b: mark an open escalation resolved (handled — e.g. a replacement confirmed). The
+ *  actor is auth-resolved (never form data); the domain fn audits + atomically guards. */
+export async function resolveEscalationFromDashboard(formData: FormData) {
+  const session = await requirePermission("shifts", "write");
+  const escalationId = String(formData.get("escalationId") ?? "").trim();
+  if (!escalationId) throw new Error("escalationId ontbreekt");
+  const notes = String(formData.get("resolutionNotes") ?? "").trim() || null;
+  const res = await resolveEscalation({ escalationId, resolvedBy: session.user.id, resolutionNotes: notes });
+  redirect(`/admin/business?done=${res.ok ? "spoed-opgelost" : "spoed-ongewijzigd"}`);
+}
+
+/** P4b: stand an escalation down (false alarm / handled elsewhere). */
+export async function standDownFromDashboard(formData: FormData) {
+  const session = await requirePermission("shifts", "write");
+  const escalationId = String(formData.get("escalationId") ?? "").trim();
+  if (!escalationId) throw new Error("escalationId ontbreekt");
+  const notes = String(formData.get("resolutionNotes") ?? "").trim() || null;
+  const res = await standDown({ escalationId, resolvedBy: session.user.id, resolutionNotes: notes });
+  redirect(`/admin/business?done=${res.ok ? "spoed-stilgelegd" : "spoed-ongewijzigd"}`);
+}
 
 /** Propose a chef for an open shift (outbound — chef gets the offer). */
 export async function proposeFromDashboard(formData: FormData) {

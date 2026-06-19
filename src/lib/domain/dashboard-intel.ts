@@ -5,6 +5,7 @@
  */
 
 export type AttentionKind =
+  | "emergency" // P4: an open escalation (chef pulled out / unassigned-soon / urgent signal) — top priority
   | "critical_shift" // under headcount, starts < 24u
   | "open_shift" // empty/open, starts < 48u
   | "underfilled_shift" // partially filled this week
@@ -35,6 +36,7 @@ export type AttentionItem = {
 
 /** Lower = more urgent (rendered first). */
 const PRIORITY: Record<AttentionKind, number> = {
+  emergency: 0,
   critical_shift: 1,
   open_shift: 2,
   underfilled_shift: 3,
