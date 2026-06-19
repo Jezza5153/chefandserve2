@@ -34,6 +34,7 @@ import { chefOpenShiftsEnabled, listOpenShiftsForChef } from "@/lib/domain/shift
 import { getChefSummaryForChef } from "@/lib/domain/ratings";
 import { getChefWarmStatus } from "@/lib/chef-events";
 import { getChefVacationEstimate } from "@/lib/domain/chef-payments";
+import { ChefHelp } from "@/components/chef/ChefHelp";
 import { formatShiftRole } from "@/lib/labels";
 import { requireAuth } from "@/lib/permissions";
 
@@ -565,6 +566,9 @@ export default async function ChefHomePage() {
           </Link>
         </section>
       ) : null}
+
+      {/* CHEF-PR7: contextual Help / FAQ — the repeat questions, Bel-Maarten one tap away */}
+      <ChefHelp />
     </div>
   );
 }
