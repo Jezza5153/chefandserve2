@@ -32,6 +32,7 @@ import { getChefForecastEarnings } from "@/lib/domain/chef-forecast";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { chefOpenShiftsEnabled, listOpenShiftsForChef } from "@/lib/domain/shift-interests";
 import { getChefSummaryForChef } from "@/lib/domain/ratings";
+import { getChefWarmStatus } from "@/lib/chef-events";
 import { formatShiftRole } from "@/lib/labels";
 import { requireAuth } from "@/lib/permissions";
 
@@ -202,6 +203,7 @@ export default async function ChefHomePage() {
 
   // Mijn cijfers — afgerond + beoordeling (rating respects the ≥5 V1 rule).
   const rating = await getChefSummaryForChef(chef.id);
+  const warm = await getChefWarmStatus(chef.id);
   const [doneRow] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(placements)
@@ -217,6 +219,25 @@ export default async function ChefHomePage() {
       <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
         Hallo {chef.fullName.split(" ")[0]}
       </h1>
+
+      {/* CHEF-PR0/6: warm trust status — encouraging, never a numeric score */}
+      {warm.labels.length > 0 ? (
+        <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
+          {warm.headline ? (
+            <p className="font-serif text-base text-emerald-900">{warm.headline}</p>
+          ) : null}
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {warm.labels.map((l) => (
+              <span
+                key={l}
+                className="rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-xs text-emerald-800"
+              >
+                {l}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* ONBOARDING — finish your data so we can plan + pay you */}
       {chef.onboardingStatus !== "submitted" ? (
