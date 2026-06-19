@@ -1714,6 +1714,43 @@ export type Placement = typeof placements.$inferSelect;
 export type NewPlacement = typeof placements.$inferInsert;
 export type MatchIntel = typeof matchIntel.$inferSelect;
 export type NewMatchIntel = typeof matchIntel.$inferInsert;
+
+/* =============================================================================
+ * CHEF-PR1 — chef → klant preferences ("stuur mij hier liever niet meer heen"
+ * + favourites). The INVERSE of the klant→chef favoriteChefIds/blockedChefIds:
+ * here the CHEF expresses how they feel about a klant. One row per (chef, klant);
+ * absence = no preference. Soft-fed into matching (never a hard exclude — the
+ * planner stays in control). INTERNAL; klanten never see it.
+ * =========================================================================== */
+export const chefClientPrefEnum = pgEnum("chef_client_pref", [
+  "favourite", // graag weer hierheen → boost
+  "block", // liever niet meer hierheen → strong down-rank
+  "only_emergency", // alleen bij spoed
+  "only_better_brief", // alleen met een betere briefing
+  "only_higher_rate", // alleen tegen een hoger tarief
+]);
+
+export const chefClientPrefs = pgTable(
+  "chef_client_prefs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    pref: chefClientPrefEnum("pref").notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    chefClientUnique: uniqueIndex("chef_client_prefs_chef_client_unique").on(t.chefId, t.clientId),
+  }),
+);
+
+export type ChefClientPref = typeof chefClientPrefs.$inferSelect;
 export type ChefDocument = typeof chefDocuments.$inferSelect;
 export type NewChefDocument = typeof chefDocuments.$inferInsert;
 export type RateLimit = typeof rateLimits.$inferSelect;
