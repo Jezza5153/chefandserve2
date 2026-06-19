@@ -6,6 +6,7 @@ import { clients, placements, shifts } from "@/lib/db/schema";
 import { findMatchesForShift } from "@/lib/domain/matching";
 import { assertChefsDeployable, type DeployabilityGate } from "@/lib/domain/chef-deployability-gate";
 import { estimateTravel, estimateMargin, eur, type MarginEstimate, type TransportMode } from "@/lib/domain/travel";
+import { summarizeFillBlockers } from "@/lib/domain/fill-blockers";
 import { env } from "@/lib/env";
 import { formatShiftRole } from "@/lib/labels";
 import { OverrideDeployabilityBlock } from "@/components/OverrideDeployabilityBlock";
@@ -93,6 +94,19 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
     }
   }
 
+  // P3 blocker explanation: WHY is a shift WITH candidates still hard to fill? Aggregates
+  // the gate signals the drawer already computed (P3a compliance · P3c margin) + the
+  // matching travel/klant-block warnings. Rich when the matching flags are on; empty when
+  // the candidates are simply fine (then the shift is just open, no blocker line).
+  const fillBlockers = summarizeFillBlockers(
+    matches.map((m) => ({
+      complianceBlocked: gateByChef.get(m.chef.id)?.deployable === false,
+      marginNegative: marginByChef.get(m.chef.id)?.tone === "negative",
+      outOfRadius: m.warnings.some((w) => w.startsWith("Buiten reisafstand")),
+      klantBlocked: m.warnings.includes("door klant geblokkeerd"),
+    })),
+  );
+
   return (
     <div className="space-y-4">
       {/* Header / context */}
@@ -109,13 +123,23 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
         <p className="mt-1 text-xs text-ink-500">Wat gebeurt er nu? Stel een chef voor — die krijgt direct de aanvraag.</p>
       </div>
 
-      {/* Blocker line (why not solved instantly) */}
-      {matches.length === 0 && (
+      {/* Blocker line (why not solved instantly) — zero matches, OR candidates exist but
+          the gates flag why it's hard (compliance / klant-block / reisafstand / marge). */}
+      {matches.length === 0 ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <span className="font-medium">Waarom nog niet opgelost?</span> Geen beschikbare match gevonden — verbreed de
           zoektocht, pas het tarief aan, of bekijk de volledige matchlijst.
         </div>
-      )}
+      ) : fillBlockers.length > 0 ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span className="font-medium">Waarom moeilijk te vullen?</span>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            {fillBlockers.map((b) => (
+              <li key={b}>{b}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {/* Action — ranked candidates with one-click Stel voor */}
       {matches.length > 0 && (
