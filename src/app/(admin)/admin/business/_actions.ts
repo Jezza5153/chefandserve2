@@ -35,8 +35,11 @@ export async function proposeFromDashboard(formData: FormData) {
   // domain gate blocks and we flash "geblokkeerd" so the override panel re-renders.
   const overrideReason = String(formData.get("overrideReason") ?? "").trim();
   const override = overrideReason ? { overriddenBy: session.user.id, reason: overrideReason } : undefined;
+  // P3c-2 margin override (auth-resolved actor, never form data).
+  const marginReason = String(formData.get("marginOverrideReason") ?? "").trim();
+  const marginOverride = marginReason ? { overriddenBy: session.user.id, reason: marginReason } : undefined;
 
-  const res = await proposePlacement(shiftId, chefId, { proposedBy: session.user.id, matchScore, override });
+  const res = await proposePlacement(shiftId, chefId, { proposedBy: session.user.id, matchScore, override, marginOverride });
   if (res.status === "blocked") {
     redirect("/admin/business?done=geblokkeerd");
   }

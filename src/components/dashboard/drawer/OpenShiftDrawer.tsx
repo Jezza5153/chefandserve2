@@ -191,8 +191,10 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
                     </ul>
                   )}
                 </div>
-                {/* P3a: blocked chefs lose the one-click button → override-with-reason panel (below). */}
-                {gateByChef.get(m.chef.id)?.deployable === false ? null : (
+                {/* Blocked (P3a) or negative-margin (P3c-2) chefs lose the one-click button →
+                    the matching override-with-reason panel renders below. */}
+                {gateByChef.get(m.chef.id)?.deployable === false ||
+                marginByChef.get(m.chef.id)?.tone === "negative" ? null : (
                   <form action={proposeFromDashboard}>
                     <input type="hidden" name="shiftId" value={shift.id} />
                     <input type="hidden" name="chefId" value={m.chef.id} />
@@ -218,6 +220,23 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
                   />
                 </div>
               )}
+
+              {/* P3c-2 margin guard: negative-margin candidate (not compliance-blocked) → justify
+                  the deliberate loss with a reason (audited placements.margin_override). */}
+              {gateByChef.get(m.chef.id)?.deployable !== false &&
+                marginByChef.get(m.chef.id)?.tone === "negative" && (
+                  <div className="mt-2">
+                    <OverrideDeployabilityBlock
+                      action={proposeFromDashboard}
+                      hidden={{ shiftId: shift.id, chefId: m.chef.id, matchScore: m.score }}
+                      blockers={["marge " + eur(marginByChef.get(m.chef.id)!.marginCents)]}
+                      cta="Stel voor"
+                      heading="Marge negatief — toch voorstellen met reden"
+                      reasonField="marginOverrideReason"
+                      placeholder="Bijv. ‘sleutelklant, accepteren we dit deze keer’"
+                    />
+                  </div>
+                )}
               {/* Contact + outcome logging (DASH-5) — feeds the per-shift timeline */}
               <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-ink-100 pt-2">
                 {m.chef.phone && (
