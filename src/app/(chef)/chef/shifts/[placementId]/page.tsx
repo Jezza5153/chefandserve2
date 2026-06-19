@@ -37,7 +37,7 @@ import {
   enqueueIntegrationEvent,
   recordEmailMessage,
 } from "@/lib/integrations";
-import { MAARTEN_PHONE, tierForShift } from "@/lib/cancellation-severity";
+import { MAARTEN_PHONE, tierForShift, asCancelReason, cancelReasonLabel } from "@/lib/cancellation-severity";
 import { formatShiftRole, formatSegment } from "@/lib/labels";
 import { recordChefEvent, diffSeconds } from "@/lib/chef-events";
 import { recipientsFor } from "@/lib/notifications";
@@ -151,6 +151,7 @@ async function cancel(formData: FormData) {
   const session = await requireAuth();
   const placementId = String(formData.get("placementId") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();
+  const cancelReason = asCancelReason(String(formData.get("cancelReason") ?? ""));
   if (!placementId || reason.length < 5) {
     redirect(`/chef/shifts/${placementId}?error=reason-required`);
   }
@@ -178,6 +179,7 @@ async function cancel(formData: FormData) {
     .set({
       status: "cancelled",
       cancelledAt: new Date(),
+      cancelReason: cancelReason ?? undefined,
       notes: `${prevNotes}[Chef-annulering reden] ${reason}`,
       updatedAt: new Date(),
     })
@@ -210,7 +212,7 @@ async function cancel(formData: FormData) {
     eventType: "shift_cancelled_by_chef",
     entityType: "placement",
     entityId: placementId,
-    payload: { reason, fromStatus: placement.status, shiftId: updated[0].shiftId },
+    payload: { reason, cancelReason, fromStatus: placement.status, shiftId: updated[0].shiftId },
   });
 
   // Load context for emails
@@ -291,7 +293,9 @@ async function cancel(formData: FormData) {
             </p>
             <p>{urgentNote}</p>
             <p>
-              <strong>Reden:</strong> {reason}
+              <strong>Reden:</strong>{" "}
+              {cancelReasonLabel(cancelReason) ? `${cancelReasonLabel(cancelReason)} — ` : ""}
+              {reason}
             </p>
             <p>
               Open shift in admin:{" "}

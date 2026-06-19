@@ -52,3 +52,31 @@ export function urgentCopy(tier: CancellationTier): {
       };
   }
 }
+
+/**
+ * CHEF-PR3 — structured cancel reasons (chef cancels AFTER accepting). One source
+ * of truth for the picker UI + the server-action validation. Stable snake_case
+ * keys (stored in placements.cancel_reason); "verkeerde_info" feeds the
+ * overpromise reports — a wrong brief is not the same as a no-show.
+ */
+export const CANCEL_REASONS = [
+  { key: "ziek", label: "Ziek" },
+  { key: "familie", label: "Familie / noodgeval" },
+  { key: "vervoer", label: "Vervoersprobleem" },
+  { key: "dubbel", label: "Dubbel geboekt" },
+  { key: "verkeerde_info", label: "Brief / info klopte niet" },
+  { key: "anders", label: "Anders" },
+] as const;
+
+const CANCEL_REASON_KEYS = new Set(CANCEL_REASONS.map((r) => r.key));
+
+/** Narrow a raw form value to a valid cancel-reason key (else null). */
+export function asCancelReason(raw: string): string | null {
+  return CANCEL_REASON_KEYS.has(raw as (typeof CANCEL_REASONS)[number]["key"]) ? raw : null;
+}
+
+/** Dutch label for a cancel-reason key (falls back to the key). */
+export function cancelReasonLabel(key: string | null | undefined): string | null {
+  if (!key) return null;
+  return CANCEL_REASONS.find((r) => r.key === key)?.label ?? key;
+}

@@ -1544,6 +1544,10 @@ export const placements = pgTable(
     matchScore: integer("match_score"),
     /** PR-INTEL: structured 1-tap reason a chef declined (te_ver/tijd/bezet/keuken/tarief/anders) — feeds preference signals. */
     declineReason: text("decline_reason"),
+    /** CHEF-PR3: structured reason a chef CANCELLED after accepting
+     *  (ziek/familie/vervoer/dubbel/verkeerde_info/anders) — feeds severity +
+     *  overpromise reports ("verkeerde_info" = brief was wrong ≠ no-show). */
+    cancelReason: text("cancel_reason"),
     /** PR-INTEL-P4: chef's post-shift 1-tap — would they work here again? (null = not asked). */
     chefReturnSignal: boolean("chef_return_signal"),
 
