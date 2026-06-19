@@ -1624,6 +1624,8 @@ export const shiftSignalKindEnum = pgEnum("shift_signal_kind", [
   // CHEF-PR4 during-shift (appended — array order = DB order, never reorder):
   "langer_doorwerken", // chef works past the planned end → early billing/overpromise signal
   "geen_pauze", // chef flags no break was possible (protects the chef, feeds reports)
+  // CHEF-PR3 (R2#14): manual arrival proof (distinct from the on-device Arrival Trust).
+  "al_op_locatie", // chef confirms they're at the location (works without GPS / before the 20-min window)
 ]);
 
 export const shiftSignals = pgTable(
