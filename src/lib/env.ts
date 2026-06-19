@@ -238,6 +238,12 @@ const serverSchema = z.object({
   // + notify the owner (safety = urgent push). Default off (dark-launch).
   SHIFT_SIGNALS_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // P4a — Emergency mode foundation. When on, on-page detection (P4b) opens escalations
+  // + shows the dashboard red banner. The read-model + idempotent CRUD ship dark behind
+  // this (no caller yet); the chef_signal trigger is additionally gated on
+  // SHIFT_SIGNALS_ENABLED. Default off.
+  EMERGENCY_MODE_ENABLED: z.enum(["true", "false"]).optional(),
+
   // CHEF-PR4 — shift-relative reminders (~24h/2h/15min before a confirmed shift).
   // When on, a 15-min ticker POSTs /api/cron/shift-reminders, which reminds the chef
   // (in-app always; push for 2h+start), once per tier. Default off (dark-launch).
