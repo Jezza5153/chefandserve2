@@ -75,6 +75,17 @@ export const placementsConfirm = defineTool({
       actorUserId: ctx.actor.requestedByUserId,
       expectedStatus: "accepted", // the description promises accepted-only; enforce it atomically
     });
+    // P3a-2: a compliance-blocked chef can't be confirmed from the AI path — the tool
+    // has no override field, so the model can't bypass. Surface PII-free Dutch labels.
+    if (!res.ok && res.reason === "blocked") {
+      return {
+        data: { id: input.placementId, status: "blocked", blockers: res.blockers ?? [] },
+        summary:
+          "Niet bevestigd — deze chef is niet inzetbaar: " +
+          (res.blockers ?? []).join(", ") +
+          ". Een mens moet dit met reden vrijgeven; ik kan dat niet zelf.",
+      };
+    }
     if (!res.ok) throw new Error(res.reason);
     if (!res.changed) {
       return { data: { id: input.placementId, changed: false }, summary: "Niet bevestigd — deze plaatsing is niet (meer) in status 'geaccepteerd' (al bevestigd, afgewezen of geannuleerd)." };

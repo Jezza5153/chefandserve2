@@ -28,7 +28,7 @@ import {
   findMatchesForShift,
   proposePlacement,
 } from "@/lib/domain/matching";
-import { assertChefsDeployable } from "@/lib/domain/chef-deployability-gate";
+import { assertChefDeployable, assertChefsDeployable } from "@/lib/domain/chef-deployability-gate";
 import { env } from "@/lib/env";
 import {
   cancelShiftAndPlacements,
@@ -69,11 +69,13 @@ export default async function ShiftDetailPage({
   const flash =
     sp.info === "al-voorgesteld"
       ? { tone: "info" as const, text: "Deze chef is al voorgesteld voor deze dienst." }
-      : sp.ok === "cancelled"
-        ? { tone: "ok" as const, text: "Dienst geannuleerd. Bevestigde chefs zijn op de hoogte gebracht." }
-        : sp.err === "already-cancelled"
-          ? { tone: "err" as const, text: "Deze dienst was al geannuleerd." }
-          : null;
+      : sp.info === "geblokkeerd" || sp.err === "geblokkeerd"
+        ? { tone: "err" as const, text: "Deze chef is niet inzetbaar (VOG/ID/contract). Los het blokkeerpunt op, of geef vrij met reden." }
+        : sp.ok === "cancelled"
+          ? { tone: "ok" as const, text: "Dienst geannuleerd. Bevestigde chefs zijn op de hoogte gebracht." }
+          : sp.err === "already-cancelled"
+            ? { tone: "err" as const, text: "Deze dienst was al geannuleerd." }
+            : null;
 
   const shift = await db.query.shifts.findFirst({
     where: eq(shifts.id, id),
@@ -397,6 +399,36 @@ export default async function ShiftDetailPage({
       await assertImpersonationAllowed();
     }
 
+    // P3a-2 compliance gate (dark-launched) on this page's inline confirm path — mirrors
+    // the transitionPlacement gate so a non-deployable chef can't be confirmed here either,
+    // unless a human re-affirms with a reason. Only → confirmed. The override audit is
+    // stamped here (async, reads cookies) but RECORDED inside the tx below, so it commits
+    // atomically with the confirm — never an orphan row for a no-op confirm.
+    let overrideBase: Parameters<typeof recordAuditCore>[0] | null = null;
+    if (env.COMPLIANCE_HARDGATE_ENABLED === "true" && newStatus === "confirmed") {
+      const [pl] = await db
+        .select({ chefId: placements.chefId })
+        .from(placements)
+        .where(eq(placements.id, placementId))
+        .limit(1);
+      if (pl?.chefId) {
+        const gate = await assertChefDeployable(pl.chefId);
+        if (!gate.deployable) {
+          const reason = String(formData.get("overrideReason") ?? "").trim();
+          if (reason.length < 10) {
+            redirect(`/admin/business/shifts/${id}?err=geblokkeerd`);
+          }
+          overrideBase = await stampFromRequest({
+            userId: session.user.id,
+            action: "placements.compliance_override",
+            resource: "placements",
+            resourceId: placementId,
+            after: { reason, blockers: gate.blockers, phase: "confirm" },
+          });
+        }
+      }
+    }
+
     const setMap: Record<string, Date> = {
       accepted: new Date(),
       confirmed: new Date(),
@@ -437,6 +469,9 @@ export default async function ShiftDetailPage({
       if (updated.length === 0) return; // terminal/stale — no-op
       changed = true;
       await recordAuditCore(auditBase, tx);
+      // P3a-2: the compliance-override audit commits in the SAME tx as the confirm, so it
+      // never persists for a no-op (terminal/stale) confirm.
+      if (overrideBase) await recordAuditCore(overrideBase, tx);
       // Backbone follows the placements: advance the shift to filled/open in the
       // SAME tx so its status never drifts from reality.
       await recomputeShiftStatus(id, tx);

@@ -89,12 +89,17 @@ export default async function PlanningPage({
     const session = await requirePermission("shifts", "write");
     const placementId = String(formData.get("placementId") ?? "").trim();
     if (!placementId) throw new Error("placementId ontbreekt");
+    // P3a-2 compliance override at confirm (auth-resolved actor, never form data).
+    const overrideReason = String(formData.get("overrideReason") ?? "").trim();
+    const override = overrideReason ? { overriddenBy: session.user.id, reason: overrideReason } : undefined;
     const res = await transitionPlacement({
       placementId,
       newStatus: "confirmed",
       actorUserId: session.user.id,
       expectedStatus: "accepted", // house rule: stale/double clicks become a clean no-op, never a duplicate mail-cascade
+      override,
     });
+    if (!res.ok && res.reason === "blocked") redirect("/admin/planning?ok=geblokkeerd");
     redirect(`/admin/planning?ok=${res.ok && res.changed ? "bevestigd" : "niet-bevestigd"}`);
   }
 
@@ -133,12 +138,14 @@ export default async function PlanningPage({
       {sp.ok ? (
         <p
           className={`mt-4 rounded border px-4 py-2 text-sm ${
-            sp.ok === "niet-bevestigd"
+            sp.ok === "niet-bevestigd" || sp.ok === "geblokkeerd"
               ? "border-amber-300 bg-amber-50 text-amber-800"
               : "border-emerald-200 bg-emerald-50 text-emerald-800"
           }`}
         >
-          {sp.ok === "al-voorgesteld" ? (
+          {sp.ok === "geblokkeerd" ? (
+            "Niet doorgevoerd — deze kok is niet inzetbaar (VOG/ID/contract). Los het blokkeerpunt op, of geef vrij met reden via het dashboard."
+          ) : sp.ok === "al-voorgesteld" ? (
             "Deze kok was al voorgesteld voor die dienst — geen dubbel voorstel verstuurd."
           ) : sp.ok === "bevestigd" ? (
             "✓ Plaatsing bevestigd — chef en klant zijn op de hoogte gebracht."

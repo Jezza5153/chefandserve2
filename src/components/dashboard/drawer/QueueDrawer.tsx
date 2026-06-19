@@ -3,7 +3,10 @@ import { asc, desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { chefs, clients, placements, shiftHours, shifts } from "@/lib/db/schema";
+import { assertChefsDeployable } from "@/lib/domain/chef-deployability-gate";
+import { env } from "@/lib/env";
 import { formatShiftRole } from "@/lib/labels";
+import { OverrideDeployabilityBlock } from "@/components/OverrideDeployabilityBlock";
 import { confirmFromDashboard, approveHoursFromDashboard } from "@/app/(admin)/admin/business/_actions";
 
 /** The aggregate-count signals open a queue: list the items + a per-row in-place action. */
@@ -23,6 +26,7 @@ async function AcceptedUnconfirmed() {
   const rows = await db
     .select({
       placementId: placements.id,
+      chefId: placements.chefId,
       chefName: chefs.fullName,
       companyName: clients.companyName,
       roleNeeded: shifts.roleNeeded,
@@ -38,16 +42,38 @@ async function AcceptedUnconfirmed() {
 
   if (rows.length === 0) return <Empty>Niets meer te bevestigen — alles is rond.</Empty>;
 
+  // P3a-2: per-row deployability (flag-gated, one batched read). Blocked chefs can't be
+  // confirmed one-click → the override-with-reason panel replaces the Bevestig button.
+  const gateByChef =
+    env.COMPLIANCE_HARDGATE_ENABLED === "true"
+      ? await assertChefsDeployable(rows.map((r) => r.chefId).filter((id): id is string => Boolean(id)))
+      : new Map();
+
   return (
     <Wrap intro="Chef zei ja — bevestig met de klant zodat de dienst rond is.">
-      {rows.map((r) => (
-        <Row key={r.placementId} title={r.chefName ?? "Chef"} sub={`${r.companyName ?? "Klant"} · ${formatShiftRole(r.roleNeeded)} · ${dateLabel(r.startsAt)}`}>
-          <form action={confirmFromDashboard}>
-            <input type="hidden" name="placementId" value={r.placementId} />
-            <Action>Bevestig</Action>
-          </form>
-        </Row>
-      ))}
+      {rows.map((r) => {
+        const sub = `${r.companyName ?? "Klant"} · ${formatShiftRole(r.roleNeeded)} · ${dateLabel(r.startsAt)}`;
+        const gate = r.chefId ? gateByChef.get(r.chefId) : undefined;
+        if (gate && !gate.deployable) {
+          return (
+            <li key={r.placementId} className="rounded-lg border border-ink-200 bg-white p-3">
+              <p className="truncate font-serif text-sm text-ink-900">{r.chefName ?? "Chef"}</p>
+              <p className="truncate text-xs text-ink-500">{sub}</p>
+              <div className="mt-2">
+                <OverrideDeployabilityBlock action={confirmFromDashboard} hidden={{ placementId: r.placementId }} blockers={gate.blockers} cta="Bevestig" />
+              </div>
+            </li>
+          );
+        }
+        return (
+          <Row key={r.placementId} title={r.chefName ?? "Chef"} sub={sub}>
+            <form action={confirmFromDashboard}>
+              <input type="hidden" name="placementId" value={r.placementId} />
+              <Action>Bevestig</Action>
+            </form>
+          </Row>
+        );
+      })}
     </Wrap>
   );
 }

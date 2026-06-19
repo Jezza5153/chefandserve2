@@ -17,6 +17,7 @@ import { db } from "@/lib/db/client";
 import { withTx } from "@/lib/db/tx";
 import { recordAuditCore } from "@/lib/audit";
 import { chefs, clients, placements, shifts } from "@/lib/db/schema";
+import { assertChefDeployable } from "@/lib/domain/chef-deployability-gate";
 import { recomputeShiftStatus } from "@/lib/domain/shift-status";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { sendReplacementHandover } from "@/lib/domain/replacement-handover";
@@ -30,7 +31,8 @@ type TransitionStatus = "accepted" | "confirmed" | "rejected" | "cancelled";
 
 export type TransitionResult =
   | { ok: true; changed: boolean }
-  | { ok: false; reason: string };
+  /** reason==='blocked' → P3a-2 compliance gate refused a confirm; blockers are PII-free labels. */
+  | { ok: false; reason: string; blockers?: string[] };
 
 export async function transitionPlacement(args: {
   placementId: string;
@@ -40,9 +42,38 @@ export async function transitionPlacement(args: {
    *  EXACTLY this status — a stale/double click (or an already-confirmed row) becomes a clean
    *  changed:false instead of re-firing the notify/email cascade. Optional for back-compat. */
   expectedStatus?: "proposed" | "accepted" | "confirmed";
+  /** P3a-2 compliance override: confirm a non-deployable chef WITH a reason (audited).
+   *  overriddenBy is the auth-resolved actor — NEVER form data. */
+  override?: { overriddenBy: string; reason: string };
 }): Promise<TransitionResult> {
   const now = new Date();
   let changed = false;
+
+  // P3a-2 compliance HARD-GATE at the financial commit (dark-launched). A chef whose
+  // deployability verdict is 'blocked' can't be CONFIRMED unless a human re-affirms WITH
+  // a reason (the confirm is the financial commitment, so re-affirming here is correct,
+  // not redundant). Only gates → confirmed; cancel/reject are never blocked. Flag off →
+  // no extra query, behaviour unchanged.
+  let overrodeBlock = false;
+  let overrideBlockers: string[] = [];
+  if (env.COMPLIANCE_HARDGATE_ENABLED === "true" && args.newStatus === "confirmed") {
+    const [pl] = await db
+      .select({ chefId: placements.chefId })
+      .from(placements)
+      .where(eq(placements.id, args.placementId))
+      .limit(1);
+    if (pl?.chefId) {
+      const gate = await assertChefDeployable(pl.chefId);
+      if (!gate.deployable) {
+        const reason = args.override?.reason?.trim() ?? "";
+        if (!args.override || reason.length < 10) {
+          return { ok: false, reason: "blocked", blockers: gate.blockers };
+        }
+        overrodeBlock = true;
+        overrideBlockers = gate.blockers;
+      }
+    }
+  }
   let priorStatus: string | null = null;
 
   await withTx(async (tx) => {
@@ -82,6 +113,20 @@ export async function transitionPlacement(args: {
       },
       tx,
     );
+    // P3a-2: a second audit row when a human confirmed a non-deployable chef with a
+    // reason (labels only, no PII) — same tx as the confirm.
+    if (overrodeBlock && args.override) {
+      await recordAuditCore(
+        {
+          userId: args.override.overriddenBy,
+          action: "placements.compliance_override",
+          resource: "placements",
+          resourceId: args.placementId,
+          after: { reason: args.override.reason.trim(), blockers: overrideBlockers, phase: "confirm" },
+        },
+        tx,
+      );
+    }
     await recomputeShiftStatus(updated[0]!.shiftId, tx);
   });
 

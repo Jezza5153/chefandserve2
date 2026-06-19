@@ -200,7 +200,7 @@ export async function clearDraftsForPeriod(args: {
  * the chef + klant confirmation mails). Sequential + best-effort; a stale row
  * just no-ops (changed=false).
  */
-export type ConfirmResult = { confirmed: number; total: number };
+export type ConfirmResult = { confirmed: number; total: number; blocked: number };
 
 export async function confirmAcceptedForPeriod(args: {
   startUtc: Date;
@@ -219,15 +219,22 @@ export async function confirmAcceptedForPeriod(args: {
       ),
     );
   let confirmed = 0;
+  let blocked = 0;
   for (const a of accepted) {
+    // No override possible in a batch (no human reason) → P3a-2: a compliance-blocked
+    // chef returns ok:false reason:'blocked' and is SKIPPED (not auto-confirmed), counted
+    // so the planner can see it rather than it vanishing silently.
     const res = await transitionPlacement({
       placementId: a.placementId,
       newStatus: "confirmed",
       actorUserId: args.actorUserId,
+      expectedStatus: "accepted", // house rule (matches the 3 sibling confirm callers): a row that
+      // changed since the select resolves to changed:false, never a duplicate mail-cascade.
     });
     if (res.ok && res.changed) confirmed++;
+    else if (!res.ok && res.reason === "blocked") blocked++;
   }
-  return { confirmed, total: accepted.length };
+  return { confirmed, total: accepted.length, blocked };
 }
 
 /* ----- weekly publish digests (PR-PLANBORD-2) ------------------------------ */
