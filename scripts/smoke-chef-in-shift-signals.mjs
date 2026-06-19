@@ -34,8 +34,9 @@ ok(`shift_signals columns present (${cols.length}/7)`, cols.length === 7);
 const kinds = await sql`
   SELECT e.enumlabel v FROM pg_type t JOIN pg_enum e ON e.enumtypid=t.oid
   WHERE t.typname='shift_signal_kind' ORDER BY e.enumsortorder`;
-ok("kind enum = onderweg/vertraagd/hulp/onveilig/kan_niet_starten",
-  kinds.map((r) => r.v).join(",") === "onderweg,vertraagd,hulp,onveilig,kan_niet_starten");
+ok("kind enum = 5 base + 2 during-shift (langer_doorwerken, geen_pauze) appended",
+  kinds.map((r) => r.v).join(",") ===
+    "onderweg,vertraagd,hulp,onveilig,kan_niet_starten,langer_doorwerken,geen_pauze");
 
 // 2 — ownership gate (mirror recordShiftSignal): owned placement, accepted/confirmed.
 const canSignal = (ownedByChef, status) =>
