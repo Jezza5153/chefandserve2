@@ -1617,6 +1617,9 @@ export const shiftSignalKindEnum = pgEnum("shift_signal_kind", [
   "hulp",
   "onveilig",
   "kan_niet_starten",
+  // CHEF-PR4 during-shift (appended — array order = DB order, never reorder):
+  "langer_doorwerken", // chef works past the planned end → early billing/overpromise signal
+  "geen_pauze", // chef flags no break was possible (protects the chef, feeds reports)
 ]);
 
 export const shiftSignals = pgTable(

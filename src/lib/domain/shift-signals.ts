@@ -19,7 +19,14 @@ import { env } from "@/lib/env";
 import { createNotification, notifyUser } from "@/lib/integrations";
 import { amsterdamDayKey } from "@/lib/roster-format";
 
-export type ShiftSignalKind = "onderweg" | "vertraagd" | "hulp" | "onveilig" | "kan_niet_starten";
+export type ShiftSignalKind =
+  | "onderweg"
+  | "vertraagd"
+  | "hulp"
+  | "onveilig"
+  | "kan_niet_starten"
+  | "langer_doorwerken"
+  | "geen_pauze";
 
 export function shiftSignalsEnabled(): boolean {
   return env.SHIFT_SIGNALS_ENABLED === "true";
@@ -66,6 +73,18 @@ export const SHIFT_SIGNAL_UI: {
     ],
   },
   { kind: "onveilig", label: "Ik voel me niet veilig / niet correct behandeld", urgent: true },
+  {
+    kind: "langer_doorwerken",
+    label: "Ik werk langer door",
+    urgent: false,
+    options: [
+      { key: "min_30", label: "± 30 min langer" },
+      { key: "uur_1", label: "± 1 uur langer" },
+      { key: "klant_vraagt", label: "Klant vraagt extra" },
+      { key: "onbekend", label: "Weet nog niet hoelang" },
+    ],
+  },
+  { kind: "geen_pauze", label: "Geen pauze mogelijk", urgent: false },
 ];
 
 const VALID_KINDS = new Set(SHIFT_SIGNAL_UI.map((o) => o.kind));
@@ -174,7 +193,11 @@ async function notifyOwner(
           ? `${who} vraagt hulp — ${where}`
           : kind === "vertraagd"
             ? `${who} is vertraagd — ${where}`
-            : `${who} is onderweg — ${where}`;
+            : kind === "langer_doorwerken"
+              ? `${who} werkt langer door — ${where}`
+              : kind === "geen_pauze"
+                ? `${who} had geen pauze — ${where}`
+                : `${who} is onderweg — ${where}`;
   const body = `${when}${detailLabel ? ` · ${detailLabel}` : ""}`;
 
   const payload = {

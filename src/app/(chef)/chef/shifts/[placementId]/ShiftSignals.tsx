@@ -47,6 +47,18 @@ const SIGNALS: SignalDef[] = [
       { key: "anders", label: "Anders" },
     ],
   },
+  {
+    kind: "langer_doorwerken",
+    label: "Ik werk langer door",
+    urgent: false,
+    options: [
+      { key: "min_30", label: "± 30 min langer" },
+      { key: "uur_1", label: "± 1 uur langer" },
+      { key: "klant_vraagt", label: "Klant vraagt extra" },
+      { key: "onbekend", label: "Weet nog niet hoelang" },
+    ],
+  },
+  { kind: "geen_pauze", label: "Geen pauze mogelijk", urgent: false },
   { kind: "onveilig", label: "Ik voel me niet veilig / niet correct behandeld", urgent: true },
 ];
 
