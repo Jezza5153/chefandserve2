@@ -110,6 +110,35 @@ export async function getChefReliability(chefId: string): Promise<ChefReliabilit
   };
 }
 
+/**
+ * CHEF-PR0/PR6: warm, NON-NUMERIC trust status for the chef's own dashboard.
+ * Turns behaviour signals into encouraging Dutch labels ("Reageert snel", "Vaak
+ * inzetbaar") — never a raw score (AVG: internal reliability stays internal; the
+ * chef sees warmth, not "73%"). The diensten-count is the chef's own factual
+ * total, not a score. Empty when there's no history yet.
+ */
+export type ChefWarmStatus = { headline: string | null; labels: string[] };
+
+export async function getChefWarmStatus(chefId: string): Promise<ChefWarmStatus> {
+  const r = await getChefReliability(chefId);
+  const labels: string[] = [];
+
+  if (r.avgResponseMinutes != null && r.avgResponseMinutes <= 120) labels.push("Reageert snel");
+
+  const proposals = r.proposalsAccepted + r.proposalsRejected;
+  if (proposals >= 3 && r.acceptanceRate != null && r.acceptanceRate >= 0.7) {
+    labels.push("Vaak inzetbaar");
+  }
+  if (r.hoursSubmitted >= 3 && r.cancellations === 0) labels.push("Altijd komen opdagen");
+  if (r.hoursSubmitted >= 1) {
+    labels.push(`${r.hoursSubmitted} ${r.hoursSubmitted === 1 ? "dienst" : "diensten"} gedraaid`);
+  }
+
+  const headline =
+    labels.length >= 2 ? "Je profiel is sterk" : labels.length === 1 ? "Goed bezig" : null;
+  return { headline, labels };
+}
+
 /** The two reliability signals the matcher folds in — kept minimal for batch loading. */
 export type ChefReliabilitySignal = {
   /** accepted / (accepted + rejected); null when there are no proposals yet. */
