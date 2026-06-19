@@ -238,6 +238,11 @@ const serverSchema = z.object({
   // + notify the owner (safety = urgent push). Default off (dark-launch).
   SHIFT_SIGNALS_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-PR4 — shift-relative reminders (~24h/2h/15min before a confirmed shift).
+  // When on, a 15-min ticker POSTs /api/cron/shift-reminders, which reminds the chef
+  // (in-app always; push for 2h+start), once per tier. Default off (dark-launch).
+  SHIFT_REMINDERS_ENABLED: z.enum(["true", "false"]).optional(),
+
   // CHEF-PR3 — Aankomstzekerheid (Arrival Trust). When on, the PWA does an on-device
   // 1km arrival check in the 20 min before a shift (sends only the result, never
   // coordinates). Default off — go-live needs an AVG/DPIA sign-off.
