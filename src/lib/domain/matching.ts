@@ -773,7 +773,17 @@ const OVERRIDE_MIN_REASON = 10;
 export async function proposePlacement(
   shiftId: string,
   chefId: string,
-  options: { proposedBy: string; matchScore?: number; notes?: string; override?: ProposeOverride },
+  options: {
+    proposedBy: string;
+    matchScore?: number;
+    notes?: string;
+    /** P3a compliance override (hard-gate). */
+    override?: ProposeOverride;
+    /** P3c-2 margin override: a human knowingly proposes a NEGATIVE-margin placement WITH
+     *  a reason. Audit-only (margin is a business prompt, not a security gate) — recorded
+     *  as placements.margin_override; the propose itself is never blocked on margin. */
+    marginOverride?: ProposeOverride;
+  },
 ): Promise<ProposeResult> {
   // Friendly guard: a still-active row means the chef is already on the table
   // for this shift. Don't reset it, don't notify twice — just report it back.
@@ -858,6 +868,19 @@ export async function proposePlacement(
       resourceId: placement.id,
       after: { reason: options.override.reason.trim(), blockers: overrideBlockers, phase: "propose" },
     }).catch((e) => console.error("[propose] override audit failed:", e));
+  }
+
+  // P3c-2: record a margin override (a human knowingly proposed at negative margin with a
+  // reason). Audit-only — margin is a business judgement, not a hard gate; the propose
+  // already happened. Creates the deliberate-loss trail. No PII.
+  if (options.marginOverride && options.marginOverride.reason.trim().length >= OVERRIDE_MIN_REASON) {
+    await recordAuditCore({
+      userId: options.marginOverride.overriddenBy,
+      action: "placements.margin_override",
+      resource: "placements",
+      resourceId: placement.id,
+      after: { reason: options.marginOverride.reason.trim(), phase: "propose" },
+    }).catch((e) => console.error("[propose] margin override audit failed:", e));
   }
 
   // Move shift to "open" if it was still in "request"
