@@ -23,6 +23,12 @@ import {
   recordShiftSignal,
   shiftSignalsEnabled,
 } from "@/lib/domain/shift-signals";
+import {
+  asChefClientPref,
+  getChefClientPref,
+  setChefClientPref,
+  CHEF_CLIENT_PREF_OPTIONS,
+} from "@/lib/domain/chef-client-prefs";
 import { db } from "@/lib/db/client";
 import {
   chefs,
@@ -395,6 +401,25 @@ async function recordSignal(formData: FormData) {
   redirect(`/chef/shifts/${placementId}?ok=signal`);
 }
 
+/* -------- server action: chef→klant preference (CHEF-PR1) ------------ */
+
+async function setClientPref(formData: FormData) {
+  "use server";
+  const session = await requireAuth();
+  const placementId = String(formData.get("placementId") ?? "");
+  const clientId = String(formData.get("clientId") ?? "");
+  const raw = String(formData.get("pref") ?? "");
+  const pref = raw === "none" ? null : asChefClientPref(raw);
+  if (!placementId || !clientId || (raw !== "none" && pref === null)) {
+    redirect(`/chef/shifts/${placementId}`);
+  }
+  // Auth IS the lookup — only the owning chef may set their own preference.
+  const chef = await db.query.chefs.findFirst({ where: eq(chefs.userId, session.user.id) });
+  if (!chef) redirect("/chef");
+  await setChefClientPref({ chefId: chef.id, clientId, pref });
+  redirect(`/chef/shifts/${placementId}?ok=pref`);
+}
+
 /* -------- page ------------------------------------------------------- */
 
 export default async function ChefShiftDetailPage({
@@ -477,6 +502,12 @@ export default async function ChefShiftDetailPage({
   const isPastWorked =
     new Date(shift.endsAt).getTime() < Date.now() &&
     ["accepted", "confirmed", "completed"].includes(placement.status);
+
+  // CHEF-PR1: the chef can set a preference for THIS klant once they've engaged
+  // (accepted/confirmed/completed). Feeds matching (soft, flag-gated).
+  const canSetClientPref =
+    !!chef && !!client && ["accepted", "confirmed", "completed"].includes(placement.status);
+  const clientPref = canSetClientPref ? await getChefClientPref(chef!.id, client!.id) : null;
 
   return (
     <div>
@@ -703,6 +734,17 @@ export default async function ChefShiftDetailPage({
         />
       )}
 
+      {/* CHEF-PR1: chef→klant preference (favourite / liever niet meer / alleen ...) */}
+      {canSetClientPref && client ? (
+        <ClientPrefSection
+          placementId={placement.id}
+          clientId={client.id}
+          clientName={client.companyName}
+          current={clientPref}
+          action={setClientPref}
+        />
+      ) : null}
+
       {/* Berichten — chef-visible messages from Chef & Serve on this placement */}
       {messages.length > 0 ? (
         <section className="mt-8">
@@ -761,6 +803,59 @@ function labelFor(status: string): string {
       no_show: "No-show",
     } as Record<string, string>
   )[status] ?? status;
+}
+
+function ClientPrefSection({
+  placementId,
+  clientId,
+  clientName,
+  current,
+  action,
+}: {
+  placementId: string;
+  clientId: string;
+  clientName: string;
+  current: string | null;
+  action: (formData: FormData) => Promise<void>;
+}) {
+  // One-tap option buttons (each its own form); the active one is highlighted.
+  const opts: { key: string; label: string }[] = [
+    { key: "none", label: "Geen voorkeur" },
+    ...CHEF_CLIENT_PREF_OPTIONS,
+  ];
+  return (
+    <section className="mt-8 rounded-lg border border-ink-200 bg-white p-5">
+      <h2 className="font-serif text-xl text-ink-900">Voorkeur voor {clientName}</h2>
+      <p className="mt-1 text-sm text-ink-700">
+        Alleen Maarten ziet dit — het helpt om je naar de juiste plekken te sturen.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {opts.map((o) => {
+          const active = (current ?? "none") === o.key;
+          const danger = o.key === "block";
+          return (
+            <form action={action} key={o.key}>
+              <input type="hidden" name="placementId" value={placementId} />
+              <input type="hidden" name="clientId" value={clientId} />
+              <input type="hidden" name="pref" value={o.key} />
+              <button
+                type="submit"
+                className={`rounded-full px-4 py-2 text-xs font-medium ${
+                  active
+                    ? danger
+                      ? "bg-burgundy text-white"
+                      : "bg-emerald-600 text-white"
+                    : "border border-ink-200 bg-white text-ink-700 hover:bg-bg-gray"
+                }`}
+              >
+                {o.label}
+              </button>
+            </form>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function ReturnSignalSection({

@@ -26,6 +26,7 @@ import { recordAuditCore } from "@/lib/audit";
 import { assertChefDeployable } from "@/lib/domain/chef-deployability-gate";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { skillTagLabel, skillTagOverlap } from "@/lib/domain/skill-tags";
+import { getClientPrefsForChefs, type ChefClientPrefKind } from "@/lib/domain/chef-client-prefs";
 import { type LatLng } from "@/lib/domain/geo";
 import { estimateTravel } from "@/lib/domain/travel";
 import { sendEmail, formatShiftWhen } from "@/lib/email";
@@ -263,6 +264,38 @@ function reliabilityAdjust(
 
   // Keep the boost from inflating past the 0..100 band the planner expects.
   return { score: Math.min(100, Math.round(base * factor)), reasons, warnings };
+}
+
+/**
+ * CHEF-PR1: SOFT, flag-gated chef→klant preference. The chef told us how they feel
+ * about THIS klant; nudge ranking accordingly. Never a hard exclude (the planner
+ * decides). Gated by MATCHING_PREFS_ENABLED (the chef-prefs flag). Reasons are
+ * klant-safe-ish but live in `warnings` when they signal reluctance (internal-only).
+ */
+function chefClientPrefAdjust(
+  base: number,
+  pref: ChefClientPrefKind | undefined,
+  isEmergency: boolean,
+): { score: number; reasons: string[]; warnings: string[] } {
+  if (env.MATCHING_PREFS_ENABLED !== "true" || !pref) {
+    return { score: base, reasons: [], warnings: [] };
+  }
+  switch (pref) {
+    case "favourite":
+      return { score: Math.min(100, Math.round(base * 1.1)), reasons: ["Werkt hier graag"], warnings: [] };
+    case "block":
+      return { score: Math.round(base * 0.2), reasons: [], warnings: ["Chef wil hier liever niet meer heen"] };
+    case "only_emergency":
+      return isEmergency
+        ? { score: base, reasons: [], warnings: [] }
+        : { score: Math.round(base * 0.3), reasons: [], warnings: ["Chef: alleen bij spoed hier"] };
+    case "only_better_brief":
+      return { score: Math.round(base * 0.7), reasons: [], warnings: ["Chef: alleen met een betere briefing"] };
+    case "only_higher_rate":
+      return { score: Math.round(base * 0.7), reasons: [], warnings: ["Chef: alleen tegen een hoger tarief"] };
+    default:
+      return { score: base, reasons: [], warnings: [] };
+  }
 }
 
 /**
@@ -621,6 +654,13 @@ export async function findMatchesForShift(
       ? await getReliabilityForChefs(candidateChefs.map((c) => c.id))
       : new Map<string, ChefReliabilitySignal>();
 
+  // CHEF-PR1: batch-load each candidate's chef→klant preference for THIS klant
+  // (flag-gated; skip the query when off).
+  const chefClientPrefByChef =
+    env.MATCHING_PREFS_ENABLED === "true"
+      ? await getClientPrefsForChefs(shift.clientId, candidateChefs.map((c) => c.id))
+      : new Map<string, ChefClientPrefKind>();
+
   // 5. Score remaining candidates
   const results: MatchResult[] = [];
   for (const chef of candidateChefs) {
@@ -666,9 +706,12 @@ export async function findMatchesForShift(
     // CHEF-PR5: soft, flag-gated skill-tag ∩ client-requirement-tag boost (default off = no-op).
     const tag = tagsAdjust(rel.score, chef.skillTags, matchClient?.clientTags);
 
+    // CHEF-PR1: soft, flag-gated chef→klant preference (favourite/block/only-*) (default off = no-op).
+    const ccp = chefClientPrefAdjust(tag.score, chefClientPrefByChef.get(chef.id), shift.isEmergency === true);
+
     results.push({
       chef,
-      score: tag.score,
+      score: ccp.score,
       scoreBreakdown: { vakniveau: v, segment: s, experience: e },
       // P3b annotations match the existing Dutch strings so the shift-detail
       // allWarnings Set dedupes "door klant geblokkeerd" against staffing-intelligence.
@@ -677,12 +720,14 @@ export async function findMatchesForShift(
         ...adj.reasons,
         ...rel.reasons,
         ...tag.reasons,
+        ...ccp.reasons,
         ...(favoriteSet.has(chef.id) ? ["klant-favoriet"] : []),
       ],
       warnings: [
         ...warnings,
         ...adj.warnings,
         ...rel.warnings,
+        ...ccp.warnings,
         ...(klantBlockedSet.has(chef.id) ? ["door klant geblokkeerd"] : []),
       ],
     });
