@@ -120,6 +120,10 @@ const JOBS: Job[] = [
   // + PR-4a review flags as ONE owner notification (notify-only, owner-only, one per
   // day). GATED via CLOCKOUT_DIGEST_ENABLED. Default OFF.
   { name: "clockout-digest", schedule: "0 8 * * *", script: "clockout-digest.ts" },
+  // CHEF-PR4 shift-relative reminders (every 15 min). Thin: POSTs /api/cron/shift-reminders
+  // which reminds the chef ~24h/2h/15min before a confirmed shift (once per tier, in-app +
+  // push for the urgent tiers). GATED via SHIFT_REMINDERS_ENABLED. Default OFF.
+  { name: "shift-reminders", schedule: "*/15 * * * *", script: "shift-reminders.ts" },
 ];
 
 function ts(): string {
