@@ -1,0 +1,1 @@
+ALTER TYPE "public"."shift_signal_kind" ADD VALUE IF NOT EXISTS 'al_op_locatie';

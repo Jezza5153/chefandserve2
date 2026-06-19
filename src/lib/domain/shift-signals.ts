@@ -26,7 +26,8 @@ export type ShiftSignalKind =
   | "onveilig"
   | "kan_niet_starten"
   | "langer_doorwerken"
-  | "geen_pauze";
+  | "geen_pauze"
+  | "al_op_locatie";
 
 export function shiftSignalsEnabled(): boolean {
   return env.SHIFT_SIGNALS_ENABLED === "true";
@@ -85,6 +86,7 @@ export const SHIFT_SIGNAL_UI: {
     ],
   },
   { kind: "geen_pauze", label: "Geen pauze mogelijk", urgent: false },
+  { kind: "al_op_locatie", label: "Ik ben al op locatie", urgent: false },
 ];
 
 const VALID_KINDS = new Set(SHIFT_SIGNAL_UI.map((o) => o.kind));
@@ -197,7 +199,9 @@ async function notifyOwner(
               ? `${who} werkt langer door — ${where}`
               : kind === "geen_pauze"
                 ? `${who} had geen pauze — ${where}`
-                : `${who} is onderweg — ${where}`;
+                : kind === "al_op_locatie"
+                  ? `${who} is op locatie — ${where}`
+                  : `${who} is onderweg — ${where}`;
   const body = `${when}${detailLabel ? ` · ${detailLabel}` : ""}`;
 
   const payload = {

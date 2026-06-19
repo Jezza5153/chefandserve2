@@ -484,6 +484,13 @@
       "when": 1781908572484,
       "tag": "0068_chef_pr1_client_prefs",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1781910608154,
+      "tag": "0069_chef_pr3_at_location_signal",
+      "breakpoints": true
     }
   ]
 }

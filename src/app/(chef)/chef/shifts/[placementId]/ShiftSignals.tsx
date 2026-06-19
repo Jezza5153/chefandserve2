@@ -59,6 +59,7 @@ const SIGNALS: SignalDef[] = [
     ],
   },
   { kind: "geen_pauze", label: "Geen pauze mogelijk", urgent: false },
+  { kind: "al_op_locatie", label: "Ik ben al op locatie", urgent: false },
   { kind: "onveilig", label: "Ik voel me niet veilig / niet correct behandeld", urgent: true },
 ];
 
