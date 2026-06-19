@@ -49,13 +49,21 @@ export async function confirmFromDashboard(formData: FormData) {
   const placementId = String(formData.get("placementId") ?? "").trim();
   if (!placementId) throw new Error("placementId ontbreekt");
 
+  // P3a-2 compliance override at the confirm step (auth-resolved actor, never form data).
+  const overrideReason = String(formData.get("overrideReason") ?? "").trim();
+  const override = overrideReason ? { overriddenBy: session.user.id, reason: overrideReason } : undefined;
+
   // House rule: only fire from EXACTLY 'accepted' — a stale/double click is a clean no-op.
   const res = await transitionPlacement({
     placementId,
     newStatus: "confirmed",
     actorUserId: session.user.id,
     expectedStatus: "accepted",
+    override,
   });
+  if (!res.ok && res.reason === "blocked") {
+    redirect("/admin/business?done=geblokkeerd");
+  }
   redirect(`/admin/business?done=${res.ok && res.changed ? "bevestigd" : "niet-bevestigd"}`);
 }
 
