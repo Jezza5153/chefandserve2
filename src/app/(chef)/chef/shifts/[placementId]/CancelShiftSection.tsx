@@ -12,6 +12,7 @@ import { useState } from "react";
 
 import { fieldClass } from "@/components/forms/Fields";
 import {
+  CANCEL_REASONS,
   MAARTEN_PHONE,
   urgentCopy,
   type CancellationTier,
@@ -75,9 +76,31 @@ export function CancelShiftSection({
 
         <form action={cancelAction} className="mt-5 space-y-3">
           <input type="hidden" name="placementId" value={placementId} />
+          <fieldset>
+            <legend className="mb-1.5 font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
+              Wat is de reden?
+            </legend>
+            <div className="flex flex-wrap gap-1.5">
+              {CANCEL_REASONS.map((r, i) => (
+                <label
+                  key={r.key}
+                  className="cursor-pointer rounded-full border border-ink-200 px-3 py-1.5 text-xs text-ink-700 has-[:checked]:border-burgundy has-[:checked]:bg-burgundy has-[:checked]:text-white"
+                >
+                  <input
+                    type="radio"
+                    name="cancelReason"
+                    value={r.key}
+                    defaultChecked={i === 0}
+                    className="sr-only"
+                  />
+                  {r.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <label className="block">
             <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-              Reden (verplicht, min 5 tekens)
+              Toelichting (verplicht, min 5 tekens)
             </span>
             <textarea
               name="reason"
