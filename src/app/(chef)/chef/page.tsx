@@ -33,6 +33,7 @@ import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { chefOpenShiftsEnabled, listOpenShiftsForChef } from "@/lib/domain/shift-interests";
 import { getChefSummaryForChef } from "@/lib/domain/ratings";
 import { getChefWarmStatus } from "@/lib/chef-events";
+import { getChefVacationEstimate } from "@/lib/domain/chef-payments";
 import { formatShiftRole } from "@/lib/labels";
 import { requireAuth } from "@/lib/permissions";
 
@@ -204,6 +205,7 @@ export default async function ChefHomePage() {
   // Mijn cijfers — afgerond + beoordeling (rating respects the ≥5 V1 rule).
   const rating = await getChefSummaryForChef(chef.id);
   const warm = await getChefWarmStatus(chef.id);
+  const vacation = await getChefVacationEstimate(chef.id);
   const [doneRow] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(placements)
@@ -540,6 +542,29 @@ export default async function ChefHomePage() {
           </div>
         </div>
       </section>
+
+      {/* CHEF-PR9: vakantiegeld tile (estimate) — tap to request payout */}
+      {vacation.basisCents > 0 ? (
+        <section className="mt-6">
+          <Link
+            href="/chef/declaraties"
+            className="flex items-center justify-between gap-3 rounded-lg border border-ink-200 bg-white p-4 hover:border-burgundy/40"
+          >
+            <div>
+              <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
+                Vakantiegeld (schatting)
+              </p>
+              <p className="mt-1 text-2xl font-semibold text-ink-900">
+                {formatEuro(vacation.accruedCents)}
+              </p>
+              <p className="text-xs text-ink-500">indicatie · payroll bevestigt</p>
+            </div>
+            <span className="shrink-0 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy">
+              Uitbetalen →
+            </span>
+          </Link>
+        </section>
+      ) : null}
     </div>
   );
 }
