@@ -22,6 +22,8 @@ import { DrawerShell } from "@/components/dashboard/drawer/DrawerShell";
 import { OpenShiftDrawer } from "@/components/dashboard/drawer/OpenShiftDrawer";
 import { QueueDrawer, type QueueKind } from "@/components/dashboard/drawer/QueueDrawer";
 import { TimelineDrawer } from "@/components/dashboard/drawer/TimelineDrawer";
+import { EmergencyDrawer } from "@/components/dashboard/drawer/EmergencyDrawer";
+import { emergencyModeEnabled, syncEmergencies, listOpenEscalations } from "@/lib/domain/emergencies";
 import { db } from "@/lib/db/client";
 import {
   chefSubmissions,
@@ -73,7 +75,7 @@ const FILLED_STATUSES = ["confirmed", "accepted"] as const;
 export default async function BusinessDashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ drawer?: string; shiftId?: string; kind?: string; done?: string }>;
+  searchParams: Promise<{ drawer?: string; shiftId?: string; kind?: string; escalationId?: string; done?: string }>;
 }) {
   const sp = await searchParams;
   const QUEUE_KINDS: QueueKind[] = ["accepted_unconfirmed", "hours_to_approve", "proposed_no_response"];
@@ -349,6 +351,26 @@ export default async function BusinessDashboardPage({
   if (missingDataCount > 0)
     items.push({ kind: "missing_data", tone: "amber", icon: "user-round", title: `${missingDataCount} chef-${plural(missingDataCount, "profiel", "profielen")} onvolledig`, detail: "postcode of tarief ontbreekt", href: "/admin/business/chefs?data=incomplete", cta: "Aanvullen", signalKey: "missing_data", fingerprint: String(missingDataCount) });
 
+  // P4b: open escalations → top-priority emergency signals (flag-gated). syncEmergencies()
+  // opens newly-detected ones on load; both the detection + the escalations table are dark
+  // behind EMERGENCY_MODE_ENABLED, so this is a no-op until the owner flips it.
+  if (emergencyModeEnabled()) {
+    await syncEmergencies().catch(() => {});
+    for (const e of await listOpenEscalations()) {
+      items.push({
+        kind: "emergency",
+        tone: "red",
+        icon: "alert-triangle",
+        title: `Spoed — ${e.companyName ?? "Onbekende klant"} · ${hhmm(e.shiftStartsAt)}`,
+        detail: e.reason,
+        href: `/admin/business?drawer=emergency&escalationId=${e.id}`,
+        cta: "Open",
+        signalKey: `emergency:${e.id}`,
+        fingerprint: e.status,
+      });
+    }
+  }
+
   // DASH-3b: drop snoozed/dismissed signals (the snooze auto-reappears; the dismiss
   // auto-reappears the moment its fingerprint changes). `ranked` is the live, non-hidden
   // set, so every downstream count reflects what actually needs attention now.
@@ -359,13 +381,15 @@ export default async function BusinessDashboardPage({
 
   // DASH-4: control-room banner — "vandaag onder controle / N aandachtspunten" + Fix-first.
   const sev = {
+    emergency: ranked.filter((r) => r.kind === "emergency").length,
     spoed: ranked.filter((r) => r.kind === "critical_shift").length,
     open: ranked.filter((r) => r.kind === "open_shift" || r.kind === "underfilled_shift").length,
     bevestigen: ranked.filter((r) => r.kind === "accepted_unconfirmed").length,
     uren: ranked.filter((r) => r.kind === "hours_to_approve").length,
   };
   const breakdown = [
-    sev.spoed && `${sev.spoed} spoed`,
+    sev.emergency && `${sev.emergency} spoed-situatie${sev.emergency === 1 ? "" : "s"}`,
+    sev.spoed && `${sev.spoed} kritiek`,
     sev.open && `${sev.open} open`,
     sev.bevestigen && `${sev.bevestigen} te bevestigen`,
     sev.uren && `${sev.uren} uren`,
@@ -435,6 +459,12 @@ export default async function BusinessDashboardPage({
           </DrawerShell>
         )}
 
+        {sp.drawer === "emergency" && sp.escalationId && (
+          <DrawerShell title="Spoed" closeHref="/admin/business">
+            <EmergencyDrawer escalationId={sp.escalationId} />
+          </DrawerShell>
+        )}
+
         {/* Top bar */}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -467,7 +497,7 @@ export default async function BusinessDashboardPage({
           className={`mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-5 py-4 ${
             ranked.length === 0
               ? "border-emerald-200 bg-emerald-50"
-              : sev.spoed > 0
+              : sev.emergency > 0 || sev.spoed > 0
                 ? "border-red-300 bg-red-50"
                 : "border-amber-300 bg-amber-50"
           }`}
@@ -475,7 +505,7 @@ export default async function BusinessDashboardPage({
           <div className="min-w-0">
             <p
               className={`font-serif text-lg ${
-                ranked.length === 0 ? "text-emerald-800" : sev.spoed > 0 ? "text-red-800" : "text-amber-900"
+                ranked.length === 0 ? "text-emerald-800" : sev.emergency > 0 || sev.spoed > 0 ? "text-red-800" : "text-amber-900"
               }`}
             >
               {ranked.length === 0
@@ -788,6 +818,9 @@ function DoneFlash({ done }: { done: string }) {
     opgelost: { msg: "✓ Gemarkeerd als opgelost. Komt terug als de situatie verandert.", tone: "good" },
     "reden-vereist": { msg: "Geef een reden op om een signaal als opgelost te markeren.", tone: "warn" },
     geblokkeerd: { msg: "Niet voorgesteld — deze chef is niet inzetbaar. Los het blokkeerpunt op, of geef vrij met reden.", tone: "warn" },
+    "spoed-opgelost": { msg: "✓ Spoedsituatie opgelost. Gelogd.", tone: "good" },
+    "spoed-stilgelegd": { msg: "Spoedsituatie stilgelegd (loos alarm / extern afgehandeld).", tone: "info" },
+    "spoed-ongewijzigd": { msg: "Niets gewijzigd — de spoedsituatie was al afgehandeld.", tone: "warn" },
   };
   const f = MAP[done] ?? { msg: "✓ Gelogd.", tone: "good" as const };
   const cls =

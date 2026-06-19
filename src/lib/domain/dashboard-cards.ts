@@ -42,7 +42,7 @@ export type CardType = "fire" | "risk" | "money" | "task" | "opportunity";
 /** Why a card can't be fixed instantly — shown so the operator knows where to push. */
 export type Blocker = "chef" | "client" | "system" | "money" | "compliance" | "timing";
 
-export type DrawerRoute = "shift" | "open-shift" | "hours" | "queue" | "timeline" | "fill";
+export type DrawerRoute = "shift" | "open-shift" | "hours" | "queue" | "timeline" | "fill" | "emergency";
 
 export type DashboardCard = {
   kind: AttentionKind;
@@ -67,6 +67,7 @@ export type DashboardCard = {
 
 /** Which card family each attention kind belongs to. */
 const CARD_TYPE: Record<AttentionKind, CardType> = {
+  emergency: "fire",
   critical_shift: "fire",
   open_shift: "risk",
   underfilled_shift: "risk",
@@ -81,6 +82,7 @@ const CARD_TYPE: Record<AttentionKind, CardType> = {
 
 /** Where a kind's drawer opens (DASH-2 builds these routes; DASH-1 only declares them). */
 const DRAWER_ROUTE: Record<AttentionKind, DrawerRoute> = {
+  emergency: "emergency",
   critical_shift: "fill",
   open_shift: "fill",
   underfilled_shift: "fill",
@@ -95,6 +97,7 @@ const DRAWER_ROUTE: Record<AttentionKind, DrawerRoute> = {
 
 /** A sensible default next-step per kind (DASH-4 enriches with shift-specific specifics). */
 const NEXT_ACTION: Record<AttentionKind, string> = {
+  emergency: "Open de spoedsituatie — vul de dienst of meld af",
   critical_shift: "Vul deze dienst — stel direct een chef voor",
   open_shift: "Vul deze dienst — stel een chef voor",
   underfilled_shift: "Vul de resterende plek(ken)",
