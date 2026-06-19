@@ -30,6 +30,7 @@ import {
 } from "@/lib/hours-labels";
 import { getChefForecastEarnings } from "@/lib/domain/chef-forecast";
 import { getProfileCompleteness } from "@/lib/domain/profile-completeness";
+import { SUGGESTION_FIELD_LABEL } from "@/lib/domain/profile-suggestions";
 import { chefOpenShiftsEnabled, listOpenShiftsForChef } from "@/lib/domain/shift-interests";
 import { getChefSummaryForChef } from "@/lib/domain/ratings";
 import { getChefWarmStatus } from "@/lib/chef-events";
@@ -260,6 +261,30 @@ export default async function ChefHomePage() {
           </div>
           <span className="shrink-0 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy">
             Starten →
+          </span>
+        </Link>
+      ) : chef.onboardingStatus === "submitted" &&
+        completeness.missingNiceToHave.length + completeness.missingCritical.length > 0 ? (
+        /* CHEF-PR0/PR6 (R2#24): practical "why so few shifts" blockers — not a % */
+        <Link
+          href="/chef/profile/compleet"
+          className="mt-6 flex items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-5 hover:bg-amber-100/60"
+        >
+          <div className="min-w-0">
+            <p className="font-serif text-lg text-ink-900">Krijg je weinig shifts aangeboden?</p>
+            <p className="mt-0.5 text-sm text-ink-700">
+              Vul nog aan:{" "}
+              <strong>
+                {[...completeness.missingCritical, ...completeness.missingNiceToHave]
+                  .slice(0, 3)
+                  .map((k) => SUGGESTION_FIELD_LABEL[k] ?? k)
+                  .join(" · ")}
+              </strong>
+              . Hoe completer je profiel, hoe vaker we je kunnen voorstellen.
+            </p>
+          </div>
+          <span className="shrink-0 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy">
+            Fix in 30 sec →
           </span>
         </Link>
       ) : null}
