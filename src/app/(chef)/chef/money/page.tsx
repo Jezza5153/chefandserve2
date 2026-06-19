@@ -6,6 +6,8 @@ import { env } from "@/lib/env";
 import { MONEY_ASSUMPTIONS } from "@/lib/money";
 import { requireAuth } from "@/lib/permissions";
 
+import { ChefHelp } from "@/components/chef/ChefHelp";
+
 import { MoneyCalculator } from "./MoneyCalculator";
 
 export const metadata = { title: "Geld uitgelegd" };
@@ -42,6 +44,9 @@ export default async function ChefMoneyPage() {
       </div>
 
       <MoneyCalculator />
+
+      {/* CHEF-PR8: money FAQ wired to the explainer */}
+      <ChefHelp topics={["geld", "algemeen"]} title="Vragen over geld" />
 
       <p className="text-[11px] leading-relaxed text-ink-400">
         Aannames bijgewerkt {MONEY_ASSUMPTIONS.lastUpdated}. Bron: {MONEY_ASSUMPTIONS.source}
