@@ -243,6 +243,11 @@ const serverSchema = z.object({
   // (in-app always; push for 2h+start), once per tier. Default off (dark-launch).
   SHIFT_REMINDERS_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-PR4 — "niet storen" during an active shift. When on, a non-urgent offer
+  // skips push/WhatsApp while the chef is mid-shift (the in-app bell still lands).
+  // Default off → notifications behave as before.
+  DND_DURING_SHIFT_ENABLED: z.enum(["true", "false"]).optional(),
+
   // CHEF-PR3 — Aankomstzekerheid (Arrival Trust). When on, the PWA does an on-device
   // 1km arrival check in the 20 min before a shift (sends only the result, never
   // coordinates). Default off — go-live needs an AVG/DPIA sign-off.

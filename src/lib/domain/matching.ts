@@ -740,6 +740,27 @@ export async function findMatchesForShift(
   return ordered.slice(0, limit);
 }
 
+/**
+ * CHEF-PR4 "niet storen": is the chef working a shift RIGHT NOW? True when they
+ * have an accepted/confirmed placement whose shift window contains `at`. Used to
+ * mute non-urgent offer pushes during active service (the in-app bell still lands).
+ */
+export async function chefIsInActiveShift(chefId: string, at: Date = new Date()): Promise<boolean> {
+  const [row] = await db
+    .select({ id: placements.id })
+    .from(placements)
+    .innerJoin(shifts, eq(shifts.id, placements.shiftId))
+    .where(
+      and(
+        eq(placements.chefId, chefId),
+        inArray(placements.status, ["accepted", "confirmed"]),
+        sql`${shifts.startsAt} <= ${at} AND ${shifts.endsAt} >= ${at}`,
+      ),
+    )
+    .limit(1);
+  return !!row;
+}
+
 /** Outcome of {@link proposePlacement}. `already_proposed` means a live
  * (proposed/accepted/confirmed) row already exists — nothing changed, no
  * second notification fires. `proposed` covers a fresh row AND a re-proposal
@@ -947,7 +968,12 @@ export async function sendProposalNotifications(placementId: string): Promise<vo
 
   // 1b. Chef in-app + phone (CHEF-14/15): the new-shift alert lands on their
   //     phone (push + WhatsApp are dark until their flags; the bell always lands).
+  //     CHEF-PR4 "niet storen": if the chef is mid-shift right now, the offer still
+  //     hits their inbox (the bell) but we don't buzz them (no push/WhatsApp) —
+  //     dark-launched via DND_DURING_SHIFT_ENABLED.
   if (chef?.userId) {
+    const quiet =
+      env.DND_DURING_SHIFT_ENABLED === "true" && (await chefIsInActiveShift(chef.id));
     await notifyUser({
       userId: chef.userId,
       type: "shift_proposed",
@@ -956,15 +982,19 @@ export async function sendProposalNotifications(placementId: string): Promise<vo
       actionUrl: `/chef/shifts/${placementId}`,
       entityType: "placements",
       entityId: placementId,
-      push: true,
-      whatsapp: {
-        template: "chef_nieuwe_dienst",
-        params: {
-          voornaam: (chef.fullName ?? "chef").split(" ")[0],
-          klant: client?.companyName ?? "een klant",
-          datum: formatShiftWhen(shift.startsAt, shift.endsAt),
-        },
-      },
+      push: !quiet,
+      ...(quiet
+        ? {}
+        : {
+            whatsapp: {
+              template: "chef_nieuwe_dienst",
+              params: {
+                voornaam: (chef.fullName ?? "chef").split(" ")[0],
+                klant: client?.companyName ?? "een klant",
+                datum: formatShiftWhen(shift.startsAt, shift.endsAt),
+              },
+            },
+          }),
     });
   }
 
