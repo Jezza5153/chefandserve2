@@ -2716,6 +2716,63 @@ export type NewClientShiftChangeRequest =
   typeof clientShiftChangeRequests.$inferInsert;
 
 /* =============================================================================
+ * Emergencies / escalations (Phase 4) — the owner-side tracked-incident store.
+ * DERIVED detection (emergencies.ts) opens these; humans/AI resolve or stand them
+ * down. Cloned in SHAPE from clientShiftChangeRequests (status/kind enums +
+ * one-open-per-(shiftId,kind) partial unique). `reason` is a machine-built Dutch
+ * one-liner — NEVER chef free text (the chef_signal trigger reads shift_signals
+ * but copies only the kind label, never the chef's `detail`). Dark behind
+ * EMERGENCY_MODE_ENABLED; nothing writes here until P4b wires on-page detection.
+ * =========================================================================== */
+export const escalationKindEnum = pgEnum("escalation_kind", [
+  "chef_cancelled_late", // confirmed chef pulled out <24h to start
+  "unassigned_soon", // shift <12h to start, under headcount
+  "unconfirmed_near_start", // accepted-not-confirmed, shift imminent
+  "chef_signal", // chef raised an urgent in-shift signal (hulp/onveilig/vertraagd)
+]);
+export const escalationStatusEnum = pgEnum("escalation_status", [
+  "open",
+  "in_progress",
+  "resolved",
+  "stood_down",
+]);
+
+export const escalations = pgTable(
+  "escalations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    shiftId: text("shift_id")
+      .notNull()
+      .references(() => shifts.id, { onDelete: "cascade" }),
+    /** The placement that triggered it (cancel / signal). Null for unassigned_soon. */
+    placementId: text("placement_id").references(() => placements.id, { onDelete: "set null" }),
+    kind: escalationKindEnum("kind").notNull(),
+    status: escalationStatusEnum("status").notNull().default("open"),
+    /** Machine-built Dutch one-liner — never chef/klant free text. */
+    reason: text("reason").notNull(),
+    /** Null when opened by system detection; a human/AI on resolve. */
+    openedBy: text("opened_by").references(() => users.id, { onDelete: "set null" }),
+    resolvedBy: text("resolved_by").references(() => users.id, { onDelete: "set null" }),
+    resolutionNotes: text("resolution_notes"),
+    /** The replacement placement that closed a cancel/unassigned escalation. */
+    replacementPlacementId: text("replacement_placement_id").references(() => placements.id, { onDelete: "set null" }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    shiftIdx: index("escalations_shift_idx").on(t.shiftId, t.status),
+    statusIdx: index("escalations_status_idx").on(t.status, t.kind),
+    // One open escalation per (shift, kind) — re-detection is a no-op (idempotent).
+    openUnique: uniqueIndex("escalations_open_unique")
+      .on(t.shiftId, t.kind)
+      .where(sql`${t.status} IN ('open', 'in_progress')`),
+  }),
+);
+export type Escalation = typeof escalations.$inferSelect;
+export type NewEscalation = typeof escalations.$inferInsert;
+
+/* =============================================================================
  * Recurring shift templates + exceptions (PR-KLANT-4).
  *
  * Admin creates a weekly pattern ("elke vrijdag 17:00 sous-chef"); a daily
