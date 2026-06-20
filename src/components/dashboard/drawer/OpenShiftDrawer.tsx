@@ -8,8 +8,10 @@ import { assertChefsDeployable, type DeployabilityGate } from "@/lib/domain/chef
 import { estimateTravel, estimateMargin, eur, type MarginEstimate, type TransportMode } from "@/lib/domain/travel";
 import { summarizeFillBlockers } from "@/lib/domain/fill-blockers";
 import { env } from "@/lib/env";
+import { aiEnabled } from "@/lib/ai/config";
 import { formatShiftRole } from "@/lib/labels";
 import { OverrideDeployabilityBlock } from "@/components/OverrideDeployabilityBlock";
+import { AiQuickAsk } from "@/components/ai/AiQuickAsk";
 import { proposeFromDashboard, logChefContactFromDashboard } from "@/app/(admin)/admin/business/_actions";
 
 /**
@@ -121,6 +123,18 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
           {hoursToStart >= 0 ? ` · start over ${hoursToStart}u` : " · gestart"}
         </p>
         <p className="mt-1 text-xs text-ink-500">Wat gebeurt er nu? Stel een chef voor — die krijgt direct de aanvraag.</p>
+        {/* P5a: shift-context AI quick-asks → hand the prompt to the assistant (it answers
+            via the confirm-gated tools: shortlist, belvolgorde, klantbericht). */}
+        {aiEnabled() && (
+          <AiQuickAsk
+            items={[
+              { label: "Wie kan dit?", prompt: aiCtx("Wie kan deze dienst doen", shift) + " Geef een korte shortlist met redenen en een aanrader." },
+              { label: "Waarom moeilijk?", prompt: aiCtx("Waarom is deze dienst moeilijk te vullen", shift) },
+              { label: "Maak belvolgorde", prompt: aiCtx("Maak een belvolgorde van chefs voor deze dienst", shift) },
+              { label: "Bericht aan klant", prompt: aiCtx("Stel een kort, geruststellend bericht op aan de klant over deze dienst — we zijn ermee bezig", shift) },
+            ]}
+          />
+        )}
       </div>
 
       {/* Blocker line (why not solved instantly) — zero matches, OR candidates exist but
@@ -313,6 +327,18 @@ function startLabel(startsAt: Date | string, endsAt: Date | string): string {
   const day = s.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/Amsterdam" });
   const t = (d: Date) => d.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
   return `${day} ${t(s)}–${t(e)}`;
+}
+
+/** P5a: a shift-context AI prompt — klant · role · when · city · id, so the assistant
+ *  routes to the right shift (shifts.find / shifts.suggest_chefs / email.send … all
+ *  stay confirm-gated). */
+function aiCtx(
+  verb: string,
+  shift: { id: string; roleNeeded: string; companyName: string | null; startsAt: Date | string; endsAt: Date | string; city: string | null },
+): string {
+  const when = startLabel(shift.startsAt, shift.endsAt);
+  const city = shift.city ? ` in ${shift.city}` : "";
+  return `${verb}: ${formatShiftRole(shift.roleNeeded)} bij ${shift.companyName ?? "de klant"} op ${when}${city}? (dienst-id: ${shift.id})`;
 }
 
 function marginTone(tone: MarginEstimate["tone"]): string {
