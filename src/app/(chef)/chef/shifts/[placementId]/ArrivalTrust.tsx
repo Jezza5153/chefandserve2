@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useT } from "@/lib/i18n/LocaleProvider";
+
 /**
  * CHEF-PR3 — Aankomstzekerheid (Arrival Trust), privacy-first.
  *
@@ -31,6 +33,7 @@ function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number): num
 }
 
 export function ArrivalTrust({ shiftId, startsAtMs, lat, lng }: Props) {
+  const t = useT();
   const [state, setState] = useState<State>("idle");
   const postedRef = useRef(false);
 
@@ -95,14 +98,14 @@ export function ArrivalTrust({ shiftId, startsAtMs, lat, lng }: Props) {
 
   const headline =
     state === "nearby"
-      ? "Je bent in de buurt — gemeld ✓"
+      ? t.shiftDetail.arrival.statusNearby
       : state === "monitoring"
-        ? "Aankomstcontrole actief"
+        ? t.shiftDetail.arrival.statusMonitoring
         : state === "permission"
-          ? "Zet locatie aan voor aankomstzekerheid"
+          ? t.shiftDetail.arrival.statusPermission
           : state === "no_signal"
-            ? "Geen locatiesignaal — geen probleem, Maarten ziet het"
-            : "Aankomstcontrole staat klaar";
+            ? t.shiftDetail.arrival.statusNoSignal
+            : t.shiftDetail.arrival.statusReady;
 
   return (
     <section className="mt-6 rounded-lg border border-burgundy/20 bg-burgundy/5 p-4">
@@ -111,13 +114,12 @@ export function ArrivalTrust({ shiftId, startsAtMs, lat, lng }: Props) {
           className={`inline-block size-2 rounded-full ${state === "nearby" ? "bg-emerald-500" : state === "monitoring" ? "animate-pulse bg-burgundy" : "bg-ink-300"}`}
         />
         <p className="font-ui text-[11px] font-medium uppercase tracking-[0.15em] text-burgundy">
-          Aankomstzekerheid
+          {t.shiftDetail.arrival.label}
         </p>
       </div>
       <p className="mt-2 text-sm font-medium text-ink-900">{headline}</p>
       <p className="mt-1 text-[11px] leading-relaxed text-ink-500">
-        Geen live tracking. Geen route. Alleen een aankomstsignaal binnen 1 km van de werklocatie,
-        in de 20 minuten vóór je shift — daarna stopt het automatisch.
+        {t.shiftDetail.arrival.description}
       </p>
     </section>
   );

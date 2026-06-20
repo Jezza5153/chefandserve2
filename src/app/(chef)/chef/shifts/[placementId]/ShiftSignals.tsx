@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 
+import { useT } from "@/lib/i18n/LocaleProvider";
+import { type Dict } from "@/lib/i18n/get-dict";
+
 /**
  * CHEF-PR3 — in-shift one-tap status buttons. Onderweg / vertraagd / kan-niet-
  * starten / hulp / "niet veilig". Buttons with sub-options expand inline; each
@@ -12,56 +15,60 @@ type Option = { key: string; label: string };
 type SignalDef = { kind: string; label: string; urgent: boolean; options?: Option[] };
 
 // Mirrors SHIFT_SIGNAL_UI in domain/shift-signals.ts (kept in sync by hand — the
-// server re-validates the kind, so a drift can never write a bad value).
-const SIGNALS: SignalDef[] = [
-  { kind: "onderweg", label: "Ik ben onderweg", urgent: false },
-  {
-    kind: "vertraagd",
-    label: "Ik ben vertraagd",
-    urgent: false,
-    options: [
-      { key: "min_15", label: "± 15 min later" },
-      { key: "min_30", label: "± 30 min later" },
-      { key: "onbekend", label: "Weet nog niet" },
-    ],
-  },
-  {
-    kind: "kan_niet_starten",
-    label: "Ik ben er, maar kan niet starten",
-    urgent: true,
-    options: [
-      { key: "contact_afwezig", label: "Contactpersoon afwezig" },
-      { key: "ingang_dicht", label: "Ingang dicht / kom er niet in" },
-      { key: "keuken_niet_klaar", label: "Keuken niet klaar" },
-      { key: "verkeerde_locatie", label: "Verkeerde locatie" },
-      { key: "anders", label: "Anders" },
-    ],
-  },
-  {
-    kind: "hulp",
-    label: "Hulp nodig",
-    urgent: true,
-    options: [
-      { key: "contact", label: "Krijg contactpersoon niet te pakken" },
-      { key: "taak", label: "Vraag over de opdracht" },
-      { key: "anders", label: "Anders" },
-    ],
-  },
-  {
-    kind: "langer_doorwerken",
-    label: "Ik werk langer door",
-    urgent: false,
-    options: [
-      { key: "min_30", label: "± 30 min langer" },
-      { key: "uur_1", label: "± 1 uur langer" },
-      { key: "klant_vraagt", label: "Klant vraagt extra" },
-      { key: "onbekend", label: "Weet nog niet hoelang" },
-    ],
-  },
-  { kind: "geen_pauze", label: "Geen pauze mogelijk", urgent: false },
-  { kind: "al_op_locatie", label: "Ik ben al op locatie", urgent: false },
-  { kind: "onveilig", label: "Ik voel me niet veilig / niet correct behandeld", urgent: true },
-];
+// server re-validates the kind, so a drift can never write a bad value). The kind
+// + option keys are the server contract; only the labels are localised (CHEF-PR11e).
+function buildSignals(t: Dict): SignalDef[] {
+  const s = t.shiftDetail.signals;
+  return [
+    { kind: "onderweg", label: s.onderweg, urgent: false },
+    {
+      kind: "vertraagd",
+      label: s.vertraagd,
+      urgent: false,
+      options: [
+        { key: "min_15", label: s.vertraagd_min15 },
+        { key: "min_30", label: s.vertraagd_min30 },
+        { key: "onbekend", label: s.vertraagd_onbekend },
+      ],
+    },
+    {
+      kind: "kan_niet_starten",
+      label: s.kanNietStarten,
+      urgent: true,
+      options: [
+        { key: "contact_afwezig", label: s.kns_contactAfwezig },
+        { key: "ingang_dicht", label: s.kns_ingangDicht },
+        { key: "keuken_niet_klaar", label: s.kns_keukenNietKlaar },
+        { key: "verkeerde_locatie", label: s.kns_verkeerdeLocatie },
+        { key: "anders", label: s.kns_anders },
+      ],
+    },
+    {
+      kind: "hulp",
+      label: s.hulp,
+      urgent: true,
+      options: [
+        { key: "contact", label: s.hulp_contact },
+        { key: "taak", label: s.hulp_taak },
+        { key: "anders", label: s.hulp_anders },
+      ],
+    },
+    {
+      kind: "langer_doorwerken",
+      label: s.langer,
+      urgent: false,
+      options: [
+        { key: "min_30", label: s.langer_min30 },
+        { key: "uur_1", label: s.langer_uur1 },
+        { key: "klant_vraagt", label: s.langer_klantVraagt },
+        { key: "onbekend", label: s.langer_onbekend },
+      ],
+    },
+    { kind: "geen_pauze", label: s.geenPauze, urgent: false },
+    { kind: "al_op_locatie", label: s.alOpLocatie, urgent: false },
+    { kind: "onveilig", label: s.onveilig, urgent: true },
+  ];
+}
 
 export function ShiftSignals({
   placementId,
@@ -70,15 +77,14 @@ export function ShiftSignals({
   placementId: string;
   recordAction: (formData: FormData) => Promise<void>;
 }) {
+  const t = useT();
   const [open, setOpen] = useState<string | null>(null);
+  const SIGNALS = buildSignals(t);
 
   return (
     <section className="mt-8 rounded-lg border border-ink-200 bg-white p-5">
-      <h2 className="font-serif text-xl text-ink-900">Tijdens je shift</h2>
-      <p className="mt-1 text-sm text-ink-700">
-        Eén tik laat Maarten direct weten waar je staat. Niet veilig of een probleem? Druk
-        gerust — daar zijn deze knoppen voor.
-      </p>
+      <h2 className="font-serif text-xl text-ink-900">{t.shiftDetail.signals.heading}</h2>
+      <p className="mt-1 text-sm text-ink-700">{t.shiftDetail.signals.intro}</p>
 
       <div className="mt-4 space-y-2">
         {SIGNALS.map((s) => {
