@@ -2925,21 +2925,26 @@ export type NewShiftTemplateException =
  * penalizing a chef (documented in docs/ai/ai-safety-rules.md).
  * =========================================================================== */
 
+/** D2: who authored a rating. 'client' = klant after a shift (placement+client bound);
+ *  'internal' = Maarten's own assessment (placementId + clientId NULL). The chefs rollup
+ *  (averageRating/ratingCount) stays CLIENT-only so internal scores don't skew the public ★. */
+export const ratingSourceEnum = pgEnum("rating_source", ["client", "internal"]);
 export const ratings = pgTable(
   "ratings",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // Nullable for internal ratings (not tied to a placement). UNIQUE still guards one
+    // client rating per placement; multiple NULLs (internal) are allowed.
     placementId: text("placement_id")
-      .notNull()
       .unique()
       .references(() => placements.id, { onDelete: "restrict" }),
     chefId: text("chef_id")
       .notNull()
       .references(() => chefs.id, { onDelete: "restrict" }),
-    clientId: text("client_id")
-      .notNull()
-      .references(() => clients.id, { onDelete: "restrict" }),
+    // Nullable for internal ratings (no klant).
+    clientId: text("client_id").references(() => clients.id, { onDelete: "restrict" }),
     stars: integer("stars").notNull(),
+    source: ratingSourceEnum("source").notNull().default("client"),
     /** Dutch tag keys from RATING_TAGS (positive + negative). */
     tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
     comment: text("comment"),

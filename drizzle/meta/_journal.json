@@ -519,6 +519,13 @@
       "when": 1781991145121,
       "tag": "0073_c1_chef_owner_tags",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1781992047405,
+      "tag": "0074_d2_internal_ratings",
+      "breakpoints": true
     }
   ]
 }
