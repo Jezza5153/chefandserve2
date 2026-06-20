@@ -31,6 +31,8 @@ import {
   timelineDots,
   computeChefAmountCents,
 } from "@/lib/hours-labels";
+import { getI18n } from "@/lib/i18n/server";
+import { INTL_TAG, type Locale } from "@/lib/i18n/locales";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata = { title: "Uren" };
@@ -38,8 +40,9 @@ export const dynamic = "force-dynamic";
 
 export default async function ChefHoursPage() {
   const session = await requireAuth("/chef/hours");
+  const { locale, dict: t } = await getI18n();
   if (session.user.kind !== "chef" && !session.user.roles.includes("super_admin")) {
-    return <p>Geen toegang.</p>;
+    return <p>{t.hours.accessDenied}</p>;
   }
   const chef = await db.query.chefs.findFirst({
     where: eq(chefs.userId, session.user.id),
@@ -47,11 +50,8 @@ export default async function ChefHoursPage() {
   if (!chef) {
     return (
       <div className="rounded-lg border border-amber-300 bg-amber-50 p-6">
-        <h1 className="font-serif text-2xl text-ink-900">Geen profiel gevonden</h1>
-        <p className="mt-2 text-sm text-ink-700">
-          Er is nog geen chef-profiel aan je account gekoppeld. Stuur een
-          berichtje naar Maarten of Gina.
-        </p>
+        <h1 className="font-serif text-2xl text-ink-900">{t.hours.profileNotFound}</h1>
+        <p className="mt-2 text-sm text-ink-700">{t.hours.profileNotFoundBody}</p>
       </div>
     );
   }
@@ -115,22 +115,20 @@ export default async function ChefHoursPage() {
   return (
     <div>
       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-        Uren
+        {t.hours.eyebrow}
       </p>
       <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
-        Mijn uren
+        {t.hours.heading}
       </h1>
       <p className="mt-4 max-w-prose text-sm leading-relaxed text-ink-700">
-        Na elke shift dien je hier je uren in. Hotel-eigenaar geeft akkoord,
-        Maarten/Gina controleren, en daarna gaan ze naar de uitbetaling.
-        Je ziet altijd waar de uren staan.
+        {t.hours.intro}
       </p>
 
       {/* Actie nodig */}
       {actieNodig.length > 0 && (
         <section className="mt-10">
           <h2 className="font-serif text-xl text-ink-900">
-            Actie nodig ({actieNodig.length})
+            {t.hours.actionNeeded} ({actieNodig.length})
           </h2>
           <ul className="mt-4 space-y-3">
             {actieNodig.map(({ h, shift, clientName }) => (
@@ -145,7 +143,7 @@ export default async function ChefHoursPage() {
                       <span className="text-ink-500">{formatShiftRole(shift.roleNeeded)}</span>
                     </h3>
                     <p className="mt-1 text-sm text-ink-700">
-                      {formatShiftDate(shift.startsAt)}
+                      {formatShiftDate(shift.startsAt, locale)}
                     </p>
                     <p className="mt-2 text-sm text-ink-900">
                       {humanNextAction(h.status, "chef")}
@@ -158,7 +156,7 @@ export default async function ChefHoursPage() {
                     href={`/chef/hours/${h.placementId}`}
                     className="inline-block rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
                   >
-                    {h.status === "draft" ? "Vul in →" : "Pas aan →"}
+                    {h.status === "draft" ? t.hours.buttonFill : t.hours.buttonEdit}
                   </Link>
                 </div>
               </li>
@@ -171,7 +169,7 @@ export default async function ChefHoursPage() {
       {wachtend.length > 0 && (
         <section className="mt-10">
           <h2 className="font-serif text-xl text-ink-900">
-            Wachten op anderen ({wachtend.length})
+            {t.hours.waitingOnOthers} ({wachtend.length})
           </h2>
           <ul className="mt-4 space-y-4">
             {wachtend.map(({ h, shift, clientName }) => (
@@ -186,7 +184,7 @@ export default async function ChefHoursPage() {
                       <span className="text-ink-500">{formatShiftRole(shift.roleNeeded)}</span>
                     </h3>
                     <p className="mt-0.5 text-xs text-ink-500">
-                      {formatShiftDate(shift.startsAt)} ·{" "}
+                      {formatShiftDate(shift.startsAt, locale)} ·{" "}
                       {formatWorkedMinutes(h.workedMinutes)} ·{" "}
                       {formatEuro(computeChefAmountCents(h.workedMinutes, h.chefRateCents))}
                     </p>
@@ -206,7 +204,7 @@ export default async function ChefHoursPage() {
       {afgerond.length > 0 && (
         <section className="mt-10">
           <h2 className="font-serif text-xl text-ink-900">
-            Afgerond deze maand ({afgerond.length})
+            {t.hours.completedThisMonth} ({afgerond.length})
           </h2>
           <ul className="mt-4 space-y-2">
             {afgerond.map(({ h, shift, clientName }) => (
@@ -220,7 +218,7 @@ export default async function ChefHoursPage() {
                     <span className="text-ink-500">{formatShiftRole(shift.roleNeeded)}</span>
                   </p>
                   <p className="text-xs text-ink-500">
-                    {formatShiftDate(shift.startsAt)} ·{" "}
+                    {formatShiftDate(shift.startsAt, locale)} ·{" "}
                     {formatWorkedMinutes(h.workedMinutes)} ·{" "}
                     {formatEuro(computeChefAmountCents(h.workedMinutes, h.chefRateCents))}
                   </p>
@@ -235,18 +233,16 @@ export default async function ChefHoursPage() {
       {/* Empty state */}
       {actieNodig.length === 0 && wachtend.length === 0 && afgerond.length === 0 && (
         <div className="mt-10 rounded-lg border border-ink-200 bg-white p-8 text-center">
-          <p className="font-serif text-lg text-ink-900">Geen uren om in te dienen</p>
-          <p className="mt-2 text-sm text-ink-500">
-            Na je shift verschijnt hier automatisch je urenbriefje.
-          </p>
+          <p className="font-serif text-lg text-ink-900">{t.hours.emptyHeading}</p>
+          <p className="mt-2 text-sm text-ink-500">{t.hours.emptyDescription}</p>
         </div>
       )}
     </div>
   );
 }
 
-function formatShiftDate(d: Date): string {
-  return new Date(d).toLocaleDateString("nl-NL", {
+function formatShiftDate(d: Date, locale: Locale): string {
+  return new Date(d).toLocaleDateString(INTL_TAG[locale], {
     weekday: "long",
     day: "numeric",
     month: "long",

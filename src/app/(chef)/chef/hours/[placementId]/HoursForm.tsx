@@ -18,6 +18,7 @@ import {
   formatEuro,
   formatWorkedMinutes,
 } from "@/lib/hours-labels";
+import { useT } from "@/lib/i18n/LocaleProvider";
 
 type Props = {
   placementId: string;
@@ -30,11 +31,8 @@ type Props = {
   errorMsg: string | null;
 };
 
-const QUICK_BREAKS: Array<{ label: string; minutes: number }> = [
-  { label: "Geen", minutes: 0 },
-  { label: "15 min", minutes: 15 },
-  { label: "30 min", minutes: 30 },
-];
+/** Quick-pick break presets, in minutes (0 = "none"; labels come from the dict). */
+const QUICK_BREAKS = [0, 15, 30] as const;
 
 export function HoursForm({
   placementId,
@@ -46,12 +44,14 @@ export function HoursForm({
   submitAction,
   errorMsg,
 }: Props) {
+  const t = useT();
   const [start, setStart] = useState(defaultStart);
   const [end, setEnd] = useState(defaultEnd);
   const [breakMinutes, setBreakMinutes] = useState(defaultBreakMinutes);
   const [customBreak, setCustomBreak] = useState(
-    !QUICK_BREAKS.some((b) => b.minutes === defaultBreakMinutes),
+    !QUICK_BREAKS.some((m) => m === defaultBreakMinutes),
   );
+  const breakLabel = (m: number) => (m === 0 ? t.hours.breakNone : `${m} min`);
 
   const { workedMinutes, expectedCents, totalDeltaMinutes } = useMemo(() => {
     const s = new Date(start);
@@ -78,7 +78,7 @@ export function HoursForm({
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block">
           <span className="mb-1 block font-ui text-[13px] font-medium text-ink-800">
-            Hoe laat ben je echt begonnen?
+            {t.hours.startLabel}
           </span>
           <input
             type="datetime-local"
@@ -92,7 +92,7 @@ export function HoursForm({
 
         <label className="block">
           <span className="mb-1 block font-ui text-[13px] font-medium text-ink-800">
-            Hoe laat was je klaar?
+            {t.hours.endLabel}
           </span>
           <input
             type="datetime-local"
@@ -108,24 +108,24 @@ export function HoursForm({
       {/* Break — quick picks + custom */}
       <div>
         <span className="mb-2 block font-ui text-[13px] font-medium text-ink-800">
-          Pauze gehad?
+          {t.hours.breakLabel}
         </span>
         <div className="flex flex-wrap gap-2">
-          {QUICK_BREAKS.map((b) => (
+          {QUICK_BREAKS.map((m) => (
             <button
-              key={b.minutes}
+              key={m}
               type="button"
               onClick={() => {
-                setBreakMinutes(b.minutes);
+                setBreakMinutes(m);
                 setCustomBreak(false);
               }}
               className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
-                !customBreak && breakMinutes === b.minutes
+                !customBreak && breakMinutes === m
                   ? "border-burgundy bg-burgundy text-white"
                   : "border-ink-200 bg-white text-ink-700 hover:border-burgundy/40"
               }`}
             >
-              {b.label}
+              {breakLabel(m)}
             </button>
           ))}
           <button
@@ -137,7 +137,7 @@ export function HoursForm({
                 : "border-ink-200 bg-white text-ink-700 hover:border-burgundy/40"
             }`}
           >
-            Anders
+            {t.hours.breakCustom}
           </button>
         </div>
         {customBreak ? (
@@ -152,32 +152,29 @@ export function HoursForm({
               onChange={(e) => setBreakMinutes(Number(e.target.value) || 0)}
               className="w-24 rounded border border-ink-200 bg-white px-3 py-2 font-mono text-base text-ink-900 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
             />
-            <span className="text-sm text-ink-700">minuten</span>
+            <span className="text-sm text-ink-700">{t.hours.breakMinutesUnit}</span>
           </div>
         ) : (
           <input type="hidden" name="breakMinutes" value={breakMinutes} />
         )}
         {breakTooLong ? (
-          <p className="mt-2 text-xs text-burgundy">
-            ⚠ Pauze is langer dan je totale werktijd — controleer.
-          </p>
+          <p className="mt-2 text-xs text-burgundy">{t.hours.breakTooLong}</p>
         ) : null}
       </div>
 
       {/* Notes */}
       <label className="block">
         <span className="mb-1 block font-ui text-[13px] font-medium text-ink-800">
-          Iets bijzonders gebeurd? (optioneel)
+          {t.hours.notesLabel}
         </span>
         <span className="mb-2 block text-xs leading-relaxed text-ink-500">
-          Alleen invullen als er iets afweek — later gestart, langer gebleven,
-          pauze anders, probleem op locatie of extra taken gedaan.
+          {t.hours.notesHint}
         </span>
         <textarea
           name="chefNotes"
           rows={3}
           defaultValue={defaultNotes}
-          placeholder="Bijv. ‘15 min later begonnen, klant te laat met de sleutel’"
+          placeholder={t.hours.notesPlaceholder}
           className={`${fieldClass} placeholder-ink-500`}
         />
       </label>
@@ -186,7 +183,7 @@ export function HoursForm({
       <div className="rounded-lg border border-ink-200 bg-bg-gray p-4">
         <div className="flex items-baseline justify-between">
           <span className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
-            Totaal gewerkt
+            {t.hours.totalWorked}
           </span>
           <span className="font-mono text-lg text-ink-900">
             {formatWorkedMinutes(workedMinutes)}
@@ -194,7 +191,7 @@ export function HoursForm({
         </div>
         <div className="mt-2 flex items-baseline justify-between">
           <span className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
-            Verwachte vergoeding
+            {t.hours.expectedCompensation}
           </span>
           <span className="font-mono text-lg text-burgundy">
             {formatEuro(expectedCents)}
@@ -208,18 +205,14 @@ export function HoursForm({
         </p>
       ) : null}
 
-      <p className="text-xs leading-relaxed text-ink-500">
-        Na indienen gaat dit naar de klant voor akkoord. Je kunt aanpassen
-        zolang de klant nog niet heeft getekend. Definitief bedrag wordt
-        bevestigd door Chef &amp; Serve.
-      </p>
+      <p className="text-xs leading-relaxed text-ink-500">{t.hours.submitDisclaimer}</p>
 
       <button
         type="submit"
         disabled={breakTooLong || workedMinutes === 0}
         className="w-full rounded-full bg-burgundy px-6 py-4 font-ui text-[12px] font-medium uppercase tracking-[0.18em] text-white transition-colors hover:bg-burgundy-900 disabled:cursor-not-allowed disabled:bg-ink-300"
       >
-        Uren indienen
+        {t.hours.submitHours}
       </button>
     </form>
   );

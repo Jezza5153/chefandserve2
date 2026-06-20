@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 
 import { estimatePayroll, estimateZzp, eur, type MoneyAssumptions } from "@/lib/money";
+import { fill } from "@/lib/i18n/locales";
+import { useT } from "@/lib/i18n/LocaleProvider";
 
 /**
  * CHEF-PR8 — Money Explainer calculator (client). Live bruto/netto/zzp INDICATIE.
@@ -25,6 +27,7 @@ function Line({ label, value, strong, muted }: { label: string; value: string; s
 }
 
 export function MoneyCalculator({ assumptions }: { assumptions: MoneyAssumptions }) {
+  const t = useT();
   const [mode, setMode] = useState<Mode>("payroll");
   const [hourly, setHourly] = useState(18);
   const [hours, setHours] = useState(32);
@@ -49,7 +52,7 @@ export function MoneyCalculator({ assumptions }: { assumptions: MoneyAssumptions
               mode === m ? "bg-burgundy text-white" : "border border-ink-200 bg-white text-ink-700"
             }`}
           >
-            {m === "payroll" ? "Payroll" : m === "zzp" ? "ZZP" : "Vergelijk"}
+            {m === "payroll" ? t.money.modePayroll : m === "zzp" ? t.money.modeZzp : t.money.modeCompare}
           </button>
         ))}
       </div>
@@ -58,7 +61,7 @@ export function MoneyCalculator({ assumptions }: { assumptions: MoneyAssumptions
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="block">
           <span className="text-sm font-medium text-ink-900">
-            {mode === "zzp" ? "Uurtarief (excl. btw)" : "Bruto uurtarief"}
+            {mode === "zzp" ? t.money.rateZzp : t.money.ratePayroll}
           </span>
           <input
             type="number"
@@ -70,7 +73,7 @@ export function MoneyCalculator({ assumptions }: { assumptions: MoneyAssumptions
           />
         </label>
         <label className="block">
-          <span className="text-sm font-medium text-ink-900">Uren</span>
+          <span className="text-sm font-medium text-ink-900">{t.money.hoursLabel}</span>
           <input
             type="number"
             min={0}
@@ -83,7 +86,7 @@ export function MoneyCalculator({ assumptions }: { assumptions: MoneyAssumptions
         {mode !== "zzp" && (
           <label className="flex items-end gap-2 pb-2 text-sm text-ink-700">
             <input type="checkbox" checked={korting} onChange={(e) => setKorting(e.target.checked)} className="accent-burgundy" />
-            Loonheffingskorting
+            {t.money.taxReduction}
           </label>
         )}
       </div>
@@ -92,40 +95,38 @@ export function MoneyCalculator({ assumptions }: { assumptions: MoneyAssumptions
       <div className={`grid gap-4 ${mode === "compare" ? "sm:grid-cols-2" : ""}`}>
         {(mode === "payroll" || mode === "compare") && (
           <div className={cardCls}>
-            <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">Payroll</p>
+            <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">{t.money.modePayroll}</p>
             <div className="mt-3 space-y-2">
-              <Line label="Bruto" value={eur(payroll.grossCents)} />
-              <Line label={`Vakantiegeld-opbouw (${8}%)`} value={eur(payroll.vacationCents)} muted />
-              <Line label={`Geschat netto (≈${payroll.effectiveTaxPct}% inhouding)`} value={eur(payroll.netEstimateCents)} strong />
+              <Line label={t.money.gross} value={eur(payroll.grossCents)} />
+              <Line label={fill(t.money.vacationAccrual, { pct: 8 })} value={eur(payroll.vacationCents)} muted />
+              <Line label={fill(t.money.estimatedNet, { pct: payroll.effectiveTaxPct })} value={eur(payroll.netEstimateCents)} strong />
             </div>
             <ul className="mt-3 space-y-0.5 text-[11px] text-ink-500">
-              <li>+ Vakantiegeld opgebouwd · vakantie-uren · payroll regelt inhouding</li>
-              <li>Minder vrijheid, meer bescherming</li>
+              <li>{t.money.payrollNote1}</li>
+              <li>{t.money.payrollNote2}</li>
             </ul>
           </div>
         )}
         {(mode === "zzp" || mode === "compare") && (
           <div className={cardCls}>
-            <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">ZZP</p>
+            <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">{t.money.modeZzp}</p>
             <div className="mt-3 space-y-2">
-              <Line label="Omzet (excl. btw)" value={eur(zzp.grossExVatCents)} />
-              <Line label="Btw (21%) — niet jouw geld" value={eur(zzp.vatCents)} muted />
-              <Line label="Reservering inkomstenbelasting" value={`− ${eur(zzp.incomeTaxReserveCents)}`} muted />
-              <Line label="Reservering Zvw" value={`− ${eur(zzp.zvwReserveCents)}`} muted />
-              <Line label="Ruwe schatting wat je overhoudt" value={eur(zzp.keepEstimateCents)} strong />
+              <Line label={t.money.revenue} value={eur(zzp.grossExVatCents)} />
+              <Line label={t.money.vat} value={eur(zzp.vatCents)} muted />
+              <Line label={t.money.incomeTaxReserve} value={`− ${eur(zzp.incomeTaxReserveCents)}`} muted />
+              <Line label={t.money.zvwReserve} value={`− ${eur(zzp.zvwReserveCents)}`} muted />
+              <Line label={t.money.zzpEstimate} value={eur(zzp.keepEstimateCents)} strong />
             </div>
             <ul className="mt-3 space-y-0.5 text-[11px] text-ink-500">
-              <li>Btw is geen inkomen · zet belasting/Zvw apart · geen automatisch vakantiegeld</li>
-              <li>Meer vrijheid, meer risico · denk aan verzekering/tools/boekhouding</li>
+              <li>{t.money.zzpNote1}</li>
+              <li>{t.money.zzpNote2}</li>
             </ul>
           </div>
         )}
       </div>
 
       <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900">
-        <strong>Dit is een indicatie, geen officiële loonstrook of belastingadvies.</strong> Je
-        echte netto hangt af van je persoonlijke situatie, heffingskortingen, meerdere banen,
-        pensioen, payrollpartner, cao en het belastingjaar.
+        <strong>{t.money.disclaimerStrong}</strong>{t.money.disclaimerRest}
       </p>
     </div>
   );
