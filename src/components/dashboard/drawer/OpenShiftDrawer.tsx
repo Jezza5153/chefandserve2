@@ -2,8 +2,12 @@ import Link from "next/link";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { clients, placements, shifts } from "@/lib/db/schema";
+import { chefs, clients, placements, shifts } from "@/lib/db/schema";
 import { findMatchesForShift } from "@/lib/domain/matching";
+import {
+  summarizePendingProposals,
+  noResponseThresholdMin,
+} from "@/lib/domain/proposal-wait";
 import { assertChefsDeployable, type DeployabilityGate } from "@/lib/domain/chef-deployability-gate";
 import { estimateTravel, estimateMargin, eur, type MarginEstimate, type TransportMode } from "@/lib/domain/travel";
 import { summarizeFillBlockers } from "@/lib/domain/fill-blockers";
@@ -55,6 +59,23 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
     .where(and(eq(placements.shiftId, shiftId), inArray(placements.status, ["confirmed", "accepted"])));
   const open = Math.max(shift.headcount - filled, 0);
 
+  const hoursToStart = Math.round((new Date(shift.startsAt).getTime() - Date.now()) / 3_600_000);
+
+  // P4d no-response timer: the proposals already in flight (status 'proposed', awaiting a
+  // chef reply). These are EXCLUDED from `matches` below (matching skips already-placed
+  // chefs), so without this the owner can't see what's pending and may re-propose the same
+  // person. Read-only — surfaces live state + a stale/next-step nudge.
+  const pendingRows = await db
+    .select({ chefId: placements.chefId, chefName: chefs.fullName, proposedAt: placements.proposedAt, seenAt: placements.seenAt })
+    .from(placements)
+    .innerJoin(chefs, eq(chefs.id, placements.chefId))
+    .where(and(eq(placements.shiftId, shiftId), eq(placements.status, "proposed")))
+    .orderBy(placements.proposedAt);
+  const pending = summarizePendingProposals(pendingRows, {
+    now: Date.now(),
+    thresholdMin: noResponseThresholdMin(hoursToStart),
+  });
+
   const matches = await findMatchesForShift(shiftId, { limit: 6 });
   // P3a: per-candidate deployability (flag-gated, one batched read). When off the Map is
   // empty → every chef renders the normal one-click propose, behaviour unchanged.
@@ -62,7 +83,6 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
     env.COMPLIANCE_HARDGATE_ENABLED === "true"
       ? await assertChefsDeployable(matches.map((m) => m.chef.id))
       : new Map();
-  const hoursToStart = Math.round((new Date(shift.startsAt).getTime() - Date.now()) / 3_600_000);
   const startTxt = startLabel(shift.startsAt, shift.endsAt);
 
   // P3c margin guard (flag-gated): per-candidate marge (revenue − loon − reis) surfaced
@@ -136,6 +156,31 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
           />
         )}
       </div>
+
+      {/* P4d no-response timer — who's already been proposed and is still awaiting a reply,
+          how long they've waited, and (when stale) the next-step nudge. Keeps the owner from
+          re-proposing someone whose offer is still open. */}
+      {pending.proposals.length > 0 && (
+        <div className="rounded-lg border border-ink-200 bg-bg-gray/40 p-3">
+          <p className="font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-ink-500">
+            Al voorgesteld — wacht op reactie
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {pending.proposals.map((p) => (
+              <li key={p.chefId} className="flex items-center justify-between gap-2 text-sm">
+                <span className="truncate text-ink-800">{p.chefName}</span>
+                <span className={`shrink-0 font-ui text-[11px] ${p.stale ? "text-amber-700" : "text-ink-500"}`}>
+                  {p.seen ? "gezien · " : ""}wacht {p.waitLabel}
+                  {p.stale ? " · geen reactie" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {pending.nudge && (
+            <p className="mt-2 rounded-md bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">⏱ {pending.nudge}</p>
+          )}
+        </div>
+      )}
 
       {/* Blocker line (why not solved instantly) — zero matches, OR candidates exist but
           the gates flag why it's hard (compliance / klant-block / reisafstand / marge). */}
