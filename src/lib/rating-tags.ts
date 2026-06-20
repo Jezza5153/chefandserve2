@@ -58,5 +58,6 @@ export function sanitizeTags(input: string[]): RatingTag[] {
   return out;
 }
 
-/** Minimum ratings before a chef may see their own average (anti-demoralizing). */
-export const CHEF_AVERAGE_MIN_COUNT = 5;
+/** Minimum ratings before a chef may see their own average (anti-demoralizing).
+ *  D3: lowered 5→3 so chefs see their score sooner (Maarten's feedback). */
+export const CHEF_AVERAGE_MIN_COUNT = 3;
