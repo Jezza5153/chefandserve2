@@ -8,6 +8,7 @@ import {
   summarizePendingProposals,
   noResponseThresholdMin,
 } from "@/lib/domain/proposal-wait";
+import { shiftOpsStatus, type OpsTone } from "@/lib/shift-ops-status";
 import { assertChefsDeployable, type DeployabilityGate } from "@/lib/domain/chef-deployability-gate";
 import { estimateTravel, estimateMargin, eur, type MarginEstimate, type TransportMode } from "@/lib/domain/travel";
 import { summarizeFillBlockers } from "@/lib/domain/fill-blockers";
@@ -53,11 +54,29 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
     return <p className="text-sm text-ink-700">Deze dienst bestaat niet (meer).</p>;
   }
 
-  const [{ filled }] = await db
-    .select({ filled: sql<number>`count(*)::int` })
+  // One grouped count → confirmed / accepted / proposed separately, so the ops-status line
+  // (below) can tell "wacht op reactie" from "chef gevonden" from "bemand". `filled` keeps
+  // its old meaning (confirmed + accepted) for the headcount display + open-slot calc.
+  const statusCounts = await db
+    .select({ status: placements.status, n: sql<number>`count(*)::int` })
     .from(placements)
-    .where(and(eq(placements.shiftId, shiftId), inArray(placements.status, ["confirmed", "accepted"])));
+    .where(eq(placements.shiftId, shiftId))
+    .groupBy(placements.status);
+  const countBy = new Map(statusCounts.map((r) => [r.status, r.n]));
+  const confirmedN = countBy.get("confirmed") ?? 0;
+  const acceptedN = countBy.get("accepted") ?? 0;
+  const filled = confirmedN + acceptedN;
   const open = Math.max(shift.headcount - filled, 0);
+
+  // P3 Track C operational status language — ONE legible state + "wat gebeurt er nu?".
+  const ops = shiftOpsStatus({
+    shiftStatus: shift.status,
+    headcount: shift.headcount,
+    confirmed: confirmedN,
+    accepted: acceptedN,
+    proposedPending: countBy.get("proposed") ?? 0,
+    startsAt: shift.startsAt,
+  });
 
   const hoursToStart = Math.round((new Date(shift.startsAt).getTime() - Date.now()) / 3_600_000);
 
@@ -138,11 +157,17 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
           {formatShiftRole(shift.roleNeeded)} · {startTxt}
           {shift.city ? ` · ${shift.city}` : ""}
         </p>
-        <p className="mt-2 text-sm font-medium text-burgundy">
-          {open > 0 ? `Mist ${open} chef${open === 1 ? "" : "s"}` : "Bemand"} · {filled}/{shift.headcount} bemand
-          {hoursToStart >= 0 ? ` · start over ${hoursToStart}u` : " · gestart"}
-        </p>
-        <p className="mt-1 text-xs text-ink-500">Wat gebeurt er nu? Stel een chef voor — die krijgt direct de aanvraag.</p>
+        {/* P3 Track C: one legible operational status + the quantitative fill line. */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className={`rounded-full px-2.5 py-0.5 font-ui text-[10px] font-medium uppercase tracking-[0.12em] ${opsTone(ops.tone)}`}>
+            {ops.label}
+          </span>
+          <span className="text-sm font-medium text-burgundy">
+            {open > 0 ? `Mist ${open} chef${open === 1 ? "" : "s"}` : "Bemand"} · {filled}/{shift.headcount} bemand
+            {hoursToStart >= 0 ? ` · start over ${hoursToStart}u` : " · gestart"}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-ink-500">Wat gebeurt er nu? {ops.nextStep}</p>
         {/* P5a: shift-context AI quick-asks → hand the prompt to the assistant (it answers
             via the confirm-gated tools: shortlist, belvolgorde, klantbericht). */}
         {aiEnabled() && (
@@ -384,6 +409,21 @@ function aiCtx(
   const when = startLabel(shift.startsAt, shift.endsAt);
   const city = shift.city ? ` in ${shift.city}` : "";
   return `${verb}: ${formatShiftRole(shift.roleNeeded)} bij ${shift.companyName ?? "de klant"} op ${when}${city}? (dienst-id: ${shift.id})`;
+}
+
+function opsTone(tone: OpsTone): string {
+  switch (tone) {
+    case "good":
+      return "bg-emerald-100 text-emerald-700";
+    case "progress":
+      return "bg-blue-100 text-blue-700";
+    case "warn":
+      return "bg-amber-100 text-amber-800";
+    case "muted":
+      return "bg-bg-gray text-ink-500";
+    default:
+      return "bg-ink-100 text-ink-700";
+  }
 }
 
 function marginTone(tone: MarginEstimate["tone"]): string {
