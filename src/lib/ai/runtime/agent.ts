@@ -57,13 +57,16 @@ export type RunAgentArgs = {
   executeOptions: ExecuteOptions;
   maxSteps?: number;
   /** Cap on conversation-history messages kept (most recent), so a long session can't
-   *  overflow the model's context window. Default 24. */
+   *  overflow the model's context window. Default 60 — a dense turn (user + assistant +
+   *  several tool calls + their results) can be ~6 messages, so 24 only held ~3-4 turns and
+   *  the assistant "forgot" earlier context; 60 keeps ~10 turns. The static system prefix
+   *  stays cached, so the extra history is the only uncached cost. */
   maxHistoryMessages?: number;
 };
 
 export async function runAgent(args: RunAgentArgs): Promise<AgentOutcome> {
   const { brain, registry, ctx, executeOptions } = args;
-  const convo: Msg[] = capRecentHistory(args.messages, args.maxHistoryMessages ?? 24);
+  const convo: Msg[] = capRecentHistory(args.messages, args.maxHistoryMessages ?? 60);
   const steps: AgentStep[] = [];
   const maxSteps = args.maxSteps ?? 8;
 
