@@ -35,6 +35,9 @@ import {
   enqueueIntegrationEvent,
 } from "@/lib/integrations";
 import { recipientsFor } from "@/lib/notifications";
+import { getI18n } from "@/lib/i18n/server";
+import { fill, INTL_TAG } from "@/lib/i18n/locales";
+import { type Dict } from "@/lib/i18n/get-dict";
 import { requireAuth } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 
@@ -229,6 +232,7 @@ export default async function ChefProfilePage({
   searchParams: Promise<{ ok?: string; error?: string }>;
 }) {
   const session = await requireAuth("/chef/profile");
+  const { dict: t } = await getI18n();
   const sp = await searchParams;
 
   const [chef] = await db
@@ -240,11 +244,8 @@ export default async function ChefProfilePage({
   if (!chef) {
     return (
       <div>
-        <h1 className="font-serif text-3xl text-ink-900">Geen profiel gevonden</h1>
-        <p className="mt-4 text-sm text-ink-700">
-          Je account is wel actief, maar er is nog geen chef-profiel aan je
-          gekoppeld. Stuur een berichtje naar Maarten of Gina.
-        </p>
+        <h1 className="font-serif text-3xl text-ink-900">{t.profile.noProfileHeading}</h1>
+        <p className="mt-4 text-sm text-ink-700">{t.profile.noProfileBody}</p>
       </div>
     );
   }
@@ -280,30 +281,26 @@ export default async function ChefProfilePage({
 
   const flashOk =
     sp.ok === "saved"
-      ? "✓ Profiel opgeslagen."
+      ? t.profile.flashSaved
       : sp.ok === "requested"
-        ? "✓ Verzoek verstuurd naar Chef & Serve."
+        ? t.profile.flashRequested
         : null;
   const flashErr =
     sp.error === "request-incomplete"
-      ? "Vul alle velden in (toelichting min 5 tekens)."
+      ? t.profile.errIncomplete
       : sp.error === "bad-rate"
-        ? "Tarief klopt niet — max moet groter of gelijk aan min zijn."
+        ? t.profile.errBadRate
         : null;
 
   return (
     <div>
       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-        Mijn profiel
+        {t.profile.eyebrow}
       </p>
       <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
         {chef.fullName}
       </h1>
-      <p className="mt-2 text-sm text-ink-500">
-        Wat wij van jou hebben staan. Sommige velden kun je direct aanpassen —
-        andere moeten via Chef &amp; Serve om te voorkomen dat tarieven per
-        ongeluk wijzigen.
-      </p>
+      <p className="mt-2 text-sm text-ink-500">{t.profile.intro}</p>
 
       {/* CV-AI-1: nudge to the "maak je profiel compleet" surface */}
       <a
@@ -317,19 +314,21 @@ export default async function ChefProfilePage({
         <span className="text-sm text-ink-800">
           {pendingSuggestions.length > 0 ? (
             <>
-              We hebben{" "}
+              {t.profile.cvSuggestionsPre}
               <strong>
-                {pendingSuggestions.length}{" "}
-                {pendingSuggestions.length === 1 ? "voorstel" : "voorstellen"}
-              </strong>{" "}
-              uit je CV — bekijk en vul je profiel aan.
+                {fill(t.profile.cvSuggestionsBold, {
+                  n: pendingSuggestions.length,
+                  unit: pendingSuggestions.length === 1 ? t.profile.suggestionOne : t.profile.suggestionMany,
+                })}
+              </strong>
+              {t.profile.cvSuggestionsPost}
             </>
           ) : (
-            <>Maak je profiel compleet voor meer passende shifts.</>
+            <>{t.profile.completeProfile}</>
           )}
         </span>
         <span className="shrink-0 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy">
-          Bekijken →
+          {t.profile.view}
         </span>
       </a>
 
@@ -347,7 +346,7 @@ export default async function ChefProfilePage({
       {/* Mijn gegevens & werkprofiel — read-only snapshot */}
       <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
         <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-          Mijn gegevens &amp; werkprofiel
+          {t.profile.detailsHeading}
         </h2>
         <div className="mt-4 grid gap-6 sm:grid-cols-[120px_1fr]">
         <div className="aspect-square overflow-hidden rounded-lg border border-ink-200 bg-bg-gray">
@@ -372,17 +371,17 @@ export default async function ChefProfilePage({
         </div>
         <div className="text-sm">
           <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
-            E-mail
+            {t.profile.emailLabel}
           </p>
           <p className="text-ink-900">{chef.email}</p>
           <p className="mt-3 font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
-            Vakniveau · jaren ervaring
+            {t.profile.levelLabel}
           </p>
           <p className="text-ink-900">
-            {formatChefRole(chef.vakniveau)} · {chef.yearsExperience ?? "—"} jaar
+            {formatChefRole(chef.vakniveau)} · {chef.yearsExperience ?? "—"} {t.profile.yearUnit}
           </p>
           <p className="mt-3 font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
-            Huidig tarief
+            {t.profile.currentRate}
           </p>
           <p className="text-ink-900">
             €
@@ -393,25 +392,23 @@ export default async function ChefProfilePage({
             {chef.hourlyRateMaxCents
               ? (chef.hourlyRateMaxCents / 100).toFixed(0)
               : "—"}{" "}
-            per uur
+            {t.profile.perHour}
           </p>
 
           {ratingSummary.hasFeedback ? (
             <>
               <p className="mt-3 font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
-                Feedback van klanten
+                {t.profile.feedbackLabel}
               </p>
               <p className="text-ink-900">
-                {ratingSummary.ratingCount}{" "}
-                {ratingSummary.ratingCount === 1 ? "klant heeft" : "klanten hebben"}{" "}
-                feedback gegeven
+                {fill(
+                  ratingSummary.ratingCount === 1 ? t.profile.feedbackOne : t.profile.feedbackMany,
+                  { n: ratingSummary.ratingCount },
+                )}
                 {ratingSummary.averageRating != null ? (
-                  <> · gemiddeld {ratingSummary.averageRating.toFixed(1)} ★</>
+                  fill(t.profile.feedbackAvg, { avg: ratingSummary.averageRating.toFixed(1) })
                 ) : (
-                  <span className="text-ink-500">
-                    {" "}
-                    · gemiddelde vanaf 5 feedbacks
-                  </span>
+                  <span className="text-ink-500">{t.profile.feedbackAvgPending}</span>
                 )}
               </p>
             </>
@@ -423,17 +420,19 @@ export default async function ChefProfilePage({
       {pending.length > 0 ? (
         <section className="mt-10 rounded-lg border border-burgundy/30 bg-burgundy/5 p-5">
           <h2 className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-            In behandeling
+            {t.profile.pendingHeading}
           </h2>
           <ul className="mt-3 space-y-2 text-sm">
             {pending.map((p) => (
               <li key={p.id} className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-ink-900">{labelForField(p.field)}</p>
+                  <p className="text-ink-900">
+                    {t.profile.field[p.field as keyof Dict["profile"]["field"]] ?? p.field}
+                  </p>
                   <p className="text-xs text-ink-500">{p.reason}</p>
                 </div>
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider text-amber-800">
-                  In behandeling
+                  {t.profile.pendingChip}
                 </span>
               </li>
             ))}
@@ -475,6 +474,7 @@ export default async function ChefProfilePage({
 }
 
 async function DocumentsSection({ chefId }: { chefId: string }) {
+  const { locale, dict: t } = await getI18n();
   const docs = await db
     .select()
     .from(chefDocuments)
@@ -486,15 +486,16 @@ async function DocumentsSection({ chefId }: { chefId: string }) {
     )
     .orderBy(desc(chefDocuments.createdAt));
 
+  const dateOpts = { day: "numeric", month: "short", year: "numeric" } as const;
+
   return (
     <section className="mt-10">
       <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-        Documenten
+        {t.profile.documentsHeading}
       </h2>
       {docs.length === 0 ? (
         <p className="mt-3 rounded-lg border border-ink-200 bg-white p-4 text-sm text-ink-500">
-          Nog geen documenten geüpload. Vraag het kantoor om je documenten
-          toe te voegen.
+          {t.profile.documentsEmpty}
         </p>
       ) : (
         <ul className="mt-3 space-y-2">
@@ -511,20 +512,16 @@ async function DocumentsSection({ chefId }: { chefId: string }) {
                   {d.filename}
                 </a>
                 <p className="mt-0.5 text-xs text-ink-500">
-                  {labelForDocType(d.type)} ·{" "}
-                  {new Date(d.createdAt).toLocaleDateString("nl-NL", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
+                  {t.profile.docType[d.type as keyof Dict["profile"]["docType"]] ?? d.type} ·{" "}
+                  {new Date(d.createdAt).toLocaleDateString(INTL_TAG[locale], dateOpts)}
                   {d.expiresAt
-                    ? ` · verloopt ${new Date(d.expiresAt).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" })}`
+                    ? ` · ${fill(t.profile.docExpires, { date: new Date(d.expiresAt).toLocaleDateString(INTL_TAG[locale], dateOpts) })}`
                     : ""}
                 </p>
               </div>
               <div className="shrink-0 space-x-2">
-                <DocVisibilityChip clientVisible={d.clientVisible} />
-                <DocStatusChip status={d.status} />
+                <DocVisibilityChip clientVisible={d.clientVisible} t={t} />
+                <DocStatusChip status={d.status} t={t} />
               </div>
             </li>
           ))}
@@ -534,19 +531,7 @@ async function DocumentsSection({ chefId }: { chefId: string }) {
   );
 }
 
-function labelForDocType(t: string): string {
-  return (
-    {
-      cv: "CV",
-      photo: "Foto",
-      certificate: "Certificaat",
-      id_document: "ID-bewijs",
-      other: "Document",
-    } as Record<string, string>
-  )[t] ?? t;
-}
-
-function DocVisibilityChip({ clientVisible }: { clientVisible: boolean }) {
+function DocVisibilityChip({ clientVisible, t }: { clientVisible: boolean; t: Dict }) {
   return (
     <span
       className={`rounded-full px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider ${
@@ -554,25 +539,14 @@ function DocVisibilityChip({ clientVisible }: { clientVisible: boolean }) {
           ? "bg-blue-100 text-blue-700"
           : "bg-bg-gray text-ink-700"
       }`}
-      title={
-        clientVisible
-          ? "Klanten met een bevestigde shift mogen dit document zien"
-          : "Alleen Chef & Serve ziet dit document"
-      }
+      title={clientVisible ? t.profile.docClientVisibleTitle : t.profile.docInternalTitle}
     >
-      {clientVisible ? "Klant mag zien" : "Alleen intern"}
+      {clientVisible ? t.profile.docClientVisible : t.profile.docInternal}
     </span>
   );
 }
 
-function DocStatusChip({ status }: { status: string }) {
-  const labels: Record<string, string> = {
-    uploaded: "Geüpload",
-    needs_review: "Wacht op controle",
-    verified: "✓ Geverifieerd",
-    expired: "⚠ Verlopen",
-    rejected: "✗ Afgewezen",
-  };
+function DocStatusChip({ status, t }: { status: string; t: Dict }) {
   const tone: Record<string, string> = {
     uploaded: "bg-bg-gray text-ink-700",
     needs_review: "bg-amber-100 text-amber-800",
@@ -584,18 +558,7 @@ function DocStatusChip({ status }: { status: string }) {
     <span
       className={`rounded-full px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider ${tone[status] ?? "bg-bg-gray text-ink-700"}`}
     >
-      {labels[status] ?? status}
+      {t.profile.docStatus[status as keyof Dict["profile"]["docStatus"]] ?? status}
     </span>
   );
-}
-
-function labelForField(field: string): string {
-  return (
-    {
-      fullName: "Naam",
-      email: "E-mailadres",
-      vakniveau: "Vakniveau",
-      hourlyRate: "Uurtarief",
-    } as Record<string, string>
-  )[field] ?? field;
 }
