@@ -38,6 +38,7 @@ const MAIN: Item[] = [
   { label: "Facturen", href: "/admin/business/invoices", icon: "banknote" },
   { label: "Analyse", href: "/admin/business/insights", icon: "bar-chart" },
   { label: "Rapportage", href: "/admin/business/reporting", icon: "activity" },
+  { label: "Afwijkingen", href: "/admin/business/overpromise", icon: "alert-triangle" },
   { label: "Team", href: "/admin/business/team", icon: "user-round" },
   { label: "Instellingen", href: "/admin/account/instellingen", icon: "settings" },
   { label: "Bedrijf", href: "/admin/business/instellingen", icon: "settings" },
