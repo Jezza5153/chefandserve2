@@ -49,6 +49,9 @@ import { recordChefEvent, diffSeconds } from "@/lib/chef-events";
 import { recipientsFor } from "@/lib/notifications";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { listVisibleComments } from "@/lib/domain/comments";
+import { getI18n } from "@/lib/i18n/server";
+import { fill, INTL_TAG, type Locale } from "@/lib/i18n/locales";
+import { type Dict } from "@/lib/i18n/get-dict";
 import { requireAuth } from "@/lib/permissions";
 
 import { ShiftCancelledByChefClientEmail } from "@/emails/ShiftCancelledByChefClientEmail";
@@ -430,6 +433,7 @@ export default async function ChefShiftDetailPage({
   searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
   const session = await requireAuth();
+  const { locale, dict: t } = await getI18n();
   const { placementId } = await params;
   const sp = await searchParams;
 
@@ -473,11 +477,11 @@ export default async function ChefShiftDetailPage({
   const offerStatus = ((): { label: string; warn: boolean } | null => {
     if (placement.status !== "proposed") return null;
     const exp = placement.expiresAt ? new Date(placement.expiresAt) : null;
-    if (exp && exp.getTime() < Date.now()) return { label: "Reactietijd verlopen", warn: true };
-    const seen = placement.seenAt ? "Gezien" : "Verstuurd";
+    if (exp && exp.getTime() < Date.now()) return { label: t.shiftDetail.offerExpired, warn: true };
+    const seen = placement.seenAt ? t.shiftDetail.offerSeen : t.shiftDetail.offerSent;
     if (exp) {
       const hrs = Math.max(0, Math.round((exp.getTime() - Date.now()) / 3_600_000));
-      return { label: `${seen} · reageer binnen ${hrs} u`, warn: hrs <= 4 };
+      return { label: fill(t.shiftDetail.offerRespondWithin, { seen, hours: hrs }), warn: hrs <= 4 };
     }
     return { label: seen, warn: false };
   })();
@@ -488,11 +492,11 @@ export default async function ChefShiftDetailPage({
 
   const errorMsg =
     sp.error === "reason-required"
-      ? "Geef een reden (minimaal 5 tekens)."
+      ? t.shiftDetail.errReasonRequired
       : sp.error === "cannot-cancel"
-        ? "Deze shift kun je niet meer annuleren."
+        ? t.shiftDetail.errCannotCancel
         : sp.error === "stale"
-          ? "Status is in de tussentijd veranderd."
+          ? t.shiftDetail.errStale
           : null;
 
   const tier = tierForShift(shift.startsAt);
@@ -516,13 +520,13 @@ export default async function ChefShiftDetailPage({
           href="/chef"
           className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy hover:underline"
         >
-          ← Dashboard
+          {t.shiftDetail.backDashboard}
         </Link>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-          {placement.status === "proposed" ? "Shift-voorstel" : "Shift"}
+          {placement.status === "proposed" ? t.shiftDetail.proposalLabel : t.shiftDetail.shiftLabel}
         </p>
         {offerStatus && (
           <span
@@ -550,19 +554,19 @@ export default async function ChefShiftDetailPage({
 
       {/* Shift details */}
       <div className="mt-8 grid gap-3 rounded-lg border border-ink-200 bg-white p-6">
-        <Row label="Wanneer" value={formatRange(shift.startsAt, shift.endsAt)} />
-        <Row label="Locatie" value={shift.location ?? shift.city ?? "—"} />
+        <Row label={t.shiftDetail.rowWhen} value={formatRange(shift.startsAt, shift.endsAt, locale)} />
+        <Row label={t.shiftDetail.rowLocation} value={shift.location ?? shift.city ?? "—"} />
         <Row
-          label="Vergoeding"
+          label={t.shiftDetail.rowCompensation}
           value={
             shift.chefRateCents
-              ? `€${(shift.chefRateCents / 100).toFixed(2)} per uur`
-              : "Nog te bevestigen door Chef & Serve"
+              ? fill(t.shiftDetail.ratePerHour, { rate: (shift.chefRateCents / 100).toFixed(2) })
+              : t.shiftDetail.ratePending
           }
         />
         {/* PR-CHEF-2b: only the chef-visible channel is shown — never shift.notes. */}
         {shift.chefVisibleNotes ? (
-          <Row label="Info van Chef & Serve" value={shift.chefVisibleNotes} />
+          <Row label={t.shiftDetail.infoFromStaff} value={shift.chefVisibleNotes} />
         ) : null}
       </div>
 
@@ -578,29 +582,29 @@ export default async function ChefShiftDetailPage({
         shift.startFlexible ||
         (client?.nonNegotiables?.length ?? 0) > 0) && (
         <section className="mt-6 rounded-lg border border-ink-200 bg-white p-6">
-          <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">Brief</p>
+          <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">{t.shiftDetail.briefLabel}</p>
           <div className="mt-3 grid gap-3">
-            {shift.dressCode ? <Row label="Dresscode" value={shift.dressCode} /> : null}
-            {shift.languageRequired ? <Row label="Taal" value={shift.languageRequired} /> : null}
+            {shift.dressCode ? <Row label={t.shiftDetail.dressCode} value={shift.dressCode} /> : null}
+            {shift.languageRequired ? <Row label={t.shiftDetail.language} value={shift.languageRequired} /> : null}
             {shift.minExperience != null ? (
-              <Row label="Min. ervaring" value={`${shift.minExperience} jaar`} />
+              <Row label={t.shiftDetail.minExperience} value={fill(t.shiftDetail.yearsValue, { years: shift.minExperience })} />
             ) : null}
-            {shift.kitchenType ? <Row label="Keuken" value={shift.kitchenType} /> : null}
+            {shift.kitchenType ? <Row label={t.shiftDetail.kitchen} value={shift.kitchenType} /> : null}
             {shift.soloOrTeam ? (
-              <Row label="Inzet" value={shift.soloOrTeam === "solo" ? "Solo" : "In team"} />
+              <Row label={t.shiftDetail.deployment} value={shift.soloOrTeam === "solo" ? t.shiftDetail.solo : t.shiftDetail.team} />
             ) : null}
             {shift.serviceStyle ? (
               <Row
-                label="Service"
+                label={t.shiftDetail.service}
                 value={
                   shift.serviceStyle === "prep"
-                    ? "Mise en place"
+                    ? t.shiftDetail.servicePrep
                     : shift.serviceStyle === "live"
-                      ? "Live service"
+                      ? t.shiftDetail.serviceLive
                       : shift.serviceStyle === "buffet"
-                        ? "Buffet"
+                        ? t.shiftDetail.serviceBuffet
                         : shift.serviceStyle === "fine_dining"
-                          ? "Fine dining"
+                          ? t.shiftDetail.serviceFineDining
                           : shift.serviceStyle
                 }
               />
@@ -610,13 +614,13 @@ export default async function ChefShiftDetailPage({
           {(shift.parkingAvailable || shift.mealIncluded || shift.startFlexible) && (
             <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-ink-600">
               {shift.parkingAvailable ? (
-                <span className="rounded-full bg-bg-gray px-2 py-0.5">🅿️ Parkeren</span>
+                <span className="rounded-full bg-bg-gray px-2 py-0.5">{t.shifts.parking}</span>
               ) : null}
               {shift.mealIncluded ? (
-                <span className="rounded-full bg-bg-gray px-2 py-0.5">🍽️ Maaltijd inbegrepen</span>
+                <span className="rounded-full bg-bg-gray px-2 py-0.5">{t.shifts.mealIncluded}</span>
               ) : null}
               {shift.startFlexible ? (
-                <span className="rounded-full bg-bg-gray px-2 py-0.5">🕒 Flexibele starttijd</span>
+                <span className="rounded-full bg-bg-gray px-2 py-0.5">{t.shifts.flexibleStart}</span>
               ) : null}
             </div>
           )}
@@ -624,7 +628,8 @@ export default async function ChefShiftDetailPage({
           {client?.nonNegotiables && client.nonNegotiables.length > 0 ? (
             <div className="mt-4">
               <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-                Niet-onderhandelbaar{client.companyName ? ` bij ${client.companyName}` : ""}
+                {t.shiftDetail.nonNegotiables}
+                {client.companyName ? fill(t.shiftDetail.nonNegotiablesAt, { client: client.companyName }) : ""}
               </p>
               <ul className="mt-1.5 space-y-1 text-sm text-ink-800">
                 {client.nonNegotiables.map((n) => (
@@ -638,9 +643,9 @@ export default async function ChefShiftDetailPage({
           ) : null}
 
           <p className="mt-4 text-xs text-ink-600">
-            Vraag of probleem vóór je shift?{" "}
+            {t.shiftDetail.questionBeforeShift}{" "}
             <a href={`tel:${MAARTEN_PHONE}`} className="font-medium text-burgundy hover:underline">
-              Bel Maarten · {MAARTEN_PHONE}
+              {fill(t.shiftDetail.cancel.callMaarten, { phone: MAARTEN_PHONE })}
             </a>
           </p>
         </section>
@@ -652,6 +657,7 @@ export default async function ChefShiftDetailPage({
           name={client.contactName ?? client.companyName}
           phone={client.phone}
           address={shift.location ?? `${client.address ?? ""} ${client.city ?? ""}`.trim()}
+          t={t}
         />
       )}
 
@@ -675,7 +681,7 @@ export default async function ChefShiftDetailPage({
           <>
             {sp.ok === "signal" ? (
               <p className="mt-8 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
-                ✓ Doorgegeven aan Maarten.
+                {t.shiftDetail.signalSuccess}
               </p>
             ) : null}
             <ShiftSignals placementId={placement.id} recordAction={recordSignal} />
@@ -685,10 +691,8 @@ export default async function ChefShiftDetailPage({
       {/* Decision form (proposed only) */}
       {placement.status === "proposed" ? (
         <section className="mt-8">
-          <h2 className="font-serif text-xl text-ink-900">Wil je deze shift?</h2>
-          <p className="mt-1 text-sm text-ink-700">
-            Reageer zo snel mogelijk. Maarten ziet je antwoord direct.
-          </p>
+          <h2 className="font-serif text-xl text-ink-900">{t.shiftDetail.decisionHeading}</h2>
+          <p className="mt-1 text-sm text-ink-700">{t.shiftDetail.decisionSubtext}</p>
           <div className="mt-4 flex flex-wrap gap-3">
             <form action={respond}>
               <input type="hidden" name="placementId" value={placement.id} />
@@ -697,22 +701,21 @@ export default async function ChefShiftDetailPage({
                 type="submit"
                 className="rounded-full bg-emerald-600 px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-emerald-700"
               >
-                ✓ Ja, ik kom
+                {t.shiftDetail.acceptYes}
               </button>
             </form>
             <RejectWithReason placementId={placement.id} respondAction={respond} />
           </div>
-          <p className="mt-3 text-xs leading-relaxed text-ink-500">
-            Als je accepteert, rekent Maarten op je. Kun je toch niet? Laat het
-            direct weten.
-          </p>
+          <p className="mt-3 text-xs leading-relaxed text-ink-500">{t.shiftDetail.acceptanceWarning}</p>
         </section>
       ) : (
         <section className="mt-8 rounded-lg border border-ink-200 bg-white p-4 text-sm text-ink-700">
-          Status:{" "}
-          <strong className="text-ink-900">{labelFor(placement.status)}</strong>
+          {t.shiftDetail.statusPrefix}{" "}
+          <strong className="text-ink-900">
+            {t.shifts.status[placement.status as keyof Dict["shifts"]["status"]] ?? placement.status}
+          </strong>
           {placement.respondedAt &&
-            ` · gereageerd ${new Date(placement.respondedAt).toLocaleDateString("nl-NL")}`}
+            ` · ${fill(t.shiftDetail.respondedOn, { date: new Date(placement.respondedAt).toLocaleDateString(INTL_TAG[locale]) })}`}
         </section>
       )}
 
@@ -731,6 +734,7 @@ export default async function ChefShiftDetailPage({
           placementId={placement.id}
           current={placement.chefReturnSignal}
           action={recordReturnSignal}
+          t={t}
         />
       )}
 
@@ -742,6 +746,7 @@ export default async function ChefShiftDetailPage({
           clientName={client.companyName}
           current={clientPref}
           action={setClientPref}
+          t={t}
         />
       ) : null}
 
@@ -749,14 +754,14 @@ export default async function ChefShiftDetailPage({
       {messages.length > 0 ? (
         <section className="mt-8">
           <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-            Berichten
+            {t.shiftDetail.messagesHeading}
           </h2>
           <ul className="mt-3 space-y-2">
             {messages.map((m) => (
               <li key={m.id} className="rounded-lg border border-ink-200 bg-white p-3">
                 <p className="whitespace-pre-wrap break-words text-sm text-ink-900">{m.body}</p>
                 <p className="mt-1 text-[10px] text-ink-400">
-                  {new Date(m.createdAt).toLocaleString("nl-NL")}
+                  {new Date(m.createdAt).toLocaleString(INTL_TAG[locale])}
                 </p>
               </li>
             ))}
@@ -780,29 +785,16 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatRange(start: Date, end: Date): string {
+function formatRange(start: Date, end: Date, locale: Locale): string {
+  const tag = INTL_TAG[locale];
   const s = new Date(start);
   const e = new Date(end);
-  return `${s.toLocaleDateString("nl-NL", {
+  return `${s.toLocaleDateString(tag, {
     weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
-  })}, ${s.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}–${e.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}`;
-}
-
-function labelFor(status: string): string {
-  return (
-    {
-      proposed: "Voorgesteld",
-      accepted: "Geaccepteerd",
-      confirmed: "Bevestigd",
-      rejected: "Afgewezen",
-      cancelled: "Geannuleerd",
-      completed: "Afgerond",
-      no_show: "No-show",
-    } as Record<string, string>
-  )[status] ?? status;
+  })}, ${s.toLocaleTimeString(tag, { hour: "2-digit", minute: "2-digit" })}–${e.toLocaleTimeString(tag, { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 function ClientPrefSection({
@@ -811,24 +803,28 @@ function ClientPrefSection({
   clientName,
   current,
   action,
+  t,
 }: {
   placementId: string;
   clientId: string;
   clientName: string;
   current: string | null;
   action: (formData: FormData) => Promise<void>;
+  t: Dict;
 }) {
   // One-tap option buttons (each its own form); the active one is highlighted.
+  // CHEF_CLIENT_PREF_OPTIONS labels come from the domain (still NL) — a deeper
+  // locale-aware-helpers pass; only "Geen voorkeur" + the chrome are localised here.
   const opts: { key: string; label: string }[] = [
-    { key: "none", label: "Geen voorkeur" },
+    { key: "none", label: t.shiftDetail.clientPrefNone },
     ...CHEF_CLIENT_PREF_OPTIONS,
   ];
   return (
     <section className="mt-8 rounded-lg border border-ink-200 bg-white p-5">
-      <h2 className="font-serif text-xl text-ink-900">Voorkeur voor {clientName}</h2>
-      <p className="mt-1 text-sm text-ink-700">
-        Alleen Maarten ziet dit — het helpt om je naar de juiste plekken te sturen.
-      </p>
+      <h2 className="font-serif text-xl text-ink-900">
+        {fill(t.shiftDetail.clientPrefHeading, { client: clientName })}
+      </h2>
+      <p className="mt-1 text-sm text-ink-700">{t.shiftDetail.clientPrefSubtext}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {opts.map((o) => {
           const active = (current ?? "none") === o.key;
@@ -862,18 +858,17 @@ function ReturnSignalSection({
   placementId,
   current,
   action,
+  t,
 }: {
   placementId: string;
   current: boolean | null;
   action: (formData: FormData) => Promise<void>;
+  t: Dict;
 }) {
   return (
     <section className="mt-8 rounded-lg border border-ink-200 bg-white p-5">
-      <h2 className="font-serif text-xl text-ink-900">Zou je hier terugkomen?</h2>
-      <p className="mt-1 text-sm text-ink-700">
-        Eén tik — alleen Maarten ziet dit. Het helpt om jou bij de juiste plekken
-        in te delen.
-      </p>
+      <h2 className="font-serif text-xl text-ink-900">{t.shiftDetail.returnHeading}</h2>
+      <p className="mt-1 text-sm text-ink-700">{t.shiftDetail.returnSubtext}</p>
       <div className="mt-4 flex flex-wrap gap-3">
         <form action={action}>
           <input type="hidden" name="placementId" value={placementId} />
@@ -886,7 +881,7 @@ function ReturnSignalSection({
                 : "border border-emerald-600/40 bg-white text-emerald-700 hover:bg-emerald-50"
             }`}
           >
-            👍 Graag weer
+            {t.shiftDetail.returnYes}
           </button>
         </form>
         <form action={action}>
@@ -900,14 +895,12 @@ function ReturnSignalSection({
                 : "border border-burgundy/40 bg-white text-burgundy hover:bg-burgundy/5"
             }`}
           >
-            👎 Liever niet
+            {t.shiftDetail.returnNo}
           </button>
         </form>
       </div>
       {current !== null && (
-        <p className="mt-3 text-xs text-ink-500">
-          Bedankt — je kunt dit altijd aanpassen.
-        </p>
+        <p className="mt-3 text-xs text-ink-500">{t.shiftDetail.returnThanks}</p>
       )}
     </section>
   );
@@ -917,15 +910,17 @@ function ContactCard({
   name,
   phone,
   address,
+  t,
 }: {
   name: string;
   phone: string | null;
   address: string | null;
+  t: Dict;
 }) {
   return (
     <div className="mt-8 rounded-lg border border-burgundy/20 bg-burgundy/5 p-5">
       <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-        Contact
+        {t.shiftDetail.contactHeading}
       </p>
       <p className="mt-1 font-serif text-base text-ink-900">{name}</p>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -935,7 +930,7 @@ function ContactCard({
               href={`tel:${phone.replace(/[^+\d]/g, "")}`}
               className="rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900"
             >
-              Bel · {phone}
+              {fill(t.shiftDetail.contactCall, { phone })}
             </a>
             <a
               href={`https://wa.me/${phone.replace(/[^\d]/g, "")}`}
@@ -943,7 +938,7 @@ function ContactCard({
               rel="noopener noreferrer"
               className="rounded-full border border-burgundy/40 bg-white px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy hover:bg-burgundy/5"
             >
-              WhatsApp
+              {t.shiftDetail.contactWhatsApp}
             </a>
           </>
         ) : null}
@@ -954,7 +949,7 @@ function ContactCard({
             rel="noopener noreferrer"
             className="rounded-full border border-burgundy/40 bg-white px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy hover:bg-burgundy/5"
           >
-            Route openen
+            {t.shiftDetail.contactRoute}
           </a>
         ) : null}
       </div>
