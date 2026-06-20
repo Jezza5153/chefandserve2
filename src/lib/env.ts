@@ -283,6 +283,12 @@ const serverSchema = z.object({
   // one per day). Default off; the endpoint re-checks the flag.
   CLOCKOUT_DIGEST_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // CHEF-PR11 — NL/EN language toggle for the chef portal. When on, chefs see a
+  // language switch and an "en" cookie is honoured; when off, everything stays
+  // Dutch (the dictionary default), so prod is unchanged until the EN copy is
+  // complete. Per-device via a cookie — no DB column, no shared-table edit.
+  I18N_ENABLED: z.enum(["true", "false"]).optional(),
+
   // Vercel injects this automatically; defaulted for local dev
   VERCEL_ENV: z.enum(["development", "preview", "production"]).default("development"),
 });
