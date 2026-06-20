@@ -2,7 +2,7 @@ import { and, desc, eq, isNull, like, or, sql } from "drizzle-orm";
 import Link from "next/link";
 
 import { db } from "@/lib/db/client";
-import { chefs } from "@/lib/db/schema";
+import { chefs, vakniveauEnum } from "@/lib/db/schema";
 import { formatChefRole } from "@/lib/labels";
 import { requirePermission } from "@/lib/permissions";
 
@@ -26,6 +26,10 @@ export default async function ChefsListPage({
     pref?: string;
     employment?: string;
     data?: string;
+    niveau?: string;
+    segment?: string;
+    rating?: string;
+    spoed?: string;
   }>;
 }) {
   await requirePermission("chefs", "read");
@@ -36,9 +40,13 @@ export default async function ChefsListPage({
   const pref = params.pref ?? "";
   const employment = params.employment ?? "";
   const dataFilter = params.data ?? "";
+  const niveau = params.niveau ?? "";
+  const segment = params.segment ?? "";
+  const rating = params.rating ?? ""; // "4" / "4.5" → minimum average ★
+  const spoed = params.spoed ?? ""; // "1" → availableForEmergency
 
   // PR-2.1: preserve every active filter across pill clicks.
-  const cur = { status, q, transport, pref, employment, data: dataFilter };
+  const cur = { status, q, transport, pref, employment, data: dataFilter, niveau, segment, rating, spoed };
   const toHref = (over: Partial<typeof cur>): string => {
     const m = { ...cur, ...over };
     const sp = new URLSearchParams();
@@ -48,6 +56,10 @@ export default async function ChefsListPage({
     if (m.pref) sp.set("pref", m.pref);
     if (m.employment) sp.set("employment", m.employment);
     if (m.data) sp.set("data", m.data);
+    if (m.niveau) sp.set("niveau", m.niveau);
+    if (m.segment) sp.set("segment", m.segment);
+    if (m.rating) sp.set("rating", m.rating);
+    if (m.spoed) sp.set("spoed", m.spoed);
     const s = sp.toString();
     return `/admin/business/chefs${s ? `?${s}` : ""}`;
   };
@@ -68,6 +80,15 @@ export default async function ChefsListPage({
   if (pref) whereParts.push(sql`${pref} = ANY(${chefs.preferences})`);
   if (employment) whereParts.push(eq(chefs.employmentType, employment as "payroll" | "zzp" | "both"));
   if (dataFilter === "incomplete") whereParts.push(or(isNull(chefs.postcode), isNull(chefs.transportMode))!);
+  // B1: precise chef-search dimensions (Maarten's repeated ways of hunting).
+  if (niveau) whereParts.push(eq(chefs.vakniveau, niveau as (typeof vakniveauEnum.enumValues)[number]));
+  if (segment) whereParts.push(sql`${segment} = ANY(${chefs.segments})`);
+  const ratingMin = Number(rating);
+  if (Number.isFinite(ratingMin) && ratingMin > 0) {
+    // numeric(3,2), nullable — unrated chefs (NULL) correctly drop out of "★N+".
+    whereParts.push(sql`${chefs.averageRating} >= ${ratingMin}`);
+  }
+  if (spoed === "1") whereParts.push(eq(chefs.availableForEmergency, true));
 
   const rows = await db
     .select({
@@ -84,6 +105,9 @@ export default async function ChefsListPage({
       transportMode: chefs.transportMode,
       preferences: chefs.preferences,
       postcode: chefs.postcode,
+      averageRating: chefs.averageRating,
+      ratingCount: chefs.ratingCount,
+      availableForEmergency: chefs.availableForEmergency,
     })
     .from(chefs)
     .where(and(...whereParts))
@@ -185,6 +209,27 @@ export default async function ChefsListPage({
         ))}
       </div>
 
+      {/* B1: precise chef-search — vakniveau */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <span className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Niveau</span>
+        {(["commis", "chef_de_partie", "sous_chef", "chef_de_cuisine", "patissier"] as const).map((nv) => (
+          <FilterPill key={nv} label={formatChefRole(nv)} active={niveau === nv} href={toHref({ niveau: niveau === nv ? "" : nv })} />
+        ))}
+        <span className="ml-2 font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Segment</span>
+        {(["hotel", "fine_dining", "michelin", "banqueting", "event"] as const).map((sg) => (
+          <FilterPill key={sg} label={SEGMENT_FILTER_LABELS[sg]} active={segment === sg} href={toHref({ segment: segment === sg ? "" : sg })} />
+        ))}
+      </div>
+
+      {/* B1: kwaliteit + spoed */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <span className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Beoordeling</span>
+        <FilterPill label="★ 4+" active={rating === "4"} href={toHref({ rating: rating === "4" ? "" : "4" })} />
+        <FilterPill label="★ 4,5+" active={rating === "4.5"} href={toHref({ rating: rating === "4.5" ? "" : "4.5" })} />
+        <span className="ml-2 font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Inzet</span>
+        <FilterPill label="Spoed-inzetbaar" active={spoed === "1"} href={toHref({ spoed: spoed === "1" ? "" : "1" })} />
+      </div>
+
       {rows.length === 0 ? (
         <div className="mt-10 rounded-lg border border-ink-200 bg-white p-10 text-center">
           <p className="font-serif text-xl text-ink-900">Geen chefs gevonden</p>
@@ -206,6 +251,7 @@ export default async function ChefsListPage({
                 <Th>Stad</Th>
                 <Th>Vervoer / voorkeur</Th>
                 <Th>Ervaring</Th>
+                <Th>Beoordeling</Th>
                 <Th>Contact</Th>
                 <Th>Status</Th>
               </tr>
@@ -241,6 +287,16 @@ export default async function ChefsListPage({
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-700">
                     {r.yearsExperience ? `${r.yearsExperience}j` : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {r.averageRating != null && (r.ratingCount ?? 0) > 0 ? (
+                      <span className="text-amber-700">
+                        ★ {Number(r.averageRating).toFixed(1)}
+                        <span className="text-ink-400"> ({r.ratingCount})</span>
+                      </span>
+                    ) : (
+                      <span className="text-ink-400">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-700">
                     {r.email ?? r.phone ?? "—"}
@@ -332,4 +388,11 @@ const PREF_FILTER_LABELS: Record<string, string> = {
   hotels: "Hotels",
   banqueting: "Banqueting",
   michelin: "Michelin",
+};
+const SEGMENT_FILTER_LABELS: Record<string, string> = {
+  hotel: "Hotel",
+  fine_dining: "Fine dining",
+  michelin: "Michelin",
+  banqueting: "Banqueting",
+  event: "Event",
 };
