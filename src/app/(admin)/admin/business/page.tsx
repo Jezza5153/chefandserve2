@@ -58,6 +58,7 @@ import { getUnbilledHoursByClient } from "@/lib/domain/invoicing";
 import { detectSwing, getPlatformTimeSeries } from "@/lib/domain/reporting";
 import { formatEuro } from "@/lib/hours-labels";
 import { requirePermission } from "@/lib/permissions";
+import { listSavedSearches } from "@/lib/domain/saved-searches";
 import {
   addDaysToKey,
   amsterdamDayKey,
@@ -376,6 +377,8 @@ export default async function BusinessDashboardPage({
   // set, so every downstream count reflects what actually needs attention now.
   const rankedAll = rankAttentionItems(items);
   const signalStates = await loadSignalStates(session.user.id);
+  // B3: the owner's own pinned chef-searches → quick-action buttons on the toolbar.
+  const myButtons = await listSavedSearches(session.user.id, "chef_search");
   const ranked = rankedAll.filter((it) => !isSignalHidden(signalStates.get(it.signalKey ?? ""), it.fingerprint, now));
   const visible = ranked.slice(0, 6);
 
@@ -487,6 +490,17 @@ export default async function BusinessDashboardPage({
           <ToolbarLink href="/admin/business/chefs" icon="search" label="Chef zoeken" />
           <ToolbarLink href="/admin/business/inbox" icon="message" label="Berichten" />
           <ToolbarLink href="/admin/business/payroll" icon="upload" label="Exporteren" />
+          {/* B3: Maarten's own pinned chef-searches (saved on /chefs via "Bewaar als knop"). */}
+          {myButtons.map((b) => (
+            <Link
+              key={b.id}
+              href={`/admin/business/chefs${b.query ? `?${b.query}` : ""}`}
+              title="Mijn opgeslagen zoekopdracht"
+              className="inline-flex items-center gap-1.5 rounded-full border border-burgundy/30 bg-burgundy/5 px-3.5 py-2 font-ui text-[11px] font-medium text-burgundy transition hover:bg-burgundy/10"
+            >
+              ★ {b.label}
+            </Link>
+          ))}
         </div>
 
         {/* DASH-5b: operations command bar — type an intent, the assistant resolves it */}
