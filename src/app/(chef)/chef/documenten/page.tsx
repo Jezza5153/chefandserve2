@@ -16,6 +16,9 @@ import {
   requestChefDocumentUpload,
   type DocumentType,
 } from "@/lib/domain/chef-documents";
+import { getI18n } from "@/lib/i18n/server";
+import { fill, INTL_TAG } from "@/lib/i18n/locales";
+import { type Dict } from "@/lib/i18n/get-dict";
 import { requireAuth } from "@/lib/permissions";
 
 import { ChefDocUploader } from "./ChefDocUploader";
@@ -24,18 +27,6 @@ export const metadata = { title: "Mijn documenten", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
 const LABEL = "font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy";
-
-const TYPE_LABEL: Record<string, string> = {
-  cv: "CV",
-  photo: "Foto",
-  certificate: "Certificaat / diploma",
-  id_document: "ID-bewijs",
-  id_copy_front: "ID (voorkant)",
-  id_copy_back: "ID (achterkant)",
-  bsn_registration: "BSN-registratie",
-  bank_card: "Bankpas",
-  other: "Overig",
-};
 
 const ALLOWED_UPLOAD = new Set<DocumentType>(["id_document", "certificate", "other"]);
 
@@ -81,11 +72,21 @@ async function deleteDoc(formData: FormData) {
   redirect("/chef/documenten?ok=deleted");
 }
 
-function expiryNote(expiresAt: Date | null): { text: string; cls: string } | null {
+function expiryNote(
+  expiresAt: Date | null,
+  t: Dict,
+): { text: string; cls: string } | null {
   if (!expiresAt) return null;
   const days = Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000);
-  if (days < 0) return { text: "Verlopen — upload een nieuwe", cls: "text-burgundy" };
-  if (days <= 30) return { text: `Verloopt over ${days} dag${days === 1 ? "" : "en"}`, cls: "text-amber-700" };
+  if (days < 0) return { text: t.documenten.expired, cls: "text-burgundy" };
+  if (days <= 30)
+    return {
+      text: fill(t.documenten.expiresIn, {
+        days,
+        unit: days === 1 ? t.documenten.dayOne : t.documenten.dayMany,
+      }),
+      cls: "text-amber-700",
+    };
   return null;
 }
 
@@ -95,9 +96,10 @@ export default async function ChefDocumentenPage({
   searchParams: Promise<{ ok?: string }>;
 }) {
   const sp = await searchParams;
+  const { locale, dict: t } = await getI18n();
   const chefId = await resolveChefId();
   const docs = await listChefDocuments(chefId);
-  const dayFmt = new Intl.DateTimeFormat("nl-NL", {
+  const dayFmt = new Intl.DateTimeFormat(INTL_TAG[locale], {
     timeZone: "Europe/Amsterdam",
     day: "numeric",
     month: "short",
@@ -106,22 +108,19 @@ export default async function ChefDocumentenPage({
 
   return (
     <div className="pb-24">
-      <p className={LABEL}>Documenten</p>
-      <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">Mijn documenten</h1>
-      <p className="mt-3 max-w-prose text-sm text-ink-700">
-        Je contract, loonstroken, jaaropgave, ID en certificaten op één plek. Het kantoor
-        zet betaaldocumenten hier neer; jij kunt zelf documenten toevoegen.
-      </p>
+      <p className={LABEL}>{t.documenten.eyebrow}</p>
+      <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">{t.documenten.title}</h1>
+      <p className="mt-3 max-w-prose text-sm text-ink-700">{t.documenten.intro}</p>
 
       {sp.ok === "deleted" ? (
         <p className="mt-4 rounded-lg border border-ink-200 bg-bg-gray/50 p-3 text-sm text-ink-600">
-          Document verwijderd.
+          {t.documenten.deleted}
         </p>
       ) : null}
 
       {/* Upload */}
       <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
-        <p className={LABEL}>Document toevoegen</p>
+        <p className={LABEL}>{t.documenten.addDoc}</p>
         <div className="mt-3 max-w-md">
           <ChefDocUploader requestUpload={requestUpload} />
         </div>
@@ -129,23 +128,20 @@ export default async function ChefDocumentenPage({
 
       {/* List */}
       <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
-        <p className={LABEL}>Je documenten</p>
+        <p className={LABEL}>{t.documenten.yourDocs}</p>
         {docs.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-500">
-            Nog geen documenten. Voeg er hierboven een toe, of wacht tot het kantoor je
-            loonstrook of contract plaatst.
-          </p>
+          <p className="mt-3 text-sm text-ink-500">{t.documenten.empty}</p>
         ) : (
           <ul className="mt-3 divide-y divide-ink-100">
             {docs.map((d) => {
-              const exp = expiryNote(d.expiresAt);
+              const exp = expiryNote(d.expiresAt, t);
               return (
                 <li key={d.id} className="flex items-center justify-between gap-3 py-3 text-sm">
                   <div className="min-w-0">
                     <p className="truncate font-medium text-ink-900">{d.filename}</p>
                     <p className="text-xs text-ink-500">
-                      {TYPE_LABEL[d.type] ?? d.type} · {dayFmt.format(d.createdAt)}
-                      {d.verifiedAt ? " · ✓ geverifieerd" : ""}
+                      {t.documenten.types[d.type as keyof Dict["documenten"]["types"]] ?? d.type} · {dayFmt.format(d.createdAt)}
+                      {d.verifiedAt ? ` · ${t.documenten.verified}` : ""}
                       {exp ? (
                         <>
                           {" · "}
@@ -162,12 +158,12 @@ export default async function ChefDocumentenPage({
                         rel="noopener noreferrer"
                         className="font-ui text-[11px] font-medium uppercase tracking-[0.15em] text-burgundy hover:underline"
                       >
-                        Bekijk
+                        {t.documenten.view}
                       </a>
                     ) : null}
                     <form action={deleteDoc}>
                       <input type="hidden" name="documentId" value={d.id} />
-                      <button className="text-xs text-ink-400 hover:text-burgundy">Verwijder</button>
+                      <button className="text-xs text-ink-400 hover:text-burgundy">{t.documenten.delete}</button>
                     </form>
                   </div>
                 </li>

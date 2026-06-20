@@ -12,6 +12,7 @@ import { CopyUrlBlock } from "@/components/CopyUrlBlock";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { deriveCalendarToken, newCalendarSecret } from "@/lib/calendar/ics";
+import { getI18n } from "@/lib/i18n/server";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata = { title: "Agenda" };
@@ -29,6 +30,7 @@ async function rotateSecret() {
 
 export default async function ChefCalendarPage() {
   const session = await requireAuth("/chef/calendar");
+  const { dict: t } = await getI18n();
 
   // Lazy issue
   let [u] = await db
@@ -52,60 +54,52 @@ export default async function ChefCalendarPage() {
   return (
     <div>
       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-        Agenda
+        {t.calendar.eyebrow}
       </p>
       <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
-        Mijn agenda — abonneer op je telefoon
+        {t.calendar.title}
       </h1>
-      <p className="mt-4 max-w-prose text-sm leading-relaxed text-ink-700">
-        Krijg al je bevestigde shifts automatisch in je telefoon-agenda.
-        Wijzigen of annuleren? Je agenda werkt zichzelf bij.
-      </p>
+      <p className="mt-4 max-w-prose text-sm leading-relaxed text-ink-700">{t.calendar.intro}</p>
 
       <CopyUrlBlock url={icsUrl} />
 
       <section className="mt-8 rounded-lg border border-ink-200 bg-white p-5">
-        <h2 className="font-serif text-lg text-ink-900">Hoe abonneer ik?</h2>
+        <h2 className="font-serif text-lg text-ink-900">{t.calendar.howTo}</h2>
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-ink-700">
-          <li>Kopieer de URL hierboven.</li>
+          <li>{t.calendar.stepCopy}</li>
           <li>
-            <strong>iPhone:</strong> Instellingen → Agenda → Accounts →
-            Account toevoegen → Andere → Agenda-abonnement toevoegen → plak
-            de URL.
+            <strong>{t.calendar.iphoneLabel}</strong>
+            {t.calendar.iphoneBody}
           </li>
           <li>
-            <strong>Android (Google):</strong> Open{" "}
+            <strong>{t.calendar.androidLabel}</strong>
+            {t.calendar.androidPre}
             <a
               href="https://calendar.google.com/calendar/u/0/r/settings/addbyurl"
               target="_blank"
               rel="noopener noreferrer"
               className="text-burgundy hover:underline"
             >
-              calendar.google.com → toevoegen via URL
-            </a>{" "}
-            → plak de URL.
+              {t.calendar.androidLink}
+            </a>
+            {t.calendar.androidPost}
           </li>
           <li>
-            <strong>Outlook:</strong> Open agenda → Abonneren op online
-            agenda → plak de URL.
+            <strong>{t.calendar.outlookLabel}</strong>
+            {t.calendar.outlookBody}
           </li>
         </ol>
       </section>
 
       <section className="mt-8 rounded-lg border border-burgundy/20 bg-burgundy/5 p-5">
-        <h2 className="font-serif text-base text-ink-900">
-          URL gelekt of gestolen?
-        </h2>
-        <p className="mt-2 text-sm text-ink-700">
-          Vernieuw de link — oude abonnees stoppen met updates en je krijgt
-          een nieuwe URL. Je moet daarna opnieuw abonneren op je telefoon.
-        </p>
+        <h2 className="font-serif text-base text-ink-900">{t.calendar.leakedTitle}</h2>
+        <p className="mt-2 text-sm text-ink-700">{t.calendar.leakedBody}</p>
         <form action={rotateSecret} className="mt-3">
           <button
             type="submit"
             className="rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
           >
-            Genereer nieuwe URL
+            {t.calendar.regenerate}
           </button>
         </form>
       </section>
