@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { Icon, type IconName } from "@/components/admin/icons";
+import { useT } from "@/lib/i18n/LocaleProvider";
+import type { Dict } from "@/lib/i18n/get-dict";
 
 /**
  * Chef portal nav — phone-first. Chefs view this on their phone, so:
@@ -12,34 +14,33 @@ import { Icon, type IconName } from "@/components/admin/icons";
  *     tap targets, safe-area padded.
  *   - `md+`: the familiar top pill row (all destinations).
  * One client component renders both; the bottom bar uses `fixed` so it escapes
- * the header flow. Active state via usePathname.
+ * the header flow. Active state via usePathname. Labels come from the active
+ * locale (CHEF-PR11) via useT(); hrefs/icons stay language-independent.
  */
 type NavItem = { label: string; href: string; icon: IconName };
 
-const PRIMARY: NavItem[] = [
+const PRIMARY = (t: Dict): NavItem[] => [
   // CHEF-PR0: 5-tab "shift command app" IA — Vandaag · Open · Beschikbaar · Geld · Profiel.
-  { label: "Vandaag", href: "/chef", icon: "dashboard" },
-  { label: "Open", href: "/chef/open", icon: "plus-circle" },
-  { label: "Beschikbaar", href: "/chef/availability", icon: "calendar" },
-  { label: "Geld", href: "/chef/earnings", icon: "wallet" },
-  { label: "Profiel", href: "/chef/profile", icon: "user-round" },
+  { label: t.nav.today, href: "/chef", icon: "dashboard" },
+  { label: t.nav.open, href: "/chef/open", icon: "plus-circle" },
+  { label: t.nav.available, href: "/chef/availability", icon: "calendar" },
+  { label: t.nav.money, href: "/chef/earnings", icon: "wallet" },
+  { label: t.nav.profile, href: "/chef/profile", icon: "user-round" },
 ];
 
-const MORE: NavItem[] = [
-  { label: "Mijn shifts", href: "/chef/shifts", icon: "calendar-days" },
-  { label: "Uren", href: "/chef/hours", icon: "clock" },
-  { label: "Geld uitgelegd", href: "/chef/money", icon: "wallet" },
-  { label: "Declaraties", href: "/chef/declaraties", icon: "banknote" },
-  { label: "Facturen", href: "/chef/facturen", icon: "wallet" },
-  { label: "Mijn documenten", href: "/chef/documenten", icon: "inbox" },
-  { label: "Meldingen", href: "/chef/notifications", icon: "bell" },
-  { label: "Prikbord", href: "/chef/board", icon: "message" },
-  { label: "Agenda-feed", href: "/chef/calendar", icon: "calendar-days" },
-  { label: "Onboarding", href: "/chef/onboarding", icon: "check-circle" },
-  { label: "Privacy", href: "/chef/privacy", icon: "shield-check" },
+const MORE = (t: Dict): NavItem[] => [
+  { label: t.nav.myShifts, href: "/chef/shifts", icon: "calendar-days" },
+  { label: t.nav.hours, href: "/chef/hours", icon: "clock" },
+  { label: t.nav.moneyExplained, href: "/chef/money", icon: "wallet" },
+  { label: t.nav.expenses, href: "/chef/declaraties", icon: "banknote" },
+  { label: t.nav.invoices, href: "/chef/facturen", icon: "wallet" },
+  { label: t.nav.myDocuments, href: "/chef/documenten", icon: "inbox" },
+  { label: t.nav.notifications, href: "/chef/notifications", icon: "bell" },
+  { label: t.nav.board, href: "/chef/board", icon: "message" },
+  { label: t.nav.calendarFeed, href: "/chef/calendar", icon: "calendar-days" },
+  { label: t.nav.onboarding, href: "/chef/onboarding", icon: "check-circle" },
+  { label: t.nav.privacy, href: "/chef/privacy", icon: "shield-check" },
 ];
-
-const ALL = [...PRIMARY, ...MORE];
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/chef") return pathname === "/chef";
@@ -48,14 +49,18 @@ function isActive(pathname: string, href: string): boolean {
 
 export function ChefNav() {
   const pathname = usePathname();
+  const t = useT();
   const [open, setOpen] = useState(false);
-  const moreActive = MORE.some((n) => isActive(pathname, n.href));
+  const primary = PRIMARY(t);
+  const more = MORE(t);
+  const all = [...primary, ...more];
+  const moreActive = more.some((n) => isActive(pathname, n.href));
 
   return (
     <>
       {/* Desktop: top pill row */}
       <nav className="mt-4 hidden flex-wrap gap-1 md:flex">
-        {ALL.map((n) => {
+        {all.map((n) => {
           const active = isActive(pathname, n.href);
           return (
             <Link
@@ -76,7 +81,7 @@ export function ChefNav() {
       {/* Mobile: sticky bottom tab bar */}
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden">
         <div className="mx-auto flex max-w-3xl items-stretch">
-          {PRIMARY.map((n) => {
+          {primary.map((n) => {
             const active = isActive(pathname, n.href);
             return (
               <Link
@@ -94,13 +99,13 @@ export function ChefNav() {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            aria-label="Meer menu"
+            aria-label={t.common.moreMenu}
             className={`flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${
               moreActive ? "text-burgundy" : "text-ink-600"
             }`}
           >
             <Icon name="list" className="h-5 w-5" />
-            Meer
+            {t.common.more}
           </button>
         </div>
       </nav>
@@ -110,15 +115,15 @@ export function ChefNav() {
         <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
           <button
             type="button"
-            aria-label="Sluiten"
+            aria-label={t.common.close}
             onClick={() => setOpen(false)}
             className="absolute inset-0 bg-ink-900/40"
           />
           <div className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)]">
             <div className="mx-auto max-w-3xl px-4 py-4">
-              <p className="font-ui text-[11px] uppercase tracking-[0.2em] text-ink-500">Meer</p>
+              <p className="font-ui text-[11px] uppercase tracking-[0.2em] text-ink-500">{t.common.more}</p>
               <div className="mt-2 divide-y divide-ink-100">
-                {MORE.map((n) => {
+                {more.map((n) => {
                   const active = isActive(pathname, n.href);
                   return (
                     <Link

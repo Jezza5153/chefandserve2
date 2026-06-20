@@ -8,12 +8,15 @@ import { SignOutLink } from "@/app/(admin)/_components/SignOutLink";
 import { AssistantWidget } from "@/components/ai/AssistantWidget";
 import { ChefNav } from "@/components/chef/ChefNav";
 import { InstallPrompt } from "@/components/chef/InstallPrompt";
+import { LanguageToggle } from "@/components/chef/LanguageToggle";
 import { PwaRegistrar } from "@/components/chef/PwaRegistrar";
 import { ConsentGate } from "@/components/ConsentGate";
 import { ImpersonationBanner } from "@/components/admin/ImpersonationBanner";
 import { NotificationBell } from "@/components/NotificationBell";
 import { aiEnabled, chefAiChatEnabled } from "@/lib/ai/config";
 import { hasCurrentConsent, isConsentEnforced, recordConsent } from "@/lib/consent";
+import { getLocale, i18nEnabled } from "@/lib/i18n/server";
+import { LocaleProvider } from "@/lib/i18n/LocaleProvider";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata: Metadata = {
@@ -52,8 +55,11 @@ export default async function ChefLayout({
     userId: session.user.id,
     kind: "chef",
   });
+  const locale = await getLocale();
+  const showLanguageToggle = i18nEnabled();
 
   return (
+    <LocaleProvider locale={locale}>
     <div className="flex min-h-screen flex-col bg-bg-gray">
       <ImpersonationBanner session={session} />
       <header className="border-b border-ink-200 bg-white">
@@ -66,6 +72,7 @@ export default async function ChefLayout({
               Chef <span className="text-burgundy">&amp;</span> Serve
             </Link>
             <div className="flex items-center gap-4">
+              {showLanguageToggle ? <LanguageToggle /> : null}
               <NotificationBell
                 userId={session.user.id}
                 notificationsHref="/chef/notifications"
@@ -108,5 +115,6 @@ export default async function ChefLayout({
       <PwaRegistrar />
       <InstallPrompt />
     </div>
+    </LocaleProvider>
   );
 }
