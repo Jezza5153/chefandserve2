@@ -25,6 +25,7 @@ import { chefAvailability, chefs, clients, placements, shifts } from "@/lib/db/s
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { recomputeShiftStatus } from "@/lib/domain/shift-status";
 import { transitionPlacement } from "@/lib/domain/placement-transition";
+import { amsterdamCalendarDayUTC } from "@/lib/tz-day";
 import { sendEmail, formatShiftWhen } from "@/lib/email";
 import { env } from "@/lib/env";
 import { createNotification, recordEmailMessage } from "@/lib/integrations";
@@ -75,9 +76,10 @@ export async function publishDraftsForPeriod(args: {
   let published = 0;
 
   for (const d of drafts) {
-    // 1a. Chef explicitly blocked on this calendar day?
-    const dayStart = new Date(d.startsAt);
-    dayStart.setUTCHours(0, 0, 0, 0);
+    // 1a. Chef explicitly blocked on this calendar day? Match the chef's LOCAL (Amsterdam)
+    // day — chefAvailability.date is UTC-midnight of the local day, so a raw UTC truncation
+    // would miss the block for a past-midnight / very-early draft and publish it anyway.
+    const dayStart = amsterdamCalendarDayUTC(d.startsAt);
     const blocked = await db
       .select({ chefId: chefAvailability.chefId })
       .from(chefAvailability)
