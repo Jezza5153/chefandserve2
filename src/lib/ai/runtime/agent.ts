@@ -159,16 +159,58 @@ function toolMessage(result: ToolResult): string {
   }
 }
 
-function jsonForBrain(data: unknown): string {
+const JSON_FOR_BRAIN_MAX = 6000;
+
+/** Serialize tool data for the brain, capped. Audit gap #8: a naive char-slice cuts mid-
+ *  object so the JSON is unparseable AND silently loses trailing rows — the model then
+ *  answers "8 chefs" when there were 25. Instead drop whole trailing ELEMENTS from the
+ *  biggest array and tell the model it's a subset, so it stays valid + honest. */
+export function jsonForBrain(data: unknown, max = JSON_FOR_BRAIN_MAX): string {
   if (data === undefined || data === null) return "";
-  try {
-    const s = JSON.stringify(data);
-    if (!s || s === "{}" || s === "[]") return "";
-    const MAX = 6000;
-    return s.length > MAX ? `${s.slice(0, MAX)}…(ingekort)` : s;
-  } catch {
-    return "";
+  const enc = (v: unknown): string => {
+    try {
+      return JSON.stringify(v) ?? "";
+    } catch {
+      return "";
+    }
+  };
+  const full = enc(data);
+  if (!full || full === "{}" || full === "[]") return "";
+  if (full.length <= max) return full;
+
+  const trim = (arr: unknown[]): { kept: unknown[]; total: number } => {
+    const total = arr.length;
+    let kept = arr.slice();
+    while (kept.length > 1 && enc(kept).length > max) kept = kept.slice(0, Math.max(1, Math.floor(kept.length / 2)));
+    while (kept.length > 1 && enc([...kept].concat()).length > max) kept = kept.slice(0, kept.length - 1);
+    return { kept, total };
+  };
+
+  if (Array.isArray(data)) {
+    const { kept, total } = trim(data);
+    return `${enc(kept)}\n…(${kept.length} van ${total} getoond — vraag gerichter voor de rest)`;
   }
+  if (typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+    let field: string | null = null;
+    let biggest = -1;
+    for (const [k, v] of Object.entries(obj)) {
+      if (Array.isArray(v)) {
+        const len = enc(v).length;
+        if (len > biggest) {
+          biggest = len;
+          field = k;
+        }
+      }
+    }
+    if (field) {
+      const { kept, total } = trim(obj[field] as unknown[]);
+      const out = enc({ ...obj, [field]: kept });
+      if (out.length <= max) return `${out}\n…(${field}: ${kept.length} van ${total} getoond — vraag gerichter voor de rest)`;
+    }
+  }
+  // Last resort: char-slice, but tell the model it's incomplete so it doesn't answer blind.
+  return `${full.slice(0, max)}…(ingekort — ONVOLLEDIG, vraag gerichter)`;
 }
 
 function safeArguments(input: unknown): string {
