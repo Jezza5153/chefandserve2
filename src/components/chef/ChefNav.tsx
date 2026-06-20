@@ -30,6 +30,7 @@ const MORE: NavItem[] = [
   { label: "Uren", href: "/chef/hours", icon: "clock" },
   { label: "Geld uitgelegd", href: "/chef/money", icon: "wallet" },
   { label: "Declaraties", href: "/chef/declaraties", icon: "banknote" },
+  { label: "Facturen", href: "/chef/facturen", icon: "wallet" },
   { label: "Mijn documenten", href: "/chef/documenten", icon: "inbox" },
   { label: "Meldingen", href: "/chef/notifications", icon: "bell" },
   { label: "Prikbord", href: "/chef/board", icon: "message" },
