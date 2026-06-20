@@ -42,8 +42,11 @@ async function submitInvoice(formData: FormData) {
   "use server";
   const session = await requireAuth();
   const chef = await db.query.chefs.findFirst({ where: eq(chefs.userId, session.user.id) });
-  if (!chef) return;
+  if (!chef) redirect("/chef/facturen?ok=error");
   const euro = parseFloat(String(formData.get("amountEuro") ?? "").replace(",", "."));
+  if (!Number.isFinite(euro) || euro <= 0 || euro > 50000) {
+    redirect("/chef/facturen?ok=error");
+  }
   const res = await createChefInvoice({
     chefId: chef.id,
     actorUserId: session.user.id,

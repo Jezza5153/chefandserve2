@@ -23,10 +23,13 @@ async function decide(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const decision = String(formData.get("decision") ?? "");
   if (!id || !["approved", "rejected", "paid"].includes(decision)) return;
+  const decisionNote =
+    decision === "rejected" ? String(formData.get("decisionNote") ?? "").trim() || null : null;
   await decideChefInvoice({
     id,
     decidedBy: session.user.id,
     decision: decision as "approved" | "rejected" | "paid",
+    decisionNote,
   });
   revalidatePath("/admin/business/chef-invoices");
 }
@@ -44,6 +47,24 @@ function Btn({ id, decision, label, tone }: { id: string; decision: string; labe
         }`}
       >
         {label}
+      </button>
+    </form>
+  );
+}
+
+/** Reject with an optional reason (the chef sees it on /chef/facturen). */
+function RejectBtn({ id }: { id: string }) {
+  return (
+    <form action={decide} className="flex items-center gap-1.5">
+      <input type="hidden" name="id" value={id} />
+      <input type="hidden" name="decision" value="rejected" />
+      <input
+        name="decisionNote"
+        placeholder="reden (optioneel)"
+        className="w-32 rounded-md border border-ink-200 px-2 py-1 text-xs focus:border-burgundy focus:outline-none"
+      />
+      <button className="rounded-full border border-burgundy/30 px-3 py-1 text-xs font-medium text-burgundy hover:bg-burgundy/10">
+        Afwijzen
       </button>
     </form>
   );
@@ -107,7 +128,7 @@ export default async function AdminChefInvoicesPage() {
                 {r.status === "submitted" ? (
                   <>
                     <Btn id={r.id} decision="approved" label="Goedkeuren" tone="go" />
-                    <Btn id={r.id} decision="rejected" label="Afwijzen" tone="no" />
+                    <RejectBtn id={r.id} />
                   </>
                 ) : (
                   <Btn id={r.id} decision="paid" label="Markeer betaald" tone="go" />
