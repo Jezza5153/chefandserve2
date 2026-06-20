@@ -54,6 +54,14 @@ const MAX = 200; // small budget to force truncation deterministically
   ok("blob: capped near budget", out.length <= MAX + 60);
 }
 
+// a BARE array whose single element is itself bigger than the budget → must NOT blow the cap;
+// trim() floors at 1, so the element-trim can't fit → fall through to the flagged char-slice.
+{
+  const out = jsonForBrain([{ id: 0, blob: "x".repeat(5000) }, { id: 1 }], MAX);
+  ok("array-giant-element: capped near budget (cap holds)", out.length <= MAX + 60);
+  ok("array-giant-element: flagged ONVOLLEDIG", out.includes("ONVOLLEDIG"));
+}
+
 if (fail.length) {
   console.error(`smoke-json-for-brain FAILED (${fail.length}): ${fail.join(", ")}`);
   process.exit(1);
