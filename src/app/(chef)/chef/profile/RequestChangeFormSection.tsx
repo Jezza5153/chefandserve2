@@ -16,16 +16,19 @@ import { useState } from "react";
 
 import { fieldClass } from "@/components/forms/Fields";
 import { formatChefRole } from "@/lib/labels";
+import { fill } from "@/lib/i18n/locales";
+import { useT } from "@/lib/i18n/LocaleProvider";
 
-const VAKNIVEAU_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "keukenhulp", label: "Keukenhulp" },
-  { value: "commis", label: "Commis chef" },
-  { value: "chef_de_partie", label: "Chef de partie" },
-  { value: "sous_chef", label: "Sous-chef" },
-  { value: "chef_de_cuisine", label: "Chef de cuisine" },
-  { value: "executive_chef", label: "Executive chef" },
-  { value: "patissier", label: "Patissier" },
-];
+/** Vakniveau enum values (server-validated); labels come from the dict. */
+const VAKNIVEAU_VALUES = [
+  "keukenhulp",
+  "commis",
+  "chef_de_partie",
+  "sous_chef",
+  "chef_de_cuisine",
+  "executive_chef",
+  "patissier",
+] as const;
 
 type Props = {
   chef: {
@@ -41,35 +44,33 @@ type Props = {
 type Field = "fullName" | "email" | "vakniveau" | "hourlyRate" | null;
 
 export function RequestChangeFormSection({ chef, requestAction }: Props) {
+  const t = useT();
   const [open, setOpen] = useState<Field>(null);
   return (
     <section className="mt-10 rounded-lg border border-burgundy/20 bg-burgundy/5 p-5">
       <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-        Aanpassen via verzoek
+        {t.profileForm.requestHeading}
       </h2>
-      <p className="mt-1 text-xs text-ink-700">
-        Naam, e-mail, vakniveau en uurtarief lopen via Chef &amp; Serve. Stuur
-        een verzoek; Maarten of Gina bevestigt en past het aan.
-      </p>
+      <p className="mt-1 text-xs text-ink-700">{t.profileForm.requestIntro}</p>
 
       <ul className="mt-4 space-y-3">
         <Row
-          label="Naam"
+          label={t.profile.field.fullName}
           current={chef.fullName}
           onOpen={() => setOpen("fullName")}
         />
         <Row
-          label="E-mailadres"
+          label={t.profile.field.email}
           current={chef.email ?? "—"}
           onOpen={() => setOpen("email")}
         />
         <Row
-          label="Vakniveau"
+          label={t.profile.field.vakniveau}
           current={formatChefRole(chef.vakniveau)}
           onOpen={() => setOpen("vakniveau")}
         />
         <Row
-          label="Uurtarief"
+          label={t.profile.field.hourlyRate}
           current={`€${chef.hourlyRateMinCents ? (chef.hourlyRateMinCents / 100).toFixed(0) : "—"} – €${chef.hourlyRateMaxCents ? (chef.hourlyRateMaxCents / 100).toFixed(0) : "—"}`}
           onOpen={() => setOpen("hourlyRate")}
         />
@@ -82,14 +83,14 @@ export function RequestChangeFormSection({ chef, requestAction }: Props) {
         >
           <input type="hidden" name="field" value={open} />
           <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-            Wijziging voor {labelFor(open)}
+            {fill(t.profileForm.changeFor, { field: t.profile.field[open] })}
           </p>
 
           {open === "hourlyRate" ? (
             <div className="mt-3 grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="mb-1 block text-xs text-ink-500">
-                  Min (€/uur)
+                  {t.profileForm.rateMin}
                 </span>
                 <input
                   type="number"
@@ -103,7 +104,7 @@ export function RequestChangeFormSection({ chef, requestAction }: Props) {
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs text-ink-500">
-                  Max (€/uur)
+                  {t.profileForm.rateMax}
                 </span>
                 <input
                   type="number"
@@ -118,7 +119,7 @@ export function RequestChangeFormSection({ chef, requestAction }: Props) {
             </div>
           ) : open === "vakniveau" ? (
             <label className="mt-3 block">
-              <span className="mb-1 block text-xs text-ink-500">Nieuw vakniveau</span>
+              <span className="mb-1 block text-xs text-ink-500">{t.profileForm.newLevel}</span>
               <select
                 name="proposed"
                 required
@@ -126,18 +127,18 @@ export function RequestChangeFormSection({ chef, requestAction }: Props) {
                 className={fieldClass}
               >
                 <option value="" disabled>
-                  Kies een vakniveau…
+                  {t.profileForm.chooseLevel}
                 </option>
-                {VAKNIVEAU_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
+                {VAKNIVEAU_VALUES.map((value) => (
+                  <option key={value} value={value}>
+                    {t.profileForm.vakniveau[value]}
                   </option>
                 ))}
               </select>
             </label>
           ) : open === "email" ? (
             <label className="mt-3 block">
-              <span className="mb-1 block text-xs text-ink-500">Nieuw e-mailadres</span>
+              <span className="mb-1 block text-xs text-ink-500">{t.profileForm.newEmail}</span>
               <input
                 type="email"
                 name="proposed"
@@ -148,7 +149,7 @@ export function RequestChangeFormSection({ chef, requestAction }: Props) {
             </label>
           ) : (
             <label className="mt-3 block">
-              <span className="mb-1 block text-xs text-ink-500">Nieuwe naam</span>
+              <span className="mb-1 block text-xs text-ink-500">{t.profileForm.newName}</span>
               <input
                 type="text"
                 name="proposed"
@@ -160,15 +161,13 @@ export function RequestChangeFormSection({ chef, requestAction }: Props) {
           )}
 
           <label className="mt-3 block">
-            <span className="mb-1 block text-xs text-ink-500">
-              Toelichting (min 5 tekens)
-            </span>
+            <span className="mb-1 block text-xs text-ink-500">{t.profileForm.reasonLabel}</span>
             <textarea
               name="reason"
               rows={3}
               required
               minLength={5}
-              placeholder="Bijv. ‘Ik heb een nieuw mobiel-nummer’ of ‘meer ervaring met fine-dining sinds april’"
+              placeholder={t.profileForm.reasonPlaceholder}
               className={`${fieldClass} placeholder-ink-500`}
             />
           </label>
@@ -178,14 +177,14 @@ export function RequestChangeFormSection({ chef, requestAction }: Props) {
               type="submit"
               className="rounded-full bg-burgundy px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
             >
-              Verzoek versturen
+              {t.profileForm.submit}
             </button>
             <button
               type="button"
               onClick={() => setOpen(null)}
               className="rounded-full border border-ink-200 bg-white px-5 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-700 hover:bg-bg-gray"
             >
-              Annuleer
+              {t.profileForm.abort}
             </button>
           </div>
         </form>
@@ -203,6 +202,7 @@ function Row({
   current: string;
   onOpen: () => void;
 }) {
+  const t = useT();
   return (
     <li className="flex items-center justify-between gap-3 rounded border border-ink-200 bg-white px-4 py-3">
       <div>
@@ -216,19 +216,8 @@ function Row({
         onClick={onOpen}
         className="rounded-full border border-burgundy/40 bg-white px-3 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy hover:bg-burgundy/5"
       >
-        Verzoek wijziging
+        {t.profileForm.requestButton}
       </button>
     </li>
   );
-}
-
-function labelFor(field: Exclude<Field, null>): string {
-  return (
-    {
-      fullName: "naam",
-      email: "e-mailadres",
-      vakniveau: "vakniveau",
-      hourlyRate: "uurtarief",
-    } as const
-  )[field];
 }
