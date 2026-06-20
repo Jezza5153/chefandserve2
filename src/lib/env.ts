@@ -244,6 +244,11 @@ const serverSchema = z.object({
   // SHIFT_SIGNALS_ENABLED. Default off.
   EMERGENCY_MODE_ENABLED: z.enum(["true", "false"]).optional(),
 
+  // P5a-2 — render the assistant's shifts.suggest_chefs shortlist as action rows with a
+  // "Stel voor" button (→ /api/ai/shortlist/propose, the same audited proposePlacement the
+  // fill-drawer uses). Off → the chat stays text-only, behaviour unchanged. Default off.
+  AI_SHORTLIST_ACTIONS_ENABLED: z.enum(["true", "false"]).optional(),
+
   // CHEF-PR4 — shift-relative reminders (~24h/2h/15min before a confirmed shift).
   // When on, a 15-min ticker POSTs /api/cron/shift-reminders, which reminds the chef
   // (in-app always; push for 2h+start), once per tier. Default off (dark-launch).

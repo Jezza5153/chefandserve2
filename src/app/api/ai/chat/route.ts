@@ -22,6 +22,7 @@ import { ownerMemoryPromptBlock } from "@/lib/ai/read-model/owner-memory";
 import { timeContextBlock } from "@/lib/ai/runtime/time-context";
 import { checkAiBudget, maybeNotifyAiBudget, recordAiUsage } from "@/lib/ai/read-model/ai-usage";
 import { breakerOpen, recordAiFailure, recordAiSuccess } from "@/lib/ai/circuit-breaker";
+import { buildShortlistEnvelope } from "@/lib/shortlist-envelope";
 import type { Msg } from "@/lib/ai/runtime/agent";
 
 export const dynamic = "force-dynamic";
@@ -186,7 +187,14 @@ export async function POST(req: Request): Promise<Response> {
         console.error("[ai/chat] usage tally failed:", e instanceof Error ? e.message : e);
       }
     }
-    return NextResponse.json({ outcome });
+    // P5a-2 (dark): when the assistant produced a shifts.suggest_chefs shortlist, hand the
+    // owner a minimal, AVG-safe action envelope so the chat can render "Stel voor" buttons.
+    // Off / no shortlist → response is unchanged (text-only).
+    const shortlist =
+      outcome.kind === "final" && env.AI_SHORTLIST_ACTIONS_ENABLED === "true"
+        ? buildShortlistEnvelope(outcome.steps)
+        : null;
+    return NextResponse.json(shortlist ? { outcome, shortlist } : { outcome });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Onbekende fout";
     return NextResponse.json({ error: `De assistent liep vast: ${message}` }, { status: 502 });
