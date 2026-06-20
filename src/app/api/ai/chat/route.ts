@@ -23,9 +23,43 @@ import { timeContextBlock } from "@/lib/ai/runtime/time-context";
 import { checkAiBudget, maybeNotifyAiBudget, recordAiUsage } from "@/lib/ai/read-model/ai-usage";
 import { breakerOpen, recordAiFailure, recordAiSuccess } from "@/lib/ai/circuit-breaker";
 import { buildShortlistEnvelope } from "@/lib/shortlist-envelope";
-import type { Msg } from "@/lib/ai/runtime/agent";
+import { jsonForBrain, type Msg } from "@/lib/ai/runtime/agent";
+import type { ToolResult } from "@/lib/ai/types";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * AI reality-audit gap #7 — after a confirm-gated action runs, the result must re-enter the
+ * conversation so the model can CHAIN (e.g. propose → confirm → "stuur hem nu een bericht"
+ * needs the freshly-created placementId). The chat is stateless: the client resends history,
+ * but the confirm round-trip only ever returned a human summary, so the structured result —
+ * the new id — was stranded and the model went blind on the next turn. This builds a compact,
+ * model-legible memo (mirrors the agent loop's own tool-result framing, incl. #8's element-
+ * aware JSON cap) that the client appends as a HIDDEN history turn.
+ */
+function confirmedActionMemo(tool: string, input: unknown, result: ToolResult): string {
+  let args = "";
+  try {
+    args = JSON.stringify(input ?? {});
+  } catch {
+    args = "{}";
+  }
+  if (args.length > 400) args = `${args.slice(0, 400)}…`;
+  const head = `(systeem) Bevestigde actie uitgevoerd — ${tool}(${args}).`;
+  switch (result.status) {
+    case "ok": {
+      const json = jsonForBrain(result.data);
+      const body = json ? `${result.summary}\n\nResultaatdata (JSON): ${json}` : result.summary;
+      return `${head} ${body} Gebruik deze gegevens (zoals nieuwe id's) direct als de volgende vraag erop voortbouwt — vraag er niet opnieuw naar.`;
+    }
+    case "denied":
+      return `${head} Geweigerd: ${result.reason}`;
+    case "error":
+      return `${head} Mislukt: ${result.error}`;
+    default:
+      return head;
+  }
+}
 
 export async function POST(req: Request): Promise<Response> {
   const session = await auth();
@@ -164,7 +198,10 @@ export async function POST(req: Request): Promise<Response> {
         token: confirm.token,
         confirmSecret,
       });
-      return NextResponse.json({ result });
+      // #7: hand back a model-legible memo of what just happened so the client can thread it
+      // into history (hidden from the UI) and the model can chain off the result next turn.
+      const memo = confirmedActionMemo(confirm.tool, confirm.input, result);
+      return NextResponse.json({ result, memo });
     }
 
     const messages = (body as { messages?: Msg[] }).messages ?? [];
