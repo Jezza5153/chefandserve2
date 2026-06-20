@@ -3,8 +3,13 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-type ChatMsg = { role: "user" | "assistant"; content: string };
+import type { ShortlistEnvelope } from "@/lib/shortlist-envelope";
+
+// P5a-2: an assistant message may carry a shortlist (owner channel only) → action rows.
+type ChatMsg = { role: "user" | "assistant"; content: string; shortlist?: ShortlistEnvelope };
 type Pending = { tool: string; input: unknown; summary: string; token: string; risk?: string };
+// Per-(shift,chef) state of a "Stel voor" click.
+type ActionState = { state: "busy" | "done" | "err"; message?: string };
 
 type ApiResponse = {
   disabled?: boolean;
@@ -18,6 +23,8 @@ type ApiResponse = {
         pending: { tool: string; input: unknown };
       };
   result?: { status: string; summary?: string; reason?: string; error?: string };
+  /** P5a-2: AVG-safe action shortlist for the owner chat (present only on the owner channel). */
+  shortlist?: ShortlistEnvelope;
 };
 
 /** Map the action's risk tier → a consequence-legible badge in the confirm-gate. */
@@ -70,6 +77,8 @@ export function AssistantChat({
   const [error, setError] = useState<string | null>(null);
   // 👍/👎 per assistant-message index — the learning loop's intake (POST /api/ai/feedback).
   const [rated, setRated] = useState<Record<number, "up" | "down">>({});
+  // P5a-2: "Stel voor" click state, keyed `${shiftId}:${chefId}` (one propose per pair).
+  const [actioned, setActioned] = useState<Record<string, ActionState>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pathname = usePathname();
@@ -147,6 +156,7 @@ export function AssistantChat({
     setPending(null);
     setError(null);
     setRated({});
+    setActioned({});
     try {
       sessionStorage.removeItem(storageKey);
     } catch {
@@ -185,7 +195,9 @@ export function AssistantChat({
     const o = data.outcome;
     if (!o) return;
     if (o.kind === "final") {
-      pushAssistant(o.text || "(geen antwoord)");
+      // Attach the action shortlist (if any) to this assistant message so its rows render
+      // right under the answer.
+      setMsgs((m) => [...m, { role: "assistant", content: o.text || "(geen antwoord)", shortlist: data.shortlist }]);
       setPending(null);
     } else {
       setPending({
@@ -233,6 +245,29 @@ export function AssistantChat({
   function cancelPending() {
     setPending(null);
     pushAssistant("Oké, geannuleerd.");
+  }
+
+  /** P5a-2: "Stel voor" on a shortlist row → the SAME audited propose the fill-drawer uses
+   *  (owner channel, behind AI_SHORTLIST_ACTIONS_ENABLED). The deliberate click is the
+   *  confirmation; the mutation is idempotent (already_proposed) so a re-click is harmless. */
+  async function proposeFromShortlist(rowKey: string, shiftId: string, chefId: string, score: number) {
+    const k = rowKey;
+    if (actioned[k]?.state === "busy" || actioned[k]?.state === "done") return;
+    setActioned((a) => ({ ...a, [k]: { state: "busy" } }));
+    try {
+      const res = await fetch("/api/ai/shortlist/propose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shiftId, chefId, matchScore: score }),
+      });
+      const data = (await res.json()) as { ok?: boolean; message?: string };
+      setActioned((a) => ({
+        ...a,
+        [k]: { state: data.ok ? "done" : "err", message: data.message ?? (data.ok ? "Voorgesteld." : "Niet gelukt.") },
+      }));
+    } catch {
+      setActioned((a) => ({ ...a, [k]: { state: "err", message: "Verbinding mislukt." } }));
+    }
   }
 
   /** 👍/👎 on assistant message i — optimistic, fire-and-forget (feedback may never block chat). */
@@ -317,6 +352,46 @@ export function AssistantChat({
                     </button>
                   </>
                 )}
+              </div>
+            ) : null}
+            {/* P5a-2: action shortlist — one row per chef with a "Stel voor" button that runs
+                the same audited propose the fill-drawer uses. Owner channel only. */}
+            {m.role === "assistant" && m.shortlist && m.shortlist.items.length > 0 ? (
+              <div className="mt-1.5 space-y-1.5 text-left">
+                {m.shortlist.items.map((it) => {
+                  // Key by message index too, so the same (shift,chef) re-suggested in a
+                  // later message gets its own click state instead of inheriting this row's.
+                  const k = `${i}:${m.shortlist!.shiftId}:${it.chefId}`;
+                  const st = actioned[k];
+                  return (
+                    <div
+                      key={it.chefId}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-sm text-ink-900">{it.chefName}</span>
+                        <span className="ml-1.5 rounded-full bg-ink-100 px-1.5 py-0.5 text-[10px] text-ink-600">
+                          score {it.score}
+                        </span>
+                        {it.reason ? <p className="truncate text-[11px] text-ink-500">{it.reason}</p> : null}
+                      </div>
+                      {st?.state === "done" ? (
+                        <span className="shrink-0 text-[11px] text-emerald-700">✓ {st.message}</span>
+                      ) : st?.state === "err" ? (
+                        <span className="shrink-0 text-[11px] text-red-600">{st.message}</span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={st?.state === "busy"}
+                          onClick={() => proposeFromShortlist(k, m.shortlist!.shiftId, it.chefId, it.score)}
+                          className="shrink-0 rounded-full bg-burgundy px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-white hover:bg-burgundy-900 disabled:opacity-50"
+                        >
+                          {st?.state === "busy" ? "…" : "Stel voor"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : null}
           </div>
