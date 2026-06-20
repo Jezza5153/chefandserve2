@@ -50,6 +50,7 @@ const SAMPLE: Record<string, unknown> = {
   "placements.confirm": { placementId: "x" },
   "placements.cancel": { placementId: "x" },
   "email.send": { to: "test@example.nl", subject: "Test", body: "Hallo" },
+  "shifts.update": { shiftId: "x", headcount: 2 },
   "email.send_to_client": { clientId: "c1", clientName: "Test", subject: "Test", body: "Hallo" },
   "email.send_to_chef": { chefId: "c1", chefName: "Test", subject: "Test", body: "Hallo" },
   "chefs.approve_profile_change": { requestId: "x" },
