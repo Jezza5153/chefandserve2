@@ -6,7 +6,14 @@ import { useEffect, useRef, useState } from "react";
 import type { ShortlistEnvelope } from "@/lib/shortlist-envelope";
 
 // P5a-2: an assistant message may carry a shortlist (owner channel only) → action rows.
-type ChatMsg = { role: "user" | "assistant"; content: string; shortlist?: ShortlistEnvelope };
+// #7: a `hidden` "system" message carries a confirmed-action memo — sent to the model (so it
+// can chain off the result), never rendered in the chat.
+type ChatMsg = {
+  role: "user" | "assistant" | "system";
+  content: string;
+  shortlist?: ShortlistEnvelope;
+  hidden?: boolean;
+};
 type Pending = { tool: string; input: unknown; summary: string; token: string; risk?: string };
 // Per-(shift,chef) state of a "Stel voor" click.
 type ActionState = { state: "busy" | "done" | "err"; message?: string };
@@ -23,6 +30,8 @@ type ApiResponse = {
         pending: { tool: string; input: unknown };
       };
   result?: { status: string; summary?: string; reason?: string; error?: string };
+  /** #7: model-legible memo of the just-confirmed action — threaded into history (hidden). */
+  memo?: string;
   /** P5a-2: AVG-safe action shortlist for the owner chat (present only on the owner channel). */
   shortlist?: ShortlistEnvelope;
 };
@@ -132,13 +141,17 @@ export function AssistantChat({
       // ignore
     }
     // Mirror to the server (debounced, fire-and-forget) so other tabs/devices can resume.
+    // Drop hidden #7 confirmed-action memos: they're a within-session chaining aid (sessionStorage
+    // keeps them for THIS tab), and the mirror only stores user/assistant turns — a "system" role
+    // would make the whole save bounce as Bad Request.
     if (syncTimer.current) clearTimeout(syncTimer.current);
-    if (msgs.length > 0) {
+    const mirror = msgs.filter((m) => !m.hidden);
+    if (mirror.length > 0) {
       syncTimer.current = setTimeout(() => {
         void fetch("/api/ai/conversation", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: msgs }),
+          body: JSON.stringify({ messages: mirror }),
         }).catch(() => {
           // best-effort
         });
@@ -182,13 +195,19 @@ export function AssistantChat({
     }
     if (data.result) {
       const r = data.result;
-      pushAssistant(
+      const summary =
         r.status === "ok"
           ? r.summary ?? "Gedaan."
           : r.status === "denied"
             ? r.reason ?? "Geweigerd."
-            : r.error ?? "Niet gelukt.",
-      );
+            : r.error ?? "Niet gelukt.";
+      // Visible summary for the human + a hidden "system" memo (#7) carrying the structured
+      // result (new id's etc.) so the model can chain off it next turn instead of going blind.
+      setMsgs((m) => [
+        ...m,
+        { role: "assistant", content: summary },
+        ...(data.memo ? [{ role: "system" as const, content: data.memo, hidden: true }] : []),
+      ]);
       setPending(null);
       return;
     }
@@ -315,7 +334,10 @@ export function AssistantChat({
         }`}
       >
         {msgs.length === 0 && <p className="text-sm text-ink-400">{placeholder}</p>}
-        {msgs.map((m, i) => (
+        {msgs.map((m, i) =>
+          // #7: hidden confirmed-action memos go to the model, never to the screen. Returning
+          // null (rather than filtering) keeps `i` aligned with the rating/feedback map.
+          m.hidden ? null : (
           <div key={`${m.role}-${i}`} className={m.role === "user" ? "text-right" : "text-left"}>
             <span
               className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-1.5 text-sm ${
