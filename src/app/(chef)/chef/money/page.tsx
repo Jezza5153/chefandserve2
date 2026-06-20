@@ -3,7 +3,7 @@
  * Dark behind MONEY_EXPLAINER_ENABLED (owner verifies the assumption table first).
  */
 import { env } from "@/lib/env";
-import { MONEY_ASSUMPTIONS } from "@/lib/money";
+import { getMoneyAssumptions } from "@/lib/business-settings";
 import { requireAuth } from "@/lib/permissions";
 
 import { ChefHelp } from "@/components/chef/ChefHelp";
@@ -17,6 +17,7 @@ const LABEL = "font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy";
 
 export default async function ChefMoneyPage() {
   await requireAuth("/chef/money");
+  const assumptions = await getMoneyAssumptions();
 
   if (env.MONEY_EXPLAINER_ENABLED !== "true") {
     return (
@@ -43,13 +44,13 @@ export default async function ChefMoneyPage() {
         </p>
       </div>
 
-      <MoneyCalculator />
+      <MoneyCalculator assumptions={assumptions} />
 
       {/* CHEF-PR8: money FAQ wired to the explainer */}
       <ChefHelp topics={["geld", "algemeen"]} title="Vragen over geld" />
 
       <p className="text-[11px] leading-relaxed text-ink-400">
-        Aannames bijgewerkt {MONEY_ASSUMPTIONS.lastUpdated}. Bron: {MONEY_ASSUMPTIONS.source}
+        Aannames bijgewerkt {assumptions.lastUpdated}. Bron: {assumptions.source}
       </p>
     </div>
   );

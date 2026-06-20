@@ -14,6 +14,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { businessSettings } from "@/lib/db/schema";
+import { MONEY_ASSUMPTIONS, type MoneyAssumptions } from "@/lib/money";
 
 type CacheEntry = { value: Record<string, unknown>; cachedAt: number };
 const CACHE_TTL_MS = 60 * 1000;
@@ -23,6 +24,7 @@ const cache = new Map<string, CacheEntry>();
 export const SETTING_KEYS = {
   hoursReminders: "hours_reminders",
   dailyBriefing: "daily_briefing",
+  moneyAssumptions: "money_assumptions",
 } as const;
 
 /** Raw jsonb value for a key (cached). Returns {} when no row exists. */
@@ -112,4 +114,43 @@ export async function getDailyBriefingConfig(): Promise<DailyBriefingConfig> {
     whatsappTo: typeof v.whatsappTo === "string" ? v.whatsappTo : undefined,
     lastSentDate: typeof v.lastSentDate === "string" ? v.lastSentDate : undefined,
   };
+}
+
+/* ---------- Money assumptions (CHEF-PR8 — owner-editable tax/wage table) ---- */
+
+/** Numeric fields the owner can tune; the rest fall back to the code defaults. */
+const MONEY_NUMERIC_KEYS = [
+  "minimumWageHour",
+  "vacationPct",
+  "payrollEffectiveTaxPct",
+  "noKortingExtraPct",
+  "zzpIncomeTaxReservePct",
+  "zzpZvwPct",
+  "vatPct",
+] as const;
+
+/**
+ * The live money assumptions = the owner's business_settings override merged over
+ * the MONEY_ASSUMPTIONS code defaults. Server-only (DB). The Money Explainer +
+ * vakantiegeld estimate read THIS so the owner can verify/tune against the current
+ * loontabellen in-app — the prerequisite for flipping MONEY_EXPLAINER_ENABLED.
+ */
+export async function getMoneyAssumptions(): Promise<MoneyAssumptions> {
+  const v = await getSetting(SETTING_KEYS.moneyAssumptions);
+  const out: MoneyAssumptions = { ...MONEY_ASSUMPTIONS };
+  for (const k of MONEY_NUMERIC_KEYS) {
+    const n = v[k];
+    if (typeof n === "number" && Number.isFinite(n) && n >= 0) out[k] = n;
+  }
+  if (typeof v.lastUpdated === "string" && v.lastUpdated) out.lastUpdated = v.lastUpdated;
+  if (typeof v.source === "string" && v.source) out.source = v.source;
+  return out;
+}
+
+/** Persist owner-edited money assumptions (caller records the audit row). */
+export async function setMoneyAssumptions(
+  value: Partial<MoneyAssumptions>,
+  userId: string,
+): Promise<void> {
+  await setSettingValue(SETTING_KEYS.moneyAssumptions, value as Record<string, unknown>, userId);
 }

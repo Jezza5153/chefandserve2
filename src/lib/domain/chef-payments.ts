@@ -21,7 +21,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { clients, shiftHours, shifts } from "@/lib/db/schema";
 import { computeChefAmountCents } from "@/lib/hours-labels";
-import { MONEY_ASSUMPTIONS } from "@/lib/money";
+import { getMoneyAssumptions } from "@/lib/business-settings";
 
 /** The payout pipeline buckets, in chain order. */
 export type PaymentStage =
@@ -206,11 +206,12 @@ export async function getChefVacationEstimate(chefId: string): Promise<ChefVacat
     (s, r) => s + computeChefAmountCents(r.workedMinutes ?? 0, r.chefRateCents ?? 0),
     0,
   );
-  const pct = MONEY_ASSUMPTIONS.vacationPct;
+  const assumptions = await getMoneyAssumptions();
+  const pct = assumptions.vacationPct;
   return {
     basisCents,
     pct,
     accruedCents: Math.round(basisCents * (pct / 100)),
-    assumptionsUpdated: MONEY_ASSUMPTIONS.lastUpdated,
+    assumptionsUpdated: assumptions.lastUpdated,
   };
 }
