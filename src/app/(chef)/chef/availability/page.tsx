@@ -24,6 +24,8 @@ import { chefAvailability, chefs } from "@/lib/db/schema";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { recordChefEvent } from "@/lib/chef-events";
 import { sanitizeSkillTags, skillTagsByCategory } from "@/lib/domain/skill-tags";
+import { getI18n } from "@/lib/i18n/server";
+import { fill } from "@/lib/i18n/locales";
 import { requireAuth } from "@/lib/permissions";
 
 import { AvailabilityCalendar } from "./_components/AvailabilityCalendar";
@@ -33,34 +35,21 @@ export const dynamic = "force-dynamic";
 
 const WEEKS_AHEAD = 8;
 
-/** What you LIKE — keys align with matching's PREFERENCE_SIGNALS so they score. */
-const LIKE_OPTIONS: [string, string][] = [
-  ["breakfast", "Ontbijt"],
-  ["hotels", "Hotels"],
-  ["restaurants", "Restaurants"],
-  ["banqueting", "Banqueting"],
-  ["beachclub", "Beachclub"],
-  ["early_shifts", "Vroege shifts"],
-  ["michelin", "Michelin"],
-  ["bbq", "BBQ"],
-];
+/** What you LIKE — keys align with matching's PREFERENCE_SIGNALS so they score. Labels via dict. */
+const LIKE_KEYS = [
+  "breakfast",
+  "hotels",
+  "restaurants",
+  "banqueting",
+  "beachclub",
+  "early_shifts",
+  "michelin",
+  "bbq",
+] as const;
 /** What you'd rather NOT do (matching enforcement lands in a later PR). */
-const AVOID_OPTIONS: [string, string][] = [
-  ["zorg", "Zorg / verpleeghuis"],
-  ["ontbijt", "Ontbijt"],
-  ["late_night", "Late nachten"],
-  ["banqueting", "Banqueting"],
-  ["events", "Evenementen"],
-];
-const START_HOUR_OPTIONS: [string, string][] = [
-  ["", "Geen voorkeur"],
-  ["6", "Niet voor 06:00"],
-  ["7", "Niet voor 07:00"],
-  ["8", "Niet voor 08:00"],
-  ["9", "Niet voor 09:00"],
-  ["10", "Niet voor 10:00"],
-  ["12", "Niet voor 12:00"],
-];
+const AVOID_KEYS = ["zorg", "ontbijt", "late_night", "banqueting", "events"] as const;
+/** Earliest-start option values; "" = no preference, else the hour (label via dict). */
+const START_HOURS = ["", "6", "7", "8", "9", "10", "12"] as const;
 
 /** Resolve the chef record bound to the current session. Throws on mismatch. */
 async function requireChefSelf(): Promise<{ chefId: string }> {
@@ -333,15 +322,11 @@ async function savePreferences(fd: FormData): Promise<void> {
   revalidatePath("/chef/availability");
 }
 
-const QUICK: [string, string][] = [
-  ["today", "Vandaag"],
-  ["tomorrow", "Morgen"],
-  ["weekend", "Dit weekend"],
-  ["week", "Deze week"],
-];
+const QUICK_SCOPES = ["today", "tomorrow", "weekend", "week"] as const;
 
 export default async function ChefAvailabilityPage() {
   const { chefId } = await requireChefSelf();
+  const { dict: t } = await getI18n();
   const chef = await db.query.chefs.findFirst({ where: eq(chefs.id, chefId) });
 
   // Load blocked rows for the next 8 weeks (anything else = available).
@@ -374,35 +359,34 @@ export default async function ChefAvailabilityPage() {
   return (
     <div className="space-y-8">
       <div>
-        <p className={sectionLabel}>Beschikbaarheid</p>
-        <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">Mijn agenda</h1>
+        <p className={sectionLabel}>{t.availability.eyebrow}</p>
+        <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">{t.availability.heading}</h1>
         <p className="mt-3 text-sm leading-relaxed text-ink-700">
-          Standaard ben je elke dag beschikbaar. Geef snel door wanneer je{" "}
-          <strong>niet</strong> kunt — dan stellen we je niet voor. Veranderingen zijn meteen actief.
+          {t.availability.introA}
+          <strong>{t.availability.introNot}</strong>
+          {t.availability.introB}
         </p>
       </div>
 
       {/* 1 — Quick blocks */}
       <section className={card}>
-        <p className={sectionLabel}>Snel niet-beschikbaar</p>
+        <p className={sectionLabel}>{t.availability.quickTitle}</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          {QUICK.map(([scope, label]) => (
+          {QUICK_SCOPES.map((scope) => (
             <form action={quickBlock} key={scope}>
               <input type="hidden" name="scope" value={scope} />
               <button className="rounded-full border border-burgundy/40 bg-burgundy/5 px-4 py-2 font-ui text-[11px] font-medium text-burgundy hover:bg-burgundy/10">
-                {label}
+                {t.availability.quick[scope]}
               </button>
             </form>
           ))}
           <form action={repeatLastWeek}>
             <button className="rounded-full border border-ink-200 bg-bg-gray px-4 py-2 font-ui text-[11px] font-medium text-ink-700 hover:bg-ink-100">
-              ↻ Herhaal vorige week
+              {t.availability.repeatLastWeek}
             </button>
           </form>
         </div>
-        <p className="mt-2 text-xs text-ink-500">
-          Weer beschikbaar maken? Tik de dag groen in de kalender hieronder.
-        </p>
+        <p className="mt-2 text-xs text-ink-500">{t.availability.unblockHint}</p>
       </section>
 
       {/* 2 — Calendar */}
@@ -417,47 +401,44 @@ export default async function ChefAvailabilityPage() {
 
       {/* 3 — Preferred work */}
       <section className={card}>
-        <p className={sectionLabel}>Mijn voorkeuren</p>
-        <p className="mt-1 text-xs text-ink-500">
-          Helpt ons betere shifts voor te stellen — geen harde blokkade.
-        </p>
+        <p className={sectionLabel}>{t.availability.prefsTitle}</p>
+        <p className="mt-1 text-xs text-ink-500">{t.availability.prefsSubtext}</p>
         <form action={savePreferences} className="mt-4 space-y-5">
           <fieldset>
-            <legend className="text-sm font-medium text-ink-900">Dit doe ik graag</legend>
+            <legend className="text-sm font-medium text-ink-900">{t.availability.likeLegend}</legend>
             <div className="mt-2 flex flex-wrap gap-2">
-              {LIKE_OPTIONS.map(([key, label]) => (
+              {LIKE_KEYS.map((key) => (
                 <label
                   key={key}
                   className="flex cursor-pointer items-center gap-1.5 rounded-full border border-ink-200 px-3 py-1.5 text-xs text-ink-700 has-[:checked]:border-emerald-300 has-[:checked]:bg-emerald-50 has-[:checked]:text-emerald-800"
                 >
                   <input type="checkbox" name="preferences" value={key} defaultChecked={likes.has(key)} className="accent-emerald-600" />
-                  {label}
+                  {t.availability.like[key]}
                 </label>
               ))}
             </div>
           </fieldset>
 
           <fieldset>
-            <legend className="text-sm font-medium text-ink-900">Liever niet</legend>
+            <legend className="text-sm font-medium text-ink-900">{t.availability.avoidLegend}</legend>
             <div className="mt-2 flex flex-wrap gap-2">
-              {AVOID_OPTIONS.map(([key, label]) => (
+              {AVOID_KEYS.map((key) => (
                 <label
                   key={key}
                   className="flex cursor-pointer items-center gap-1.5 rounded-full border border-ink-200 px-3 py-1.5 text-xs text-ink-700 has-[:checked]:border-burgundy/40 has-[:checked]:bg-burgundy/5 has-[:checked]:text-burgundy"
                 >
                   <input type="checkbox" name="avoid" value={key} defaultChecked={avoid.has(key)} className="accent-burgundy" />
-                  {label}
+                  {t.availability.avoid[key]}
                 </label>
               ))}
             </div>
           </fieldset>
 
-          {/* CHEF-PR5: structured skill tags — what je goed kunt (helpt bij matching). */}
+          {/* CHEF-PR5: structured skill tags — what je goed kunt (helpt bij matching).
+              group/tag labels come from the skill-tags domain helper (still NL) — deferred. */}
           <fieldset>
-            <legend className="text-sm font-medium text-ink-900">Wat kun je goed?</legend>
-            <p className="mt-0.5 text-xs text-ink-500">
-              Kies je sterke punten — dit helpt ons je op passende shifts voor te stellen.
-            </p>
+            <legend className="text-sm font-medium text-ink-900">{t.availability.skillLegend}</legend>
+            <p className="mt-0.5 text-xs text-ink-500">{t.availability.skillSubtext}</p>
             <div className="mt-2 space-y-3">
               {skillTagsByCategory().map((group) => (
                 <div key={group.category}>
@@ -488,27 +469,29 @@ export default async function ChefAvailabilityPage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="text-sm font-medium text-ink-900">Max reisafstand (km)</span>
+              <span className="text-sm font-medium text-ink-900">{t.availability.travelRadius}</span>
               <input
                 type="number"
                 name="travelRadiusKm"
                 min={0}
                 max={300}
                 defaultValue={chef?.travelRadiusKm ?? ""}
-                placeholder="bijv. 30"
+                placeholder={t.availability.travelRadiusPlaceholder}
                 className="mt-1 w-full rounded-md border border-ink-200 px-3 py-2 text-sm"
               />
             </label>
             <label className="block">
-              <span className="text-sm font-medium text-ink-900">Vroegste starttijd</span>
+              <span className="text-sm font-medium text-ink-900">{t.availability.earliestStart}</span>
               <select
                 name="minStartHour"
                 defaultValue={chef?.minStartHour != null ? String(chef.minStartHour) : ""}
                 className="mt-1 w-full rounded-md border border-ink-200 px-3 py-2 text-sm"
               >
-                {START_HOUR_OPTIONS.map(([v, l]) => (
+                {START_HOURS.map((v) => (
                   <option key={v} value={v}>
-                    {l}
+                    {v === ""
+                      ? t.availability.startHourNone
+                      : fill(t.availability.startHourBefore, { time: `${v.padStart(2, "0")}:00` })}
                   </option>
                 ))}
               </select>
@@ -516,12 +499,12 @@ export default async function ChefAvailabilityPage() {
           </div>
 
           <fieldset>
-            <legend className="text-sm font-medium text-ink-900">Dienstverband</legend>
+            <legend className="text-sm font-medium text-ink-900">{t.availability.employment}</legend>
             <div className="mt-2 flex flex-wrap gap-4 text-sm text-ink-700">
-              {[["payroll", "Payroll"], ["zzp", "ZZP"], ["both", "Beide"]].map(([v, l]) => (
+              {(["payroll", "zzp", "both"] as const).map((v) => (
                 <label key={v} className="flex cursor-pointer items-center gap-1.5">
                   <input type="radio" name="employmentType" value={v} defaultChecked={emp === v} className="accent-burgundy" />
-                  {l}
+                  {t.availability.employmentOpts[v]}
                 </label>
               ))}
             </div>
@@ -529,23 +512,23 @@ export default async function ChefAvailabilityPage() {
 
           <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-700">
             <input type="checkbox" name="availableForEmergency" defaultChecked={chef?.availableForEmergency ?? false} className="accent-burgundy" />
-            Ik ben oproepbaar voor spoeddiensten (last-minute)
+            {t.availability.emergencyOptIn}
           </label>
 
           <label className="block">
-            <span className="text-sm font-medium text-ink-900">Notitie (optioneel)</span>
+            <span className="text-sm font-medium text-ink-900">{t.availability.noteLabel}</span>
             <textarea
               name="availabilityNotes"
               rows={2}
               maxLength={1000}
               defaultValue={chef?.availabilityNotes ?? ""}
-              placeholder="bijv. geen varkensvlees-keukens, alleen Utrecht/Amersfoort, minimaal 5 uur"
+              placeholder={t.availability.notePlaceholder}
               className="mt-1 w-full rounded-md border border-ink-200 px-3 py-2 text-sm"
             />
           </label>
 
           <button className="rounded-full bg-burgundy px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy/90">
-            Voorkeuren opslaan
+            {t.availability.savePrefs}
           </button>
         </form>
       </section>
