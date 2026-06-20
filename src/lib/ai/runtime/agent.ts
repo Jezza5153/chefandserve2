@@ -188,7 +188,11 @@ export function jsonForBrain(data: unknown, max = JSON_FOR_BRAIN_MAX): string {
 
   if (Array.isArray(data)) {
     const { kept, total } = trim(data);
-    return `${enc(kept)}\n…(${kept.length} van ${total} getoond — vraag gerichter voor de rest)`;
+    const out = enc(kept);
+    // trim() floors at 1 element, so a single element bigger than `max` would otherwise blow the
+    // cap entirely (a 1MB blob despite a 6000-char budget). Guard like the object branch below:
+    // only return the element-trimmed form if it actually fits; else fall through to the char-slice.
+    if (out.length <= max) return `${out}\n…(${kept.length} van ${total} getoond — vraag gerichter voor de rest)`;
   }
   if (typeof data === "object") {
     const obj = data as Record<string, unknown>;
