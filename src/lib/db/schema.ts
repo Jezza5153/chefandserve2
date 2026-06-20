@@ -2324,6 +2324,55 @@ export const chefExpenseClaims = pgTable(
 export type ChefExpenseClaim = typeof chefExpenseClaims.$inferSelect;
 
 /* =============================================================================
+ * CHEF-PR7 — ZZP self-billing. A freelance (ZZP) chef invoices Chef & Serve for
+ * the shifts they worked. This is the chef → AGENCY direction and is DELIBERATELY
+ * separate from the invoicing chat's klant-billing `invoices`/`invoice_lines`
+ * (agency → hotel) — different parties, different lifecycle, no shared columns.
+ * The chef uploads their own invoice PDF (or marks a concept); the office marks it
+ * approved/paid. Amounts are the chef's claim; payroll/finance confirm.
+ * =========================================================================== */
+export const chefInvoiceStatusEnum = pgEnum("chef_invoice_status", [
+  "concept", // chef started one, not sent yet
+  "submitted", // chef sent it to the office
+  "approved", // office accepted it
+  "paid", // office paid it
+  "rejected", // office bounced it (see decisionNote)
+]);
+
+export const chefInvoices = pgTable(
+  "chef_invoices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    status: chefInvoiceStatusEnum("status").notNull().default("concept"),
+    /** Total the chef is invoicing (cents). Chef's claim — finance confirms. */
+    amountCents: integer("amount_cents").notNull(),
+    /** Period the invoice covers. */
+    periodFrom: date("period_from"),
+    periodTo: date("period_to"),
+    /** The chef's own invoice number, optional. */
+    reference: text("reference"),
+    note: text("note"),
+    /** R2 key of the uploaded invoice PDF (optional — concept may have none yet). */
+    invoiceR2Key: text("invoice_r2_key"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decidedBy: text("decided_by").references(() => users.id, { onDelete: "set null" }),
+    decisionNote: text("decision_note"),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    chefIdx: index("chef_invoices_chef_idx").on(t.chefId, t.status),
+  }),
+);
+
+export type ChefInvoice = typeof chefInvoices.$inferSelect;
+
+/* =============================================================================
  * Profile change requests (PR-CHEF-4) — chef requests edits to sensitive fields.
  *
  * Chef can edit phone/city/languages/specialties/segments/photo directly.
