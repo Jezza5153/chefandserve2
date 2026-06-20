@@ -45,6 +45,7 @@ import {
   listPendingSuggestions,
 } from "@/lib/domain/profile-suggestions";
 import { getChefAverageForAdmin, submitInternalRating } from "@/lib/domain/ratings";
+import { entityAuditTrail } from "@/lib/domain/audit-trail";
 import { requirePermission } from "@/lib/permissions";
 import { r2IsConfigured } from "@/lib/r2";
 import { DetailShell } from "@/components/ui/DetailShell";
@@ -115,6 +116,8 @@ export default async function ChefDetailPage({
 
   // PR-KLANT-5: rating summary (admin always sees full picture).
   const rating = await getChefAverageForAdmin(id);
+  // E1: full per-entity audit trail for this chef.
+  const auditTrail = await entityAuditTrail("chefs", id, 30);
 
   // PR-CHEF-4 (admin review): chef-submitted profile change requests.
   const changeRequests = await db
@@ -661,6 +664,27 @@ export default async function ChefDetailPage({
             Beoordeel
           </button>
         </form>
+      </section>
+
+      {/* E1: full per-entity audit trail — everything that happened to this chef. */}
+      <section className="mt-4 rounded-lg border border-ink-200 bg-white p-5">
+        <h2 className="font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy">Audit / geschiedenis</h2>
+        <p className="mt-1 text-xs text-ink-500">Wie deed wat met deze chef, en wanneer (laatste 30 acties).</p>
+        {auditTrail.length === 0 ? (
+          <p className="mt-3 text-sm text-ink-400">Nog geen acties vastgelegd.</p>
+        ) : (
+          <ul className="mt-3 divide-y divide-ink-100">
+            {auditTrail.map((e) => (
+              <li key={e.id} className="flex items-baseline justify-between gap-3 py-1.5 text-sm">
+                <span className="text-ink-800">{e.label}</span>
+                <span className="shrink-0 font-ui text-[11px] text-ink-500">
+                  {e.who ? `${e.who} · ` : ""}
+                  {e.at.toLocaleString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* Documents */}

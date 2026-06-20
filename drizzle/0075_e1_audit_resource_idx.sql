@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "audit_log_resource_idx" ON "audit_log" USING btree ("resource","resource_id");
