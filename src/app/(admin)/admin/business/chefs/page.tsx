@@ -5,6 +5,8 @@ import { db } from "@/lib/db/client";
 import { chefs, vakniveauEnum } from "@/lib/db/schema";
 import { formatChefRole } from "@/lib/labels";
 import { requirePermission } from "@/lib/permissions";
+import { listSavedSearches } from "@/lib/domain/saved-searches";
+import { saveCurrentSearch, removeSavedSearch } from "./_actions";
 
 export const metadata = { title: "Chefs" };
 
@@ -32,7 +34,7 @@ export default async function ChefsListPage({
     spoed?: string;
   }>;
 }) {
-  await requirePermission("chefs", "read");
+  const session = await requirePermission("chefs", "read");
   const params = await searchParams;
   const status: FilterStatus = params.status ?? "active";
   const q = params.q?.trim() ?? "";
@@ -63,6 +65,10 @@ export default async function ChefsListPage({
     const s = sp.toString();
     return `/admin/business/chefs${s ? `?${s}` : ""}`;
   };
+
+  // B2: the current filter set as a querystring (to pin) + the owner's saved buttons.
+  const currentQuery = toHref({}).split("?")[1] ?? "";
+  const savedSearchList = await listSavedSearches(session.user.id, "chef_search");
 
   // Build WHERE
   const whereParts = [isNull(chefs.deletedAt)];
@@ -195,6 +201,52 @@ export default async function ChefsListPage({
         <FilterPill label="Mist profieldata" active={dataFilter === "incomplete"} href={toHref({ data: dataFilter === "incomplete" ? "" : "incomplete" })} />
         <FilterPill label="ZZP" active={employment === "zzp"} href={toHref({ employment: employment === "zzp" ? "" : "zzp" })} />
         <FilterPill label="Payroll" active={employment === "payroll"} href={toHref({ employment: employment === "payroll" ? "" : "payroll" })} />
+      </div>
+
+      {/* B2: Maarten's own pinned searches + "bewaar als knop" (captures the active filters). */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <span className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Mijn knoppen</span>
+        {savedSearchList.length === 0 ? (
+          <span className="text-[11px] text-ink-400">Nog geen — bewaar hieronder een filtercombinatie.</span>
+        ) : (
+          savedSearchList.map((sv) => (
+            <span
+              key={sv.id}
+              className="inline-flex items-center gap-1 rounded-full border border-burgundy/30 bg-burgundy/5 py-1 pl-3 pr-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-burgundy"
+            >
+              <Link href={`/admin/business/chefs${sv.query ? `?${sv.query}` : ""}`} className="hover:underline">
+                {sv.label}
+              </Link>
+              <form action={removeSavedSearch} className="inline">
+                <input type="hidden" name="id" value={sv.id} />
+                <input type="hidden" name="query" value={currentQuery} />
+                <button
+                  type="submit"
+                  aria-label={`Verwijder knop ${sv.label}`}
+                  title="Verwijder knop"
+                  className="rounded-full px-1 leading-none text-ink-400 hover:bg-burgundy/10 hover:text-burgundy"
+                >
+                  ×
+                </button>
+              </form>
+            </span>
+          ))
+        )}
+        <form action={saveCurrentSearch} className="ml-2 inline-flex items-center gap-1">
+          <input type="hidden" name="query" value={currentQuery} />
+          <input
+            name="label"
+            placeholder="Knopnaam…"
+            maxLength={60}
+            className="w-28 rounded border border-ink-200 bg-white px-2 py-1 text-[11px] placeholder-ink-400 focus:border-burgundy focus:outline-none"
+          />
+          <button
+            type="submit"
+            className="rounded-full border border-burgundy/40 bg-white px-2.5 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-burgundy hover:bg-burgundy/5"
+          >
+            Bewaar als knop
+          </button>
+        </form>
       </div>
 
       {/* PR-2.1: verfijn — vervoer + voorkeur */}
