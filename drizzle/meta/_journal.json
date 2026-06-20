@@ -505,6 +505,13 @@
       "when": 1781938170470,
       "tag": "0071_chef_pr7_zzp_invoices",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1781987598724,
+      "tag": "0072_b2_saved_searches",
+      "breakpoints": true
     }
   ]
 }

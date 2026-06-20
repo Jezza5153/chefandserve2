@@ -3974,6 +3974,34 @@ export const dashboardSignalState = pgTable("dashboard_signal_state", {
 export type DashboardSignalState = typeof dashboardSignalState.$inferSelect;
 
 /**
+ * Saved searches (Phase B2) — Maarten pins his repeated chef-search filter combos as
+ * one-click buttons. `query` is the chef-directory querystring (e.g.
+ * "status=active&niveau=sous_chef&rating=4"); the button deep-links to
+ * /admin/business/chefs?<query> and (B3) also renders on the dashboard toolbar.
+ * Owner-scoped: ownerUserId = session.user.id (auth IS the lookup).
+ */
+export const savedSearchKindEnum = pgEnum("saved_search_kind", ["chef_search", "dashboard_action"]);
+export const savedSearches = pgTable(
+  "saved_searches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    kind: savedSearchKindEnum("kind").notNull().default("chef_search"),
+    /** chef-directory querystring (no leading '?'), e.g. "status=active&niveau=sous_chef&rating=4". */
+    query: text("query").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    byOwner: index("saved_searches_owner_idx").on(t.ownerUserId, t.sortOrder),
+  }),
+);
+export type SavedSearch = typeof savedSearches.$inferSelect;
+
+/**
  * Agenda events (P2b/P2d) — the MANUAL, one-off ops-agenda entries that aren't derived
  * from another row: intake calls, follow-ups, onboarding tasks, contract starts, internal
  * reminders. (Shifts + change-requests stay DERIVED — see getAgendaEvents.) Optional
