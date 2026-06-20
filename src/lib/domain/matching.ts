@@ -28,6 +28,7 @@ import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { skillTagLabel, skillTagOverlap } from "@/lib/domain/skill-tags";
 import { getClientPrefsForChefs, type ChefClientPrefKind } from "@/lib/domain/chef-client-prefs";
 import { type LatLng } from "@/lib/domain/geo";
+import { amsterdamCalendarDayUTC } from "@/lib/tz-day";
 import { estimateTravel } from "@/lib/domain/travel";
 import { sendEmail, formatShiftWhen } from "@/lib/email";
 import { env } from "@/lib/env";
@@ -556,8 +557,12 @@ export function applyFavoriteBlockedOrder<T extends { chef: { id: string }; scor
   results: T[],
   favoriteIds: Set<string>,
   blockedIds: Set<string>,
+  rejectedIds: Set<string> = new Set(),
 ): T[] {
-  const tier = (id: string) => (favoriteIds.has(id) ? 2 : blockedIds.has(id) ? 0 : 1);
+  // A chef who REJECTED this shift sinks to the bottom tier even when they're a klant
+  // favorite — a decliner must never LEAD the shortlist (else the "eerder afgewezen"
+  // warning rides along buried under the #1 slot). Still visible, never excluded.
+  const tier = (id: string) => (rejectedIds.has(id) ? 0 : favoriteIds.has(id) ? 2 : blockedIds.has(id) ? 0 : 1);
   return [...results].sort((a, b) => tier(b.chef.id) - tier(a.chef.id) || b.score - a.score);
 }
 
@@ -603,9 +608,11 @@ export async function findMatchesForShift(
       ),
     );
 
-  // 2. Exclude chefs blocked on this date
-  const shiftDate = new Date(shift.startsAt);
-  shiftDate.setUTCHours(0, 0, 0, 0);
+  // 2. Exclude chefs blocked on this date. Match the chef's LOCAL (Amsterdam) calendar day
+  // — chefAvailability.date is stored as UTC-midnight of the local day, so truncating the
+  // shift's instant to its UTC day silently missed blocks for past-midnight / very-early
+  // shifts (local date ≠ UTC date).
+  const shiftDate = amsterdamCalendarDayUTC(shift.startsAt);
   const blockedRows = await db
     .select({ chefId: chefAvailability.chefId })
     .from(chefAvailability)
@@ -683,8 +690,11 @@ export async function findMatchesForShift(
     const s = segmentScore(chef.segments, shift.segment);
     const e = experienceBonus(chef.yearsExperience, shift.segment);
 
-    // Composite — weighted product. Vakniveau is the gate.
-    if (v === 0 && !options.includeOverqualified) continue;
+    // Composite — weighted product. Vakniveau is the gate — EXCEPT klant favorites/blocked,
+    // which must stay visible (pinned / sink-visible) per the favorite contract even on a
+    // vakniveau mismatch, so the planner can still see + override them.
+    const favOrBlocked = favoriteSet.has(chef.id) || klantBlockedSet.has(chef.id);
+    if (v === 0 && !options.includeOverqualified && !favOrBlocked) continue;
     const composite = v * 0.5 + s * 0.3 + e * 0.2;
 
     const { reasons, warnings } = buildReasonsAndWarnings(
@@ -747,7 +757,7 @@ export async function findMatchesForShift(
 
   // P3b: favorites up / klant-blocked down (sink-visible) when flagged; else score-only.
   const ordered = favEnabled
-    ? applyFavoriteBlockedOrder(results, favoriteSet, klantBlockedSet)
+    ? applyFavoriteBlockedOrder(results, favoriteSet, klantBlockedSet, rejectedSet)
     : results.sort((a, b) => b.score - a.score);
   return ordered.slice(0, limit);
 }

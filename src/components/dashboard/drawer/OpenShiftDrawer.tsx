@@ -65,8 +65,10 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
   const countBy = new Map(statusCounts.map((r) => [r.status, r.n]));
   const confirmedN = countBy.get("confirmed") ?? 0;
   const acceptedN = countBy.get("accepted") ?? 0;
-  const filled = confirmedN + acceptedN;
-  const open = Math.max(shift.headcount - filled, 0);
+  // Open slots are measured against CONFIRMED placements only, so this line agrees with the
+  // ops-status chip (which is confirmed-based). Accepted-but-unconfirmed is shown separately
+  // below — counting it as "bemand" would overstate staffing (the slot isn't locked yet).
+  const openConfirmed = Math.max(shift.headcount - confirmedN, 0);
 
   // P3 Track C operational status language — ONE legible state + "wat gebeurt er nu?".
   const ops = shiftOpsStatus({
@@ -163,7 +165,8 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
             {ops.label}
           </span>
           <span className="text-sm font-medium text-burgundy">
-            {open > 0 ? `Mist ${open} chef${open === 1 ? "" : "s"}` : "Bemand"} · {filled}/{shift.headcount} bemand
+            {openConfirmed > 0 ? `Mist ${openConfirmed} chef${openConfirmed === 1 ? "" : "s"}` : "Bemand"} · {confirmedN}/{shift.headcount} bevestigd
+            {acceptedN > 0 ? ` · ${acceptedN} geaccepteerd (nog te bevestigen)` : ""}
             {hoursToStart >= 0 ? ` · start over ${hoursToStart}u` : " · gestart"}
           </span>
         </div>

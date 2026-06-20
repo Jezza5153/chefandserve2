@@ -49,5 +49,16 @@ const conflict = applyFavoriteBlockedOrder(
 ).map((r) => r.chef.id);
 assert("favorite∩blocked → favorite tier wins", conflict[0] === "x", conflict.join(","));
 
+// A chef who REJECTED this shift sinks to the bottom tier even if they're a favorite, so a
+// decliner never leads the shortlist (the "eerder afgewezen" warning would otherwise hide).
+const rej = applyFavoriteBlockedOrder(rows, fav, blk, new Set(["fav-hi"]));
+const rejIds = rej.map((r) => r.chef.id);
+assert("rejected favorite no longer leads", rejIds[0] !== "fav-hi", rejIds.join(","));
+assert("now the non-rejected favorite leads", rejIds[0] === "fav-lo", rejIds.join(","));
+assert("rejected chef sinks to bottom tier (with blocked)", rejIds.includes("fav-hi") && (rejIds[3] === "fav-hi" || rejIds[4] === "fav-hi"), rejIds.join(","));
+assert("rejected chef still PRESENT (visible, warned, not excluded)", rej.length === rows.length);
+// Default empty rejectedIds → behaviour unchanged (back-compat).
+assert("no rejected arg → unchanged ordering", applyFavoriteBlockedOrder(rows, fav, blk).map((r) => r.chef.id)[0] === "fav-hi");
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 process.exit(fail > 0 ? 1 : 0);
