@@ -3,7 +3,9 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { clients, escalations, shifts } from "@/lib/db/schema";
+import { aiEnabled } from "@/lib/ai/config";
 import { formatShiftRole } from "@/lib/labels";
+import { AiQuickAsk } from "@/components/ai/AiQuickAsk";
 import { resolveEscalationFromDashboard, standDownFromDashboard } from "@/app/(admin)/admin/business/_actions";
 
 /**
@@ -46,6 +48,17 @@ export async function EmergencyDrawer({ escalationId }: { escalationId: string }
         </p>
         <p className="mt-2 text-sm font-medium text-red-800">{e.reason}</p>
         <p className="mt-1 text-xs text-ink-500">Gemeld {stamp(e.createdAt)}.</p>
+        {/* P5b: AI context chips — hand the spoed-context to the assistant (it answers via
+            the confirm-gated tools: invallers-shortlist, belvolgorde, klantbericht). */}
+        {aiEnabled() && (
+          <AiQuickAsk
+            items={[
+              { label: "Wie kan invallen?", prompt: emergencyCtx("Wie kan invallen voor deze spoeddienst", e) + " Geef een korte shortlist met redenen." },
+              { label: "Maak belvolgorde", prompt: emergencyCtx("Maak een belvolgorde van invallers voor deze spoeddienst", e) },
+              { label: "Bericht aan klant", prompt: emergencyCtx("Stel een geruststellend bericht op aan de klant over deze spoedsituatie — we regelen een oplossing", e) },
+            ]}
+          />
+        )}
       </div>
 
       {/* Primary move — jump to the fill drawer (ranked replacements live there). */}
@@ -78,6 +91,15 @@ export async function EmergencyDrawer({ escalationId }: { escalationId: string }
       </div>
     </div>
   );
+}
+
+/** P5b: spoed-context AI prompt — klant · role · when · dienst-id so the assistant
+ *  routes to the right shift; answers stay confirm-gated. */
+function emergencyCtx(
+  verb: string,
+  e: { companyName: string | null; roleNeeded: string; startsAt: Date | string; shiftId: string },
+): string {
+  return `${verb}: ${formatShiftRole(e.roleNeeded)} bij ${e.companyName ?? "de klant"} op ${when(e.startsAt)}? (dienst-id: ${e.shiftId})`;
 }
 
 function when(d: Date | string): string {

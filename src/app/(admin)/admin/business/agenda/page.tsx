@@ -20,6 +20,8 @@ import { getAgendaEvents, type AgendaEvent, type AgendaTone } from "@/lib/domain
 import { AGENDA_EVENT_KINDS, agendaEventLabel } from "@/lib/domain/agenda-events";
 import { amsterdamDayKey, amsterdamMidnightUtc, addDaysToKey } from "@/lib/roster-format";
 import { requirePermission } from "@/lib/permissions";
+import { aiEnabled } from "@/lib/ai/config";
+import { AiQuickAsk } from "@/components/ai/AiQuickAsk";
 import {
   createAgendaEventAction,
   completeAgendaEventAction,
@@ -112,6 +114,17 @@ export default async function OwnerAgendaPage({
       <p className="mt-2 text-sm text-ink-600">
         Wat staat er gepland — en waar koks tekortkomen. Open diensten openen direct de vul-lade.
       </p>
+
+      {/* P5b: AI context chips for the agenda — week-vooruitblik via the confirm-gated tools. */}
+      {aiEnabled() && (
+        <AiQuickAsk
+          items={[
+            { label: "Wat speelt er deze week?", prompt: "Geef een korte vooruitblik op deze week: welke diensten zijn nog niet vol, wat kan er misgaan, en waar moet ik op letten?" },
+            { label: "Welke diensten zijn open?", prompt: "Welke diensten zijn de komende dagen nog niet (volledig) bemand?" },
+            { label: "Welke klanten lopen risico?", prompt: "Welke klanten lopen op dit moment risico — uitlopende diensten, veel wijzigingen of openstaande verzoeken?" },
+          ]}
+        />
+      )}
 
       {sp.done && <AgendaFlash done={sp.done} />}
 
