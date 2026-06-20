@@ -1,8 +1,9 @@
 /**
  * placements.reply — post a comment into a placement's thread (the klant hub's source of truth),
- * as the owner. visibility 'client_visible' reaches the klant on their shift page; 'internal' is
- * a staff-only note. Wraps the tested addPlacementComment (the ONLY correct way to write a
- * multi-actor comment — never placements.notes). Confirm-gated (klant-facing content).
+ * as the owner. visibility 'client_visible' reaches the klant on their shift page; 'chef_visible'
+ * reaches the assigned chef on their placement (audit gap #11 — the AI could message the klant but
+ * not the chef); 'internal' is a staff-only note. Wraps the tested addPlacementComment (the ONLY
+ * correct way to write a multi-actor comment — never placements.notes). Confirm-gated.
  */
 import { z } from "zod";
 
@@ -13,16 +14,17 @@ export const placementsReply = defineTool({
   name: "placements.reply",
   title: "Reageren bij een plaatsing (klant-hub)",
   description:
-    "Plaats een bericht in de gesprekslijn van een plaatsing — namens Chef & Serve. Met visibility 'client_visible' ziet de klant het op de dienstpagina (gebruik dit om op een klant te reageren of iets te laten weten); met 'internal' is het een interne notitie voor je team. Voor 'reageer naar hotel X dat … / laat de klant weten dat …'. Gebruik shifts.detail voor het placementId (staat per teamlid).",
+    "Plaats een bericht in de gesprekslijn van een plaatsing — namens Chef & Serve. Met visibility 'client_visible' ziet de klant het op de dienstpagina (voor 'reageer naar hotel X dat … / laat de klant weten dat …'); met 'chef_visible' ziet de toegewezen chef het op zijn plaatsing (voor 'laat de chef weten dat … / bericht de chef van deze dienst'); met 'internal' is het een interne notitie voor je team. Gebruik shifts.detail voor het placementId (staat per teamlid).",
   risk: "outbound",
   permission: { resource: "shifts", action: "write" },
   input: z.object({
     placementId: z.string().min(1, "placementId is verplicht"),
     body: z.string().min(1, "bericht mag niet leeg zijn").max(1000, "max. 1000 tekens"),
-    visibility: z.enum(["client_visible", "internal"]).optional(),
+    visibility: z.enum(["client_visible", "chef_visible", "internal"]).optional(),
   }),
   describeAction: (i) => {
-    const vis = (i.visibility ?? "client_visible") === "client_visible" ? "ZICHTBAAR VOOR DE KLANT" : "intern (alleen je team)";
+    const v = i.visibility ?? "client_visible";
+    const vis = v === "client_visible" ? "ZICHTBAAR VOOR DE KLANT" : v === "chef_visible" ? "ZICHTBAAR VOOR DE CHEF" : "intern (alleen je team)";
     return `Bericht plaatsen bij plaatsing ${i.placementId} (${vis}):\n"${i.body}"`;
   },
   run: async (input, ctx) => {
@@ -38,9 +40,13 @@ export const placementsReply = defineTool({
         res.error === "empty" ? "het bericht is leeg" : res.error === "too-long" ? "het bericht is te lang (max. 1000 tekens)" : "kon het bericht niet plaatsen";
       throw new Error(msg);
     }
-    return {
-      data: { id: res.id },
-      summary: `Bericht geplaatst${(input.visibility ?? "client_visible") === "client_visible" ? " — de klant kan het zien op de dienstpagina" : " (intern)"}.`,
-    };
+    const v = input.visibility ?? "client_visible";
+    const where =
+      v === "client_visible"
+        ? " — de klant kan het zien op de dienstpagina"
+        : v === "chef_visible"
+          ? " — de chef kan het zien bij zijn plaatsing"
+          : " (intern)";
+    return { data: { id: res.id }, summary: `Bericht geplaatst${where}.` };
   },
 });
