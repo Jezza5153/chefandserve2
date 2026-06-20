@@ -60,6 +60,7 @@ import { feedbackReview } from "@/lib/ai/tools/feedback-review";
 import { systemHealth, watchdogFindings } from "@/lib/ai/tools/system-tools";
 import { inboxesGrantAccess, inboxesList, inboxesRevokeAccess } from "@/lib/ai/tools/inbox-admin";
 import { shiftsCreate } from "@/lib/ai/tools/shift-create";
+import { shiftsUpdate } from "@/lib/ai/tools/shift-update";
 import { chefsAvailability } from "@/lib/ai/tools/chef-availability";
 import { clientsShiftRequests, clientsDecideShiftRequest } from "@/lib/ai/tools/client-requests";
 import { placementsReply } from "@/lib/ai/tools/placement-reply";
@@ -103,6 +104,7 @@ export const ALL_TOOLS: AnyTool[] = [
   inboxesGrantAccess,
   inboxesRevokeAccess,
   shiftsCreate,
+  shiftsUpdate,
   clientsHistory,
   clientsHealth,
   clientsReachability,

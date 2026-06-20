@@ -52,7 +52,7 @@ const DESTRUCTIVE = new Set([
   "hours.approve", "hours.reject", "placements.cancel", "placements.propose", "placements.confirm",
   "placements.complete", "email.send", "email.send_to_client", "email.send_to_chef", "placements.reply", "roster.publish", "roster.autofill", "roster.copy_last_week",
   "chefs.approve_profile_change", "chefs.reject_profile_change", "chefs.send_availability_reminder",
-  "chefs.request_profile_data", "inboxes.grant_access", "inboxes.revoke_access", "shifts.create",
+  "chefs.request_profile_data", "inboxes.grant_access", "inboxes.revoke_access", "shifts.create", "shifts.update",
   "clients.decide_shift_request",
 ]);
 
@@ -111,6 +111,7 @@ const GOLDEN: RouteCase[] = [
   { id: "G-syshealth", q: "Draait het platform goed — zijn er fouten of storingen in het systeem vandaag?", expect: ["system.health", "integrations.health"] },
   { id: "G-inboxes", q: "Wie heeft er allemaal toegang tot de planning-inbox?", expect: ["inboxes.list"] },
   { id: "G-newshift", q: "Maak een dienst aan voor aanstaande vrijdag 17:00-23:00 bij Hotel Okura, een sous-chef.", expect: ["clients.find", "shifts.create"] },
+  { id: "G-editshift", q: "Zet de dienst bij Hotel Okura van vrijdag een uur later.", expect: ["shifts.find", "shifts.update", "shifts.detail"] },
   { id: "G-creach", q: "Krijgt Hotel Okura mijn mails wel — hoe kan ik ze bereiken?", expect: ["clients.reachability", "clients.find"] },
   { id: "G-ctmpl", q: "Welke vaste shifts heeft Hotel Okura standaard staan?", expect: ["clients.shift_templates", "clients.find"] },
   // AI-W0: intel_snapshot + deep-dive read tools had ZERO routing coverage. The "voor je belt"
