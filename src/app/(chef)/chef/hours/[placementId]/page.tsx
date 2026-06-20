@@ -44,6 +44,8 @@ import {
   humanStatus,
 } from "@/lib/hours-labels";
 import { recordChefEvent, diffMinutes } from "@/lib/chef-events";
+import { getI18n } from "@/lib/i18n/server";
+import { INTL_TAG } from "@/lib/i18n/locales";
 import { requireAuth } from "@/lib/permissions";
 
 import { HoursSubmittedKlantEmail } from "@/emails/HoursSubmittedKlantEmail";
@@ -285,6 +287,7 @@ export default async function ChefHoursFormPage({
   searchParams: Promise<{ error?: string; ok?: string }>;
 }) {
   const session = await requireAuth();
+  const { locale, dict: t } = await getI18n();
   const { placementId } = await params;
   const sp = await searchParams;
 
@@ -326,11 +329,11 @@ export default async function ChefHoursFormPage({
 
   const errorMsg =
     sp.error === "bad-times"
-      ? "Eindtijd moet later zijn dan starttijd."
+      ? t.hours.errBadTimes
       : sp.error === "break-too-long"
-        ? "Pauze kan niet langer zijn dan je totale werktijd."
+        ? t.hours.errBreakTooLong
         : sp.error === "stale"
-          ? "De status is in de tussentijd veranderd — vernieuw de pagina."
+          ? t.hours.errStale
           : null;
 
   return (
@@ -340,7 +343,7 @@ export default async function ChefHoursFormPage({
           href="/chef/hours"
           className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy hover:underline"
         >
-          ← Mijn uren
+          {t.hours.backLink}
         </Link>
       </div>
 
@@ -348,51 +351,47 @@ export default async function ChefHoursFormPage({
         {row.clientName}
       </p>
       <h1 className="mt-2 font-serif text-2xl text-ink-900 md:text-3xl">
-        Uren invullen
+        {t.hours.detailTitle}
       </h1>
       <p className="mt-2 text-sm text-ink-700">
-        {new Date(row.shift.startsAt).toLocaleDateString("nl-NL", {
+        {new Date(row.shift.startsAt).toLocaleDateString(INTL_TAG[locale], {
           weekday: "long",
           day: "numeric",
           month: "long",
         })}
       </p>
       <p className="mt-1 text-sm text-ink-500">
-        Gepland: {formatTime(row.shift.startsAt)} – {formatTime(row.shift.endsAt)}
+        {t.hours.scheduledLabel} {formatTime(row.shift.startsAt)} – {formatTime(row.shift.endsAt)}
       </p>
 
       {/* Rejection callout */}
       {row.h.status === "client_rejected" && row.h.clientNotes ? (
         <div className="mt-6 rounded-lg border-l-4 border-burgundy bg-burgundy/5 p-4">
           <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-            Klant niet akkoord
+            {t.hours.clientRejectedHeading}
           </p>
           <p className="mt-2 text-sm italic text-ink-900">
             &ldquo;{row.h.clientNotes}&rdquo;
           </p>
-          <p className="mt-2 text-xs text-ink-700">
-            Pas je uren aan en dien opnieuw in.
-          </p>
+          <p className="mt-2 text-xs text-ink-700">{t.hours.rejectedPrompt}</p>
         </div>
       ) : null}
       {row.h.status === "admin_rejected" && row.h.adminNotes ? (
         <div className="mt-6 rounded-lg border-l-4 border-burgundy bg-burgundy/5 p-4">
           <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-            Chef &amp; Serve heeft je uren teruggezet
+            {t.hours.adminRejectedHeading}
           </p>
           <p className="mt-2 text-sm italic text-ink-900">
             &ldquo;{row.h.adminNotes}&rdquo;
           </p>
-          <p className="mt-2 text-xs text-ink-700">
-            Pas je uren aan en dien opnieuw in.
-          </p>
+          <p className="mt-2 text-xs text-ink-700">{t.hours.rejectedPrompt}</p>
         </div>
       ) : null}
 
       {!isEditable ? (
         <div className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
           <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-            Status
+            {t.hours.statusHeading}
           </p>
           <p className="mt-2 text-sm text-ink-900">{humanStatus(row.h.status)}</p>
           <p className="mt-2 text-sm text-ink-700">
@@ -416,25 +415,23 @@ export default async function ChefHoursFormPage({
       {reviewable &&
         (existingReview || sp.ok === "review" ? (
           <div className="mt-8 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            ✓ Bedankt voor je terugkoppeling — dit helpt ons betere shifts te kiezen.
+            {t.hours.reviewThanks}
           </div>
         ) : (
           <section className="mt-8 rounded-lg border border-ink-200 bg-white p-6">
             <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-              Hoe ging je shift?
+              {t.hours.reviewHeading}
             </p>
-            <p className="mt-1 text-xs text-ink-500">
-              6 korte vragen — helpt ons betere shifts kiezen en beschermt jou.
-            </p>
+            <p className="mt-1 text-xs text-ink-500">{t.hours.reviewSubtext}</p>
             <form action={submitReview} className="mt-4 space-y-4">
               <input type="hidden" name="placementId" value={placementId} />
               {(
                 [
-                  ["workedPlannedRole", "Heb je de geplande rol gewerkt?"],
-                  ["workedExtraHours", "Heb je extra uren gewerkt?"],
-                  ["gotBreak", "Heb je pauze gehad?"],
-                  ["asDescribed", "Was de shift zoals afgesproken?"],
-                  ["wouldReturn", "Zou je hier weer werken?"],
+                  ["workedPlannedRole", t.hours.reviewQ1],
+                  ["workedExtraHours", t.hours.reviewQ2],
+                  ["gotBreak", t.hours.reviewQ3],
+                  ["asDescribed", t.hours.reviewQ4],
+                  ["wouldReturn", t.hours.reviewQ5],
                 ] as [string, string][]
               ).map(([key, q]) => (
                 <fieldset key={key} className="flex flex-wrap items-center justify-between gap-2">
@@ -446,26 +443,24 @@ export default async function ChefHoursFormPage({
                         className="cursor-pointer rounded-full border border-ink-200 px-3 py-1 text-xs text-ink-700 has-[:checked]:border-burgundy has-[:checked]:bg-burgundy has-[:checked]:text-white"
                       >
                         <input type="radio" name={key} value={v} className="sr-only" />
-                        {v === "ja" ? "Ja" : "Nee"}
+                        {v === "ja" ? t.hours.reviewYes : t.hours.reviewNo}
                       </label>
                     ))}
                   </div>
                 </fieldset>
               ))}
               <label className="block">
-                <span className="text-sm text-ink-800">
-                  Iets dat Maarten moet weten? (optioneel)
-                </span>
+                <span className="text-sm text-ink-800">{t.hours.reviewIssueLabel}</span>
                 <textarea
                   name="issueNote"
                   rows={2}
                   maxLength={1000}
-                  placeholder="bijv. ze lieten me langer doorwerken, geen pauze mogelijk"
+                  placeholder={t.hours.reviewIssuePlaceholder}
                   className="mt-1 w-full rounded-md border border-ink-200 px-3 py-2 text-sm"
                 />
               </label>
               <button className="rounded-full bg-burgundy px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy/90">
-                Versturen
+                {t.hours.reviewSubmit}
               </button>
             </form>
           </section>
