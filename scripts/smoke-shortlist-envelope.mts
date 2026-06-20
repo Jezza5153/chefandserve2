@@ -16,7 +16,7 @@ const okStep = (shiftId: string, matches: unknown) => ({
   input: { shiftId },
   result: { status: "ok", data: { count: Array.isArray(matches) ? matches.length : 0, matches } },
 });
-const match = (chefId: string, chefName: string, score: number, reasons: string[] = []) => ({ chefId, chefName, score, reasons });
+const match = (chefId: string, chefName: string, score: number, reasons: string[] = [], warnings: string[] = []) => ({ chefId, chefName, score, reasons, warnings });
 
 // 1. happy path → shiftId + mapped items (chefId/name/score/first-reason)
 {
@@ -27,6 +27,13 @@ const match = (chefId: string, chefName: string, score: number, reasons: string[
   ok("happy: first item maps", env?.items[0].chefId === "c1" && env?.items[0].chefName === "Sam" && env?.items[0].score === 92);
   ok("happy: first reason only", env?.items[0].reason === "ontbijt");
   ok("happy: empty reasons → ''", buildShortlistEnvelope([okStep("s1", [match("c1", "Sam", 90)])])?.items[0].reason === "");
+}
+
+// 1b. warnings carry through (joined); empty when none
+{
+  const env = buildShortlistEnvelope([okStep("s1", [match("c1", "Sam", 90, ["ontbijt"], ["heeft deze dienst eerder afgewezen", "buiten reisafstand"])])]);
+  ok("warning: joined", env?.items[0].warning === "heeft deze dienst eerder afgewezen · buiten reisafstand");
+  ok("warning: empty when none", buildShortlistEnvelope([okStep("s1", [match("c1", "Sam", 90, ["ontbijt"])])])?.items[0].warning === "");
 }
 
 // 2. picks the LAST successful suggest_chefs step

@@ -6,7 +6,7 @@
  * (no AI-runtime imports), so it unit-tests without the agent loop and lives outside the
  * eval-gated `src/lib/ai` tree.
  */
-export type ShortlistItem = { chefId: string; chefName: string; score: number; reason: string };
+export type ShortlistItem = { chefId: string; chefName: string; score: number; reason: string; warning: string };
 export type ShortlistEnvelope = { shiftId: string; items: ShortlistItem[] };
 
 /** Structural mirror of an AgentStep — avoids importing the AI runtime types here. */
@@ -39,7 +39,12 @@ export function buildShortlistEnvelope(steps: readonly StepLike[] | undefined | 
     if (!chefId || !chefName) continue;
     const score = typeof m.score === "number" && Number.isFinite(m.score) ? Math.max(0, Math.min(100, Math.round(m.score))) : 0;
     const reason = Array.isArray(m.reasons) && typeof m.reasons[0] === "string" ? m.reasons[0] : "";
-    items.push({ chefId, chefName, score, reason });
+    // Carry the match warnings (labels — "heeft eerder afgewezen", "buiten reisafstand",
+    // "door klant geblokkeerd"…) so a one-click "Stel voor" is never made blind. Capped.
+    const warning = Array.isArray(m.warnings)
+      ? m.warnings.filter((w): w is string => typeof w === "string").join(" · ").slice(0, 120)
+      : "";
+    items.push({ chefId, chefName, score, reason, warning });
     if (items.length >= MAX_ITEMS) break;
   }
   return items.length > 0 ? { shiftId, items } : null;

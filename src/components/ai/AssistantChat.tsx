@@ -374,6 +374,7 @@ export function AssistantChat({
                           score {it.score}
                         </span>
                         {it.reason ? <p className="truncate text-[11px] text-ink-500">{it.reason}</p> : null}
+                        {it.warning ? <p className="truncate text-[11px] text-amber-700">⚠ {it.warning}</p> : null}
                       </div>
                       {st?.state === "done" ? (
                         <span className="shrink-0 text-[11px] text-emerald-700">✓ {st.message}</span>
