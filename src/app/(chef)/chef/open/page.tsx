@@ -21,6 +21,9 @@ import {
 } from "@/lib/domain/shift-interests";
 import { formatEuro } from "@/lib/hours-labels";
 import { formatChefRole } from "@/lib/labels";
+import { getI18n } from "@/lib/i18n/server";
+import { fill, INTL_TAG, type Locale } from "@/lib/i18n/locales";
+import { type Dict } from "@/lib/i18n/get-dict";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata = { title: "Open diensten" };
@@ -28,16 +31,17 @@ export const dynamic = "force-dynamic";
 
 const LABEL = "font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy";
 
-function formatWhen(start: Date, end: Date): string {
-  const day = new Intl.DateTimeFormat("nl-NL", {
+function formatWhen(start: Date, end: Date, locale: Locale): string {
+  const tag = INTL_TAG[locale];
+  const day = new Intl.DateTimeFormat(tag, {
     weekday: "short",
     day: "numeric",
     month: "short",
     timeZone: "Europe/Amsterdam",
   }).format(start);
-  const t = (x: Date) =>
-    new Intl.DateTimeFormat("nl-NL", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" }).format(x);
-  return `${day} · ${t(start)}–${t(end)}`;
+  const time = (x: Date) =>
+    new Intl.DateTimeFormat(tag, { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" }).format(x);
+  return `${day} · ${time(start)}–${time(end)}`;
 }
 
 /** Fit% badge tone — green strong, amber decent, grey weak. */
@@ -48,29 +52,16 @@ function fitTone(score: number): string {
 }
 
 /** Urgency label — only shown when the shift starts soon (<24h). */
-function urgencyLabel(hoursUntilStart: number): string | null {
+function urgencyLabel(hoursUntilStart: number, t: Dict): string | null {
   if (hoursUntilStart >= 24) return null;
-  if (hoursUntilStart < 2) return "Spoed · begint binnen 2 uur";
-  return `Spoed · begint over ${Math.round(hoursUntilStart)} uur`;
+  if (hoursUntilStart < 2) return t.shifts.urgencyUnder2;
+  return fill(t.shifts.urgencyHours, { hours: Math.round(hoursUntilStart) });
 }
 
 /** "~12 km" road estimate. */
 function formatKm(km: number): string {
   return km < 10 ? `~${km.toFixed(0)} km` : `~${Math.round(km)} km`;
 }
-
-/** Friendly banner copy for a failed claim (?claim=<reason>). */
-const CLAIM_MSG: Record<string, string> = {
-  full: "Helaas — deze spoeddienst is net door een andere chef opgepakt.",
-  conflict: "Je hebt al een shift die hiermee overlapt.",
-  blocked: "Je hebt deze dag geblokkeerd in je beschikbaarheid.",
-  already: "Je staat al op deze dienst.",
-  closed: "Deze dienst kan niet meer geclaimd worden.",
-  not_emergency: "Deze dienst is geen spoeddienst.",
-  not_found: "Dienst niet gevonden.",
-  disabled: "Direct claimen is nu niet beschikbaar.",
-  opted_out: "Je staat niet open voor spoeddiensten — pas dit aan bij je voorkeuren.",
-};
 
 async function interestAction(fd: FormData) {
   "use server";
@@ -124,17 +115,21 @@ export default async function ChefOpenShiftsPage({
   searchParams: Promise<{ claim?: string }>;
 }) {
   const session = await requireAuth("/chef/open");
+  const { locale, dict: t } = await getI18n();
   const chef = await db.query.chefs.findFirst({ where: eq(chefs.userId, session.user.id) });
   const emergencyOn = emergencyClaimEnabled();
-  const claimError = CLAIM_MSG[(await searchParams).claim ?? ""] ?? null;
+  const claimReason = (await searchParams).claim ?? "";
+  const claimError = claimReason
+    ? t.shifts.claim[claimReason as keyof Dict["shifts"]["claim"]] ?? null
+    : null;
 
   if (!chefOpenShiftsEnabled() || !chef) {
     return (
       <div>
-        <p className={LABEL}>Rooster</p>
-        <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">Open diensten</h1>
+        <p className={LABEL}>{t.shifts.rosterEyebrow}</p>
+        <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">{t.shifts.openTitle}</h1>
         <p className="mt-6 rounded-lg border border-ink-200 bg-white p-8 text-center text-sm text-ink-500">
-          Open diensten zijn er binnenkort.
+          {t.shifts.openComingSoon}
         </p>
       </div>
     );
@@ -144,12 +139,11 @@ export default async function ChefOpenShiftsPage({
 
   return (
     <div>
-      <p className={LABEL}>Rooster</p>
-      <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">Open diensten</h1>
+      <p className={LABEL}>{t.shifts.rosterEyebrow}</p>
+      <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">{t.shifts.openTitle}</h1>
       <p className="mt-2 text-sm text-ink-600">
-        Diensten waar nog plek is. Geef aan dat je interesse hebt — wij koppelen terug en
-        bevestigen het definitief.
-        {emergencyOn ? " Spoeddiensten ⚡ kun je meteen vastleggen." : ""}
+        {t.shifts.openIntro}
+        {emergencyOn ? t.shifts.openIntroEmergency : ""}
       </p>
 
       {claimError && (
@@ -161,11 +155,11 @@ export default async function ChefOpenShiftsPage({
       <div className="mt-6 space-y-3">
         {open.length === 0 ? (
           <p className="rounded-lg border border-ink-200 bg-white p-8 text-center text-sm text-ink-500">
-            Geen open diensten op dit moment. Kijk later nog eens.
+            {t.shifts.emptyOpen}
           </p>
         ) : (
           open.map((s) => {
-            const urgency = urgencyLabel(s.hoursUntilStart);
+            const urgency = urgencyLabel(s.hoursUntilStart, t);
             const claimable = s.isEmergency && emergencyOn && (chef.availableForEmergency ?? false);
             return (
               <div
@@ -180,22 +174,22 @@ export default async function ChefOpenShiftsPage({
                       </p>
                       {claimable && (
                         <span className="rounded-full bg-burgundy px-2 py-0.5 font-ui text-[10px] font-semibold uppercase tracking-[0.12em] text-white">
-                          ⚡ Spoed
+                          {t.shifts.emergencyBadge}
                         </span>
                       )}
                       {s.fitScore != null && (
                         <span
                           className={`rounded-full px-2 py-0.5 font-ui text-[10px] font-semibold ring-1 ${fitTone(s.fitScore)}`}
                         >
-                          {s.fitScore}% match
+                          {s.fitScore}{t.shifts.matchLabel}
                         </span>
                       )}
                     </div>
                     <p className="mt-1 text-sm font-medium text-ink-900">{s.clientName}</p>
                     <p className="mt-0.5 text-xs text-ink-600">
-                      {formatWhen(s.startsAt, s.endsAt)}
+                      {formatWhen(s.startsAt, s.endsAt, locale)}
                       {s.city ? ` · ${s.city}` : ""}
-                      {s.rateCents ? ` · ${formatEuro(s.rateCents)}/uur` : ""}
+                      {s.rateCents ? ` · ${formatEuro(s.rateCents)}${t.shifts.perHour}` : ""}
                     </p>
 
                     {/* CHEF-PR1 — trust signals */}
@@ -212,7 +206,7 @@ export default async function ChefOpenShiftsPage({
                       )}
                       {s.grossCents != null && (
                         <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800">
-                          ≈ {formatEuro(s.grossCents)} bruto · {s.durationHours} u
+                          {fill(t.shifts.grossEstimate, { gross: formatEuro(s.grossCents), hours: s.durationHours })}
                         </span>
                       )}
                     </div>
@@ -221,13 +215,13 @@ export default async function ChefOpenShiftsPage({
                     {(s.mealIncluded || s.parkingAvailable || s.startFlexible) && (
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-ink-600">
                         {s.mealIncluded && (
-                          <span className="rounded-full bg-bg-gray px-2 py-0.5">🍽️ Maaltijd inbegrepen</span>
+                          <span className="rounded-full bg-bg-gray px-2 py-0.5">{t.shifts.mealIncluded}</span>
                         )}
                         {s.parkingAvailable && (
-                          <span className="rounded-full bg-bg-gray px-2 py-0.5">🅿️ Parkeren</span>
+                          <span className="rounded-full bg-bg-gray px-2 py-0.5">{t.shifts.parking}</span>
                         )}
                         {s.startFlexible && (
-                          <span className="rounded-full bg-bg-gray px-2 py-0.5">🕒 Flexibele starttijd</span>
+                          <span className="rounded-full bg-bg-gray px-2 py-0.5">{t.shifts.flexibleStart}</span>
                         )}
                       </div>
                     )}
@@ -235,7 +229,7 @@ export default async function ChefOpenShiftsPage({
                     {s.reasons.length > 0 && (
                       <details className="mt-2">
                         <summary className="cursor-pointer font-ui text-[11px] font-medium text-burgundy">
-                          Waarom krijg ik deze shift?
+                          {t.shifts.whyShift}
                         </summary>
                         <ul className="mt-1.5 flex flex-wrap gap-1">
                           {s.reasons.map((r) => (
@@ -251,15 +245,13 @@ export default async function ChefOpenShiftsPage({
                     )}
 
                     {s.grossCents != null && (
-                      <p className="mt-1.5 text-[10px] text-ink-400">
-                        Indicatie. Netto hangt af van loonheffing en je situatie.
-                      </p>
+                      <p className="mt-1.5 text-[10px] text-ink-400">{t.shifts.indicatieNote}</p>
                     )}
 
                     {/* CHEF-PR1 — interesse, maar ik heb een vraag */}
                     <details className="mt-2">
                       <summary className="cursor-pointer font-ui text-[11px] font-medium text-ink-600">
-                        Een vraag over deze dienst?
+                        {t.shifts.questionSummary}
                       </summary>
                       <form action={askAction} className="mt-1.5 flex flex-col gap-1.5 sm:flex-row">
                         <input type="hidden" name="shiftId" value={s.shiftId} />
@@ -268,11 +260,11 @@ export default async function ChefOpenShiftsPage({
                           name="question"
                           required
                           maxLength={500}
-                          placeholder="bijv. is parkeren dichtbij? mag ik eerder weg?"
+                          placeholder={t.shifts.questionPlaceholder}
                           className="flex-1 rounded-md border border-ink-200 px-3 py-1.5 text-xs"
                         />
                         <button className="shrink-0 rounded-full border border-ink-300 bg-white px-3 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-ink-700 hover:bg-bg-gray">
-                          Stuur naar Maarten
+                          {t.shifts.sendToMaarten}
                         </button>
                       </form>
                     </details>
@@ -282,21 +274,21 @@ export default async function ChefOpenShiftsPage({
                     <form action={claimAction} className="shrink-0">
                       <input type="hidden" name="shiftId" value={s.shiftId} />
                       <button className="rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy/90">
-                        ⚡ Accepteer nu
+                        {t.shifts.acceptNow}
                       </button>
                     </form>
                   ) : s.interested ? (
                     <form action={withdrawAction} className="shrink-0">
                       <input type="hidden" name="shiftId" value={s.shiftId} />
                       <button className="rounded-full border border-burgundy bg-burgundy/10 px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-burgundy">
-                        ✓ Interesse · intrekken
+                        {t.shifts.withdrawInterest}
                       </button>
                     </form>
                   ) : (
                     <form action={interestAction} className="shrink-0">
                       <input type="hidden" name="shiftId" value={s.shiftId} />
                       <button className="rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy/90">
-                        Ik heb interesse
+                        {t.shifts.expressInterest}
                       </button>
                     </form>
                   )}
@@ -308,9 +300,9 @@ export default async function ChefOpenShiftsPage({
       </div>
 
       <p className="mt-6 text-xs text-ink-500">
-        Terug naar je{" "}
+        {t.shifts.backToPre}
         <Link href="/chef/shifts" className="text-burgundy hover:underline">
-          shifts
+          {t.shifts.backToLink}
         </Link>
         .
       </p>

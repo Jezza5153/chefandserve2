@@ -9,16 +9,20 @@ import {
   shifts,
 } from "@/lib/db/schema";
 import { formatShiftRole } from "@/lib/labels";
+import { getI18n } from "@/lib/i18n/server";
+import { INTL_TAG, type Locale } from "@/lib/i18n/locales";
+import { type Dict } from "@/lib/i18n/get-dict";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata = { title: "Mijn shifts" };
 
 export default async function ChefShiftsPage() {
   const session = await requireAuth();
+  const { locale, dict: t } = await getI18n();
   const chef = await db.query.chefs.findFirst({
     where: eq(chefs.userId, session.user.id),
   });
-  if (!chef) return <p>Geen chef-profiel gekoppeld.</p>;
+  if (!chef) return <p>{t.shifts.noProfile}</p>;
 
   const rows = await db
     .select({
@@ -35,15 +39,15 @@ export default async function ChefShiftsPage() {
   return (
     <div>
       <p className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-        Mijn shifts
+        {t.nav.myShifts}
       </p>
       <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">
-        Alle voorstellen & geschiedenis
+        {t.shifts.allProposals}
       </h1>
 
       {rows.length === 0 ? (
         <p className="mt-8 rounded-lg border border-ink-200 bg-white p-8 text-center text-sm text-ink-500">
-          Nog geen shifts. Maarten matcht jou aan komende klant-aanvragen.
+          {t.shifts.emptyList}
         </p>
       ) : (
         <ul className="mt-8 space-y-2">
@@ -59,11 +63,11 @@ export default async function ChefShiftsPage() {
                       {formatShiftRole(shift.roleNeeded)} · {clientName}
                     </h3>
                     <p className="mt-0.5 text-xs text-ink-500">
-                      {formatRange(shift.startsAt, shift.endsAt)}
+                      {formatRange(shift.startsAt, shift.endsAt, locale)}
                       {shift.city && ` · ${shift.city}`}
                     </p>
                   </div>
-                  <StatusBadge status={placement.status} />
+                  <StatusBadge status={placement.status} t={t} />
                 </div>
               </Link>
             </li>
@@ -74,17 +78,18 @@ export default async function ChefShiftsPage() {
   );
 }
 
-function formatRange(start: Date, end: Date): string {
+function formatRange(start: Date, end: Date, locale: Locale): string {
+  const tag = INTL_TAG[locale];
   const s = new Date(start);
   const e = new Date(end);
-  return `${s.toLocaleDateString("nl-NL", {
+  return `${s.toLocaleDateString(tag, {
     weekday: "short",
     day: "numeric",
     month: "short",
-  })} · ${s.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}–${e.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}`;
+  })} · ${s.toLocaleTimeString(tag, { hour: "2-digit", minute: "2-digit" })}–${e.toLocaleTimeString(tag, { hour: "2-digit", minute: "2-digit" })}`;
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, t }: { status: string; t: Dict }) {
   const tone =
     status === "confirmed" || status === "accepted"
       ? "bg-emerald-100 text-emerald-700"
@@ -93,20 +98,12 @@ function StatusBadge({ status }: { status: string }) {
         : status === "completed"
           ? "bg-blue-100 text-blue-700"
           : "bg-bg-gray text-ink-500";
-  const labels: Record<string, string> = {
-    proposed: "Wacht op jou",
-    accepted: "Geaccepteerd",
-    confirmed: "Bevestigd",
-    rejected: "Afgewezen",
-    cancelled: "Geannuleerd",
-    completed: "Afgerond",
-    no_show: "No-show",
-  };
+  const label = t.shifts.status[status as keyof Dict["shifts"]["status"]] ?? status;
   return (
     <span
       className={`shrink-0 rounded-full px-2.5 py-1 font-ui text-[9px] font-medium uppercase tracking-wider ${tone}`}
     >
-      {labels[status] ?? status}
+      {label}
     </span>
   );
 }
