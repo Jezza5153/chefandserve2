@@ -249,6 +249,10 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
                   <p className="mt-0.5 text-xs text-ink-500">
                     {formatShiftRole(m.chef.vakniveau)} · {m.chef.city ?? "—"}
                     {m.chef.yearsExperience ? ` · ${m.chef.yearsExperience}j` : ""}
+                    {/* D1: surface the chef's ★ at the fill moment (aggregate, AVG-safe). */}
+                    {m.chef.averageRating != null && (m.chef.ratingCount ?? 0) > 0 ? (
+                      <span className="text-amber-700"> · ★ {Number(m.chef.averageRating).toFixed(1)} ({m.chef.ratingCount})</span>
+                    ) : null}
                   </p>
                   {/* P3c: marge at the choice moment (negative = red guard). */}
                   {marginByChef.has(m.chef.id) && (
