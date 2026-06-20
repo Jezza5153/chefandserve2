@@ -74,7 +74,14 @@ export type AcceptResult =
   | { ok: false; error: string };
 
 /** Accept ONE proposal: atomically claim it (pending → accepted, reject if already decided),
- *  then write the exact fact into owner-memory and audit it. */
+ *  then write the exact fact into owner-memory and audit it.
+ *
+ *  neon-http has no cross-statement tx, so the claim COMMITS before rememberFact's own withTx.
+ *  If that durable write (or the fail-closed audit) then throws, roll the claim BACK to pending —
+ *  otherwise the proposal would vanish from the pending list while the fact never reached memory,
+ *  silently swallowing the owner's click. The rethrow surfaces a 500 so the UI keeps the row for a
+ *  retry (a 409 "al verwerkt" would make the client drop it). rememberFact dedups, so the retry's
+ *  second write is harmless. */
 export async function acceptMemoryProposal(args: { userId: string; id: string }): Promise<AcceptResult> {
   const [claimed] = await db
     .update(aiMemoryProposals)
@@ -89,20 +96,31 @@ export async function acceptMemoryProposal(args: { userId: string; id: string })
     .returning({ fact: aiMemoryProposals.fact });
   if (!claimed) return { ok: false, error: "Dit voorstel is al verwerkt." };
 
-  const res = await rememberFact({
-    userId: args.userId,
-    text: claimed.fact,
-    id: randomUUID(),
-    now: new Date().toISOString(),
-  });
-  await recordAuditFromRequest({
-    userId: args.userId,
-    action: "memory.proposal_accepted",
-    resource: "ai_memory_proposals",
-    resourceId: args.id,
-    after: { fact: claimed.fact, deduped: res.deduped },
-  });
-  return { ok: true, fact: claimed.fact, deduped: res.deduped };
+  try {
+    const res = await rememberFact({
+      userId: args.userId,
+      text: claimed.fact,
+      id: randomUUID(),
+      now: new Date().toISOString(),
+    });
+    await recordAuditFromRequest({
+      userId: args.userId,
+      action: "memory.proposal_accepted",
+      resource: "ai_memory_proposals",
+      resourceId: args.id,
+      after: { fact: claimed.fact, deduped: res.deduped },
+    });
+    return { ok: true, fact: claimed.fact, deduped: res.deduped };
+  } catch (err) {
+    // Best-effort compensation: un-claim so the proposal re-surfaces on the next GET. If THIS also
+    // fails (same infra blip) the original error still propagates — strictly better than silent loss.
+    await db
+      .update(aiMemoryProposals)
+      .set({ status: "pending", decidedAt: null })
+      .where(and(eq(aiMemoryProposals.id, args.id), eq(aiMemoryProposals.status, "accepted")))
+      .catch(() => {});
+    throw err instanceof Error ? err : new Error("Kon het voorstel niet onthouden.");
+  }
 }
 
 /** Dismiss ONE proposal (pending → dismissed). Idempotent: a second click is a harmless no-op. */
