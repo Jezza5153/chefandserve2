@@ -459,7 +459,10 @@ export const auditLog = pgTable("audit_log", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (t) => ({
+  // E1: per-entity audit trail ("alles met deze chef/dienst/klant") queries by (resource, resourceId).
+  resourceIdx: index("audit_log_resource_idx").on(t.resource, t.resourceId),
+}));
 
 /** Application error log — our minimal Sentry replacement. */
 export const errorLog = pgTable("error_log", {
