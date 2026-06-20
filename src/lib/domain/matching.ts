@@ -630,6 +630,17 @@ export async function findMatchesForShift(
     );
   const placedSet = new Set(alreadyPlaced.map((r) => r.chefId));
 
+  // 3b. Chefs who already REJECTED this shift. The exclusion above only covers ACTIVE
+  // statuses, so a decliner would otherwise be silently re-suggested — in the fill drawer,
+  // the planner, AND the AI "Stel voor" shortlist. We don't hard-exclude (the owner may
+  // re-ask with new info, mirroring how klant-blocked chefs stay sink-visible); instead we
+  // attach a warning below so the choice is informed.
+  const rejectedRows = await db
+    .select({ chefId: placements.chefId })
+    .from(placements)
+    .where(and(eq(placements.shiftId, shift.id), eq(placements.status, "rejected")));
+  const rejectedSet = new Set(rejectedRows.map((r) => r.chefId));
+
   // 4. Exclude chefs with conflicting confirmed placements that overlap in time
   const conflictRows = await db
     .select({ chefId: placements.chefId })
@@ -729,6 +740,7 @@ export async function findMatchesForShift(
         ...rel.warnings,
         ...ccp.warnings,
         ...(klantBlockedSet.has(chef.id) ? ["door klant geblokkeerd"] : []),
+        ...(rejectedSet.has(chef.id) ? ["heeft deze dienst eerder afgewezen"] : []),
       ],
     });
   }
