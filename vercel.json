@@ -6,6 +6,14 @@
     {
       "path": "/api/cron/rag-ingest",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/shift-reminders",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/clockout-digest",
+      "schedule": "0 8 * * *"
     }
   ],
   "headers": [
