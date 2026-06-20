@@ -49,6 +49,7 @@ import { shiftsDetail, shiftsInterestedChefs } from "@/lib/ai/tools/shift-detail
 import { boardRecent } from "@/lib/ai/tools/board";
 import { chefsHistoryAtClient } from "@/lib/ai/tools/chef-client-history";
 import { risksScan } from "@/lib/ai/tools/risks";
+import { escalationsList } from "@/lib/ai/tools/escalations";
 import { intakeList, intakeConvert } from "@/lib/ai/tools/intake";
 import { onboardingMissing, onboardingRequestMissing } from "@/lib/ai/tools/onboarding";
 import { clientOnboardingMissing } from "@/lib/ai/tools/client-onboarding";
@@ -120,6 +121,7 @@ export const ALL_TOOLS: AnyTool[] = [
   matchIntelLookup,
   plannerCockpitTool,
   risksScan,
+  escalationsList,
   shiftsSuggestChefs,
   chefsSemanticSearch,
   clientsSemanticSearch,
