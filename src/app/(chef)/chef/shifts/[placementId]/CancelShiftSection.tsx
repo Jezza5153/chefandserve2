@@ -17,6 +17,9 @@ import {
   urgentCopy,
   type CancellationTier,
 } from "@/lib/cancellation-severity";
+import { fill } from "@/lib/i18n/locales";
+import { type Dict } from "@/lib/i18n/get-dict";
+import { useT } from "@/lib/i18n/LocaleProvider";
 
 type Props = {
   placementId: string;
@@ -29,6 +32,7 @@ export function CancelShiftSection({
   tier,
   cancelAction,
 }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const copy = urgentCopy(tier);
 
@@ -40,7 +44,7 @@ export function CancelShiftSection({
           onClick={() => setOpen(true)}
           className="rounded-full border border-ink-300 bg-white px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-ink-700 hover:border-burgundy/40 hover:text-burgundy"
         >
-          Shift annuleren
+          {t.shiftDetail.cancel.button}
         </button>
       </section>
     );
@@ -58,11 +62,13 @@ export function CancelShiftSection({
       <div className={wrapperCls}>
         <h2 className="font-serif text-xl text-ink-900">
           {tier === "urgent"
-            ? "⚠ Shift annuleren — minder dan 24 uur"
+            ? t.shiftDetail.cancel.titleUrgent
             : tier === "caution"
-              ? "Shift annuleren — binnenkort"
-              : "Shift annuleren"}
+              ? t.shiftDetail.cancel.titleCaution
+              : t.shiftDetail.cancel.titleSafe}
         </h2>
+        {/* copy.warning comes from the shared cancellation-severity lib (still NL) — a
+            deeper locale-aware-helpers pass; the surrounding chrome is translated. */}
         <p className="mt-2 text-sm text-ink-700">{copy.warning}</p>
 
         {copy.showCallCta ? (
@@ -70,7 +76,7 @@ export function CancelShiftSection({
             href={`tel:${MAARTEN_PHONE}`}
             className="mt-4 inline-block rounded-full bg-burgundy px-6 py-3 font-ui text-[12px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
           >
-            Bel Maarten · {MAARTEN_PHONE}
+            {fill(t.shiftDetail.cancel.callMaarten, { phone: MAARTEN_PHONE })}
           </a>
         ) : null}
 
@@ -78,7 +84,7 @@ export function CancelShiftSection({
           <input type="hidden" name="placementId" value={placementId} />
           <fieldset>
             <legend className="mb-1.5 font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-              Wat is de reden?
+              {t.shiftDetail.cancel.reasonLegend}
             </legend>
             <div className="flex flex-wrap gap-1.5">
               {CANCEL_REASONS.map((r, i) => (
@@ -93,42 +99,39 @@ export function CancelShiftSection({
                     defaultChecked={i === 0}
                     className="sr-only"
                   />
-                  {r.label}
+                  {t.shiftDetail.cancel.reasons[r.key as keyof Dict["shiftDetail"]["cancel"]["reasons"]] ?? r.label}
                 </label>
               ))}
             </div>
           </fieldset>
           <label className="block">
             <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-              Toelichting (verplicht, min 5 tekens)
+              {t.shiftDetail.cancel.explanationLabel}
             </span>
             <textarea
               name="reason"
               required
               minLength={5}
               rows={4}
-              placeholder="Bijv. ‘Ziek geworden’ of ‘familie-noodgeval’"
+              placeholder={t.shiftDetail.cancel.explanationPlaceholder}
               className={`${fieldClass} placeholder-ink-500`}
               autoFocus
             />
           </label>
-          <p className="text-xs text-ink-500">
-            De klant en Chef &amp; Serve krijgen je toelichting per mail.
-            Wij zoeken direct vervanging.
-          </p>
+          <p className="text-xs text-ink-500">{t.shiftDetail.cancel.explanationHint}</p>
           <div className="flex gap-2">
             <button
               type="submit"
               className="rounded-full bg-burgundy px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
             >
-              {tier === "urgent" ? "Annuleer en bel daarna" : "Annuleer shift"}
+              {tier === "urgent" ? t.shiftDetail.cancel.submitUrgent : t.shiftDetail.cancel.submit}
             </button>
             <button
               type="button"
               onClick={() => setOpen(false)}
               className="rounded-full border border-ink-200 bg-white px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-700 hover:bg-bg-gray"
             >
-              Toch niet
+              {t.shiftDetail.cancel.abort}
             </button>
           </div>
         </form>
