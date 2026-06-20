@@ -44,7 +44,7 @@ import {
   dismissSuggestion,
   listPendingSuggestions,
 } from "@/lib/domain/profile-suggestions";
-import { getChefAverageForAdmin } from "@/lib/domain/ratings";
+import { getChefAverageForAdmin, submitInternalRating } from "@/lib/domain/ratings";
 import { requirePermission } from "@/lib/permissions";
 import { r2IsConfigured } from "@/lib/r2";
 import { DetailShell } from "@/components/ui/DetailShell";
@@ -374,6 +374,18 @@ export default async function ChefDetailPage({
     revalidatePath(`/admin/business/chefs/${id}`);
   }
 
+  // D2: Maarten's own internal ★ for this chef (not a klant rating; never skews the public ★).
+  async function rateChefInternally(formData: FormData) {
+    "use server";
+    const session = await requirePermission("chefs", "write");
+    const stars = Number(formData.get("stars"));
+    const comment = String(formData.get("comment") ?? "").trim() || null;
+    if (Number.isInteger(stars) && stars >= 1 && stars <= 5) {
+      await submitInternalRating({ chefId: id, createdBy: session.user.id, stars, comment });
+    }
+    revalidatePath(`/admin/business/chefs/${id}`);
+  }
+
   async function updateBasics(formData: FormData) {
     "use server";
     const session = await requirePermission("chefs", "write");
@@ -624,6 +636,32 @@ export default async function ChefDetailPage({
 
       {/* PR-KLANT-5: rating breakdown (internal — admin only) */}
       <RatingSummary rating={rating} />
+
+      {/* D2: Maarten's own internal beoordeling — separate from the klant ★. */}
+      <section className="mt-4 rounded-lg border border-ink-200 bg-white p-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy">Mijn beoordeling</h2>
+          {rating.internalCount > 0 ? (
+            <span className="text-sm text-amber-700">
+              ★ {rating.internalAverage?.toFixed(1)} <span className="text-ink-400">({rating.internalCount} van jou)</span>
+            </span>
+          ) : (
+            <span className="text-[11px] text-ink-400">Nog niet door jou beoordeeld</span>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-ink-500">Jouw eigen oordeel over deze chef — los van de klantbeoordeling, telt niet mee in de publieke ★.</p>
+        <form action={rateChefInternally} className="mt-3 flex flex-wrap items-center gap-2">
+          <select name="stars" defaultValue="5" aria-label="Sterren" className="rounded border border-ink-200 bg-white px-2 py-2 text-sm">
+            {[5, 4, 3, 2, 1].map((s) => (
+              <option key={s} value={s}>{"★".repeat(s)} ({s})</option>
+            ))}
+          </select>
+          <input name="comment" placeholder="Korte notitie (optioneel)" className="min-w-0 flex-1 rounded border border-ink-200 bg-white px-3 py-2 text-sm placeholder-ink-400 focus:border-burgundy focus:outline-none" />
+          <button type="submit" className="rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-white hover:bg-burgundy-900">
+            Beoordeel
+          </button>
+        </form>
+      </section>
 
       {/* Documents */}
       <DocumentsSection

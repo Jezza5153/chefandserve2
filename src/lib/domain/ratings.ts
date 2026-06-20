@@ -75,12 +75,13 @@ export async function submitRating(args: {
     return { ok: false, error: "db" };
   }
 
-  // Recompute the chef rollup from the source of truth.
+  // Recompute the chef rollup from the source of truth. CLIENT ratings only — internal
+  // owner ratings (D2) are tracked separately and must not skew the public/self ★.
   await db
     .update(chefs)
     .set({
-      averageRating: sql`(SELECT round(avg(stars)::numeric, 2) FROM ratings WHERE chef_id = ${row.chefId})`,
-      ratingCount: sql`(SELECT count(*)::int FROM ratings WHERE chef_id = ${row.chefId})`,
+      averageRating: sql`(SELECT round(avg(stars)::numeric, 2) FROM ratings WHERE chef_id = ${row.chefId} AND source = 'client')`,
+      ratingCount: sql`(SELECT count(*)::int FROM ratings WHERE chef_id = ${row.chefId} AND source = 'client')`,
       updatedAt: new Date(),
     })
     .where(eq(chefs.id, row.chefId));
@@ -96,23 +97,72 @@ export async function submitRating(args: {
   return { ok: true, id };
 }
 
-/** Admin: full picture, always. */
+export type SubmitInternalRatingResult = { ok: true; id: string } | { ok: false; error: "invalid" | "db" };
+
+/**
+ * D2: Maarten's OWN internal assessment of a chef — not tied to a placement or klant.
+ * source='internal', placementId/clientId NULL. Deliberately does NOT touch the client
+ * rollup (chefs.averageRating stays klant-only); the internal aggregate is read on demand
+ * by getChefAverageForAdmin. Owner-only; createdBy is the session user.
+ */
+export async function submitInternalRating(args: {
+  chefId: string;
+  createdBy: string;
+  stars: number;
+  tags?: string[];
+  comment?: string | null;
+}): Promise<SubmitInternalRatingResult> {
+  if (!Number.isInteger(args.stars) || args.stars < 1 || args.stars > 5) {
+    return { ok: false, error: "invalid" };
+  }
+  const tags = sanitizeTags(args.tags ?? []);
+  const comment = (args.comment ?? "").trim().slice(0, 2000) || null;
+  try {
+    const [inserted] = await db
+      .insert(ratings)
+      .values({ chefId: args.chefId, stars: args.stars, source: "internal", tags, comment, createdBy: args.createdBy })
+      .returning({ id: ratings.id });
+    await recordAuditFromRequest({
+      userId: args.createdBy,
+      action: "ratings.internal_created",
+      resource: "ratings",
+      resourceId: inserted.id,
+      after: { chefId: args.chefId, stars: args.stars, tags },
+    });
+    return { ok: true, id: inserted.id };
+  } catch (err) {
+    console.error("[ratings] internal insert failed:", err instanceof Error ? err.message : err);
+    return { ok: false, error: "db" };
+  }
+}
+
+/** Admin: full picture, always — klant ★ (the rollup) PLUS Maarten's own internal ★. */
 export async function getChefAverageForAdmin(chefId: string): Promise<{
   averageRating: number | null;
   ratingCount: number;
-  recent: Array<{ stars: number; tags: string[]; comment: string | null; createdAt: Date }>;
+  internalAverage: number | null;
+  internalCount: number;
+  recent: Array<{ stars: number; tags: string[]; comment: string | null; createdAt: Date; source: "client" | "internal" }>;
 }> {
   const [c] = await db
     .select({ averageRating: chefs.averageRating, ratingCount: chefs.ratingCount })
     .from(chefs)
     .where(eq(chefs.id, chefId))
     .limit(1);
+  const [internal] = await db
+    .select({
+      avg: sql<string | null>`round(avg(${ratings.stars})::numeric, 2)`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(ratings)
+    .where(and(eq(ratings.chefId, chefId), eq(ratings.source, "internal")));
   const recent = await db
     .select({
       stars: ratings.stars,
       tags: ratings.tags,
       comment: ratings.comment,
       createdAt: ratings.createdAt,
+      source: ratings.source,
     })
     .from(ratings)
     .where(eq(ratings.chefId, chefId))
@@ -121,7 +171,9 @@ export async function getChefAverageForAdmin(chefId: string): Promise<{
   return {
     averageRating: c?.averageRating ? Number(c.averageRating) : null,
     ratingCount: c?.ratingCount ?? 0,
-    recent,
+    internalAverage: internal?.avg ? Number(internal.avg) : null,
+    internalCount: internal?.count ?? 0,
+    recent: recent as Array<{ stars: number; tags: string[]; comment: string | null; createdAt: Date; source: "client" | "internal" }>,
   };
 }
 
