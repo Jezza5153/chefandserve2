@@ -11,17 +11,19 @@
 import { useState } from "react";
 
 import { fieldClass } from "@/components/forms/Fields";
+import { useT } from "@/lib/i18n/LocaleProvider";
 
-const SEGMENT_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "casual", label: "Casual / brasserie" },
-  { value: "fine_dining", label: "Fine dining" },
-  { value: "hotel", label: "Hotel" },
-  { value: "banqueting", label: "Banqueting" },
-  { value: "catering", label: "Catering" },
-  { value: "event", label: "Event" },
-  { value: "corporate", label: "Corporate" },
-  { value: "michelin", label: "Michelin" },
-];
+/** Segment enum values (server-validated); labels come from the dict. */
+const SEGMENT_VALUES = [
+  "casual",
+  "fine_dining",
+  "hotel",
+  "banqueting",
+  "catering",
+  "event",
+  "corporate",
+  "michelin",
+] as const;
 
 type Props = {
   chef: {
@@ -35,6 +37,7 @@ type Props = {
 };
 
 export function ProfileForm({ chef, saveAction }: Props) {
+  const t = useT();
   const [segments, setSegments] = useState<string[]>([...(chef.segments ?? [])]);
 
   function toggle(v: string) {
@@ -46,17 +49,14 @@ export function ProfileForm({ chef, saveAction }: Props) {
   return (
     <section className="mt-10">
       <h2 className="font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy">
-        Direct aanpassen
+        {t.profileForm.directHeading}
       </h2>
-      <p className="mt-1 text-xs text-ink-500">
-        Telefoon, plaats, talen, specialteiten, segmenten — wijzigingen
-        zijn meteen actief.
-      </p>
+      <p className="mt-1 text-xs text-ink-500">{t.profileForm.directIntro}</p>
 
       <form action={saveAction} className="mt-4 space-y-4">
         <label className="block">
           <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-            Telefoon
+            {t.profileForm.phone}
           </span>
           <input
             type="tel"
@@ -69,7 +69,7 @@ export function ProfileForm({ chef, saveAction }: Props) {
 
         <label className="block">
           <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-            Plaats
+            {t.profileForm.city}
           </span>
           <input
             type="text"
@@ -82,7 +82,7 @@ export function ProfileForm({ chef, saveAction }: Props) {
 
         <label className="block">
           <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-            Talen (gescheiden door komma's)
+            {t.profileForm.languages}
           </span>
           <input
             type="text"
@@ -95,27 +95,27 @@ export function ProfileForm({ chef, saveAction }: Props) {
 
         <label className="block">
           <span className="mb-1 block font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-            Specialteiten (vrij veld)
+            {t.profileForm.specialties}
           </span>
           <textarea
             name="specialties"
             rows={3}
             defaultValue={chef.specialties ?? ""}
-            placeholder="bijv. patisserie · banketkok · Frans"
+            placeholder={t.profileForm.specialtiesPlaceholder}
             className={`${fieldClass} placeholder-ink-500`}
           />
         </label>
 
         <div>
           <p className="mb-2 font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
-            Segmenten waar je werkt
+            {t.profileForm.segmentsLabel}
           </p>
           <div className="flex flex-wrap gap-2">
-            {SEGMENT_OPTIONS.map((opt) => {
-              const checked = segments.includes(opt.value);
+            {SEGMENT_VALUES.map((value) => {
+              const checked = segments.includes(value);
               return (
                 <label
-                  key={opt.value}
+                  key={value}
                   className={`cursor-pointer rounded-full px-3 py-1.5 text-sm transition-colors ${
                     checked
                       ? "bg-burgundy text-white"
@@ -125,12 +125,12 @@ export function ProfileForm({ chef, saveAction }: Props) {
                   <input
                     type="checkbox"
                     name="segments"
-                    value={opt.value}
+                    value={value}
                     checked={checked}
-                    onChange={() => toggle(opt.value)}
+                    onChange={() => toggle(value)}
                     className="sr-only"
                   />
-                  {opt.label}
+                  {t.profileForm.segments[value]}
                 </label>
               );
             })}
@@ -141,7 +141,7 @@ export function ProfileForm({ chef, saveAction }: Props) {
           type="submit"
           className="rounded-full bg-burgundy px-6 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-white hover:bg-burgundy-900"
         >
-          Profiel opslaan
+          {t.profileForm.save}
         </button>
       </form>
     </section>

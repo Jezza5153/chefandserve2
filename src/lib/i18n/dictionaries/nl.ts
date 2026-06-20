@@ -548,6 +548,55 @@ export const nl = {
       rejected: "✗ Afgewezen",
     },
   },
+  profileForm: {
+    // ProfileForm — directly editable
+    directHeading: "Direct aanpassen",
+    directIntro:
+      "Telefoon, plaats, talen, specialteiten, segmenten — wijzigingen zijn meteen actief.",
+    phone: "Telefoon",
+    city: "Plaats",
+    languages: "Talen (gescheiden door komma's)",
+    specialties: "Specialteiten (vrij veld)",
+    specialtiesPlaceholder: "bijv. patisserie · banketkok · Frans",
+    segmentsLabel: "Segmenten waar je werkt",
+    save: "Profiel opslaan",
+    segments: {
+      casual: "Casual / brasserie",
+      fine_dining: "Fine dining",
+      hotel: "Hotel",
+      banqueting: "Banqueting",
+      catering: "Catering",
+      event: "Event",
+      corporate: "Corporate",
+      michelin: "Michelin",
+    },
+    // RequestChangeFormSection — request a change
+    requestHeading: "Aanpassen via verzoek",
+    requestIntro:
+      "Naam, e-mail, vakniveau en uurtarief lopen via Chef & Serve. Stuur een verzoek; Maarten of Gina bevestigt en past het aan.",
+    requestButton: "Verzoek wijziging",
+    changeFor: "Wijziging voor {field}",
+    rateMin: "Min (€/uur)",
+    rateMax: "Max (€/uur)",
+    newLevel: "Nieuw vakniveau",
+    chooseLevel: "Kies een vakniveau…",
+    newEmail: "Nieuw e-mailadres",
+    newName: "Nieuwe naam",
+    reasonLabel: "Toelichting (min 5 tekens)",
+    reasonPlaceholder:
+      "Bijv. ‘Ik heb een nieuw mobiel-nummer’ of ‘meer ervaring met fine-dining sinds april’",
+    submit: "Verzoek versturen",
+    abort: "Annuleer",
+    vakniveau: {
+      keukenhulp: "Keukenhulp",
+      commis: "Commis chef",
+      chef_de_partie: "Chef de partie",
+      sous_chef: "Sous-chef",
+      chef_de_cuisine: "Chef de cuisine",
+      executive_chef: "Executive chef",
+      patissier: "Patissier",
+    },
+  },
 };
 
 /** The dictionary shape — every locale must satisfy this (string leaves). */
