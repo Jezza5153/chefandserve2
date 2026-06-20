@@ -4014,6 +4014,46 @@ export const savedSearches = pgTable(
 export type SavedSearch = typeof savedSearches.$inferSelect;
 
 /**
+ * AI memory proposals (audit gap #4) — the nightly conversation-mining worker proposes durable
+ * facts ("Okura wil alleen sous-chefs") it overheard mid-chat; the owner accepts with ONE click
+ * → the fact lands in owner-memory via rememberFact. Human-approved memory stays the rule; this
+ * is the structured backing the notification nudge used to lack (it only carried truncated body
+ * text, unparseable back into the exact fact). `factNorm` + a partial unique keep re-runs from
+ * re-proposing the same pending fact. Dark until AI_MEMORY_MINING_ENABLED.
+ */
+export const aiMemoryProposalStatusEnum = pgEnum("ai_memory_proposal_status", [
+  "pending",
+  "accepted",
+  "dismissed",
+]);
+export const aiMemoryProposals = pgTable(
+  "ai_memory_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    fact: text("fact").notNull(),
+    /** normalizeFactText(fact) — for the pending dedup unique index (matches owner-memory's dedup). */
+    factNorm: text("fact_norm").notNull(),
+    status: aiMemoryProposalStatusEnum("status").notNull().default("pending"),
+    /** Provenance — "mining" today; leaves room for other proposal sources later. */
+    source: text("source").notNull().default("mining"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (t) => ({
+    byUserStatus: index("ai_memory_proposals_user_status_idx").on(t.userId, t.status),
+    // One OPEN proposal per (user, normalized fact): re-runs ON CONFLICT DO NOTHING instead of
+    // stacking duplicates. Accepted/dismissed rows don't occupy the slot (partial predicate).
+    uniquePending: uniqueIndex("ai_memory_proposals_pending_uq")
+      .on(t.userId, t.factNorm)
+      .where(sql`${t.status} = 'pending'`),
+  }),
+);
+export type AiMemoryProposal = typeof aiMemoryProposals.$inferSelect;
+
+/**
  * Agenda events (P2b/P2d) — the MANUAL, one-off ops-agenda entries that aren't derived
  * from another row: intake calls, follow-ups, onboarding tasks, contract starts, internal
  * reminders. (Shifts + change-requests stay DERIVED — see getAgendaEvents.) Optional
