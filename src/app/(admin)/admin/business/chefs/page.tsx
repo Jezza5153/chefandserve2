@@ -32,6 +32,7 @@ export default async function ChefsListPage({
     segment?: string;
     rating?: string;
     spoed?: string;
+    ownertag?: string;
   }>;
 }) {
   const session = await requirePermission("chefs", "read");
@@ -46,9 +47,10 @@ export default async function ChefsListPage({
   const segment = params.segment ?? "";
   const rating = params.rating ?? ""; // "4" / "4.5" → minimum average ★
   const spoed = params.spoed ?? ""; // "1" → availableForEmergency
+  const ownertag = params.ownertag?.trim() ?? ""; // C1: one of Maarten's free labels
 
   // PR-2.1: preserve every active filter across pill clicks.
-  const cur = { status, q, transport, pref, employment, data: dataFilter, niveau, segment, rating, spoed };
+  const cur = { status, q, transport, pref, employment, data: dataFilter, niveau, segment, rating, spoed, ownertag };
   const toHref = (over: Partial<typeof cur>): string => {
     const m = { ...cur, ...over };
     const sp = new URLSearchParams();
@@ -62,6 +64,7 @@ export default async function ChefsListPage({
     if (m.segment) sp.set("segment", m.segment);
     if (m.rating) sp.set("rating", m.rating);
     if (m.spoed) sp.set("spoed", m.spoed);
+    if (m.ownertag) sp.set("ownertag", m.ownertag);
     const s = sp.toString();
     return `/admin/business/chefs${s ? `?${s}` : ""}`;
   };
@@ -95,6 +98,7 @@ export default async function ChefsListPage({
     whereParts.push(sql`${chefs.averageRating} >= ${ratingMin}`);
   }
   if (spoed === "1") whereParts.push(eq(chefs.availableForEmergency, true));
+  if (ownertag) whereParts.push(sql`${ownertag} = ANY(${chefs.ownerTags})`); // C1: filter by an owner label
 
   const rows = await db
     .select({
@@ -114,6 +118,7 @@ export default async function ChefsListPage({
       averageRating: chefs.averageRating,
       ratingCount: chefs.ratingCount,
       availableForEmergency: chefs.availableForEmergency,
+      ownerTags: chefs.ownerTags,
     })
     .from(chefs)
     .where(and(...whereParts))
@@ -202,6 +207,14 @@ export default async function ChefsListPage({
         <FilterPill label="ZZP" active={employment === "zzp"} href={toHref({ employment: employment === "zzp" ? "" : "zzp" })} />
         <FilterPill label="Payroll" active={employment === "payroll"} href={toHref({ employment: employment === "payroll" ? "" : "payroll" })} />
       </div>
+
+      {/* C1: active owner-label filter (set by clicking a chef's label chip). */}
+      {ownertag && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">Label</span>
+          <FilterPill label={`${ownertag} ✕`} active href={toHref({ ownertag: "" })} />
+        </div>
+      )}
 
       {/* B2: Maarten's own pinned searches + "bewaar als knop" (captures the active filters). */}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -321,6 +334,20 @@ export default async function ChefsListPage({
                     >
                       {r.fullName}
                     </Link>
+                    {(r.ownerTags ?? []).length > 0 && (
+                      <span className="mt-1 flex flex-wrap gap-1">
+                        {(r.ownerTags ?? []).slice(0, 4).map((t) => (
+                          <Link
+                            key={t}
+                            href={toHref({ ownertag: ownertag === t ? "" : t })}
+                            title={`Filter op label “${t}”`}
+                            className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${ownertag === t ? "bg-burgundy text-white" : "bg-burgundy/10 text-burgundy hover:bg-burgundy/20"}`}
+                          >
+                            {t}
+                          </Link>
+                        ))}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-xs text-ink-700">
                     {formatChefRole(r.vakniveau)}

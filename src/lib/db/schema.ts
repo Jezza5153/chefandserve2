@@ -936,6 +936,10 @@ export const chefs = pgTable("chefs", {
   /** Maarten's tribal-knowledge notes. RAG-indexable in Phase 9. */
   notes: text("notes"),
 
+  /** C1: owner-defined free labels (e.g. "VIP-vertrouwd", "eigen messen"). Internal-only,
+   *  owner-managed on the admin chef profile; filterable in the chef directory. */
+  ownerTags: text("owner_tags").array(),
+
   /* ----- audit ----- */
   createdBy: text("created_by").references(() => users.id, {
     onDelete: "set null",
