@@ -39,6 +39,10 @@ export async function GET(): Promise<Response> {
 export async function POST(req: Request): Promise<Response> {
   const id = await ownerId();
   if (id instanceof Response) return id;
+  // Dark-launch parity with GET + the miner: when the flag is off the surface doesn't exist, so
+  // never touch ai_memory_proposals (the table may not be in prod yet). Defense-in-depth — the UI
+  // already hides the buttons when disabled.
+  if (!enabled()) return new NextResponse("Not Found", { status: 404 });
 
   let body: { id?: unknown; action?: unknown };
   try {
