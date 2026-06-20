@@ -25,3 +25,20 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   nl: "Nederlands",
   en: "English",
 };
+
+/**
+ * Fill `{placeholder}` slots in a dictionary string, e.g.
+ * fill("komende {days} dagen", { days: 14 }) → "komende 14 dagen".
+ * Missing vars become an empty string (never the literal "undefined").
+ */
+export function fill(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_, key) =>
+    vars[key] != null ? String(vars[key]) : "",
+  );
+}
+
+/** Intl locale tag for date/number formatting in the active app locale. */
+export const INTL_TAG: Record<Locale, string> = {
+  nl: "nl-NL",
+  en: "en-GB",
+};

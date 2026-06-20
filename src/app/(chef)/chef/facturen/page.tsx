@@ -13,6 +13,9 @@ import { chefs } from "@/lib/db/schema";
 import { createChefInvoice, listChefInvoices } from "@/lib/domain/chef-invoices";
 import { getChefPaymentStatus } from "@/lib/domain/chef-payments";
 import { formatEuro } from "@/lib/hours-labels";
+import { getI18n } from "@/lib/i18n/server";
+import { fill } from "@/lib/i18n/locales";
+import { type Dict } from "@/lib/i18n/get-dict";
 import { requireAuth } from "@/lib/permissions";
 import { chefInvoiceKey, getUploadUrl, isAllowedFile, r2IsConfigured } from "@/lib/r2";
 
@@ -23,18 +26,18 @@ export const dynamic = "force-dynamic";
 
 const LABEL = "font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy";
 
-function statusChip(status: string): { label: string; cls: string } {
+function statusChip(status: string, t: Dict): { label: string; cls: string } {
   switch (status) {
     case "paid":
-      return { label: "Betaald", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+      return { label: t.status.paid, cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
     case "approved":
-      return { label: "Goedgekeurd", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+      return { label: t.status.approved, cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
     case "submitted":
-      return { label: "In behandeling", cls: "bg-amber-50 text-amber-700 border-amber-200" };
+      return { label: t.status.pending, cls: "bg-amber-50 text-amber-700 border-amber-200" };
     case "rejected":
-      return { label: "Afgewezen", cls: "bg-burgundy/10 text-burgundy border-burgundy/20" };
+      return { label: t.status.rejected, cls: "bg-burgundy/10 text-burgundy border-burgundy/20" };
     default:
-      return { label: "Concept", cls: "bg-ink-100 text-ink-500 border-ink-200" };
+      return { label: t.status.concept, cls: "bg-ink-100 text-ink-500 border-ink-200" };
   }
 }
 
@@ -84,6 +87,7 @@ export default async function ChefFacturenPage({
   searchParams: Promise<{ ok?: string }>;
 }) {
   const sp = await searchParams;
+  const { dict: t } = await getI18n();
   const session = await requireAuth("/chef/facturen");
   const chef = await db.query.chefs.findFirst({ where: eq(chefs.userId, session.user.id) });
   if (!chef) notFound();
@@ -93,12 +97,10 @@ export default async function ChefFacturenPage({
   if (!isZzp) {
     return (
       <div>
-        <p className={LABEL}>Facturen</p>
-        <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">Facturen</h1>
+        <p className={LABEL}>{t.invoices.eyebrow}</p>
+        <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">{t.invoices.eyebrow}</h1>
         <p className="mt-6 rounded-lg border border-ink-200 bg-white p-8 text-center text-sm text-ink-500">
-          Facturen zijn voor ZZP&apos;ers. Werk je via payroll? Dan regelt Chef &amp; Serve je
-          uitbetaling — je hoeft niets te factureren. Klopt je situatie niet? Pas je
-          voorkeur aan bij Beschikbaarheid of bel het kantoor.
+          {t.invoices.nonZzpBody}
         </p>
       </div>
     );
@@ -114,68 +116,65 @@ export default async function ChefFacturenPage({
 
   return (
     <div className="pb-24">
-      <p className={LABEL}>Facturen</p>
-      <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">Jouw facturen</h1>
-      <p className="mt-3 max-w-prose text-sm text-ink-700">
-        Als ZZP&apos;er stuur je Chef &amp; Serve een factuur voor je goedgekeurde uren.
-        Hieronder zie je wat klaarstaat, dien je factuur in en volg je de status.
-      </p>
+      <p className={LABEL}>{t.invoices.eyebrow}</p>
+      <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">{t.invoices.title}</h1>
+      <p className="mt-3 max-w-prose text-sm text-ink-700">{t.invoices.intro}</p>
 
       {sp.ok === "submitted" ? (
         <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-          ✓ Je factuur is ingediend — het kantoor beoordeelt hem.
+          {t.invoices.okSubmitted}
         </p>
       ) : sp.ok === "error" ? (
         <p className="mt-4 rounded-lg border border-burgundy/20 bg-burgundy/10 p-3 text-sm text-burgundy">
-          Er ging iets mis — controleer het bedrag en probeer opnieuw.
+          {t.common.amountError}
         </p>
       ) : null}
 
       {/* Ready to invoice (from the payout pipeline's 'approved' bucket) */}
       <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
-        <p className={LABEL}>Klaar om te factureren</p>
+        <p className={LABEL}>{t.invoices.readyTitle}</p>
         {readyBucket && readyBucket.amountCents > 0 ? (
           <p className="mt-1 text-sm text-ink-700">
-            <strong>{formatEuro(readyBucket.amountCents)}</strong> aan goedgekeurde uren
-            ({readyBucket.count} {readyBucket.count === 1 ? "dienst" : "diensten"}). Dit is een
-            indicatie — zet het bedrag op je eigen factuur.
+            <strong>{formatEuro(readyBucket.amountCents)}</strong>
+            {fill(t.invoices.readyBody, {
+              count: readyBucket.count,
+              unit: readyBucket.count === 1 ? t.common.shift : t.common.shifts,
+            })}
           </p>
         ) : (
-          <p className="mt-1 text-sm text-ink-500">
-            Nog geen goedgekeurde uren die klaarstaan om te factureren.
-          </p>
+          <p className="mt-1 text-sm text-ink-500">{t.invoices.readyEmpty}</p>
         )}
       </section>
 
       {/* Submit an invoice */}
       <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
-        <p className={LABEL}>Factuur indienen</p>
+        <p className={LABEL}>{t.invoices.submitTitle}</p>
         <form action={submitInvoice} className="mt-3 space-y-3">
           <label className="block">
-            <span className="text-sm text-ink-800">Bedrag incl. of excl. btw (€)</span>
-            <input name="amountEuro" type="text" inputMode="decimal" required placeholder="bijv. 540,00" className={inputCls} />
+            <span className="text-sm text-ink-800">{t.invoices.amountField}</span>
+            <input name="amountEuro" type="text" inputMode="decimal" required placeholder={t.invoices.amountPlaceholder} className={inputCls} />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
-              <span className="text-sm text-ink-800">Periode van</span>
+              <span className="text-sm text-ink-800">{t.invoices.periodFrom}</span>
               <input name="periodFrom" type="date" className={inputCls} />
             </label>
             <label className="block">
-              <span className="text-sm text-ink-800">tot</span>
+              <span className="text-sm text-ink-800">{t.invoices.periodTo}</span>
               <input name="periodTo" type="date" className={inputCls} />
             </label>
           </div>
           <label className="block">
-            <span className="text-sm text-ink-800">Je factuurnummer (optioneel)</span>
+            <span className="text-sm text-ink-800">{t.invoices.referenceField}</span>
             <input name="reference" type="text" maxLength={120} className={inputCls} />
           </label>
           <label className="block">
-            <span className="text-sm text-ink-800">Toelichting (optioneel)</span>
+            <span className="text-sm text-ink-800">{t.common.noteOptional}</span>
             <textarea name="note" rows={2} maxLength={500} className={inputCls} />
           </label>
           <InvoiceUploadField requestUpload={requestInvoiceUpload} />
           <button className="rounded-full bg-burgundy px-5 py-2.5 font-ui text-[11px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy/90">
-            Factuur indienen
+            {t.invoices.submitInvoice}
           </button>
         </form>
       </section>
@@ -183,10 +182,10 @@ export default async function ChefFacturenPage({
       {/* Own invoices */}
       {invoices.length > 0 ? (
         <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
-          <p className={LABEL}>Je facturen</p>
+          <p className={LABEL}>{t.invoices.yourInvoices}</p>
           <ul className="mt-3 divide-y divide-ink-100">
             {invoices.map((inv) => {
-              const chip = statusChip(inv.status);
+              const chip = statusChip(inv.status, t);
               return (
                 <li key={inv.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                   <span className="min-w-0 text-ink-700">

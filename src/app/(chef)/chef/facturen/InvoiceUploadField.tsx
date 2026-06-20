@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { FileUploader } from "@/components/forms/FileUploader";
+import { useT } from "@/lib/i18n/LocaleProvider";
 
 /**
  * CHEF-PR7: optional invoice-PDF upload for a ZZP self-bill. Sits inside the
@@ -17,9 +18,10 @@ type RequestUpload = (args: {
 
 export function InvoiceUploadField({ requestUpload }: { requestUpload: RequestUpload }) {
   const [r2Key, setR2Key] = useState("");
+  const t = useT();
   return (
     <div>
-      <span className="text-sm text-ink-800">Factuur (PDF, optioneel)</span>
+      <span className="text-sm text-ink-800">{t.invoices.uploadLabel}</span>
       <div className="mt-1">
         <FileUploader requestUpload={requestUpload} onUploaded={(id) => setR2Key(id)} accept="application/pdf" />
       </div>
