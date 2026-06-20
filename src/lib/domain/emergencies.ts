@@ -6,8 +6,11 @@
  *
  * Dark behind EMERGENCY_MODE_ENABLED (and the chef_signal trigger additionally behind
  * SHIFT_SIGNALS_ENABLED — it READS the parallel-lane shift_signals table, never writes
- * it). Idempotent by the escalations_open_unique partial index: re-detecting the same
- * emergency every scan opens exactly one row. neon-http: single atomic statements;
+ * it). Idempotent on two axes: (1) the escalations_open_unique partial index collapses
+ * re-detection of a still-OPEN emergency to one row; (2) detection ALSO filters out what
+ * the owner already resolved/stood down (filterReopenSuppressed) so a close sticks instead
+ * of re-opening every scan — event-based kinds re-open only on a NEW trigger, condition-
+ * based kinds stay suppressed for a per-kind cooldown. neon-http: single atomic statements;
  * resolve/standDown pair the UPDATE + audit in withTx. AVG: `reason` is a machine-built
  * Dutch one-liner — the chef's free-text signal `detail` is NEVER copied in.
  *
@@ -41,6 +44,25 @@ export type DetectedEmergency = {
   kind: EmergencyKind;
   reason: string;
   severity: EmergencySeverity;
+  /**
+   * P4d: the triggering EVENT time, set only for event-based kinds (chef_cancelled_late =
+   * cancelledAt, chef_signal = signal.createdAt). Lets re-detection re-open one of these
+   * only when a NEW event arrived after the owner's last resolve/stand-down. Condition-
+   * based kinds (unassigned_soon, unconfirmed_near_start) leave it null and instead stay
+   * suppressed for a per-kind cooldown.
+   */
+  triggerAt?: Date | string | null;
+};
+
+/**
+ * P4d cooldown for the CONDITION-based kinds: once an owner resolves/stands one down, the
+ * same (shift, kind) stays suppressed for this long so a continuous condition doesn't
+ * re-open every 60s scan. ≈ each kind's own detection window, so suppression lasts until
+ * the condition naturally expires (the shift starts). Event-based kinds don't use this.
+ */
+const REOPEN_COOLDOWN_HOURS: Partial<Record<EmergencyKind, number>> = {
+  unassigned_soon: 12,
+  unconfirmed_near_start: 4,
 };
 
 /* ---- PURE classifiers (key-free, unit-tested) ---- */
@@ -72,6 +94,7 @@ export function classifyCancelledLate(
     kind: "chef_cancelled_late",
     reason: "Bevestigde chef trok zich laat terug — dienst start binnen 24u.",
     severity: "red",
+    triggerAt: p.cancelledAt,
   };
 }
 
@@ -131,7 +154,43 @@ export function classifyChefSignal(
     kind: "chef_signal",
     reason: `Chef ${label} — urgent signaal tijdens de dienst.`,
     severity: sig.kind === "vertraagd" ? "amber" : "red",
+    triggerAt: sig.createdAt,
   };
+}
+
+/* ---- P4d re-open suppression (pure, unit-tested) ---- */
+
+export type ClosedEscalationRow = { shiftId: string; kind: string; resolvedAt: Date | string | null };
+
+/**
+ * Drop candidates the owner already closed, so a resolve/stand-down actually sticks instead
+ * of re-opening on the next scan (the partial unique index only collapses open-vs-open).
+ *  - event-based kinds (triggerAt set): re-open ONLY when a trigger newer than the last
+ *    close arrived (a genuinely new cancellation / urgent signal) — else suppress.
+ *  - condition-based kinds (no triggerAt): suppress while still within the per-kind cooldown
+ *    after the most recent close; the condition expires before the cooldown does.
+ * Pure: the caller loads the recently-closed rows; this just filters.
+ */
+export function filterReopenSuppressed(
+  candidates: DetectedEmergency[],
+  closed: ClosedEscalationRow[],
+  now: Date,
+): DetectedEmergency[] {
+  const latestClose = new Map<string, number>();
+  for (const c of closed) {
+    if (!c.resolvedAt) continue;
+    const k = c.shiftId + ":" + c.kind;
+    const t = new Date(c.resolvedAt).getTime();
+    const prev = latestClose.get(k);
+    if (prev === undefined || t > prev) latestClose.set(k, t);
+  }
+  return candidates.filter((e) => {
+    const closeT = latestClose.get(e.shiftId + ":" + e.kind);
+    if (closeT === undefined) return true; // never closed → keep
+    if (e.triggerAt != null) return new Date(e.triggerAt).getTime() > closeT; // new event since close?
+    const cooldownH = REOPEN_COOLDOWN_HOURS[e.kind] ?? 12;
+    return closeT <= now.getTime() - cooldownH * MS_HOUR; // cooldown elapsed?
+  });
 }
 
 /* ---- detection read-model (SELECT only, no side effects) ---- */
@@ -152,7 +211,16 @@ export async function detectEmergencies(opts?: { now?: Date }): Promise<Detected
   const add = (e: DetectedEmergency | null) => {
     if (!e) return;
     const k = e.shiftId + ":" + e.kind;
-    if (!out.has(k)) out.set(k, e);
+    const prev = out.get(k);
+    if (!prev) {
+      out.set(k, e);
+      return;
+    }
+    // Event-based collision (two cancellations / signals on one shift): keep the LATEST
+    // event as the representative, so re-open suppression compares against the newest trigger.
+    if (e.triggerAt && prev.triggerAt && new Date(e.triggerAt).getTime() > new Date(prev.triggerAt).getTime()) {
+      out.set(k, e);
+    }
   };
 
   if (shiftRows.length > 0) {
@@ -196,7 +264,27 @@ export async function detectEmergencies(opts?: { now?: Date }): Promise<Detected
     }
   }
 
-  return [...out.values()].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "red" ? -1 : 1));
+  // P4d: suppress what the owner already resolved/stood down, so a stand-down sticks rather
+  // than re-opening every scan. Load only the recently-closed rows for the candidate shifts
+  // (24h covers the widest detection window); the pure filter applies the per-kind rule.
+  let candidates = [...out.values()];
+  if (candidates.length > 0) {
+    const shiftIds = [...new Set(candidates.map((c) => c.shiftId))];
+    const closedSince = new Date(now.getTime() - 24 * MS_HOUR);
+    const closedRows = await db
+      .select({ shiftId: escalations.shiftId, kind: escalations.kind, resolvedAt: escalations.resolvedAt })
+      .from(escalations)
+      .where(
+        and(
+          inArray(escalations.shiftId, shiftIds),
+          inArray(escalations.status, ["resolved", "stood_down"]),
+          gt(escalations.resolvedAt, closedSince),
+        ),
+      );
+    candidates = filterReopenSuppressed(candidates, closedRows, now);
+  }
+
+  return candidates.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "red" ? -1 : 1));
 }
 
 /* ---- idempotent CRUD ---- */
