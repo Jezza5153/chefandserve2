@@ -1,6 +1,7 @@
 import { requireAuth } from "@/lib/permissions";
 import { getPublishedForm } from "@/lib/domain/forms";
 import { getChefByUserId, hydrateFormState, ONBOARDING_FORM_SLUG } from "@/lib/domain/onboarding";
+import { getI18n } from "@/lib/i18n/server";
 import { r2IsConfigured } from "@/lib/r2";
 import { site } from "@/lib/site";
 
@@ -11,14 +12,15 @@ export const dynamic = "force-dynamic";
 
 export default async function OnboardingPage() {
   const session = await requireAuth("/chef/onboarding");
+  const { dict: t } = await getI18n();
   const chef = await getChefByUserId(session.user.id);
 
   if (!chef) {
     return (
       <div className="rounded-lg border border-amber-300 bg-amber-50 p-6">
-        <h1 className="font-serif text-2xl text-ink-900">Profiel ontbreekt</h1>
+        <h1 className="font-serif text-2xl text-ink-900">{t.onboarding.profileMissing}</h1>
         <p className="mt-2 text-sm text-ink-700">
-          Er is nog geen chef-profiel aan dit account gekoppeld. Mail ons via{" "}
+          {t.onboarding.profileMissingPre}
           <a href={`mailto:${site.email}`} className="text-burgundy underline-offset-4 hover:underline">
             {site.email}
           </a>
@@ -32,8 +34,8 @@ export default async function OnboardingPage() {
   if (!form) {
     return (
       <div className="rounded-lg border border-ink-200 bg-white p-6">
-        <h1 className="font-serif text-2xl text-ink-900">Onboarding</h1>
-        <p className="mt-2 text-sm text-ink-700">Het onboardingformulier is nog niet beschikbaar.</p>
+        <h1 className="font-serif text-2xl text-ink-900">{t.onboarding.title}</h1>
+        <p className="mt-2 text-sm text-ink-700">{t.onboarding.notAvailable}</p>
       </div>
     );
   }

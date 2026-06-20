@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
 import { chefs } from "@/lib/db/schema";
 import { BOARD_EMOJI, boardEnabled, listBoardFeed, toggleReaction } from "@/lib/domain/board";
+import { getI18n } from "@/lib/i18n/server";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata = { title: "Prikbord" };
@@ -30,16 +31,17 @@ async function toggleReactionAction(fd: FormData) {
 
 export default async function ChefBoardPage() {
   const session = await requireAuth("/chef/board");
+  const { dict: t } = await getI18n();
   // Auth-is-the-lookup: confirm a chef profile exists for this account.
   const chef = await db.query.chefs.findFirst({ where: eq(chefs.userId, session.user.id) });
 
   if (!boardEnabled() || !chef) {
     return (
       <div>
-        <p className={LABEL}>Team</p>
-        <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">Prikbord</h1>
+        <p className={LABEL}>{t.board.eyebrow}</p>
+        <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">{t.board.title}</h1>
         <p className="mt-6 rounded-lg border border-ink-200 bg-white p-8 text-center text-sm text-ink-500">
-          Het prikbord is er binnenkort.
+          {t.board.comingSoon}
         </p>
       </div>
     );
@@ -52,26 +54,26 @@ export default async function ChefBoardPage() {
 
   return (
     <div>
-      <p className={LABEL}>Team</p>
-      <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">Prikbord</h1>
-      <p className="mt-2 text-sm text-ink-600">Nieuws en weetjes van Chef &amp; Serve.</p>
+      <p className={LABEL}>{t.board.eyebrow}</p>
+      <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">{t.board.title}</h1>
+      <p className="mt-2 text-sm text-ink-600">{t.board.intro}</p>
 
       <div className="mt-6 space-y-4">
         {feed.length === 0 ? (
           <p className="rounded-lg border border-ink-200 bg-white p-8 text-center text-sm text-ink-500">
-            Nog geen berichten. Kijk later nog eens.
+            {t.board.empty}
           </p>
         ) : (
           feed.map((post) => (
             <article key={post.id} className="rounded-lg border border-ink-200 bg-white p-4">
               {post.pinned ? (
                 <span className="mr-1 rounded-full bg-amber-100 px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider text-amber-800">
-                  Vastgepind
+                  {t.board.pinned}
                 </span>
               ) : null}
               {seenAt && post.createdAt > seenAt ? (
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-ui text-[9px] uppercase tracking-wider text-emerald-700">
-                  Nieuw
+                  {t.board.isNew}
                 </span>
               ) : null}
               <p className="mt-1 whitespace-pre-wrap break-words text-sm text-ink-900">{post.body}</p>
@@ -114,9 +116,9 @@ export default async function ChefBoardPage() {
       </div>
 
       <p className="mt-6 text-xs text-ink-500">
-        Terug naar je{" "}
+        {t.board.backPre}
         <Link href="/chef" className="text-burgundy hover:underline">
-          dashboard
+          {t.board.backLink}
         </Link>
         .
       </p>
