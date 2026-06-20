@@ -17,6 +17,7 @@ import { shiftsOpenSoon, insightsLeaderboards, integrationsHealth } from "@/lib/
 import { placementsPropose, placementsConfirm, placementsCancel, placementsComplete } from "@/lib/ai/tools/placements";
 import { chefsFind, clientsFind, shiftsFind } from "@/lib/ai/tools/directory";
 import { emailSend, emailSendToClient, emailSendToChef } from "@/lib/ai/tools/comms";
+import { chefsUpdateContact } from "@/lib/ai/tools/chef-update-contact";
 import { remindersCreate, remindersList, remindersComplete } from "@/lib/ai/tools/reminders";
 import { memoryRemember, memoryList, memoryForget } from "@/lib/ai/tools/memory";
 import {
@@ -155,6 +156,7 @@ export const ALL_TOOLS: AnyTool[] = [
   emailSend,
   emailSendToClient,
   emailSendToChef,
+  chefsUpdateContact,
   chefsApproveProfileChange,
   chefsRejectProfileChange,
   chefsSendAvailabilityReminder,

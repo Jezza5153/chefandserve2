@@ -71,6 +71,7 @@ const GOLDEN: RouteCase[] = [
   { id: "G-aud", q: "Wat is er de afgelopen week met chef Lisa gewijzigd?", expect: ["audit.search", "chefs.find"] },
   { id: "G-mail", q: "Is mijn mail aan hotel Okura aangekomen of gebounced?", expect: ["email.status", "clients.find"] },
   { id: "G-mailclient", q: "Mail Hotel Okura dat we de chef voor zaterdag bevestigd hebben.", expect: ["email.send_to_client", "clients.find"] },
+  { id: "G-fixphone", q: "Het telefoonnummer van chef Daniel klopt niet, zet het op 06-12345678.", expect: ["chefs.find", "chefs.update_contact"] },
   { id: "G-brief", q: "Geef me mijn dagstart.", expect: ["briefing.daily"] },
   { id: "G-cockpit", q: "Wat staat er nu in de wachtrij dat ik moet oppakken?", expect: ["planner.cockpit", "briefing.daily"] },
   { id: "G-spoed", q: "Zijn er noodgevallen of spoedsituaties die ik nu moet oppakken?", expect: ["escalations.list", "risks.scan", "planner.cockpit"] },
