@@ -17,6 +17,7 @@ import { NextResponse } from "next/server";
 import { and, eq, gt } from "drizzle-orm";
 
 import { listOwnerMemory, normalizeFactText } from "@/lib/ai/read-model/owner-memory";
+import { createMemoryProposals, pendingProposalNorms } from "@/lib/domain/memory-proposals";
 import { db } from "@/lib/db/client";
 import { aiConversations, notifications } from "@/lib/db/schema";
 import { env } from "@/lib/env";
@@ -122,17 +123,26 @@ export async function GET(req: Request): Promise<Response> {
     const facts = await extractFacts(msgs).catch(() => [] as string[]);
     if (facts.length === 0) continue;
 
-    // Dedup against what's already remembered.
+    // Dedup against what's already remembered AND what's already waiting on a decision (#4) —
+    // so a fact the owner hasn't accepted/dismissed yet isn't re-proposed every night.
     const known = new Set((await listOwnerMemory(convo.userId)).map((f) => normalizeFactText(f.text)));
-    const fresh = facts.filter((f) => !known.has(normalizeFactText(f)));
+    const openNorms = await pendingProposalNorms(convo.userId);
+    const fresh = facts.filter((f) => {
+      const n = normalizeFactText(f);
+      return !known.has(n) && !openNorms.has(n);
+    });
     if (fresh.length === 0) continue;
 
-    proposed += fresh.length;
+    // Persist structured proposals (#4) so the owner can accept the EXACT fact with one click;
+    // the notification stays as the nudge that brings them to the assistant page.
+    const inserted = await createMemoryProposals({ userId: convo.userId, facts: fresh });
+    if (inserted === 0) continue;
+    proposed += inserted;
     const res = await createNotification({
       userId: convo.userId,
       type: "ai_memory_proposal",
       title: "Zal ik dit onthouden?",
-      body: `Uit je recente gesprekken: ${fresh.map((f) => `"${f.slice(0, 100)}"`).join(" · ")}. Zeg in de chat "onthoud dat …" voor wat ik moet bewaren.`,
+      body: `Uit je recente gesprekken: ${fresh.map((f) => `"${f.slice(0, 100)}"`).join(" · ")}. Open de assistent en tik op "Onthoud" voor wat ik moet bewaren.`,
       actionUrl: "/admin/assistant",
     });
     if (res.ok) notified++;

@@ -533,6 +533,13 @@
       "when": 1781992534387,
       "tag": "0075_e1_audit_resource_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1781996539064,
+      "tag": "0076_ai_memory_proposals",
+      "breakpoints": true
     }
   ]
 }
