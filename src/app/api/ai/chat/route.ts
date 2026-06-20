@@ -113,6 +113,20 @@ export async function POST(req: Request): Promise<Response> {
   const pageBlock = pagePath
     ? `\n\nContext: Maarten kijkt nu naar de pagina "${pagePath}". Verwijst hij naar "deze/dit/hier" zonder verdere details, gebruik dan deze pagina als context. Haal de bijbehorende gegevens altijd via een tool op.`
     : "";
+  // Page→entity resolution: a detail page already names the entity ID in its URL. Hand it to
+  // the model so "deze chef / dit / hem" resolves with NO name-search round-trip (the email-
+  // class gap: the detail tools take an id, but the model was told to find it by a name it
+  // doesn't have).
+  const entityMatch = pagePath?.match(/^\/admin\/business\/(chefs|clients|shifts)\/([\w-]{6,})(?:\/|$)/);
+  const ENTITY_HINT: Record<string, { noun: string; idName: string; tools: string }> = {
+    chefs: { noun: "chef", idName: "chefId", tools: "chefs.work_summary · chefs.feedback · chefs.trends · chefs.history_at_client · email.send_to_chef" },
+    clients: { noun: "klant", idName: "clientId", tools: "clients.history · clients.health · email.send_to_client" },
+    shifts: { noun: "dienst", idName: "shiftId", tools: "shifts.detail · shifts.margin · shifts.suggest_chefs" },
+  };
+  const entityHint = entityMatch ? ENTITY_HINT[entityMatch[1]] : null;
+  const entityBlock = entityMatch && entityHint
+    ? `\n\nDe pagina gaat over één ${entityHint.noun} met ${entityHint.idName} "${entityMatch[2]}". Verwijst Maarten naar "deze ${entityHint.noun}"/"hier"/"hem"/"haar"/"dit", gebruik dan dit ${entityHint.idName} DIRECT bij de bijbehorende tools (bijv. ${entityHint.tools}) — zoek de ${entityHint.noun} NIET eerst op met een naam, je hebt het id al.`
+    : "";
   // Inject what Maarten has had the assistant remember (memory.remember), so it uses it automatically.
   const memoryBlock = await ownerMemoryPromptBlock(userId);
   // Keep timeBlock + pageBlock + memoryBlock OUT of the brain's system prompt: they're DYNAMIC
@@ -122,7 +136,7 @@ export async function POST(req: Request): Promise<Response> {
   const plannerBlock = isPlanner
     ? "\n\nJe praat met een PLANNER (geen eigenaar): focus op diensten vullen, voorstellen en bevestigen. Financiële informatie, klantwaarde en uren-goedkeuring horen niet bij deze rol — verwijs daarvoor naar Maarten."
     : "";
-  const systemContext = `${timeContextBlock()}${plannerBlock}${pageBlock}${memoryBlock}`.trim() || undefined;
+  const systemContext = `${timeContextBlock()}${plannerBlock}${pageBlock}${entityBlock}${memoryBlock}`.trim() || undefined;
   // Accumulate token usage across the turn's model calls; persisted after the run for the
   // /admin/system AI-tokens card. A tally failure never breaks the chat (try/catch below).
   let promptTokens = 0;
