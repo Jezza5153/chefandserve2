@@ -349,6 +349,31 @@ export default async function ChefDetailPage({
     revalidatePath(`/admin/business/chefs/${id}`);
   }
 
+  // C1: owner-defined free labels (internal-only). Comma-separated → de-duped array.
+  async function saveOwnerTags(formData: FormData) {
+    "use server";
+    const session = await requirePermission("chefs", "write");
+    const tags = [
+      ...new Set(
+        String(formData.get("ownerTags") ?? "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 40)
+          .map((s) => s.slice(0, 40)),
+      ),
+    ];
+    await db.update(chefs).set({ ownerTags: tags.length ? tags : null, updatedAt: new Date() }).where(eq(chefs.id, id));
+    await recordAuditFromRequest({
+      userId: session.user.id,
+      action: "chefs.owner_tags_updated",
+      resource: "chefs",
+      resourceId: id,
+      after: { ownerTags: tags },
+    });
+    revalidatePath(`/admin/business/chefs/${id}`);
+  }
+
   async function updateBasics(formData: FormData) {
     "use server";
     const session = await requirePermission("chefs", "write");
@@ -553,6 +578,32 @@ export default async function ChefDetailPage({
 
       {/* PR-INTEL: "Maarten's brein" — the editable judgment layer (internal). */}
       <ChefBreinCard intel={chef.intel} saveAction={saveChefIntel} />
+
+      {/* C1: owner-defined free labels (internal-only; filterable in the chef directory). */}
+      <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
+        <h2 className="font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-burgundy">Eigen labels</h2>
+        <p className="mt-1 text-xs text-ink-500">
+          Jouw eigen labels voor deze chef (bijv. “VIP-vertrouwd”, “eigen messen”). Komma-gescheiden. Alleen intern — filterbaar op de chef-lijst.
+        </p>
+        {(chef.ownerTags ?? []).length > 0 && (
+          <ul className="mt-3 flex flex-wrap gap-1.5">
+            {(chef.ownerTags ?? []).map((t) => (
+              <li key={t} className="rounded-full bg-burgundy/10 px-2.5 py-0.5 text-[11px] font-medium text-burgundy">{t}</li>
+            ))}
+          </ul>
+        )}
+        <form action={saveOwnerTags} className="mt-3 flex items-center gap-2">
+          <input
+            name="ownerTags"
+            defaultValue={(chef.ownerTags ?? []).join(", ")}
+            placeholder="VIP-vertrouwd, eigen messen, snel beschikbaar…"
+            className="flex-1 rounded border border-ink-200 bg-white px-3 py-2 text-sm placeholder-ink-400 focus:border-burgundy focus:outline-none"
+          />
+          <button type="submit" className="rounded-full bg-burgundy px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-white hover:bg-burgundy-900">
+            Bewaar labels
+          </button>
+        </form>
+      </section>
 
       {/* PR-1.6: Chef 360 — full track record, moved directly under the verdict so
           opening a chef shows WHO they are first, before the editing chrome. */}
