@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { FileUploader } from "@/components/forms/FileUploader";
+import { useT } from "@/lib/i18n/LocaleProvider";
 
 /**
  * CHEF-PR9b: optional receipt photo for an expense claim. Sits INSIDE the expense
@@ -17,10 +18,11 @@ type RequestUpload = (args: {
 
 export function ReceiptUploadField({ requestUpload }: { requestUpload: RequestUpload }) {
   const [r2Key, setR2Key] = useState("");
+  const t = useT();
 
   return (
     <div>
-      <span className="text-sm text-ink-800">Bon meesturen (optioneel)</span>
+      <span className="text-sm text-ink-800">{t.expenses.receiptLabel}</span>
       <div className="mt-1">
         <FileUploader
           requestUpload={requestUpload}

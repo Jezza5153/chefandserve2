@@ -16,6 +16,9 @@ import {
 } from "@/lib/domain/chef-requests";
 import { getChefVacationEstimate } from "@/lib/domain/chef-payments";
 import { formatEuro } from "@/lib/hours-labels";
+import { getI18n } from "@/lib/i18n/server";
+import { fill } from "@/lib/i18n/locales";
+import { type Dict } from "@/lib/i18n/get-dict";
 import { requireAuth } from "@/lib/permissions";
 import { chefExpenseReceiptKey, getUploadUrl, isAllowedFile, r2IsConfigured } from "@/lib/r2";
 
@@ -26,26 +29,21 @@ export const dynamic = "force-dynamic";
 
 const LABEL = "font-ui text-[11px] uppercase tracking-[0.18em] text-burgundy";
 
-function statusChip(status: string): { label: string; cls: string } {
+function statusChip(status: string, t: Dict): { label: string; cls: string } {
   switch (status) {
     case "approved":
-      return { label: "Goedgekeurd", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+      return { label: t.status.approved, cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
     case "rejected":
-      return { label: "Afgewezen", cls: "bg-burgundy/10 text-burgundy border-burgundy/20" };
+      return { label: t.status.rejected, cls: "bg-burgundy/10 text-burgundy border-burgundy/20" };
     case "cancelled":
-      return { label: "Geannuleerd", cls: "bg-ink-100 text-ink-500 border-ink-200" };
+      return { label: t.status.cancelled, cls: "bg-ink-100 text-ink-500 border-ink-200" };
     default:
-      return { label: "In behandeling", cls: "bg-amber-50 text-amber-700 border-amber-200" };
+      return { label: t.status.pending, cls: "bg-amber-50 text-amber-700 border-amber-200" };
   }
 }
 
-const CATEGORY_LABEL: Record<string, string> = {
-  reiskosten: "Reiskosten",
-  parkeren: "Parkeren",
-  ov: "OV",
-  kilometers: "Kilometers",
-  overig: "Overig",
-};
+const categoryLabel = (t: Dict, c: string): string =>
+  t.expenses.categories[c as keyof Dict["expenses"]["categories"]] ?? c;
 
 async function resolveChefId(): Promise<string> {
   const session = await requireAuth("/chef/declaraties");
@@ -121,6 +119,7 @@ export default async function ChefDeclaratiesPage({
   searchParams: Promise<{ ok?: string }>;
 }) {
   const sp = await searchParams;
+  const { dict: t } = await getI18n();
   const chefId = await resolveChefId();
   const [estimate, vacReqs, expClaims] = await Promise.all([
     getChefVacationEstimate(chefId),
@@ -135,38 +134,36 @@ export default async function ChefDeclaratiesPage({
 
   return (
     <div className="pb-24">
-      <p className={LABEL}>Declaraties</p>
-      <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">Vakantiegeld &amp; kosten</h1>
-      <p className="mt-3 max-w-prose text-sm text-ink-700">
-        Vraag je vakantiegeld uit of declareer gemaakte kosten. Dit zijn verzoeken — het
-        kantoor beoordeelt ze en payroll bevestigt de uiteindelijke bedragen.
-      </p>
+      <p className={LABEL}>{t.expenses.eyebrow}</p>
+      <h1 className="mt-2 font-serif text-3xl text-ink-900 md:text-4xl">{t.expenses.title}</h1>
+      <p className="mt-3 max-w-prose text-sm text-ink-700">{t.expenses.intro}</p>
 
       {sp.ok === "vacation" ? (
         <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-          ✓ Je vakantieverzoek is ingediend — het kantoor beoordeelt het.
+          {t.expenses.okVacation}
         </p>
       ) : sp.ok === "expense" ? (
         <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-          ✓ Je declaratie is ingediend — het kantoor beoordeelt het.
+          {t.expenses.okExpense}
         </p>
       ) : sp.ok === "error" ? (
         <p className="mt-4 rounded-lg border border-burgundy/20 bg-burgundy/10 p-3 text-sm text-burgundy">
-          Er ging iets mis — controleer het bedrag en probeer opnieuw.
+          {t.common.amountError}
         </p>
       ) : null}
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         {/* Vacation payout */}
         <section className="rounded-lg border border-ink-200 bg-white p-5">
-          <p className={LABEL}>Vakantiegeld uitbetalen</p>
+          <p className={LABEL}>{t.expenses.vacationPayout}</p>
           <p className="mt-2 text-sm text-ink-700">
-            Geschat opgebouwd: <strong>{formatEuro(estimate.accruedCents)}</strong> (indicatie,
-            ~{estimate.pct}% over je goedgekeurde uren). Payroll bevestigt het echte saldo.
+            {t.expenses.vacationEstimateA}
+            <strong>{formatEuro(estimate.accruedCents)}</strong>
+            {fill(t.expenses.vacationEstimateB, { pct: estimate.pct })}
           </p>
           <form action={submitVacation} className="mt-4 space-y-3">
             <label className="block">
-              <span className="text-sm text-ink-800">Bedrag (€)</span>
+              <span className="text-sm text-ink-800">{t.expenses.amountField}</span>
               <input
                 name="amountEuro"
                 type="text"
@@ -177,32 +174,30 @@ export default async function ChefDeclaratiesPage({
               />
             </label>
             <label className="block">
-              <span className="text-sm text-ink-800">Toelichting (optioneel)</span>
+              <span className="text-sm text-ink-800">{t.common.noteOptional}</span>
               <textarea name="note" rows={2} maxLength={1000} className={inputCls} />
             </label>
-            <button className={btnCls}>Verzoek indienen</button>
+            <button className={btnCls}>{t.expenses.submitRequest}</button>
           </form>
         </section>
 
         {/* Expense claim */}
         <section className="rounded-lg border border-ink-200 bg-white p-5">
-          <p className={LABEL}>Kosten declareren</p>
-          <p className="mt-2 text-sm text-ink-700">
-            Reiskosten, parkeren, OV of kilometers gemaakt voor een shift? Declareer ze hier.
-          </p>
+          <p className={LABEL}>{t.expenses.declareCosts}</p>
+          <p className="mt-2 text-sm text-ink-700">{t.expenses.declareIntro}</p>
           <form action={submitExpense} className="mt-4 space-y-3">
             <label className="block">
-              <span className="text-sm text-ink-800">Soort</span>
+              <span className="text-sm text-ink-800">{t.expenses.kindField}</span>
               <select name="category" className={inputCls} defaultValue="reiskosten">
-                {Object.entries(CATEGORY_LABEL).map(([v, l]) => (
+                {Object.keys(t.expenses.categories).map((v) => (
                   <option key={v} value={v}>
-                    {l}
+                    {categoryLabel(t, v)}
                   </option>
                 ))}
               </select>
             </label>
             <label className="block">
-              <span className="text-sm text-ink-800">Bedrag (€)</span>
+              <span className="text-sm text-ink-800">{t.expenses.amountField}</span>
               <input
                 name="amountEuro"
                 type="text"
@@ -213,11 +208,11 @@ export default async function ChefDeclaratiesPage({
               />
             </label>
             <label className="block">
-              <span className="text-sm text-ink-800">Omschrijving (optioneel)</span>
+              <span className="text-sm text-ink-800">{t.expenses.descriptionOptional}</span>
               <textarea name="description" rows={2} maxLength={1000} className={inputCls} />
             </label>
             <ReceiptUploadField requestUpload={requestReceiptUpload} />
-            <button className={btnCls}>Declaratie indienen</button>
+            <button className={btnCls}>{t.expenses.submitClaim}</button>
           </form>
         </section>
       </div>
@@ -225,14 +220,14 @@ export default async function ChefDeclaratiesPage({
       {/* Own requests */}
       {vacReqs.length > 0 || expClaims.length > 0 ? (
         <section className="mt-6 rounded-lg border border-ink-200 bg-white p-5">
-          <p className={LABEL}>Je verzoeken</p>
+          <p className={LABEL}>{t.expenses.yourRequests}</p>
           <ul className="mt-3 divide-y divide-ink-100">
             {vacReqs.map((r) => {
-              const chip = statusChip(r.status);
+              const chip = statusChip(r.status, t);
               return (
                 <li key={r.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                   <span className="min-w-0 text-ink-700">
-                    Vakantiegeld{" "}
+                    {t.expenses.vacationItem}{" "}
                     <span className="text-ink-400">
                       · {r.amountCents != null ? formatEuro(r.amountCents) : "—"}
                     </span>
@@ -244,11 +239,11 @@ export default async function ChefDeclaratiesPage({
               );
             })}
             {expClaims.map((c) => {
-              const chip = statusChip(c.status);
+              const chip = statusChip(c.status, t);
               return (
                 <li key={c.id} className="flex items-center justify-between gap-3 py-2 text-sm">
                   <span className="min-w-0 truncate text-ink-700">
-                    {CATEGORY_LABEL[c.category] ?? c.category}{" "}
+                    {categoryLabel(t, c.category)}{" "}
                     <span className="text-ink-400">· {formatEuro(c.amountCents)}</span>
                   </span>
                   <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs ${chip.cls}`}>
