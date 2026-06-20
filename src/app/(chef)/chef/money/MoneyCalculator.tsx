@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { estimatePayroll, estimateZzp, eur } from "@/lib/money";
+import { estimatePayroll, estimateZzp, eur, type MoneyAssumptions } from "@/lib/money";
 
 /**
  * CHEF-PR8 — Money Explainer calculator (client). Live bruto/netto/zzp INDICATIE.
@@ -24,17 +24,17 @@ function Line({ label, value, strong, muted }: { label: string; value: string; s
   );
 }
 
-export function MoneyCalculator() {
+export function MoneyCalculator({ assumptions }: { assumptions: MoneyAssumptions }) {
   const [mode, setMode] = useState<Mode>("payroll");
   const [hourly, setHourly] = useState(18);
   const [hours, setHours] = useState(32);
   const [korting, setKorting] = useState(true);
 
   const payroll = useMemo(
-    () => estimatePayroll({ grossHourly: hourly, hours, loonheffingskorting: korting }),
-    [hourly, hours, korting],
+    () => estimatePayroll({ grossHourly: hourly, hours, loonheffingskorting: korting, a: assumptions }),
+    [hourly, hours, korting, assumptions],
   );
-  const zzp = useMemo(() => estimateZzp({ hourly, hours }), [hourly, hours]);
+  const zzp = useMemo(() => estimateZzp({ hourly, hours, a: assumptions }), [hourly, hours, assumptions]);
 
   return (
     <div className="space-y-5">
