@@ -11,18 +11,46 @@ export const chefsFind = defineTool({
   name: "chefs.find",
   title: "Chefs opzoeken",
   description:
-    'Zoek chefs op naam, stad, specialiteit of segment (bijv. "Daniel", "sushi", "fine dining"). Laat de zoekterm leeg voor de best beoordeelde chefs. Read-only.',
+    'Zoek chefs. Combineer gerust meerdere eisen — ze worden ALLEMAAL toegepast (EN), niet één ervan. ' +
+    'Gebruik `query` alleen voor losse tekst (een naam, een gerecht, een hotel waar iemand werkte: "Daniel", "sushi", "Okura"). ' +
+    'Zet elke concrete eis in zijn eigen veld: city, vakniveau, segment, skillTags, language, maxRateCents, minRating, availableOn. ' +
+    'Bijv. "sous-chef in Utrecht die NL spreekt onder €35" → vakniveau=sous_chef, city=Utrecht, language=NL, maxRateCents=3500. ' +
+    'Laat alles leeg voor de best beoordeelde chefs. Archiveerde chefs blijven standaard buiten beeld. ' +
+    'Let op het veld `notes` in het antwoord: daarin staat wat NIET gefilterd kon worden — noem dat altijd tegen Maarten. Read-only.',
   risk: "read",
   permission: { resource: "chefs", action: "read" },
   input: z.object({
-    query: z.string().optional(),
+    query: z.string().optional().describe("Losse tekst: naam, specialiteit, eerder werkadres."),
+    city: z.string().optional().describe("Woonplaats van de chef."),
+    vakniveau: z
+      .enum([
+        "keukenhulp", "commis", "chef_de_partie", "sous_chef", "chef_de_cuisine",
+        "executive_chef", "patissier", "banqueting", "breakfast", "roomservice",
+        "runner", "host", "bediening",
+      ])
+      .optional(),
+    segment: z.string().optional().describe("Bijv. hotel, fine_dining, michelin, banqueting."),
+    skillTags: z.array(z.string()).optional().describe("Vaardigheidssleutels; matcht als de chef er MINSTENS ÉÉN van heeft."),
+    language: z.string().optional().describe('Eén taal, bijv. "NL" of "Engels".'),
+    maxRateCents: z.number().int().positive().optional().describe("Max uurtarief in centen (€35 = 3500)."),
+    minRating: z.number().min(1).max(5).optional(),
+    availableOn: z.string().optional().describe("Datum JJJJ-MM-DD. Sluit chefs uit die die dag geblokkeerd hebben."),
+    includeInactive: z.boolean().optional().describe("Ook gearchiveerde chefs meenemen. Standaard nee."),
     limit: z.number().int().min(1).max(25).optional(),
   }),
   run: async (input) => {
-    const rows = await findChefs({ q: input.query, limit: input.limit });
+    const { query, ...rest } = input;
+    const { chefs: rows, notes } = await findChefs({ q: query, ...rest });
+    const asked = Object.entries(rest).filter(([, v]) =>
+      Array.isArray(v) ? v.length > 0 : v !== undefined && v !== "",
+    ).length;
     return {
-      data: { count: rows.length, chefs: rows },
-      summary: rows.length ? `${rows.length} chef(s) gevonden.` : "Geen chefs gevonden.",
+      data: { count: rows.length, chefs: rows, notes },
+      summary: rows.length
+        ? `${rows.length} chef(s) gevonden.`
+        : asked
+          ? "Geen chefs die aan álle eisen voldoen — probeer één eis los te laten."
+          : "Geen chefs gevonden.",
     };
   },
 });
