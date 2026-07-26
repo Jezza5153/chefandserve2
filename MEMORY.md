@@ -76,7 +76,7 @@ schema, so a typo in one fails silently — listed in
 
 | What | Detail | Status |
 | --- | --- | --- |
-| Chef search | `chefs.find` threw on every non-empty query (`text[] ~~* unknown`). Prod audit over 60 days: 11 failures to 2 successes. | **fixed on `docs/system-rebuild`**, not yet merged |
+| Chef search | `chefs.find` threw on every non-empty query (`text[] ~~* unknown`). Prod audit over 60 days: 11 failures to 2 successes. | **fixed** (#319, merged `e3d8c7f`). Every query shape re-run against prod 2026-07-26: all pass. |
 | Chef embeddings | 0 of 8 prod chefs have one, so `chefs.semantic_search` returns an empty set for every query (`WHERE embedding IS NOT NULL`). The `embedding-refresh` worker runs nightly. | open — worker output unverified |
 | Availability data | `chef_availability` has **0 rows** in prod. "No row = available", so nothing is ever excluded and "wie kan zaterdag?" cannot be answered. | open — a data/product problem, not a code one |
 | "Filled" means three different things | `platform-rollups.ts` (confirmed+completed, capped) · `metrics-snapshot.ts` (confirmed+completed, **uncapped** → `filled_slots` can exceed `slots_count`) · `demand-forecast.ts` (confirmed only, capped). | open — blocks any fill-rate KPI |
