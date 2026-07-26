@@ -134,7 +134,16 @@ export default async function ChefsListPage({
     })
     .from(chefs)
     .where(and(...whereParts))
-    .orderBy(desc(chefs.joinedAt))
+    // Quality sort, not signup order. desc(joinedAt) put the NEWEST signup on top, so
+    // at scale the most proven chefs sank to the bottom (and past row 200, off the page
+    // entirely). Same ordering contract as chefs.find: rating volume before average
+    // (one lucky 5.0 never outranks a proven 4.6), deterministic name tail.
+    .orderBy(
+      sql`case when ${chefs.ratingCount} >= 3 then 0 else 1 end`,
+      sql`${chefs.averageRating} desc nulls last`,
+      desc(chefs.ratingCount),
+      chefs.fullName,
+    )
     .limit(LIST_LIMIT);
 
   // Counts per status (for the filter pills)
@@ -333,7 +342,7 @@ export default async function ChefsListPage({
               "this is everyone" — say it out loud instead. */}
           {rows.length === LIST_LIMIT && (
             <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
-              Eerste {LIST_LIMIT} getoond (nieuwste eerst) — er kunnen er meer zijn. Verfijn je
+              Eerste {LIST_LIMIT} getoond (best beoordeeld eerst) — er kunnen er meer zijn. Verfijn je
               filters om de rest te zien.
             </p>
           )}

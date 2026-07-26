@@ -362,6 +362,18 @@ export default async function BusinessDashboardPage({
   ];
   const chefCards = await getChefCards(cardIds);
 
+  // Bestand-samenstelling: "hoeveel sous-chefs heb ik eigenlijk" at a glance (Q2).
+  const niveauCounts = new Map<string, number>();
+  for (const c of activeChefRows) {
+    if (c.vakniveau) niveauCounts.set(c.vakniveau, (niveauCounts.get(c.vakniveau) ?? 0) + 1);
+  }
+  const niveauMix = [...niveauCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([k, n]) => `${n}× ${formatShiftRole(k)}`)
+    .join(" · ");
+  const spoedCount = activeChefRows.filter((c) => c.availableForEmergency).length;
+
   function dayMetrics(dayShifts: typeof horizonShifts, dayKey: string) {
     let slots = 0;
     let filled = 0;
@@ -604,6 +616,7 @@ export default async function BusinessDashboardPage({
 
         {/* Action toolbar */}
         <div className="mt-5 flex flex-wrap gap-2">
+          <SpoedLink />
           <ToolbarLink href="/admin/business/shifts/new" icon="plus-circle" label="Nieuwe shift" primary />
           <ToolbarLink href="/admin/business/templates" icon="copy" label="Shift kopiëren" />
           <ToolbarLink href="/admin/business/chefs" icon="search" label="Chef zoeken" />
@@ -803,8 +816,10 @@ export default async function BusinessDashboardPage({
             lines={[{ text: "te keuren" }, hoursKlantTimeout > 0 ? { text: `${hoursKlantTimeout} wacht op klant`, tone: "amber" } : { text: "geen achterstand", tone: "muted" }]} />
           <OpsCard icon="check-circle" label="Bevestigd" value={confirmedThisWeek} href="/admin/business/shifts" cta="Naar shifts"
             lines={[{ text: "deze week" }, deltaLine(confirmedDelta)]} />
-          <OpsCard icon="user-round" label="Profieldata" value={missingDataCount} href="/admin/business/chefs?data=incomplete" cta="Naar overzicht"
-            lines={[{ text: "ontbrekend" }, missingDataCount > 0 ? { text: "actie vereist", tone: "amber" } : { text: "compleet", tone: "emerald" }]} />
+          {/* DASH-PEOPLE: was "Profieldata" — a duplicate of the amber line on the Chefs
+              card two tiles away. Replaced with the bestand shape: what CAN I field? */}
+          <OpsCard icon="shield-check" label="Spoed-inzetbaar" value={spoedCount} href="/admin/business/chefs?spoed=1" cta="Naar chefs"
+            lines={[{ text: niveauMix || "nog geen niveaus ingevuld", tone: "muted" }, missingDataCount > 0 ? { text: `${missingDataCount} mist profieldata`, tone: "amber" } : { text: "profieldata compleet", tone: "emerald" }]} />
         </div>
 
         {/* KPI-5: money overview (FINAL hours) */}
@@ -871,6 +886,18 @@ export default async function BusinessDashboardPage({
 }
 
 /* ----- inline presentational helpers ----- */
+
+function SpoedLink() {
+  return (
+    <Link
+      href="/admin/business/spoed"
+      className="flex items-center gap-2 rounded-full bg-red-700 px-4 py-2 font-ui text-[11px] font-semibold uppercase tracking-[0.15em] text-white hover:bg-red-800"
+    >
+      <Icon name="alert-triangle" className="h-[15px] w-[15px]" />
+      Spoed
+    </Link>
+  );
+}
 
 function ToolbarLink({ href, icon, label, primary }: { href: string; icon: IconName; label: string; primary?: boolean }) {
   return (

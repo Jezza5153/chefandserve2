@@ -24,6 +24,8 @@ export type CreateShiftArgs = {
   clientRateCents?: number | null;
   chefRateCents?: number | null;
   notes?: string | null;
+  /** SPOED: eligible for emergency claim + flagged in the roster. Default false. */
+  isEmergency?: boolean;
   createdBy: string;
 };
 
@@ -63,6 +65,7 @@ export async function createShift(args: CreateShiftArgs): Promise<CreateShiftRes
       clientRateCents: args.clientRateCents ?? null,
       chefRateCents: args.chefRateCents ?? null,
       notes: args.notes ?? null,
+      isEmergency: args.isEmergency ?? false,
       status: "open",
       createdBy: args.createdBy,
     })
