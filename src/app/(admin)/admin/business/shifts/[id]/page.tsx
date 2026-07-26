@@ -24,6 +24,8 @@ import { addPlacementComment, listVisibleComments } from "@/lib/domain/comments"
 import { listInterestedChefs } from "@/lib/domain/shift-interests";
 import { saveMatchIntel } from "@/lib/domain/intel";
 import { completePlacement } from "@/lib/domain/hours-admin";
+import { transitionPlacement } from "@/lib/domain/placement-transition";
+import { recordChefEvent } from "@/lib/chef-events";
 import {
   findMatchesForShift,
   proposePlacement,
@@ -382,6 +384,67 @@ export default async function ShiftDetailPage({
     await recomputeShiftStatus(id);
 
     redirect(`/admin/business/shifts/${id}`);
+  }
+
+  /* ---- DASH-PANIC: "Chef valt uit" — the 09:40 sick call as one motion ---------
+   * Cancels a COMMITTED placement with a captured reason, then lands straight in the
+   * dashboard fill drawer so the replacement search starts immediately. Reuses
+   * transitionPlacement — the same atomic transition (expectedStatus guard, terminal
+   * guard, shift-status recompute in-tx, replacement-handover message to the pulled
+   * chef) the AI path uses. The reason feeds two places: the audit trail always, and
+   * chef_events ONLY for ziek/no-show — "anders" (klant verzette de dienst, fout van
+   * ons) must never dent the chef's reliability score now MATCHING_RELIABILITY is live.
+   */
+  async function chefValtUit(formData: FormData) {
+    "use server";
+    const session = await requirePermission("shifts", "write");
+    await assertImpersonationAllowed(); // destructive — never during "Bekijk als"
+    const placementId = String(formData.get("placementId") ?? "").trim();
+    const reason = String(formData.get("reason") ?? "");
+    const note = String(formData.get("note") ?? "").trim().slice(0, 300);
+    if (!placementId || !["ziek", "no_show", "anders"].includes(reason)) {
+      redirect(`/admin/business/shifts/${id}?err=uitval`);
+    }
+
+    const [pl] = await db
+      .select({ chefId: placements.chefId, status: placements.status })
+      .from(placements)
+      .where(eq(placements.id, placementId))
+      .limit(1);
+    if (!pl || !["accepted", "confirmed"].includes(pl.status)) {
+      redirect(`/admin/business/shifts/${id}?err=uitval`);
+    }
+
+    const res = await transitionPlacement({
+      placementId,
+      newStatus: "cancelled",
+      actorUserId: session.user.id,
+      // Atomic: if the status moved between our read and this update, it's a clean no-op.
+      expectedStatus: pl!.status as "accepted" | "confirmed",
+    });
+    if (!res.ok || !res.changed) {
+      redirect(`/admin/business/shifts/${id}?err=uitval`);
+    }
+
+    await recordAuditFromRequest({
+      userId: session.user.id,
+      action: "placements.chef_valt_uit",
+      resource: "placements",
+      resourceId: placementId,
+      after: { reason, ...(note ? { note } : {}) },
+    });
+    if (reason !== "anders" && pl!.chefId) {
+      await recordChefEvent({
+        chefId: pl!.chefId,
+        eventType: "shift_cancelled_by_chef",
+        entityType: "placement",
+        entityId: placementId,
+        payload: { reason, recordedBy: "office", ...(note ? { note } : {}) },
+      });
+    }
+
+    // Straight into the panic toolkit: ranked matches, one-click Stel voor, WhatsApp.
+    redirect(`/admin/business?drawer=open-shift&shiftId=${id}`);
   }
 
   async function setPlacementStatus(formData: FormData) {
@@ -941,6 +1004,7 @@ export default async function ShiftDetailPage({
           existingPlacements={existingPlacements}
           commentsByPlacement={commentsByPlacement}
           setPlacementStatus={setPlacementStatus}
+          chefValtUit={chefValtUit}
           replyComment={replyComment}
           completePlacementAction={completePlacementAction}
         />
