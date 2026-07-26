@@ -207,6 +207,13 @@ export function MatchSuggestions({
               )}
               {/* Contact actions (one-click + log) */}
               <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink-100 pt-3">
+                {/* CHEF-CTA: a found chef must be one tap from contact — call AND message.
+                    (The App link existed; the call button did not.) */}
+                {phoneDigits && (
+                  <a href={`tel:${c?.phone?.replace(/[^+\d]/g, "") ?? ""}`} className="rounded-full border border-ink-200 bg-white px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-ink-700 hover:border-burgundy hover:text-burgundy">
+                    Bel
+                  </a>
+                )}
                 {phoneDigits && (
                   <a href={`https://wa.me/${phoneDigits}`} target="_blank" rel="noopener noreferrer" className="rounded-full border border-ink-200 bg-white px-3 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.15em] text-ink-700 hover:border-burgundy hover:text-burgundy">
                     App

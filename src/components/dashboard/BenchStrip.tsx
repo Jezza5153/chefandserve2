@@ -72,7 +72,7 @@ export function BenchStrip({ rows, cards }: { rows: BenchRow[]; cards: Map<strin
               {c.phone && (
                 <span className="flex shrink-0 items-center gap-1">
                   <a
-                    href={`tel:${c.phone}`}
+                    href={`tel:${c.phone.replace(/[^+\d]/g, "")}`}
                     className="rounded-full border border-ink-200 p-1.5 text-ink-700 hover:border-burgundy hover:text-burgundy"
                     title={`Bel ${c.fullName}`}
                   >
