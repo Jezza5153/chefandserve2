@@ -25,6 +25,7 @@ import { listInterestedChefs } from "@/lib/domain/shift-interests";
 import { saveMatchIntel } from "@/lib/domain/intel";
 import { completePlacement } from "@/lib/domain/hours-admin";
 import { transitionPlacement } from "@/lib/domain/placement-transition";
+import { getChefCards } from "@/lib/domain/chef-cards";
 import { recordChefEvent } from "@/lib/chef-events";
 import {
   findMatchesForShift,
@@ -845,6 +846,8 @@ export default async function ShiftDetailPage({
   }
 
   // Admin sees ALL comments (every visibility) per placement.
+  // ChefCard hover data for every placed chef on this shift (3 batched queries).
+  const placementCards = await getChefCards(existingPlacements.map((x) => x.placement.chefId));
   const commentsByPlacement = new Map(
     await Promise.all(
       existingPlacements.map(
@@ -1005,6 +1008,7 @@ export default async function ShiftDetailPage({
           commentsByPlacement={commentsByPlacement}
           setPlacementStatus={setPlacementStatus}
           chefValtUit={chefValtUit}
+          cards={placementCards}
           replyComment={replyComment}
           completePlacementAction={completePlacementAction}
         />

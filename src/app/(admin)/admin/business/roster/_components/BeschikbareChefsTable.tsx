@@ -6,7 +6,9 @@
 
 import Link from "next/link";
 
+import { ChefCard } from "@/components/ChefCard";
 import { Icon } from "@/components/admin/icons";
+import type { ChefCardData } from "@/lib/domain/chef-cards";
 
 export type ChefRow = {
   id: string;
@@ -19,7 +21,7 @@ export type ChefRow = {
 
 const TH = "px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.2em] text-burgundy";
 
-export function BeschikbareChefsTable({ rows, total }: { rows: ChefRow[]; total: number }) {
+export function BeschikbareChefsTable({ rows, total, cards }: { rows: ChefRow[]; total: number; cards?: Map<string, ChefCardData> }) {
   return (
     <section className="overflow-hidden rounded-xl border border-ink-200 bg-white shadow-[0_1px_2px_rgba(41,41,42,0.04)]">
       <div className="flex items-center gap-1.5 border-b border-ink-100 px-4 py-3">
@@ -43,13 +45,22 @@ export function BeschikbareChefsTable({ rows, total }: { rows: ChefRow[]; total:
             {rows.map((c) => (
               <tr key={c.id} className="h-12 transition-colors hover:bg-bg-gray">
                 <td className="px-4 align-middle">
-                  <Link
-                    href={`/admin/business/chefs/${c.id}`}
-                    className="flex items-center gap-2 rounded text-ink-900 hover:text-burgundy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-burgundy"
-                  >
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
-                    <span className="block max-w-[180px] truncate font-ui text-[13px]">{c.fullName}</span>
-                  </Link>
+                  {cards?.get(c.id) ? (
+                    <ChefCard data={cards.get(c.id)!}>
+                      <span className="flex items-center gap-2 rounded text-ink-900 hover:text-burgundy">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                        <span className="block max-w-[180px] truncate font-ui text-[13px]">{c.fullName}</span>
+                      </span>
+                    </ChefCard>
+                  ) : (
+                    <Link
+                      href={`/admin/business/chefs/${c.id}`}
+                      className="flex items-center gap-2 rounded text-ink-900 hover:text-burgundy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-burgundy"
+                    >
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                      <span className="block max-w-[180px] truncate font-ui text-[13px]">{c.fullName}</span>
+                    </Link>
+                  )}
                 </td>
                 <td className="whitespace-nowrap px-2 align-middle text-ink-700">{c.niveau ?? "—"}</td>
                 <td className="px-2 align-middle">

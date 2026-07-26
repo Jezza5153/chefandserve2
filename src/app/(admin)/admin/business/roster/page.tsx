@@ -43,6 +43,7 @@ import {
   type RosterView,
 } from "@/lib/domain/roster-intel";
 import { getRosterSettings } from "@/lib/domain/user-settings";
+import { getChefCards } from "@/lib/domain/chef-cards";
 import { formatChefRole, formatSegment } from "@/lib/labels";
 import { requirePermission } from "@/lib/permissions";
 import {
@@ -198,6 +199,7 @@ export default async function RosterPage({
   let chefSlotsByShift: Record<string, Array<{ name: string; status: SlotStatus }>> = {};
   let availableChefs: AvailableChefRow[] = [];
   let chefTableRows: ChefRow[] = [];
+  let freeChefCards = new Map<string, import("@/lib/domain/chef-cards").ChefCardData>();
   let overlaps: ReturnType<typeof detectOverlaps> = [];
   const conflictShiftIds = new Set<string>();
 
@@ -272,6 +274,7 @@ export default async function RosterPage({
       locatie: c.city,
       phone: c.phone,
     }));
+    freeChefCards = await getChefCards(free.map((c) => c.id));
   }
 
   /* ── engine: truth header (full) + body (filter-narrowed) ── */
@@ -402,7 +405,7 @@ export default async function RosterPage({
           <RosterDayTimeline hotels={vmBody.dayHotels ?? []} nowHour={showMarker ? amsHourFloat(now) : null} chefSlotsByShift={chefSlotsByShift} />
           <div className="grid gap-6 lg:grid-cols-2">
             <OpenDienstenTable rows={openRows} total={openTotal} />
-            <BeschikbareChefsTable rows={chefTableRows} total={chefTableRows.length} />
+            <BeschikbareChefsTable rows={chefTableRows} total={chefTableRows.length} cards={freeChefCards} />
           </div>
         </div>
       ) : (

@@ -51,6 +51,8 @@ import { toCard, type CardType } from "@/lib/domain/dashboard-cards";
 import { AutoRefresh } from "@/components/admin/AutoRefresh";
 import { CommandBar } from "@/components/dashboard/CommandBar";
 import { BenchStrip } from "@/components/dashboard/BenchStrip";
+import { ChefCard } from "@/components/ChefCard";
+import { getChefCards, type ChefCardData } from "@/lib/domain/chef-cards";
 import { aiEnabled } from "@/lib/ai/config";
 import { snoozeSignal, dismissSignal } from "./_actions";
 import { formatShiftRole } from "@/lib/labels";
@@ -280,12 +282,12 @@ export default async function BusinessDashboardPage({
   // Names on the day tables: id→name over ALL non-deleted chefs (placements can
   // reference onboarding chefs that the active-only rows miss).
   const chefName = new Map(chefNameRows.map((c) => [c.id, c.fullName]));
-  const chefNamesByShift = new Map<string, string[]>();
+  const chefNamesByShift = new Map<string, { id: string; name: string }[]>();
   for (const pl of horizonPlacements) {
     const nm = chefName.get(pl.chefId);
     if (!nm) continue;
     if (!chefNamesByShift.has(pl.shiftId)) chefNamesByShift.set(pl.shiftId, []);
-    chefNamesByShift.get(pl.shiftId)!.push(nm);
+    chefNamesByShift.get(pl.shiftId)!.push({ id: pl.chefId, name: nm });
   }
 
   // The bench: who can Maarten CALL today? Active chefs minus everyone already placed
@@ -350,6 +352,15 @@ export default async function BusinessDashboardPage({
     }
   }
   peopleMoments.sort((a, b) => a.label.localeCompare(b.label));
+
+  // One batched load (3 queries total) for every chef name this page will render —
+  // the ChefCard hover data: face, tenure, hours, rating, best-used-for, birthday.
+  const cardIds = [
+    ...benchRows.map((c) => c.id),
+    ...horizonPlacements.map((p) => p.chefId),
+    ...peopleMoments.map((m) => m.chefId),
+  ];
+  const chefCards = await getChefCards(cardIds);
 
   function dayMetrics(dayShifts: typeof horizonShifts, dayKey: string) {
     let slots = 0;
@@ -672,8 +683,8 @@ export default async function BusinessDashboardPage({
             <div className="px-5 pt-4 pb-2">
               <h2 className="font-serif text-xl text-ink-900">Vandaag &amp; morgen</h2>
             </div>
-            <DayTable title={`Vandaag · ${cap(now.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }))}`} accent shifts={todayShifts} countByShift={countByShift} namesByShift={chefNamesByShift} />
-            <DayTable title={`Morgen · ${cap(new Date(now.getTime() + 864e5).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }))}`} shifts={tomorrowShifts} countByShift={countByShift} namesByShift={chefNamesByShift} />
+            <DayTable title={`Vandaag · ${cap(now.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }))}`} accent shifts={todayShifts} countByShift={countByShift} namesByShift={chefNamesByShift} cards={chefCards} />
+            <DayTable title={`Morgen · ${cap(new Date(now.getTime() + 864e5).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }))}`} shifts={tomorrowShifts} countByShift={countByShift} namesByShift={chefNamesByShift} cards={chefCards} />
             {horizonShifts.length === 0 && (
               <div className="px-5 py-10 text-center">
                 <p className="font-serif text-lg text-ink-900">Geen diensten vandaag of morgen</p>
@@ -735,7 +746,7 @@ export default async function BusinessDashboardPage({
 
             {/* DASH-PEOPLE: the call list — who is NOT working today. Above spotlight on
                 purpose: in a panic this is the second thing Maarten needs after the queue. */}
-            <BenchStrip rows={benchRows} />
+            <BenchStrip rows={benchRows} cards={chefCards} />
 
             {/* DASH-PEOPLE: birthdays, jubilea, milestones — the boss who remembers. */}
             {peopleMoments.length > 0 && (
@@ -915,7 +926,7 @@ function BezettingCard({ label, date, metrics, href, cta, accent }: { label: str
   );
 }
 
-function DayTable({ title, shifts: dayShifts, countByShift, namesByShift, accent }: { title: string; shifts: { id: string; startsAt: Date; endsAt: Date; roleNeeded: string; status: string; headcount: number; city: string | null; companyName: string | null }[]; countByShift: Map<string, number>; namesByShift: Map<string, string[]>; accent?: boolean }) {
+function DayTable({ title, shifts: dayShifts, countByShift, namesByShift, cards, accent }: { title: string; shifts: { id: string; startsAt: Date; endsAt: Date; roleNeeded: string; status: string; headcount: number; city: string | null; companyName: string | null }[]; countByShift: Map<string, number>; namesByShift: Map<string, { id: string; name: string }[]>; cards: Map<string, ChefCardData>; accent?: boolean }) {
   if (dayShifts.length === 0) return null;
   return (
     <>
@@ -937,7 +948,23 @@ function DayTable({ title, shifts: dayShifts, countByShift, namesByShift, accent
                   {/* DASH-PEOPLE: names, not counts — "wie komt er vanavond?" answered from
                       the row Maarten is already looking at. */}
                   {(namesByShift.get(s.id) ?? []).length > 0 && (
-                    <p className="mt-0.5 text-xs text-burgundy">{(namesByShift.get(s.id) ?? []).join(" · ")}</p>
+                    <p className="mt-0.5 text-xs text-burgundy">
+                      {(namesByShift.get(s.id) ?? []).map((c, i) => {
+                        const card = cards.get(c.id);
+                        return (
+                          <span key={c.id}>
+                            {i > 0 && " · "}
+                            {card ? (
+                              <ChefCard data={card}>
+                                <span className="hover:underline">{c.name}</span>
+                              </ChefCard>
+                            ) : (
+                              c.name
+                            )}
+                          </span>
+                        );
+                      })}
+                    </p>
                   )}
                 </td>
                 <td className="px-2 py-3 align-top"><span className={`inline-flex items-center gap-1.5 ${chip.text}`}><span className={`h-2 w-2 rounded-full ${chip.dot}`} />{chip.label}</span></td>

@@ -12,7 +12,9 @@
 import Link from "next/link";
 
 import { Icon } from "@/components/admin/icons";
+import { ChefCard } from "@/components/ChefCard";
 import { formatChefRole } from "@/lib/labels";
+import type { ChefCardData } from "@/lib/domain/chef-cards";
 
 export type BenchRow = {
   id: string;
@@ -31,7 +33,7 @@ function waHref(phone: string): string {
   return `https://wa.me/${intl}`;
 }
 
-export function BenchStrip({ rows }: { rows: BenchRow[] }) {
+export function BenchStrip({ rows, cards }: { rows: BenchRow[]; cards: Map<string, ChefCardData> }) {
   return (
     <section className="rounded-xl border border-ink-200 bg-white p-5">
       <div className="flex items-baseline justify-between gap-2">
@@ -49,10 +51,7 @@ export function BenchStrip({ rows }: { rows: BenchRow[] }) {
         <ul className="mt-3 divide-y divide-ink-100">
           {rows.map((c) => (
             <li key={c.id} className="flex items-center gap-3 py-2">
-              <Link
-                href={`/admin/business/chefs/${c.id}`}
-                className="min-w-0 flex-1 hover:text-burgundy"
-              >
+              <CardOrLink card={cards.get(c.id)} chefId={c.id}>
                 <span className="flex items-center gap-1.5 truncate text-sm text-ink-900">
                   {c.fullName}
                   {c.spoed && (
@@ -69,7 +68,7 @@ export function BenchStrip({ rows }: { rows: BenchRow[] }) {
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
-              </Link>
+              </CardOrLink>
               {c.phone && (
                 <span className="flex shrink-0 items-center gap-1">
                   <a
@@ -95,5 +94,29 @@ export function BenchStrip({ rows }: { rows: BenchRow[] }) {
         </ul>
       )}
     </section>
+  );
+}
+
+/** The name opens the hover card when we have its data; plain profile link otherwise. */
+function CardOrLink({
+  card,
+  chefId,
+  children,
+}: {
+  card: ChefCardData | undefined;
+  chefId: string;
+  children: React.ReactNode;
+}) {
+  if (card) {
+    return (
+      <span className="min-w-0 flex-1">
+        <ChefCard data={card}>{children}</ChefCard>
+      </span>
+    );
+  }
+  return (
+    <Link href={`/admin/business/chefs/${chefId}`} className="min-w-0 flex-1 hover:text-burgundy">
+      {children}
+    </Link>
   );
 }

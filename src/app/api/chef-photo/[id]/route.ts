@@ -26,6 +26,7 @@ import {
   shifts,
 } from "@/lib/db/schema";
 import { getDownloadUrl, r2IsConfigured } from "@/lib/r2";
+import { hasPermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,15 @@ export async function GET(
 
   // Access control (conservative — deny on any ambiguity).
   let allowed = Boolean(session.user.roles?.includes("super_admin"));
+
+  // CHEF-CARD: internal staff with chefs:read may see any chef photo. This was the
+  // gap that meant the OWNER never saw a chef's face anywhere in the admin — the
+  // route allowed super_admin, the chef themself and a placed klant, but not the
+  // person running the roster. Internal-only; the klant path below stays as strict
+  // as it was.
+  if (!allowed) {
+    allowed = await hasPermission(session, "chefs", "read");
+  }
 
   if (!allowed) {
     // 1. The chef themself.
