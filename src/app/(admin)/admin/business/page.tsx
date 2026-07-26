@@ -12,6 +12,7 @@
  */
 
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 
 import { Icon, type IconName } from "@/components/admin/icons";
@@ -54,6 +55,9 @@ import { CommandBar } from "@/components/dashboard/CommandBar";
 import { BenchStrip } from "@/components/dashboard/BenchStrip";
 import { ChefCard } from "@/components/ChefCard";
 import { getChefCards, type ChefCardData } from "@/lib/domain/chef-cards";
+import { agendaToday } from "@/lib/ai/read-model/agenda";
+import { createAgendaEvent } from "@/lib/domain/agenda-events";
+import { recordAuditFromRequest } from "@/lib/audit";
 import { aiEnabled } from "@/lib/ai/config";
 import { snoozeSignal, dismissSignal } from "./_actions";
 import { formatShiftRole } from "@/lib/labels";
@@ -97,6 +101,34 @@ export default async function BusinessDashboardPage({
     criticalHours: rosterSettings.criticalHours,
     labels: rosterSettings.labels,
   };
+
+  // FLYWHEEL: "Belofte" quick-add — verbal reality captured where Maarten already is.
+  // Same domain function as the assistant's agenda.remember.
+  async function quickBelofte(formData: FormData) {
+    "use server";
+    const s = await requirePermission("planning", "write");
+    const title = String(formData.get("title") ?? "").trim().slice(0, 200);
+    if (title.length < 3) redirect("/admin/business");
+    const chefId = String(formData.get("chefId") ?? "").trim() || null;
+    const day = String(formData.get("date") ?? "").trim();
+    const startsAt = /^\d{4}-\d{2}-\d{2}$/.test(day)
+      ? new Date(amsterdamMidnightUtc(day).getTime() + 9 * 3600e3)
+      : new Date(amsterdamMidnightUtc(amsterdamDayKey(new Date())).getTime() + 9 * 3600e3);
+    const row = await createAgendaEvent({
+      type: "internal_reminder",
+      startsAt,
+      title,
+      linkedChefId: chefId,
+      createdBy: s.user.id,
+    });
+    await recordAuditFromRequest({
+      userId: s.user.id,
+      action: "agenda.quick_belofte",
+      resource: "agenda_events",
+      resourceId: row.id,
+    });
+    redirect("/admin/business?done=belofte");
+  }
 
   const now = new Date();
   const todayKey = amsterdamDayKey(now);
@@ -402,6 +434,9 @@ export default async function BusinessDashboardPage({
     ...peopleMoments.map((m) => m.chefId),
   ];
   const chefCards = await getChefCards(cardIds);
+  // FLYWHEEL: today's agenda (intakes, opvolgingen, beloftes) — the same read-model the
+  // assistant's agenda.vandaag uses, so chat and dashboard can never disagree.
+  const agendaItems = await agendaToday();
 
   // Bestand-samenstelling: "hoeveel sous-chefs heb ik eigenlijk" at a glance (Q2).
   const niveauCounts = new Map<string, number>();
@@ -414,6 +449,9 @@ export default async function BusinessDashboardPage({
     .map(([k, n]) => `${n}× ${formatShiftRole(k)}`)
     .join(" · ");
   const spoedCount = activeChefRows.filter((c) => c.availableForEmergency).length;
+  // Rate coverage: the margin guard + shifts.margin are only as good as the rates on
+  // file — surface the gap where the owner looks every morning.
+  const withRate = activeChefRows.filter((c) => c.hourlyRateMinCents != null).length;
 
   function dayMetrics(dayShifts: typeof horizonShifts, dayKey: string) {
     let slots = 0;
@@ -810,6 +848,57 @@ export default async function BusinessDashboardPage({
               )}
             </section>
 
+            {/* FLYWHEEL: today's commitments — intakes, opvolgingen, beloftes. Above the
+                bench: what you PROMISED outranks who you could call. */}
+            <section className="rounded-xl border border-ink-200 bg-white p-5">
+              <div className="flex items-baseline justify-between gap-2">
+                <h2 className="font-serif text-lg text-ink-900">Vandaag op de agenda</h2>
+                <Link href="/admin/planning" className="font-ui text-[11px] text-burgundy hover:underline">Planning</Link>
+              </div>
+              {agendaItems.length === 0 ? (
+                <p className="mt-2 text-sm text-ink-500">Geen afspraken of beloftes vandaag.</p>
+              ) : (
+                <ul className="mt-2 divide-y divide-ink-100">
+                  {agendaItems.slice(0, 5).map((a) => (
+                    <li key={a.id} className="py-2">
+                      <p className="text-sm text-ink-900">
+                        <span className="font-ui text-[11px] text-ink-500">{a.time}</span>{" "}
+                        {a.title}
+                      </p>
+                      <p className="text-xs text-ink-500">
+                        {a.type}
+                        {a.chefName ? ` · ${a.chefName}` : ""}
+                        {a.clientName ? ` · ${a.clientName}` : ""}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <form action={quickBelofte} className="mt-3 border-t border-ink-100 pt-3">
+                <p className="font-ui text-[10px] uppercase tracking-[0.15em] text-ink-500">Belofte vastleggen</p>
+                <input
+                  name="title"
+                  required
+                  minLength={3}
+                  maxLength={200}
+                  placeholder='bijv. "Daniel vrijdag vrij houden"'
+                  className="mt-1.5 w-full rounded border border-ink-200 bg-white px-2.5 py-1.5 text-sm placeholder-ink-400 focus:border-burgundy focus:outline-none"
+                />
+                <div className="mt-2 flex items-center gap-2">
+                  <input type="date" name="date" defaultValue={todayKey} className="rounded border border-ink-200 bg-white px-2 py-1.5 text-xs text-ink-700" />
+                  <select name="chefId" defaultValue="" className="min-w-0 flex-1 rounded border border-ink-200 bg-white px-2 py-1.5 text-xs text-ink-700">
+                    <option value="">— geen chef —</option>
+                    {activeChefRows.map((c) => (
+                      <option key={c.id} value={c.id}>{c.fullName}</option>
+                    ))}
+                  </select>
+                  <button type="submit" className="rounded-full bg-burgundy px-3 py-1.5 font-ui text-[10px] font-semibold uppercase tracking-[0.12em] text-white hover:bg-burgundy-900">
+                    Vastleggen
+                  </button>
+                </div>
+              </form>
+            </section>
+
             {/* DASH-PEOPLE: the call list — who is NOT working today. Above spotlight on
                 purpose: in a panic this is the second thing Maarten needs after the queue. */}
             <BenchStrip rows={benchRows} cards={chefCards} />
@@ -872,7 +961,7 @@ export default async function BusinessDashboardPage({
           {/* DASH-PEOPLE: was "Profieldata" — a duplicate of the amber line on the Chefs
               card two tiles away. Replaced with the bestand shape: what CAN I field? */}
           <OpsCard icon="shield-check" label="Spoed-inzetbaar" value={spoedCount} href="/admin/business/chefs?spoed=1" cta="Naar chefs"
-            lines={[{ text: niveauMix || "nog geen niveaus ingevuld", tone: "muted" }, missingDataCount > 0 ? { text: `${missingDataCount} mist profieldata`, tone: "amber" } : { text: "profieldata compleet", tone: "emerald" }]} />
+            lines={[{ text: niveauMix || "nog geen niveaus ingevuld", tone: "muted" }, withRate < activeChefRows.length ? { text: `${withRate}/${activeChefRows.length} met tarief — vul aan voor marge`, tone: "amber" } : missingDataCount > 0 ? { text: `${missingDataCount} mist profieldata`, tone: "amber" } : { text: "profieldata compleet", tone: "emerald" }]} />
         </div>
 
         {/* KPI-5: money overview (FINAL hours) */}

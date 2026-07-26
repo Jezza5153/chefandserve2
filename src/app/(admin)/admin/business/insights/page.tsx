@@ -8,6 +8,7 @@ import { LeaderboardCard } from "@/components/dashboard/LeaderboardCard";
 import { forecastEnabled, getForecast } from "@/lib/domain/forecast";
 import { getLeaderboards } from "@/lib/domain/leaderboards";
 import { getPlatformRollups, type FillBreakdown, type MoneyWindow } from "@/lib/domain/platform-rollups";
+import { getKpiBaselines } from "@/lib/domain/kpi-baselines";
 import { formatEuro } from "@/lib/hours-labels";
 import { formatChefRole, formatSegment } from "@/lib/labels";
 import { requirePermission } from "@/lib/permissions";
@@ -21,10 +22,11 @@ const pct = (r: number | null) => (r == null ? "—" : `${Math.round(r * 100)}%`
 export default async function InsightsPage() {
   await requirePermission("cockpit", "read");
   const wantForecast = forecastEnabled();
-  const [lb, roll, forecast] = await Promise.all([
+  const [lb, roll, forecast, baselines] = await Promise.all([
     getLeaderboards(90, 5),
     getPlatformRollups(),
     wantForecast ? getForecast() : Promise.resolve(null),
+    getKpiBaselines(),
   ]);
   const lbEmpty = lb.topEarners.length === 0 && lb.busiest.length === 0 && lb.topClients.length === 0;
 
@@ -46,6 +48,38 @@ export default async function InsightsPage() {
           <MoneyCard title="Laatste 30 dagen" w={roll.month} />
           <MoneyCard title="Dit jaar" w={roll.ytd} />
         </div>
+      </section>
+
+      <section>
+        <h2 className={SECTION}>Vooruit · de stuurgetallen</h2>
+        <div className="mt-3 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-ink-200 bg-white p-4">
+            <p className="font-ui text-[10px] uppercase tracking-[0.15em] text-ink-500">Vulgraad komende {baselines.forwardFill.windowDays} dagen</p>
+            <p className="mt-1 font-serif text-2xl text-ink-900">
+              {baselines.forwardFill.pct != null ? `${baselines.forwardFill.pct}%` : "—"}
+            </p>
+            <p className="text-xs text-ink-500">{baselines.forwardFill.filled}/{baselines.forwardFill.slots} plekken gevuld{baselines.forwardFill.slots === 0 ? " — geen geplande diensten" : ""}</p>
+          </div>
+          <div className="rounded-xl border border-ink-200 bg-white p-4">
+            <p className="font-ui text-[10px] uppercase tracking-[0.15em] text-ink-500">Time-to-fill · {baselines.timeToFill.windowDays} dagen</p>
+            <p className="mt-1 font-serif text-2xl text-ink-900">
+              {baselines.timeToFill.medianHours != null ? `${baselines.timeToFill.medianHours} u` : "—"}
+            </p>
+            <p className="text-xs text-ink-500">
+              mediaan aanvraag→bevestigd{baselines.timeToFill.p90Hours != null ? ` · p90 ${baselines.timeToFill.p90Hours} u` : ""} · {baselines.timeToFill.confirmedCount} bevestigingen
+            </p>
+          </div>
+          <div className="rounded-xl border border-ink-200 bg-white p-4">
+            <p className="font-ui text-[10px] uppercase tracking-[0.15em] text-ink-500">Geboekte omzet · {baselines.bookedRevenue.windowDays} dagen vooruit</p>
+            <p className="mt-1 font-serif text-2xl text-ink-900">€{Math.round(baselines.bookedRevenue.cents / 100).toLocaleString("nl-NL")}</p>
+            <p className="text-xs text-ink-500">
+              {baselines.bookedRevenue.shifts} geplande diensten{baselines.bookedRevenue.missingRate > 0 ? ` · ${baselines.bookedRevenue.missingRate} zonder tarief (telt als €0)` : ""}
+            </p>
+          </div>
+        </div>
+        <p className="mt-2 text-[11px] text-ink-500">
+          Definities: docs/METRICS.md. Vulgraad = bevestigde plekken (gecapt per dienst) / gevraagde plekken, vooruitkijkend.
+        </p>
       </section>
 
       <section>

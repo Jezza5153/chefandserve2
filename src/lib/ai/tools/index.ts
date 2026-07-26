@@ -19,6 +19,7 @@ import { chefsFind, clientsFind, shiftsFind } from "@/lib/ai/tools/directory";
 import { emailSend, emailSendToClient, emailSendToChef } from "@/lib/ai/tools/comms";
 import { chefsUpdateContact } from "@/lib/ai/tools/chef-update-contact";
 import { remindersCreate, remindersList, remindersComplete } from "@/lib/ai/tools/reminders";
+import { agendaVandaag, agendaRemember } from "@/lib/ai/tools/agenda";
 import { memoryRemember, memoryList, memoryForget } from "@/lib/ai/tools/memory";
 import {
   chefsListProfileChanges,
@@ -168,6 +169,8 @@ export const ALL_TOOLS: AnyTool[] = [
   onboardingRequestMissing,
   // personal — Maarten's own to-remember list
   remindersCreate,
+  agendaVandaag,
+  agendaRemember,
   remindersList,
   remindersComplete,
   // personal — what Maarten teaches the assistant to remember

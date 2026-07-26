@@ -25,6 +25,9 @@ export type MoneyAssumptions = {
   zzpZvwPct: number;
   /** VAT % (btw) on zzp invoices — collected for the Belastingdienst, NOT income. */
   vatPct: number;
+  /** INDICATIE werkgeverslasten bovenop het bruto cheftarief (sociale premies,
+   *  vakantiegeld, pensioen). Voedt de contributiemarge — NOT a payroll statement. */
+  employerChargesPct: number;
   /** When the owner last verified these against official tables. */
   lastUpdated: string;
   source: string;
@@ -43,6 +46,7 @@ export const MONEY_ASSUMPTIONS: MoneyAssumptions = {
   zzpIncomeTaxReservePct: 30,
   zzpZvwPct: 5.26,
   vatPct: 21,
+  employerChargesPct: 30, // INDICATIE — tune to the payroll provider's real uplift
   lastUpdated: "2026-06-15",
   source:
     "Rijksoverheid minimumloon/vakantiegeld · Belastingdienst Handboek Loonheffingen · KHN Horeca-cao 2025–2026. INDICATIE — verifieer tegen actuele tabellen.",

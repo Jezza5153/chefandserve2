@@ -15,6 +15,7 @@ import {
 } from "@/lib/domain/matching";
 import { getPlannerCockpit } from "@/lib/domain/planner-intel";
 import { estimateMargin } from "@/lib/domain/travel";
+import { getMoneyAssumptions } from "@/lib/business-settings";
 import { formatChefRole, formatShiftRole } from "@/lib/labels";
 
 function shapeMatch(m: MatchResult) {
@@ -130,9 +131,28 @@ export async function shiftMargin(shiftId: string) {
   if (s.clientRateCents == null || s.chefRateCents == null) {
     return { shift, priced: false as const };
   }
+  // CONTRIBUTIEMARGE-INDICATIE: the raw rate spread overstated margin by the
+  // werkgeverslasten (sociale premies, vakantiegeld, pensioen) — exactly while the
+  // owner is calibrating pricing. Uplift the chef cost by the owner-tuned assumption
+  // (money-assumptions page) — but ONLY for payroll: a zzp chef invoices, the agency
+  // carries no premies. When every confirmed chef on the shift is zzp, no uplift.
+  // Still an INDICATIE: travel/no-show/bad debt excluded — see docs/METRICS.md.
+  const assumptions = await getMoneyAssumptions();
+  const placedTypes = await db
+    .select({ employmentType: chefs.employmentType })
+    .from(placements)
+    .innerJoin(chefs, eq(chefs.id, placements.chefId))
+    .where(and(eq(placements.shiftId, shiftId), inArray(placements.status, ["accepted", "confirmed", "completed"])));
+  const allZzp = placedTypes.length > 0 && placedTypes.every((r) => r.employmentType === "zzp");
+  const basis = allZzp
+    ? "zzp — geen werkgeverslasten toegepast"
+    : `incl. ${assumptions.employerChargesPct}% werkgeverslasten (payroll-aanname)`;
+  const chefRateLoaded = allZzp
+    ? s.chefRateCents
+    : Math.round(s.chefRateCents * (1 + assumptions.employerChargesPct / 100));
   const per = estimateMargin({
     clientRateCents: s.clientRateCents,
-    chefRateCents: s.chefRateCents,
+    chefRateCents: chefRateLoaded,
     hours: hoursPerChef,
     travelCents: 0,
   });
@@ -140,6 +160,7 @@ export async function shiftMargin(shiftId: string) {
   return {
     shift,
     priced: true as const,
+    basis,
     tone: per.tone,
     perChef: {
       revenueEur: toEur(per.revenueCents),

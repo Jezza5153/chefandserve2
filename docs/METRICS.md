@@ -74,6 +74,10 @@ marginCents   = revenueCents − chefPayCents
 > discounts, and bad debt. Call it *tariefmarge* in the UI. `estimateMargin()` (used per-shift,
 > before the fact) *does* subtract estimated travel cost, so the two numbers legitimately
 > differ — do not "reconcile" them.
+>
+> **Per-shift contributiemarge-INDICATIE (2026-07-27):** the `shifts.margin` AI tool uplifts
+> the chef cost by `employerChargesPct` from the money-assumptions page (default 30%,
+> owner-tunable). The snapshot tables stay tariefmarge — one definition per surface, labeled.
 
 ### Occupancy (realised, 30 days)
 
@@ -97,23 +101,21 @@ never offered ones.
 The numbers an agency owner needs daily that this system cannot produce today. Ordered by
 value ÷ effort.
 
-### 1. Fill rate, forward-looking — **the missing daily steering number**
+### 1. Fill rate, forward-looking — **BUILT (2026-07-27)**
 
-"Of the slots we have promised for next week, X% are covered." The building blocks all exist
-(`shifts.headcount`, `placements.status`); only the calculation is missing. `demand.forecast`
-already computes needed/filled/open per ISO-week × role but reports absolute gaps, never a
-percentage or a trend.
-**Blocked on:** nothing, now that "filled" has one definition. This is the first thing to build.
+`getKpiBaselines().forwardFill` — canonical capped filled-slot definition over upcoming
+**committed** shifts (status `open`/`filled`; a `request` is a klant wish that may still be
+declined and counts nowhere). Default 7 days. Surfaces: `/admin/business/insights` ("Vooruit · de stuurgetallen")
+and the AI `reports.platform_kpi` payload. Live query, not yet snapshotted as a series.
 
 ### 2. Time-to-fill
 
 "How long from shift request to confirmed chef." The single most important operational KPI
 after fill rate, and it does not exist anywhere.
-**Blocked on: nothing — correction (2026-07-26).** An earlier version of this file claimed
-`placements.confirmed_at` does not exist. It does (schema.ts ~1536, alongside `proposed_at`
-and `responded_at`); the dashboard already filters on it. So time-to-fill is
-`shifts.created_at → placements.confirmed_at`, computable today. The snapshot worker can keep
-a `time_to_fill_seconds_sum` / `_count` pair — the `approval_sla_minutes_sum` pattern.
+**BUILT (2026-07-27).** `getKpiBaselines().timeToFill`: median + p90 of
+`shifts.created_at → placements.confirmed_at` over confirms in the last 90 days (guard:
+`confirmed_at > created_at`). Fully backfillable — both timestamps were always stored.
+Surfaces: insights + `reports.platform_kpi`.
 
 ### 3. No-show and late-cancellation rate
 
@@ -143,7 +145,9 @@ admin-approved. There is no "already booked for the coming 30 days"
 (`future shifts × headcount × client_rate × duration`), no intake→shift conversion in euros,
 and no forecast-vs-actual — because no forecast is ever stored, so deviation is by definition
 unmeasurable.
-**Blocked on:** the booked figure needs nothing. Forecast-vs-actual needs a stored forecast.
+**Booked figure BUILT (2026-07-27):** `getKpiBaselines().bookedRevenue` — committed
+(`open`/`filled`) shifts in the next 30 days × headcount × client rate × duration (negative
+durations guarded to 0); shifts without a rate count as €0 and are surfaced as a count. Forecast-vs-actual still needs a stored forecast.
 
 ### 7. Real contribution margin
 

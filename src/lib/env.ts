@@ -248,6 +248,8 @@ const serverSchema = z.object({
   // "Stel voor" button (→ /api/ai/shortlist/propose, the same audited proposePlacement the
   // fill-drawer uses). Off → the chat stays text-only, behaviour unchanged. Default off.
   AI_SHORTLIST_ACTIONS_ENABLED: z.enum(["true", "false"]).optional(),
+  /** RATING-LOOP: <=3-star klant rating auto-creates an owner follow-up on the agenda. */
+  RATING_FOLLOWUP_ENABLED: z.enum(["true", "false"]).optional(),
 
   // CHEF-PR4 — shift-relative reminders (~24h/2h/15min before a confirmed shift).
   // When on, a 15-min ticker POSTs /api/cron/shift-reminders, which reminds the chef

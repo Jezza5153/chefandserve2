@@ -61,6 +61,10 @@ type SafetyCase = { id: string; q: string };
 
 // Golden routing — admin intents → an acceptable first tool (any-of).
 const GOLDEN: RouteCase[] = [
+  { id: "G-belofte", q: "Leg even vast dat ik morgen vóór 12 uur het contract naar het hotel moet mailen", expect: ["agenda.remember"] },
+  // A promise NAMING a chef legitimately routes chefs.find first (id resolution per the
+  // playbook) — that chain belongs in MULTI, not in first-step GOLDEN scoring.
+  { id: "G-agenda-vandaag", q: "Wat heb ik vandaag allemaal beloofd en gepland staan?", expect: ["agenda.vandaag"] },
   { id: "G1", q: "Welke uren wachten nog op goedkeuring?", expect: ["hours.list_awaiting_approval"] },
   { id: "G2", q: "Kan ik de uren goedkeuren die op mijn goedkeuring wachten — kloppen ze allemaal?", expect: ["hours.detail", "hours.list_awaiting_approval"] },
   { id: "G3", q: "Stuur Daniel een herinnering om zijn uren in te dienen.", expect: ["chefs.find", "hours.send_reminder", "hours.list_awaiting_approval"] },

@@ -71,6 +71,17 @@ laatste zetje nodig heeft.
 
 ## Voor Maarten — het kantoor
 
+#### Vandaag-agenda + Belofte vastleggen 🟢 live
+*ik wil dat wat ik toezeg niet alleen in mijn hoofd bestaat*
+Dashboard-kaart met de agenda van vandaag (intakes, opvolgingen, beloftes, met gekoppelde chef/klant) + één-regel "Belofte vastleggen" (titel, datum, optioneel chef). Zelfde data als de assistent: zeg "ik beloofde Daniel vrijdag vrij" in de chat en `agenda.remember` legt het vast; "wat heb ik vandaag beloofd?" → `agenda.vandaag`.
+**Waar:** `/admin/business` (rail) · assistent · `/admin/planning` · agenda-feed
+
+#### Lage beoordeling → automatisch nabellen op de agenda 🟢 live
+*ik wil het horen vóór de klant afhaakt, niet in een tabel achteraf*
+Geeft een klant ≤3★, dan verschijnt "Nabellen: [klant] gaf N★" automatisch op je agenda (morgenochtend) + een melding. Geeft een klant 4-5★, dan krijgt die één-tik "zet als vaste favoriet" — favorieten krijgen echte voorrang in de matching (staat aan).
+**Waar:** klantportaal rate-flow → jouw dashboard/agenda
+
+
 De schermen waar het werk gebeurt: diensten bemannen, chefs en klanten beheren, uren keuren, plannen, factureren.
 
 ### Owner/internal-staff portal
@@ -415,6 +426,17 @@ Elke transactionele template gerenderd met voorbeelddata (magic link, shift voor
 ---
 
 ## Voor Maarten — de cijfers
+
+#### Vooruit-stuurgetallen (vulgraad, time-to-fill, geboekte omzet) 🟢 live
+*ik wil weten of volgende week gedekt is, hoe snel we vullen en wat er al geboekt staat*
+Drie kaarten op Inzichten + in het AI-rapport (`reports.platform_kpi`): vulgraad komende 7 dagen (gecapt per dienst), mediaan/p90 aanvraag→bevestigd over 90 dagen, en geboekte omzet 30 dagen vooruit (diensten zonder tarief tellen als €0 en worden genoemd). Eén definitie in `src/lib/domain/kpi-baselines.ts`.
+**Waar:** `/admin/business/insights` · assistent: "hoe staat volgende week ervoor?"
+
+#### Contributiemarge-indicatie per dienst 🟢 live
+*ik wil weten wat een dienst écht oplevert, niet alleen het tariefverschil*
+`shifts.margin` rekent nu met werkgeverslasten bovenop het cheftarief (percentage instelbaar op de geld-aannames-pagina, default 30%). De assistent zegt erbij wat er níet in zit (reiskosten, no-show, oninbaar).
+**Waar:** assistent ("wat is de marge op …") · `/admin/business/money-assumptions`
+
 
 Wat het systeem over de business kan vertellen. Definities staan in [docs/METRICS.md](docs/METRICS.md).
 

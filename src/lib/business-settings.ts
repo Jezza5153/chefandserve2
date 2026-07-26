@@ -132,6 +132,7 @@ const MONEY_NUMERIC_KEYS = [
   "zzpIncomeTaxReservePct",
   "zzpZvwPct",
   "vatPct",
+  "employerChargesPct",
 ] as const;
 
 /**

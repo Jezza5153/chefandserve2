@@ -16,7 +16,7 @@
  * until then so the hub is never a dead end.
  */
 
-import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -26,12 +26,14 @@ import { ChefAvatar } from "./ChefAvatar";
 import { ChefFeedbackForm } from "./ChefFeedbackForm";
 import { WhatHappensNext } from "@/components/client/WhatHappensNext";
 import { db } from "@/lib/db/client";
+import { recordAuditFromRequest } from "@/lib/audit";
 import {
   chefDocuments,
   chefs,
   clients,
   clientShiftChangeRequests,
   placements,
+  ratings,
   shiftHours,
   shifts,
 } from "@/lib/db/schema";
@@ -67,11 +69,23 @@ export default async function ClientShiftHubPage({
   searchParams,
 }: {
   params: Promise<{ shiftId: string }>;
-  searchParams: Promise<{ ok?: string; err?: string }>;
+  searchParams: Promise<{ ok?: string; err?: string; fav?: string }>;
 }) {
   const { client, session } = await requireClientSelf();
   const { shiftId } = await params;
   const sp = await searchParams;
+  // RATING-LOOP: the favoriet offer derives from the STORED >=4 rating (never the URL).
+  let ratedHighChefId: string | null = null;
+  if (sp.ok === "rated") {
+    const [r] = await db
+      .select({ chefId: placements.chefId })
+      .from(ratings)
+      .innerJoin(placements, eq(placements.id, ratings.placementId))
+      .where(and(eq(ratings.clientId, client.id), eq(placements.shiftId, shiftId), gte(ratings.stars, 4)))
+      .orderBy(desc(ratings.createdAt))
+      .limit(1);
+    ratedHighChefId = r?.chefId ?? null;
+  }
 
   const [shift] = await db
     .select()
@@ -104,6 +118,49 @@ export default async function ClientShiftHubPage({
 
   // Server action: klant sends an opmerking about a proposed chef. Writes a
   // placement_comments row (visibility='client_visible'), NEVER placements.notes.
+  /* RATING-LOOP: one-tap "vaste favoriet" after a happy rating. Auth IS the lookup,
+   * fully: the form carries NOTHING — the chef is re-derived server-side from this
+   * klant's own >=4-star rating on THIS shift's placement, so a crafted URL or POST
+   * cannot favorite an arbitrary id, a blocked chef, or a chef they never worked with.
+   * Capped + audited like the admin-side favorite writes. */
+  async function setFavoriteChefAction() {
+    "use server";
+    const { client, session } = await requireClientSelf();
+    // The chef this klant just rated >=4 on this shift — the only favoritable target.
+    const [rated] = await db
+      .select({ chefId: placements.chefId })
+      .from(ratings)
+      .innerJoin(placements, eq(placements.id, ratings.placementId))
+      .where(
+        and(
+          eq(ratings.clientId, client.id),
+          eq(placements.shiftId, shiftId),
+          gte(ratings.stars, 4),
+        ),
+      )
+      .orderBy(desc(ratings.createdAt))
+      .limit(1);
+    if (!rated?.chefId) redirect(`/client/shifts/${shiftId}`);
+
+    const [row] = await db
+      .select({ fav: clients.favoriteChefIds, blocked: clients.blockedChefIds })
+      .from(clients)
+      .where(eq(clients.id, client.id))
+      .limit(1);
+    // Never let a favorite override an (admin-set) block, and cap the list.
+    if ((row?.blocked ?? []).includes(rated!.chefId)) redirect(`/client/shifts/${shiftId}`);
+    const next = [...new Set([...(row?.fav ?? []), rated!.chefId])].slice(0, 50);
+    await db.update(clients).set({ favoriteChefIds: next }).where(eq(clients.id, client.id));
+    await recordAuditFromRequest({
+      userId: session.user.id,
+      action: "clients.favorite_chef",
+      resource: "clients",
+      resourceId: client.id,
+      after: { chefId: rated!.chefId, via: "rating_flow" },
+    });
+    redirect(`/client/shifts/${shiftId}?ok=favoriet`);
+  }
+
   async function sendChefComment(formData: FormData) {
     "use server";
     const placementId = String(formData.get("placementId") ?? "");
@@ -299,8 +356,26 @@ export default async function ClientShiftHubPage({
         </p>
       ) : null}
       {sp.ok === "rated" ? (
+        <div className="mt-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <p>✓ Bedankt voor je feedback over de chef. Chef &amp; Serve neemt die mee.</p>
+          {ratedHighChefId ? (
+            <form action={setFavoriteChefAction} className="mt-2">
+              <button
+                type="submit"
+                className="rounded-full border border-emerald-600 bg-white px-3.5 py-1.5 font-ui text-[11px] font-medium uppercase tracking-[0.12em] text-emerald-800 hover:bg-emerald-100"
+              >
+                ★ Zet deze chef als vaste favoriet
+              </button>
+              <span className="ml-2 text-xs text-emerald-700">
+                Favorieten krijgen voorrang bij het inplannen voor jullie.
+              </span>
+            </form>
+          ) : null}
+        </div>
+      ) : null}
+      {sp.ok === "favoriet" ? (
         <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
-          ✓ Bedankt voor je feedback over de chef. Chef &amp; Serve neemt die mee.
+          ★ Vastgelegd — deze chef krijgt voorrang bij jullie volgende aanvragen.
         </p>
       ) : null}
       {sp.err === "duplicate" ? (
