@@ -18,7 +18,7 @@ export const remindersCreate = defineTool({
   name: "reminders.create",
   title: "Herinnering toevoegen",
   description:
-    "Zet een persoonlijke herinnering op Maarten's lijst (bijv. 'bel chef Daniel maandag'). Optioneel met een datum/tijd (ISO). Eigen lijst — geen bevestiging nodig.",
+    "Zet een persoonlijke herinnering op Maarten's lijst (bijv. 'bel chef Daniel maandag'). Optioneel met een datum/tijd (ISO). Eigen lijst — geen bevestiging nodig. NIET voor toezeggingen aan een chef of klant of iets dat op de agenda hoort — gebruik dan agenda.remember.",
   risk: "self",
   permission: null,
   input: z.object({

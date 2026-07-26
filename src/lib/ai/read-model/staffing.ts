@@ -134,10 +134,22 @@ export async function shiftMargin(shiftId: string) {
   // CONTRIBUTIEMARGE-INDICATIE: the raw rate spread overstated margin by the
   // werkgeverslasten (sociale premies, vakantiegeld, pensioen) — exactly while the
   // owner is calibrating pricing. Uplift the chef cost by the owner-tuned assumption
-  // (money-assumptions page). Still an INDICATIE: travel/no-show/bad debt excluded —
-  // see docs/METRICS.md.
+  // (money-assumptions page) — but ONLY for payroll: a zzp chef invoices, the agency
+  // carries no premies. When every confirmed chef on the shift is zzp, no uplift.
+  // Still an INDICATIE: travel/no-show/bad debt excluded — see docs/METRICS.md.
   const assumptions = await getMoneyAssumptions();
-  const chefRateLoaded = Math.round(s.chefRateCents * (1 + assumptions.employerChargesPct / 100));
+  const placedTypes = await db
+    .select({ employmentType: chefs.employmentType })
+    .from(placements)
+    .innerJoin(chefs, eq(chefs.id, placements.chefId))
+    .where(and(eq(placements.shiftId, shiftId), inArray(placements.status, ["accepted", "confirmed", "completed"])));
+  const allZzp = placedTypes.length > 0 && placedTypes.every((r) => r.employmentType === "zzp");
+  const basis = allZzp
+    ? "zzp — geen werkgeverslasten toegepast"
+    : `incl. ${assumptions.employerChargesPct}% werkgeverslasten (payroll-aanname)`;
+  const chefRateLoaded = allZzp
+    ? s.chefRateCents
+    : Math.round(s.chefRateCents * (1 + assumptions.employerChargesPct / 100));
   const per = estimateMargin({
     clientRateCents: s.clientRateCents,
     chefRateCents: chefRateLoaded,
@@ -148,6 +160,7 @@ export async function shiftMargin(shiftId: string) {
   return {
     shift,
     priced: true as const,
+    basis,
     tone: per.tone,
     perChef: {
       revenueEur: toEur(per.revenueCents),

@@ -72,7 +72,7 @@ export const shiftsMargin = defineTool({
     const toneNl: Record<string, string> = { ok: "gezond", low: "laag", negative: "negatief" };
     return {
       data,
-      summary: `${data.shift.client ?? "Dienst"} (${data.shift.role}): marge €${data.total.marginEur.toLocaleString("nl-NL")} totaal (€${data.perChef.marginEur}/chef) — ${toneNl[data.tone] ?? data.tone}.`,
+      summary: `${data.shift.client ?? "Dienst"} (${data.shift.role}): marge €${data.total.marginEur.toLocaleString("nl-NL")} totaal (€${data.perChef.marginEur}/chef, ${data.basis}) — ${toneNl[data.tone] ?? data.tone}.`,
     };
   },
 });

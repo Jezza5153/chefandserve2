@@ -86,9 +86,6 @@ export default async function RateShiftPage({
     // favoriet" offer (the matcher's favourite tiering is live); a disappointed one
     // creates an internal follow-up on the owner's agenda — the klant never sees
     // that (ratings are internal-only V1).
-    if (stars >= 4 && placement?.chefId) {
-      redirect(`/client/shifts/${shiftId}?ok=rated&fav=${placement.chefId}`);
-    }
     if (stars > 0 && stars <= 3) {
       await createLowRatingFollowUp({
         clientId: c.id,

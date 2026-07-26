@@ -84,6 +84,7 @@ export const CATALOG: CatalogPerm[] = [
   { key: "shifts.write", resource: "shifts", action: "write", class: "business", label: "Shifts plannen/bewerken" },
   { key: "roster.read", resource: "roster", action: "read", class: "business", label: "Rooster bekijken" },
   { key: "planning.read", resource: "planning", action: "read", class: "business", label: "Planning-werkruimte bekijken" },
+  { key: "planning.write", resource: "planning", action: "write", class: "business", label: "Planning bewerken (agenda, beloftes)" },
   { key: "templates.read", resource: "templates", action: "read", class: "business", label: "Shift-sjablonen bekijken" },
   { key: "templates.write", resource: "templates", action: "write", class: "business", label: "Shift-sjablonen beheren" },
   { key: "forms.read", resource: "forms", action: "read", class: "business", label: "Formulieren bekijken" },
@@ -128,7 +129,7 @@ export function permKeyExists(key: string): boolean {
 const OWNER_PLANNER_PERMS = [
   "chefs.read", "chefs.write",
   "shifts.read", "shifts.write",
-  "roster.read", "planning.read",
+  "roster.read", "planning.read", "planning.write",
   "templates.read", "templates.write",
   "forms.read", "forms.write",
   "reminders.read", "reminders.write",

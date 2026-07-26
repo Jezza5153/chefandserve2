@@ -8,8 +8,11 @@
  * as reminders.*: remember = risk "self" (internal work item, nothing leaves the
  * building), vandaag = read.
  */
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { db } from "@/lib/db/client";
+import { chefs, clients } from "@/lib/db/schema";
 import { defineTool } from "@/lib/ai/tools/registry";
 import { createAgendaEvent, agendaEventLabel } from "@/lib/domain/agenda-events";
 import { agendaToday } from "@/lib/ai/read-model/agenda";
@@ -43,7 +46,7 @@ export const agendaRemember = defineTool({
   description:
     'Legt een belofte, afspraak of "niet vergeten" vast als agendapunt: "ik beloofde Daniel vrijdag vrij te houden", "morgen Hotel X terugbellen", "vrijdag contract mailen". ' +
     "Geef een korte titel + datum (JJJJ-MM-DD, zonder datum = vandaag) en koppel waar mogelijk de chef of klant (id via chefs.find / clients.find — dan verschijnt de belofte óók op hun dossier). " +
-    "Verschijnt op het dashboard (Vandaag-strip), de planning en in de agenda-feed. Intern — er wordt niets naar de chef of klant gestuurd.",
+    "Verschijnt op het dashboard (Vandaag-strip), de planning en in de agenda-feed. Intern — er wordt niets naar de chef of klant gestuurd. NIET voor persoonlijke to-do's zonder datum of belofte — dat is reminders.create.",
   risk: "self",
   permission: { resource: "planning", action: "write" },
   input: z.object({
@@ -63,6 +66,17 @@ export const agendaRemember = defineTool({
     // is wrong from late October to late March).
     const [hh, mm] = time.split(":").map(Number);
     const startsAt = new Date(amsterdamMidnightUtc(day).getTime() + hh! * 3600e3 + mm! * 60e3);
+
+    // Linked ids are FK-constrained — a hallucinated id would raise a raw 23503. Validate
+    // first so the model gets a correctable Dutch error instead.
+    if (input.linkedChefId) {
+      const [c] = await db.select({ id: chefs.id }).from(chefs).where(eq(chefs.id, input.linkedChefId)).limit(1);
+      if (!c) throw new Error("chefId bestaat niet — zoek het juiste id met chefs.find");
+    }
+    if (input.linkedClientId) {
+      const [c] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, input.linkedClientId)).limit(1);
+      if (!c) throw new Error("clientId bestaat niet — zoek het juiste id met clients.find");
+    }
 
     const row = await createAgendaEvent({
       type: "internal_reminder",

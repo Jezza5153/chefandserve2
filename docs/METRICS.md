@@ -104,7 +104,8 @@ value ÷ effort.
 ### 1. Fill rate, forward-looking — **BUILT (2026-07-27)**
 
 `getKpiBaselines().forwardFill` — canonical capped filled-slot definition over upcoming
-shifts (default 7 days). Surfaces: `/admin/business/insights` ("Vooruit · de stuurgetallen")
+**committed** shifts (status `open`/`filled`; a `request` is a klant wish that may still be
+declined and counts nowhere). Default 7 days. Surfaces: `/admin/business/insights` ("Vooruit · de stuurgetallen")
 and the AI `reports.platform_kpi` payload. Live query, not yet snapshotted as a series.
 
 ### 2. Time-to-fill
@@ -144,9 +145,9 @@ admin-approved. There is no "already booked for the coming 30 days"
 (`future shifts × headcount × client_rate × duration`), no intake→shift conversion in euros,
 and no forecast-vs-actual — because no forecast is ever stored, so deviation is by definition
 unmeasurable.
-**Booked figure BUILT (2026-07-27):** `getKpiBaselines().bookedRevenue` — upcoming 30 days ×
-headcount × client rate × duration; shifts without a rate count as €0 and are surfaced as a
-count. Forecast-vs-actual still needs a stored forecast.
+**Booked figure BUILT (2026-07-27):** `getKpiBaselines().bookedRevenue` — committed
+(`open`/`filled`) shifts in the next 30 days × headcount × client rate × duration (negative
+durations guarded to 0); shifts without a rate count as €0 and are surfaced as a count. Forecast-vs-actual still needs a stored forecast.
 
 ### 7. Real contribution margin
 

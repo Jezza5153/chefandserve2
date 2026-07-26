@@ -9,10 +9,11 @@
  * the event carries labels — never the klant's free-text comment (that stays in the
  * ratings table where feedback.review reads it).
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { users } from "@/lib/db/schema";
+import { agendaEvents, users } from "@/lib/db/schema";
+import { addDaysToKey, amsterdamDayKey, amsterdamMidnightUtc } from "@/lib/roster-format";
 import { env } from "@/lib/env";
 import { createAgendaEvent } from "@/lib/domain/agenda-events";
 import { createNotification } from "@/lib/integrations";
@@ -24,21 +25,43 @@ export async function createLowRatingFollowUp(args: {
   chefName: string | null;
   shiftId: string;
   stars: number;
-  /** The klant user who rated — used only as createdBy provenance. */
+  /** The klant user who rated — provenance only; NEVER used as creator/assignee. */
   createdBy: string;
 }): Promise<void> {
-  // Assign to the owner when resolvable; otherwise the event still lands (assignedTo
-  // falls back to createdBy inside createAgendaEvent) and the notification is skipped.
+  // Dark-launch rule (CLAUDE.md): a new side-effect surface ships behind a default-off
+  // flag with idempotency, so re-fires are harmless.
+  if (process.env.RATING_FOLLOWUP_ENABLED !== "true") return;
+
+  // The follow-up is an OWNER work item. If the owner cannot be resolved we skip and
+  // log — an internal agenda row must NEVER be created/assigned under the klant's user
+  // (it would leak the internal follow-through into their audit trail).
   const ownerEmail = env.MAARTEN_EMAIL?.trim().toLowerCase();
   const [owner] = ownerEmail
     ? await db.select({ id: users.id }).from(users).where(eq(users.email, ownerEmail)).limit(1)
     : [];
+  if (!owner?.id) {
+    console.error("[rating-follow-up] owner not resolvable (MAARTEN_EMAIL) — follow-up skipped");
+    return;
+  }
 
-  // Tomorrow 09:00 Amsterdam-ish: today's UTC midnight + 33h is close enough for an
-  // internal follow-up and keeps this file free of tz imports the worker also lacks.
-  const startsAt = new Date();
-  startsAt.setUTCHours(0, 0, 0, 0);
-  startsAt.setUTCHours(33);
+  // Idempotent per shift: one open follow-up, however many low ratings arrive.
+  const [existing] = await db
+    .select({ id: agendaEvents.id })
+    .from(agendaEvents)
+    .where(
+      and(
+        eq(agendaEvents.type, "follow_up"),
+        eq(agendaEvents.status, "open"),
+        eq(agendaEvents.linkedShiftId, args.shiftId),
+      ),
+    )
+    .limit(1);
+  if (existing) return;
+
+  // Tomorrow 09:00 Amsterdam, DST-correct.
+  const startsAt = new Date(
+    amsterdamMidnightUtc(addDaysToKey(amsterdamDayKey(new Date()), 1)).getTime() + 9 * 3600e3,
+  );
 
   const row = await createAgendaEvent({
     type: "follow_up",
@@ -48,11 +71,11 @@ export async function createLowRatingFollowUp(args: {
     linkedClientId: args.clientId,
     linkedChefId: args.chefId,
     linkedShiftId: args.shiftId,
-    assignedTo: owner?.id ?? null,
-    createdBy: owner?.id ?? args.createdBy,
+    assignedTo: owner.id,
+    createdBy: owner.id,
   });
 
-  if (owner?.id) {
+  {
     await createNotification({
       userId: owner.id,
       type: "rating_follow_up",

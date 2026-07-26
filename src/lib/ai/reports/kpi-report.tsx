@@ -125,6 +125,24 @@ export function KpiReportDoc({ data }: { data: KpiReportData }) {
           </View>
         </View>
 
+        <View style={s.cardsRow}>
+          <View style={s.card}>
+            <Text style={s.cardLabel}>Vulgraad {data.baselines.forwardFill.windowDays}d vooruit</Text>
+            <Text style={s.cardValue}>{data.baselines.forwardFill.pct != null ? `${data.baselines.forwardFill.pct}%` : "—"}</Text>
+            <Text style={s.cardNote}>{data.baselines.forwardFill.filled}/{data.baselines.forwardFill.slots} plekken</Text>
+          </View>
+          <View style={s.card}>
+            <Text style={s.cardLabel}>Time-to-fill (mediaan)</Text>
+            <Text style={s.cardValue}>{data.baselines.timeToFill.medianHours != null ? `${data.baselines.timeToFill.medianHours} u` : "—"}</Text>
+            <Text style={s.cardNote}>{data.baselines.timeToFill.confirmedCount} bevestigingen · {data.baselines.timeToFill.windowDays}d</Text>
+          </View>
+          <View style={s.card}>
+            <Text style={s.cardLabel}>Geboekt {data.baselines.bookedRevenue.windowDays}d vooruit</Text>
+            <Text style={s.cardValue}>{eur(data.baselines.bookedRevenue.cents)}</Text>
+            <Text style={s.cardNote}>{data.baselines.bookedRevenue.shifts} diensten (open/gevuld)</Text>
+          </View>
+        </View>
+
         <View style={s.section}>
           <Text style={s.h2}>Omzet &amp; marge — laatste 6 maanden</Text>
           <Chart data={data} />

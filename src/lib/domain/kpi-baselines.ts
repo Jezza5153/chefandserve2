@@ -10,7 +10,8 @@
  *    window). Backfillable — both timestamps have always been stored.
  *  - forwardFill: the canonical filled-slot definition (METRICS.md: confirmed
  *    placements capped per shift) over UPCOMING shifts in the window.
- *  - bookedRevenue: already-committed money — upcoming shifts × headcount ×
+ *  - bookedRevenue: already-committed money (status open/filled — a 'request' is not a
+ *    commitment) — upcoming shifts × headcount ×
  *    client rate × duration. Says "what is coming", where every other money number
  *    says "what happened".
  */
@@ -59,7 +60,9 @@ export async function getKpiBaselines(opts?: {
         select count(*)::int as cnt from placements p
         where p.shift_id = s.id and p.status in ('confirmed', 'completed')
       ) c on true
-      where s.status not in ('cancelled', 'completed')
+      -- COMMITTED work only: a 'request' is a klant wish Chef & Serve may still decline.
+      -- Counting it as a promised slot (or booked euros) flatters both numbers.
+      where s.status in ('open', 'filled')
         and s.starts_at >= now()
         and s.starts_at < now() + make_interval(days => ${fwdDays})
     `),
@@ -68,13 +71,13 @@ export async function getKpiBaselines(opts?: {
       select
         coalesce(sum(
           case when s.client_rate_cents is not null
-            then round(s.client_rate_cents * s.headcount * extract(epoch from s.ends_at - s.starts_at) / 3600.0)
+            then round(s.client_rate_cents * s.headcount * greatest(0, extract(epoch from s.ends_at - s.starts_at)) / 3600.0)
             else 0 end
         ), 0)::bigint as cents,
         count(*)::int as shifts,
         count(*) filter (where s.client_rate_cents is null)::int as missing_rate
       from shifts s
-      where s.status not in ('cancelled', 'completed')
+      where s.status in ('open', 'filled')
         and s.starts_at >= now()
         and s.starts_at < now() + make_interval(days => ${bookDays})
     `),
