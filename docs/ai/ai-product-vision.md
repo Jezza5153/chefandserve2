@@ -177,7 +177,7 @@ Cross-referenced with `ai-safety-rules.md`:
 
 ## What this doc is for
 
-When we ship Layer 4 (per `AI_INTEGRATION.md`), engineering uses this doc to:
+When we ship Layer 4 (per `AI.md`), engineering uses this doc to:
 
 1. Decide which intents to test in the eval harness (see `ai-evaluation-set.md`).
 2. Decide which Layer-3 tools must exist (see `tool-contracts/`).

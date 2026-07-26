@@ -2,7 +2,7 @@
 
 > For every fact the AI might surface, this doc says: **which table holds it · who can mutate it · how stale can it be · what the AI is allowed to read or say about it**. The AI must never invent a fact not present here.
 
-This is the grounding contract for Layer 1 (per `../../AI_INTEGRATION.md`). The AI quotes from these rows; nothing else.
+This is the grounding contract for Layer 1 (per `../../AI.md`). The AI quotes from these rows; nothing else.
 
 ---
 

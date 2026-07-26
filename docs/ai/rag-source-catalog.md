@@ -17,7 +17,7 @@ These are sources where the *content* itself doesn't carry PII or financial data
 
 | Source | What | Refresh | Notes |
 |---|---|---|---|
-| Project docs (`docs/ai/`, `MEMORY.md`, `WORKFLOW.md`, `AI_INTEGRATION.md`, `BUILD_PLAN.md`, `ROADMAP.md`, `README.md`) | The repo's own knowledge base | On commit | Self-documenting RAG. AI uses these to answer "how does the system work?". |
+| Project docs (`docs/ai/`, `MEMORY.md`, `FEATURES.md`, `AI.md`, `WORKFLOW.md`, `README.md`, `CLAUDE.md`, `docs/STATE.generated.md`) | The repo's own knowledge base | On commit | Self-documenting RAG. AI uses these to answer "how does the system work?". Archived docs (`docs/history/`) are deliberately NOT indexed — they teach things that are no longer true. |
 | Public privacy pages (`src/content/privacy-chef.mdx`, `privacy-klant.mdx`) | Legal text | On commit | Helps AI answer "what data do we store and why?" |
 | Internal SOP / playbooks (future) | Operating procedures | On commit | When written, place under `docs/sops/`. |
 | Vakniveau + segment glossary | Domain language | On schema change | Stays in sync with the `vakniveau` and `segment` enums + `ai-glossary.md`. |

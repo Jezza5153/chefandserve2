@@ -28,7 +28,19 @@ if (!result.enabled) {
 
 console.log("\n── project docs ──");
 const docPaths: string[] = [];
-for (const p of ["MEMORY.md", "WORKFLOW.md", "AI_INTEGRATION.md", "README.md", "CLAUDE.md"]) {
+// AI_INTEGRATION.md is deliberately absent: it was archived to docs/history/ as a
+// pre-launch plan whose detail never matched the build, and indexing it taught the
+// assistant tool names that do not exist. AI.md replaces it. The PR ledger is history,
+// not knowledge, so it stays out too.
+for (const p of [
+  "MEMORY.md",
+  "FEATURES.md",
+  "AI.md",
+  "WORKFLOW.md",
+  "README.md",
+  "CLAUDE.md",
+  "docs/STATE.generated.md",
+]) {
   if (existsSync(p)) docPaths.push(p);
 }
 if (existsSync("docs/ai")) {

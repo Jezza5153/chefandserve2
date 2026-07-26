@@ -9,7 +9,7 @@
 Status: **design contract, not yet built.** The audit primitives it relies on
 (`recordAuditCore`, `audit_log.impersonator_user_id`, `after._imp`) are live as
 of the write-impersonation phase. The PA itself ships in Layer 4 (see
-`../../AI_INTEGRATION.md`).
+`../../AI.md`).
 
 ---
 
@@ -157,4 +157,4 @@ By deciding the access model now:
 - Audit shape + correlation: `ai-audit-and-logging.md` (§ impersonation + § AI delegation).
 - The full safety posture: `ai-safety-rules.md`.
 - Tool modes + the four-mode table: `tool-contracts/README.md`.
-- Where the PA code will live: `../../AI_INTEGRATION.md` §7.
+- Where the PA code will live: `../../AI.md` §7.
