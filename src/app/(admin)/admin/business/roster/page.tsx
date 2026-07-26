@@ -257,6 +257,7 @@ export default async function RosterPage({
         city: chefs.city,
         segments: chefs.segments,
         vakniveau: chefs.vakniveau,
+        phone: chefs.phone,
       })
       .from(chefs)
       .where(and(isNull(chefs.deletedAt), eq(chefs.status, "active")));
@@ -269,6 +270,7 @@ export default async function RosterPage({
       niveau: c.vakniveau ? formatChefRole(c.vakniveau) : null,
       skills: (c.segments ?? []).map(formatSegment),
       locatie: c.city,
+      phone: c.phone,
     }));
   }
 
@@ -400,7 +402,7 @@ export default async function RosterPage({
           <RosterDayTimeline hotels={vmBody.dayHotels ?? []} nowHour={showMarker ? amsHourFloat(now) : null} chefSlotsByShift={chefSlotsByShift} />
           <div className="grid gap-6 lg:grid-cols-2">
             <OpenDienstenTable rows={openRows} total={openTotal} />
-            <BeschikbareChefsTable rows={chefTableRows.slice(0, 6)} total={chefTableRows.length} />
+            <BeschikbareChefsTable rows={chefTableRows} total={chefTableRows.length} />
           </div>
         </div>
       ) : (
