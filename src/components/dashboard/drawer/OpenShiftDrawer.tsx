@@ -331,7 +331,7 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
               {/* Contact + outcome logging (DASH-5) — feeds the per-shift timeline */}
               <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-ink-100 pt-2">
                 {m.chef.phone && (
-                  <a href={`tel:${m.chef.phone}`} className="rounded-full border border-ink-200 bg-white px-2.5 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-ink-700 hover:border-burgundy hover:text-burgundy">
+                  <a href={`tel:${m.chef.phone.replace(/[^+\d]/g, "")}`} className="rounded-full border border-ink-200 bg-white px-2.5 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-ink-700 hover:border-burgundy hover:text-burgundy">
                     Bel
                   </a>
                 )}

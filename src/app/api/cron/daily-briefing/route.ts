@@ -26,6 +26,7 @@ import { getDailyBriefingConfig, setSettingValue, SETTING_KEYS } from "@/lib/bus
 import { buildDailyBriefing } from "@/lib/ai/read-model/briefing";
 import { createNotification } from "@/lib/integrations/notifications";
 import { sendEmail } from "@/lib/email";
+import { recordEmailMessage } from "@/lib/integrations";
 import { OwnerMessageEmail } from "@/emails/OwnerMessageEmail";
 
 export const dynamic = "force-dynamic";
@@ -95,6 +96,17 @@ export async function GET(req: Request): Promise<Response> {
         subject,
         react: OwnerMessageEmail({ title: subject, body: briefing.text }),
       });
+      // CLAUDE.md hard rule: every sendEmail pairs with recordEmailMessage. This one
+      // predates the rule's enforcement here — and since the briefing now carries
+      // people-data (birthdays, stale contacts), an untracked send is no longer ok.
+      if (r.ok && r.id) {
+        await recordEmailMessage({
+          providerMessageId: r.id,
+          toEmail: env.MAARTEN_EMAIL,
+          template: "OwnerMessageEmail",
+          eventKey: "daily_briefing",
+        }).catch(() => {});
+      }
       sent.email = r.ok ? true : r.error;
     }
     if (cfg.channels.whatsapp) {

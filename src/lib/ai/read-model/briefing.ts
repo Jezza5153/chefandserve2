@@ -118,7 +118,11 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
                  or to_char(date_of_birth, 'MM-DD') <= to_char((now() at time zone 'Europe/Amsterdam') + interval '7 days', 'MM-DD')
           end
         )
-      order by to_char(date_of_birth, 'MM-DD') limit 5
+      -- days-until order, wraparound-aware (January birthdays after December's in the
+      -- New-Year week, not before)
+      order by (to_char(date_of_birth, 'MM-DD') < to_char(now() at time zone 'Europe/Amsterdam', 'MM-DD'))::int,
+               to_char(date_of_birth, 'MM-DD')
+      limit 5
     `),
     db.execute(sql`
       select c.full_name as "fullName",
@@ -145,6 +149,12 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
           select 1 from placements p join shifts s on s.id = p.shift_id
           where p.chef_id = c.id and p.status in ('accepted','confirmed')
             and s.starts_at >= ${tStart} and s.starts_at < ${tEnd}
+        )
+        -- A chef who blocked today is NOT on the bellijst (the very table this
+        -- feature set exists to grow — respect it here too).
+        and not exists (
+          select 1 from chef_availability a
+          where a.chef_id = c.id and a.date = ${tStart} and a.available = false
         )
     `),
   ]);
@@ -203,11 +213,19 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
 
   // ---- mensen ----
   const mensen: string[] = [];
-  if (birthdays.length > 0 || stale.length > 0 || bench > 0) {
+  if (birthdays.length > 0 || stale.length > 0 || (bench > 0 && tShifts.length > 0)) {
     mensen.push("👥 *Je mensen*");
-    for (const b of birthdays) mensen.push(`• 🎂 ${b.fullName} is binnenkort jarig (${b.dayMonth}) — stuur een berichtje.`);
-    if (stale.length > 0) mensen.push(`• 📞 ${stale[0]!.fullName} al ${stale[0]!.daysSilent} dagen niet gesproken — bel of app vandaag even.`);
-    if (bench > 0) mensen.push(`• ${plural(bench, "chef", "chefs")} vandaag niet ingepland — jouw bellijst bij uitval.`);
+    const todayDM = new Date().toLocaleDateString("nl-NL", { day: "2-digit", month: "2-digit", timeZone: "Europe/Amsterdam" }).replace("/", "-");
+    for (const b of birthdays) {
+      mensen.push(b.dayMonth === todayDM
+        ? `• 🎉 ${b.fullName} is VANDAAG jarig — bel even!`
+        : `• 🎂 ${b.fullName} is binnenkort jarig (${b.dayMonth}) — stuur een berichtje.`);
+    }
+    // The log hint matters: a bare call clears nothing — telling the assistant does
+    // (contacts.log writes the row this very counter reads).
+    if (stale.length > 0) mensen.push(`• 📞 ${stale[0]!.fullName} al ${stale[0]!.daysSilent} dagen niet gesproken — bel of app, en zeg daarna "net gesproken met ${stale[0]!.fullName.split(" ")[0]}" tegen de assistent zodat het meetelt.`);
+    // A bench only means something on a day that has work.
+    if (bench > 0 && tShifts.length > 0) mensen.push(`• ${plural(bench, "chef", "chefs")} vandaag niet ingepland — jouw bellijst bij uitval.`);
   }
 
   const sections = [gisteren.join("\n"), vandaag.join("\n")];

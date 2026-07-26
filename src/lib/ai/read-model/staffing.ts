@@ -24,9 +24,10 @@ function shapeMatch(m: MatchResult) {
     vakniveau: formatChefRole(m.chef.vakniveau),
     city: m.chef.city,
     // CHEF-CTA: when the assistant FINDS a chef, the answer must end in an action —
-    // "bel of app 'm nu". Owner-only tools (suggest_chefs / match_requirement /
-    // planner.cockpit); chefs.reachability already hands the AI the same number, so
-    // this widens no boundary. Never add BSN/IBAN-class fields here (AVG).
+    // "bel of app 'm nu". These shapes feed OWNER/PLANNER-only tools (suggest_chefs /
+    // match_requirement / planner.cockpit — portal registries never see them), and the
+    // playbook prints the number on the web channel only. Phone is not a BSN/IBAN-class
+    // value, but it IS personal data: never let these shapes reach a klant/chef surface.
     phone: m.chef.phone,
     score: m.score,
     reasons: m.reasons,

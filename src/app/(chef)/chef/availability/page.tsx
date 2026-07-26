@@ -24,6 +24,7 @@ import { chefAvailability, chefs, shifts } from "@/lib/db/schema";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { recordChefEvent } from "@/lib/chef-events";
 import { sanitizeSkillTags, skillTagsByCategory } from "@/lib/domain/skill-tags";
+import { amsterdamCalendarDayUTC } from "@/lib/tz-day";
 import { getI18n } from "@/lib/i18n/server";
 import { fill } from "@/lib/i18n/locales";
 import { requireAuth } from "@/lib/permissions";
@@ -284,25 +285,73 @@ async function repeatLastWeek(): Promise<void> {
 async function confirmDays(fd: FormData): Promise<void> {
   "use server";
   const { chefId } = await requireChefSelf();
-  const raw = fd.getAll("days").map(String);
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  // Amsterdam day anchor — same convention as quickBlock/repeatLastWeek. Plain UTC
+  // midnight is a different day between 00:00–02:00 Amsterdam in summer.
+  const today = amsTodayUtcMidnight();
   const max = new Date(today);
   max.setUTCDate(max.getUTCDate() + 14);
-  const dates: Date[] = [];
-  for (const d of raw) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
-    const dt = new Date(`${d}T00:00:00Z`);
-    if (dt >= today && dt <= max) dates.push(dt);
+
+  // The strip is a TOGGLE over the 7-day window: ticked = confirm, unticked = withdraw.
+  // The window's day list is derived server-side so the diff never trusts client state.
+  const submitted = new Set(
+    fd.getAll("days").map(String).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)),
+  );
+  const windowDays: Date[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() + i);
+    if (d <= max) windowDays.push(d);
   }
-  if (dates.length === 0) return;
-  await db
-    .insert(chefAvailability)
-    .values(dates.map((d) => ({ chefId, date: d, available: true })))
-    .onConflictDoUpdate({
-      target: [chefAvailability.chefId, chefAvailability.date],
-      set: { available: true },
-    });
+
+  // Server-side blocked guard: the checkbox `disabled` is client decoration; a replayed
+  // POST must not silently flip a chef's own block to beschikbaar.
+  const blockedRows = await db
+    .select({ date: chefAvailability.date })
+    .from(chefAvailability)
+    .where(
+      and(
+        eq(chefAvailability.chefId, chefId),
+        gte(chefAvailability.date, today),
+        eq(chefAvailability.available, false),
+      ),
+    );
+  const blocked = new Set(blockedRows.map((r) => isoOf(new Date(r.date))));
+
+  const confirm = windowDays.filter((d) => submitted.has(isoOf(d)) && !blocked.has(isoOf(d)));
+  const withdraw = windowDays.filter((d) => !submitted.has(isoOf(d)));
+
+  if (confirm.length > 0) {
+    await db
+      .insert(chefAvailability)
+      .values(confirm.map((d) => ({ chefId, date: d, available: true })))
+      .onConflictDoUpdate({
+        target: [chefAvailability.chefId, chefAvailability.date],
+        set: { available: true },
+      });
+  }
+  if (withdraw.length > 0) {
+    // Withdrawal deletes ONLY explicit available:true rows (back to "unknown") —
+    // it never touches blocks.
+    await db
+      .delete(chefAvailability)
+      .where(
+        and(
+          eq(chefAvailability.chefId, chefId),
+          eq(chefAvailability.available, true),
+          inArray(chefAvailability.date, withdraw),
+        ),
+      );
+  }
+
+  // Same traceability as every sibling action on this page (AVG: personal-data write).
+  await recordAuditFromRequest({
+    userId: chefId,
+    action: "chef.availability_confirmed",
+    resource: "chef_availability",
+    resourceId: chefId,
+    after: { confirmed: confirm.length, withdrawn: withdraw.length },
+  });
+  await recordChefEvent({ chefId, eventType: "availability_updated", entityType: "availability" });
   revalidatePath("/chef/availability");
 }
 
@@ -377,14 +426,18 @@ export default async function ChefAvailabilityPage() {
     );
   const blockedDates = rows.map((r) => isoOf(new Date(r.date)));
 
-  // FLYWHEEL: explicit "ik kan" rows (next 14 days) + the payoff count.
+  // FLYWHEEL: explicit "ik kan" rows (bounded to the next 14 days) + the payoff count.
+  const amsToday = amsTodayUtcMidnight();
+  const amsMax = new Date(amsToday);
+  amsMax.setUTCDate(amsMax.getUTCDate() + 14);
   const confirmedRows = await db
     .select({ date: chefAvailability.date })
     .from(chefAvailability)
     .where(
       and(
         eq(chefAvailability.chefId, chefId),
-        gte(chefAvailability.date, today),
+        gte(chefAvailability.date, amsToday),
+        lte(chefAvailability.date, amsMax),
         eq(chefAvailability.available, true),
       ),
     );
@@ -394,12 +447,22 @@ export default async function ChefAvailabilityPage() {
     const openRows = await db
       .select({ startsAt: shifts.startsAt })
       .from(shifts)
-      .where(and(inArray(shifts.status, ["request", "open"]), gte(shifts.startsAt, today)));
-    payoffCount = openRows.filter((r) => confirmedDates.has(isoOf(new Date(r.startsAt)))).length;
+      .where(
+        and(
+          inArray(shifts.status, ["request", "open"]),
+          gte(shifts.startsAt, amsToday),
+          lte(shifts.startsAt, amsMax),
+        ),
+      );
+    // Bucket on the AMSTERDAM calendar day — chefAvailability.date stores exactly that
+    // (a 00:30-Amsterdam shift belongs to that local day, not the previous UTC day).
+    payoffCount = openRows.filter((r) =>
+      confirmedDates.has(isoOf(amsterdamCalendarDayUTC(new Date(r.startsAt)))),
+    ).length;
   }
   const nextSeven: { iso: string; label: string }[] = [];
   for (let i = 0; i < 7; i++) {
-    const d = new Date(today);
+    const d = new Date(amsToday);
     d.setUTCDate(d.getUTCDate() + i);
     nextSeven.push({
       iso: isoOf(d),
@@ -428,12 +491,14 @@ export default async function ChefAvailabilityPage() {
       </div>
 
       {/* 1 — Quick blocks */}
-      <section className={`${card} border-emerald-200`}>
+      <section id="beschikbaar" className={`${card} border-emerald-200`}>
         <p className={sectionLabel}>{t.availability.confirmTitle}</p>
         <p className="mt-1 text-sm text-ink-700">{t.availability.confirmIntro}</p>
-        {payoffCount > 0 && (
+        {confirmedDates.size > 0 && (
           <p className="mt-2 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            ✓ {t.availability.confirmPayoff.replace("{n}", String(payoffCount))}
+            ✓ {payoffCount > 0
+              ? t.availability.confirmPayoff.replace("{n}", String(payoffCount))
+              : t.availability.confirmSaved}
           </p>
         )}
         <form action={confirmDays} className="mt-3">
@@ -447,9 +512,10 @@ export default async function ChefAvailabilityPage() {
                   className={`cursor-pointer rounded-full border px-3 py-1.5 font-ui text-[12px] ${
                     isBlocked
                       ? "cursor-not-allowed border-ink-100 bg-bg-gray text-ink-300 line-through"
-                      : isConfirmed
-                        ? "border-emerald-600 bg-emerald-600 text-white"
-                        : "border-ink-200 bg-white text-ink-700 hover:border-emerald-600"
+                      : // Visual state follows the CHECKBOX, not the server snapshot — a tap
+                        // must be visible before submit (same has-[:checked] pattern as the
+                        // preference checkboxes further down this page).
+                        "border-ink-200 bg-white text-ink-700 hover:border-emerald-600 has-[:checked]:border-emerald-600 has-[:checked]:bg-emerald-600 has-[:checked]:text-white"
                   }`}
                 >
                   <input

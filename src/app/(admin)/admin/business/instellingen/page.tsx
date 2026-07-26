@@ -152,8 +152,8 @@ export default async function BedrijfsinstellingenPage({
             <span>
               <span className="block text-sm font-medium text-ink-900">Beschikbaarheids-herinnering</span>
               <span className="mt-0.5 block text-sm text-ink-500">
-                Vraagt actieve chefs elke donderdagochtend hun beschikbaarheid voor volgende week
-                in te vullen (e-mail + melding in de app).{" "}
+                Vraagt actieve chefs elke donderdagochtend om 09:00 de dagen aan te tikken die ze
+                wél kunnen werken (e-mail + melding in de app, met directe link naar de kalender).{" "}
                 <strong className="text-ink-700">
                   Hoe meer chefs invullen, hoe beter “wie kan zaterdag?” en de spoed-matching werken.
                 </strong>

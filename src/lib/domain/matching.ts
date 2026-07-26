@@ -613,16 +613,16 @@ export async function findMatchesForShift(
   // shift's instant to its UTC day silently missed blocks for past-midnight / very-early
   // shifts (local date ≠ UTC date).
   const shiftDate = amsterdamCalendarDayUTC(shift.startsAt);
-  const blockedRows = await db
-    .select({ chefId: chefAvailability.chefId })
+  const availabilityRows = await db
+    .select({ chefId: chefAvailability.chefId, available: chefAvailability.available })
     .from(chefAvailability)
-    .where(
-      and(
-        eq(chefAvailability.date, shiftDate),
-        eq(chefAvailability.available, false),
-      ),
-    );
-  const blockedSet = new Set(blockedRows.map((r) => r.chefId));
+    .where(eq(chefAvailability.date, shiftDate));
+  const blockedSet = new Set(availabilityRows.filter((r) => !r.available).map((r) => r.chefId));
+  // FLYWHEEL: explicit available:true = the chef THEMSELF confirmed this day. The
+  // confirm-strip copy promises "sta je hoger bij het matchen" — this is the read half
+  // that makes that true. A flat +8 with a visible reason: enough to break the dense
+  // score ties (composite quantises to ~60 values), never enough to beat a vakniveau gap.
+  const confirmedSet = new Set(availabilityRows.filter((r) => r.available).map((r) => r.chefId));
 
   // 3. Exclude chefs already placed on this shift
   const alreadyPlaced = await db
@@ -730,9 +730,10 @@ export async function findMatchesForShift(
     // CHEF-PR1: soft, flag-gated chef→klant preference (favourite/block/only-*) (default off = no-op).
     const ccp = chefClientPrefAdjust(tag.score, chefClientPrefByChef.get(chef.id), shift.isEmergency === true);
 
+    const selfConfirmed = confirmedSet.has(chef.id);
     results.push({
       chef,
-      score: ccp.score,
+      score: Math.min(100, ccp.score + (selfConfirmed ? 8 : 0)),
       scoreBreakdown: { vakniveau: v, segment: s, experience: e },
       // P3b annotations match the existing Dutch strings so the shift-detail
       // allWarnings Set dedupes "door klant geblokkeerd" against staffing-intelligence.
@@ -743,6 +744,7 @@ export async function findMatchesForShift(
         ...tag.reasons,
         ...ccp.reasons,
         ...(favoriteSet.has(chef.id) ? ["klant-favoriet"] : []),
+        ...(selfConfirmed ? ["heeft zelf aangegeven deze dag te kunnen"] : []),
       ],
       warnings: [
         ...warnings,

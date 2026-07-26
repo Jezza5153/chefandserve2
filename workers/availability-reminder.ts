@@ -31,10 +31,10 @@ function emailHtml(firstName: string): string {
   const url = `${APP_URL}/chef/availability`;
   return `
     <div>
-      <h1>Geef je beschikbaarheid voor volgende week door</h1>
-      <p>Hé ${firstName}, wil je even checken of je beschikbaarheid voor volgende week klopt? Dan kunnen we je voor de juiste diensten inplannen.</p>
-      <p><a href="${url}">Beschikbaarheid bijwerken</a></p>
-      <p>Heb je niets te blokkeren? Dan hoef je niets te doen — we gaan ervan uit dat je beschikbaar bent.</p>
+      <h1>Welke dagen kun jij volgende week?</h1>
+      <p>Hé ${firstName}, tik in één minuut de dagen aan die je wél kunt werken. Dagen die je bevestigt tellen zwaarder mee bij het matchen — zo krijg je eerder de diensten die jou passen.</p>
+      <p><a href="${url}#beschikbaar">Tik je dagen aan</a></p>
+      <p>Kun je een dag juist niet? Blokkeer 'm in dezelfde kalender, dan bellen we je ook niet voor die dag.</p>
     </div>
   `;
 }
@@ -68,7 +68,7 @@ async function main() {
   let failed = 0;
   for (const c of chefs) {
     const firstName = c.full_name.split(" ")[0] || c.full_name;
-    const res = await sendPlainEmail(c.email, "Vul je beschikbaarheid voor volgende week in", emailHtml(firstName));
+    const res = await sendPlainEmail(c.email, "Welke dagen kun jij volgende week?", emailHtml(firstName));
     if (!res.ok) {
       failed++;
       log(`  email failed for ${c.email}: ${res.error}`);
@@ -82,7 +82,7 @@ async function main() {
         ${c.user_id},
         'availability_reminder',
         'Beschikbaarheid volgende week',
-        'Geef je beschikbaarheid voor volgende week door, dan plannen we je voor de juiste diensten.',
+        'Tik de dagen aan die je volgende week wél kunt — bevestigde dagen tellen zwaarder mee bij het matchen.',
         '/chef/availability',
         'chef',
         ${c.id}

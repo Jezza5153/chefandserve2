@@ -82,7 +82,7 @@ export function BeschikbareChefsTable({ rows, total, cards }: { rows: ChefRow[];
                 <td className="whitespace-nowrap px-2 align-middle">
                   {c.phone ? (
                     <span className="flex items-center gap-1">
-                      <a href={`tel:${c.phone}`} title={`Bel ${c.fullName}`} className="rounded-full border border-ink-200 p-1 text-ink-700 hover:border-burgundy hover:text-burgundy">
+                      <a href={`tel:${c.phone.replace(/[^+\d]/g, "")}`} title={`Bel ${c.fullName}`} className="rounded-full border border-ink-200 p-1 text-ink-700 hover:border-burgundy hover:text-burgundy">
                         <Icon name="phone" className="h-3.5 w-3.5" />
                       </a>
                       <a

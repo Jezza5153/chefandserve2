@@ -150,7 +150,7 @@ export function ChefCard({
           {data.phone && (
             <span className="mt-3 flex items-center gap-2">
               <a
-                href={`tel:${data.phone}`}
+                href={`tel:${data.phone.replace(/[^+\d]/g, "")}`}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-ink-200 py-1.5 font-ui text-[11px] text-ink-700 hover:border-burgundy hover:text-burgundy"
               >
                 <Icon name="phone" className="h-3.5 w-3.5" /> Bel
