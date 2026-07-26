@@ -152,6 +152,11 @@ async function ProposedNoResponse() {
               stap"; this is that step.) */}
           <span className="flex shrink-0 flex-wrap items-center gap-1.5">
             {r.chefPhone && (
+              <a href={`tel:${r.chefPhone}`} className="rounded-full border border-ink-200 bg-white px-2.5 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-ink-700 hover:border-burgundy hover:text-burgundy">
+                Bel
+              </a>
+            )}
+            {r.chefPhone && (
               <a
                 href={`https://wa.me/${r.chefPhone.replace(/\D/g, "")}`}
                 target="_blank"

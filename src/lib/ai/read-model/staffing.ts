@@ -23,6 +23,11 @@ function shapeMatch(m: MatchResult) {
     chefName: m.chef.fullName,
     vakniveau: formatChefRole(m.chef.vakniveau),
     city: m.chef.city,
+    // CHEF-CTA: when the assistant FINDS a chef, the answer must end in an action —
+    // "bel of app 'm nu". Owner-only tools (suggest_chefs / match_requirement /
+    // planner.cockpit); chefs.reachability already hands the AI the same number, so
+    // this widens no boundary. Never add BSN/IBAN-class fields here (AVG).
+    phone: m.chef.phone,
     score: m.score,
     reasons: m.reasons,
     warnings: m.warnings,
