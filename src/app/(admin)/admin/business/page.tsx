@@ -27,6 +27,7 @@ import { emergencyModeEnabled, syncEmergencies, listOpenEscalations } from "@/li
 import { db } from "@/lib/db/client";
 import {
   chefAvailability,
+  chefDocuments,
   chefMetricsDaily,
   chefSubmissions,
   chefs,
@@ -129,6 +130,8 @@ export default async function BusinessDashboardPage({
     chefNameRows,
     blockedTodayRows,
     lifetimeRows,
+    expiringDocs,
+    staleContacts,
     roll,
     unbilledList,
     weekSeries,
@@ -232,6 +235,44 @@ export default async function BusinessDashboardPage({
       })
       .from(chefMetricsDaily)
       .groupBy(chefMetricsDaily.chefId),
+    // Compliance horizon: documents (VOG/certificaat/ID) expiring within 30 days.
+    // The document-expiry worker mails at 30d; this is the dashboard mirror so the
+    // deadline is visible where decisions happen, not only in a mailbox.
+    db
+      .select({
+        chefId: chefDocuments.chefId,
+        chefName: chefs.fullName,
+        docType: chefDocuments.type,
+        expiresAt: chefDocuments.expiresAt,
+      })
+      .from(chefDocuments)
+      .innerJoin(chefs, eq(chefs.id, chefDocuments.chefId))
+      .where(
+        and(
+          isNull(chefDocuments.deletedAt),
+          isNull(chefs.deletedAt),
+          sql`${chefDocuments.expiresAt} is not null`,
+          sql`${chefDocuments.expiresAt} >= now()`,
+          sql`${chefDocuments.expiresAt} < now() + interval '30 days'`,
+          sql`${chefDocuments.status} not in ('rejected', 'expired')`,
+        ),
+      )
+      .orderBy(chefDocuments.expiresAt)
+      .limit(5),
+    // Relationship rot: active chefs nobody has TOUCHED in 21+ days (contact log or,
+    // for never-contacted chefs, their join date as the baseline). Chef intimacy is a
+    // practice, not a feeling — this is the quiet-Tuesday work list.
+    db.execute(sql`
+      select c.id, c.full_name as "fullName",
+             extract(day from now() - coalesce(max(cl.created_at), c.joined_at))::int as "daysSilent"
+      from ${chefs} c
+      left join contact_logs cl on cl.target_type = 'chef' and cl.target_id = c.id
+      where c.deleted_at is null and c.status = 'active'
+      group by c.id, c.full_name, c.joined_at
+      having coalesce(max(cl.created_at), c.joined_at) < now() - interval '21 days'
+      order by coalesce(max(cl.created_at), c.joined_at) asc
+      limit 3
+    `),
     // Previously 5 sequential awaits AFTER this block — each its own neon-http round trip,
     // serialized for no reason. ~100-150ms off every render by riding the same Promise.all.
     getPlatformRollups(),
@@ -482,6 +523,18 @@ export default async function BusinessDashboardPage({
     items.push({ kind: "inbox", tone: "blue", icon: "inbox", title: `${inboxCount} nieuwe ${plural(inboxCount, "aanmelding", "aanmeldingen")}`, detail: `${newChefSubs} chef · ${newClientSubs} klant`, href: "/admin/business/inbox", cta: "Open inbox", signalKey: "inbox", fingerprint: String(inboxCount) });
   if (missingDataCount > 0)
     items.push({ kind: "missing_data", tone: "amber", icon: "user-round", title: `${missingDataCount} chef-${plural(missingDataCount, "profiel", "profielen")} onvolledig`, detail: "postcode of tarief ontbreekt", href: "/admin/business/chefs?data=incomplete", cta: "Aanvullen", signalKey: "missing_data", fingerprint: String(missingDataCount) });
+  if (expiringDocs.length > 0) {
+    const first = expiringDocs[0]!;
+    const firstDate = first.expiresAt ? new Date(first.expiresAt).toLocaleDateString("nl-NL", { day: "numeric", month: "short", timeZone: "Europe/Amsterdam" }) : "";
+    items.push({ kind: "doc_expiring", tone: "amber", icon: "clock", title: `${expiringDocs.length} ${plural(expiringDocs.length, "document verloopt", "documenten verlopen")} binnen 30 dagen`, detail: `eerste: ${first.chefName} (${firstDate})`, href: `/admin/business/chefs/${first.chefId}`, cta: "Bekijk", signalKey: "doc_expiring", fingerprint: `${expiringDocs.length}:${first.chefId}` });
+  }
+  {
+    const stale = (Array.isArray(staleContacts) ? staleContacts : (staleContacts as { rows?: unknown[] }).rows ?? []) as { id: string; fullName: string; daysSilent: number }[];
+    if (stale.length > 0) {
+      const worst = stale[0]!;
+      items.push({ kind: "chef_contact_stale", tone: "blue", icon: "user-round", title: `${stale.length} ${plural(stale.length, "chef", "chefs")} 3+ weken niet gesproken`, detail: `stilste: ${worst.fullName} (${worst.daysSilent} dagen)`, href: `/admin/business/chefs/${worst.id}`, cta: "Bel of app", signalKey: "chef_contact_stale", fingerprint: `${stale.length}:${worst.id}` });
+    }
+  }
 
   // P4b: open escalations → top-priority emergency signals (flag-gated). syncEmergencies()
   // opens newly-detected ones on load; both the detection + the escalations table are dark

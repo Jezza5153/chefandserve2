@@ -1,4 +1,6 @@
 import Link from "next/link";
+
+import { logChefContactFromDashboard } from "@/app/(admin)/admin/business/_actions";
 import { asc, desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
@@ -121,7 +123,10 @@ async function ProposedNoResponse() {
     .select({
       id: placements.id,
       shiftId: placements.shiftId,
+      chefId: placements.chefId,
       chefName: chefs.fullName,
+      chefPhone: chefs.phone,
+      chefEmail: chefs.email,
       companyName: clients.companyName,
       roleNeeded: shifts.roleNeeded,
       startsAt: shifts.startsAt,
@@ -138,16 +143,58 @@ async function ProposedNoResponse() {
   if (rows.length === 0) return <Empty>Geen openstaande voorstellen.</Empty>;
 
   return (
-    <Wrap intro="Voorgesteld, nog geen reactie. Open de dienst om op te volgen (bellen/loggen komt in een volgende stap).">
+    <Wrap intro="Voorgesteld, nog geen reactie. Jaag na zonder de lade te verlaten — elke log telt mee in de contact-historie.">
       {rows.map((r) => (
         <Row key={r.id} title={r.chefName ?? "Chef"} sub={`${r.companyName ?? "Klant"} · ${formatShiftRole(r.roleNeeded)} · ${dateLabel(r.startsAt)}`}>
-          {/* No-fake-action rule: this is a link, so it reads "Bekijk", not "Los op". */}
-          <Link
-            href={`/admin/business/shifts/${r.shiftId}`}
-            className="shrink-0 rounded-full border border-burgundy/40 bg-white px-3.5 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-burgundy hover:bg-burgundy/5"
-          >
-            Bekijk
-          </Link>
+          {/* DASH-PANIC: the chase loop, in-drawer — the same App/Mail/Log widgets the
+              OpenShiftDrawer already ships, so all three non-responders can be chased
+              without a navigation each. (The old intro promised this "in een volgende
+              stap"; this is that step.) */}
+          <span className="flex shrink-0 flex-wrap items-center gap-1.5">
+            {r.chefPhone && (
+              <a
+                href={`https://wa.me/${r.chefPhone.replace(/\D/g, "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-full border border-ink-200 bg-white px-2.5 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-ink-700 hover:border-burgundy hover:text-burgundy"
+              >
+                App
+              </a>
+            )}
+            {r.chefEmail && (
+              <a
+                href={`mailto:${r.chefEmail}`}
+                className="rounded-full border border-ink-200 bg-white px-2.5 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-ink-700 hover:border-burgundy hover:text-burgundy"
+              >
+                Mail
+              </a>
+            )}
+            {r.chefId && (
+              <form action={logChefContactFromDashboard} className="flex items-center gap-1">
+                <input type="hidden" name="shiftId" value={r.shiftId} />
+                <input type="hidden" name="chefId" value={r.chefId} />
+                <input type="hidden" name="channel" value="phone" />
+                <select name="outcome" aria-label="Contactresultaat" className="rounded border border-ink-200 bg-white px-1.5 py-1 text-[10px] text-ink-700">
+                  <option value="spoken">Gesproken</option>
+                  <option value="no_answer">Geen gehoor</option>
+                  <option value="callback_requested">Teruggebeld</option>
+                  <option value="note_only">Notitie</option>
+                </select>
+                <button
+                  type="submit"
+                  className="rounded-full border border-burgundy/40 bg-white px-2.5 py-1 font-ui text-[10px] font-medium uppercase tracking-[0.12em] text-burgundy hover:bg-burgundy/5"
+                >
+                  Log
+                </button>
+              </form>
+            )}
+            <Link
+              href={`/admin/business/shifts/${r.shiftId}`}
+              className="rounded-full border border-burgundy/40 bg-white px-3.5 py-1.5 font-ui text-[10px] font-medium uppercase tracking-[0.14em] text-burgundy hover:bg-burgundy/5"
+            >
+              Bekijk
+            </Link>
+          </span>
         </Row>
       ))}
     </Wrap>
