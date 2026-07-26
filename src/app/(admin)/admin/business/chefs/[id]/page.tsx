@@ -48,6 +48,7 @@ import { getChefAverageForAdmin, submitInternalRating } from "@/lib/domain/ratin
 import { entityAuditTrail } from "@/lib/domain/audit-trail";
 import { requirePermission } from "@/lib/permissions";
 import { r2IsConfigured } from "@/lib/r2";
+import { sanitizeSkillTags } from "@/lib/domain/skill-tags";
 import { DetailShell } from "@/components/ui/DetailShell";
 
 import { RatingSummary } from "./_components/RatingSummary";
@@ -423,6 +424,11 @@ export default async function ChefDetailPage({
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
+    // CHEF-PR5 skill tags. Until now the ONLY writer was the chef's own availability
+    // page, so Maarten could not tag a chef himself and the column sat empty on the whole
+    // roster — which meant the matcher's tag scoring had nothing to score. sanitizeSkillTags
+    // drops anything outside the curated vocabulary, so a stale checkbox can't poison it.
+    const skillTags = sanitizeSkillTags(formData.getAll("skillTags").map(String));
     const hourlyRateMin = formData.get("hourlyRateMinEur")
       ? Math.round(Number(formData.get("hourlyRateMinEur")) * 100)
       : null;
@@ -443,6 +449,7 @@ export default async function ChefDetailPage({
         vakniveau,
         segments: segments.length > 0 ? segments : null,
         specialties,
+        skillTags: skillTags.length > 0 ? skillTags : null,
         languages: languages.length > 0 ? languages : null,
         hourlyRateMinCents: hourlyRateMin,
         hourlyRateMaxCents: hourlyRateMax,

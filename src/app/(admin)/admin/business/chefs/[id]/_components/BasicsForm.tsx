@@ -1,6 +1,7 @@
 import { fieldClass } from "@/components/forms/Fields";
 import { chefs } from "@/lib/db/schema";
 import { formatChefRole, formatSegment } from "@/lib/labels";
+import { skillTagsByCategory } from "@/lib/domain/skill-tags";
 
 type ChefRow = typeof chefs.$inferSelect;
 
@@ -94,6 +95,54 @@ export function BasicsForm({
                 </label>
               );
             })}
+          </div>
+        </label>
+      </div>
+
+      {/* CHEF-PR5 skill tags. Previously only the chef could set these (on their own
+          availability page), so the column was empty across the roster and the matcher's
+          tag scoring had nothing to work with. Same pill pattern as segments above. */}
+      <div className="md:col-span-2">
+        <label className="block">
+          <span className="font-ui text-[10px] uppercase tracking-[0.15em] text-ink-500">
+            Vaardigheden — waar kun je deze chef op inzetten?
+          </span>
+          <span className="mt-1 block text-[11px] text-ink-500">
+            Dit is de gestructureerde lijst waar de matching en de assistent op zoeken.
+            Specialties hierboven is vrije tekst en telt niet mee in de score.
+          </span>
+          <div className="mt-3 space-y-3">
+            {skillTagsByCategory().map((group) => (
+              <div key={group.category}>
+                <span className="font-ui text-[10px] uppercase tracking-[0.15em] text-ink-400">
+                  {group.label}
+                </span>
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {group.tags.map((t) => {
+                    const checked = (chef.skillTags ?? []).includes(t.key);
+                    return (
+                      <label
+                        key={t.key}
+                        className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 font-ui text-[11px] uppercase tracking-[0.15em] ${
+                          checked
+                            ? "border-burgundy bg-burgundy text-white"
+                            : "border-ink-200 bg-white text-ink-700 hover:border-burgundy/40"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          name="skillTags"
+                          value={t.key}
+                          defaultChecked={checked}
+                          className="sr-only"
+                        />
+                        {t.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </label>
       </div>
