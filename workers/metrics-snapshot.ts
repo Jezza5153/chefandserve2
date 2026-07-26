@@ -127,10 +127,21 @@ async function snapshotClients(d: string): Promise<number> {
       FROM shifts WHERE starts_at::date = ${d}::date GROUP BY client_id
     ) sh ON sh.client_id = ids.client_id
     LEFT JOIN (
-      SELECT s.client_id, count(*)::int AS filled
-      FROM placements p JOIN shifts s ON s.id = p.shift_id
-      WHERE s.starts_at::date = ${d}::date AND p.status IN ('confirmed','completed')
-      GROUP BY s.client_id
+      -- Cap PER SHIFT before summing. A flat count over the client's placements is
+      -- uncapped, so an over-placed shift (3 placements on headcount 2) pushed
+      -- filled_slots above slots_count and any fill rate built on it above 100%.
+      -- Canonical definition: docs/METRICS.md#filled-slot. Same as platform-rollups.ts.
+      SELECT client_id, sum(f)::int AS filled
+      FROM (
+        SELECT s.client_id,
+               least(count(p.id), s.headcount)::int AS f
+        FROM shifts s
+        LEFT JOIN placements p
+          ON p.shift_id = s.id AND p.status IN ('confirmed','completed')
+        WHERE s.starts_at::date = ${d}::date
+        GROUP BY s.id, s.client_id, s.headcount
+      ) per_shift
+      GROUP BY client_id
     ) fl ON fl.client_id = ids.client_id
     LEFT JOIN (
       SELECT client_id,
