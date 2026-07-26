@@ -77,10 +77,11 @@ schema, so a typo in one fails silently — listed in
 | What | Detail | Status |
 | --- | --- | --- |
 | Chef search | `chefs.find` threw on every non-empty query (`text[] ~~* unknown`). Prod audit over 60 days: 11 failures to 2 successes. | **fixed** (#319, merged `e3d8c7f`). Every query shape re-run against prod 2026-07-26: all pass. |
-| Chef embeddings | 0 of 8 prod chefs have one, so `chefs.semantic_search` returns an empty set for every query (`WHERE embedding IS NOT NULL`). The `embedding-refresh` worker runs nightly. | open — worker output unverified |
+| Chef embeddings | 0 of 8 prod chefs have one, so `chefs.semantic_search` returns an empty set for every query (`WHERE embedding IS NOT NULL`). | **Root cause found:** `embedding-refresh` has run 61 nights in a row in `mode=observe` — `scanned=11 stale=8 updated=0` every time. Observe mode means no `OPENAI_API_KEY` **on the Railway service** (it is set on Vercel, which is why the chat works). Set it on Railway and semantic chef search starts working. |
 | Availability data | `chef_availability` has **0 rows** in prod. "No row = available", so nothing is ever excluded and "wie kan zaterdag?" cannot be answered. | open — a data/product problem, not a code one |
 | "Filled" means three different things | `platform-rollups.ts` (confirmed+completed, capped) · `metrics-snapshot.ts` (confirmed+completed, **uncapped** → `filled_slots` can exceed `slots_count`) · `demand-forecast.ts` (confirmed only, capped). | open — blocks any fill-rate KPI |
 | Migration bookkeeping ≠ DDL | Dev recorded `0073` as applied but lacked its column; prod is missing `0076`'s table. Record counts prove nothing — verify via `information_schema`. | dev repaired; prod pending |
+| Worker liveness is checkable | Railway workers audit under DOMAIN action names (`metrics_snapshot.run`, `integration.outbox_delivered`), **not** a `worker.` prefix — filtering on `worker.%` finds three of them and looks like an outage. Several also audit only when they actually do work, so zero rows ≠ not running. Verified 2026-07-26: metrics-snapshot 53× (last 21h), embedding-refresh 61× (last 18h), RAG ingest daily. | healthy |
 | Cron double-trigger | `clockout-digest` and `shift-reminders` fire from Railway *and* Vercel. Harmless only because both routes are idempotent. | accepted — keep them idempotent |
 | `CLAUDE.md` rating rule | says `ratingCount≥5`; code says `3` (`src/lib/rating-tags.ts`). | fix CLAUDE.md |
 
