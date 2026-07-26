@@ -16,7 +16,7 @@ If you are about to describe something that shipped, it belongs in the PR ledger
 
 ## State right now
 
-_Last verified against production: 2026-07-26._
+_Last verified against production: 2026-07-26 (flags re-verified after the evening flips)._
 
 | | |
 | --- | --- |
@@ -30,11 +30,19 @@ _Last verified against production: 2026-07-26._
 
 **Waiting on a person, not on code:**
 
-1. **Migration `0076_ai_memory_proposals` is not applied to prod.** The table does not exist
-   (verified 2026-07-26). `AI_MEMORY_MINING_ENABLED` cannot be flipped until it is.
-2. **`RESEND_INBOUND_SECRET`** — needs setting on the Resend dashboard webhook.
-3. **OpenAI key rotation** — a test key was once exposed in chat. After rotating, update
+1. **`RESEND_INBOUND_SECRET`** — needs setting on the Resend dashboard webhook. The whole
+   inbound-mail pipeline (svix webhook → `inbound_messages` → inbox UI → AI tool) is built
+   and dark behind it.
+2. **OpenAI key rotation** — a test key was once exposed in chat. After rotating, update
    Vercel + Railway + local `.env.local`.
+3. **Verify tonight's embedding run** — owner set `OPENAI_API_KEY` on Railway 2026-07-26
+   after 61 nights of `mode=observe`; `select count(embedding) from chefs` should read 8
+   after the 03:00 run. If still 0, the audit log will say `observe` again.
+
+_Resolved 2026-07-26: migration `0076` applied to prod (verified via information_schema) and
+`AI_MEMORY_MINING_ENABLED=true` set + redeployed — memory mining is live. `I18N_ENABLED`,
+`KPI_FORECAST_ENABLED`, `MATCHING_TAGS_ENABLED`, `MATCHING_RELIABILITY_ENABLED` also flipped
+on (beta, no users). The prod flag table below predates these flips for the four names listed._
 
 ---
 
