@@ -662,6 +662,13 @@ Zes klikbare stat-tegels boven het rooster (label, groot getal, optioneel percen
 
 ## Voor de chef
 
+#### Beschikbaarheid bevestigen (week-strip) 🟢 live
+*ik wil in één tik doorgeven welke dagen ik wél kan werken*
+Zeven dag-chips op de beschikbaarheidspagina. Aangetikte dagen worden expliciet "beschikbaar" (en tellen +8 mee bij het matchen, zichtbaar als reden); uitgetikte dagen worden weer "onbekend". Geblokkeerde dagen zijn onaantastbaar vanaf deze strip. Na opslaan zie je voor hoeveel open diensten je zichtbaar bent.
+**Waar:** `/chef/availability#beschikbaar` · donderdagse herinnering (aan te zetten op `/admin/business/instellingen`)
+**Let op:** de herinnerings-mail vraagt de POSITIEVE actie en linkt direct naar de strip. Audit + chef-event per opslag.
+
+
 Het chefportaal: werk vinden, beschikbaarheid, uren, documenten, profiel.
 
 #### Portaltoegang: uitnodiging + magic-link login 🟢 live
