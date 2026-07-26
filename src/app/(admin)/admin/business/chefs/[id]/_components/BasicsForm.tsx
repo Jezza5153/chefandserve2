@@ -161,6 +161,27 @@ export function BasicsForm({
         defaultValue={(chef.languages ?? []).join(", ")}
       />
 
+      {/* Address + travel radius. Nothing in the office could write these, so postcode was
+          null across the roster — which meant scripts/geocode-backfill.mts had nothing to
+          geocode, latitude stayed null, and the travel-radius adjustment could never fire
+          (it needs BOTH a chef and a shift LatLng). The dashboard's "postcode of tarief
+          ontbreekt · Aanvullen" card linked here and offered no way to fill it in. */}
+      <Field label="Straat" name="street" defaultValue={chef.street ?? ""} />
+      <Field label="Huisnummer" name="houseNumber" defaultValue={chef.houseNumber ?? ""} />
+      <div>
+        <Field label="Postcode (bv. 1011 AB)" name="postcode" defaultValue={chef.postcode ?? ""} />
+        <span className="mt-1 block text-[11px] text-ink-500">
+          Nodig om reisafstand te kunnen berekenen — zonder postcode telt reisafstand niet mee
+          in de match.
+        </span>
+      </div>
+      <Field
+        label="Max reisafstand (km, enkele reis)"
+        name="travelRadiusKm"
+        type="number"
+        defaultValue={chef.travelRadiusKm != null ? String(chef.travelRadiusKm) : ""}
+      />
+
       <div />
 
       <Field

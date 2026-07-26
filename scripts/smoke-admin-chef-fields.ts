@@ -1,5 +1,5 @@
 /**
- * Smoke: the admin skill-tag write path.
+ * Smoke: the admin write path for the fields matching depends on.
  *
  * WHY. `chefs.skill_tags` is the curated vocabulary the matcher scores on and the assistant
  * filters by — and it was empty for the ENTIRE production roster, because the only writer in
@@ -10,7 +10,7 @@
  * sanitizeSkillTags rejects anything outside it (a stale checkbox must not poison the
  * column), and a round-trip write/read of the array actually persists.
  *
- *   npx tsx --env-file=.env.local scripts/smoke-admin-skill-tags.ts
+ *   npx tsx --env-file=.env.local scripts/smoke-admin-chef-fields.ts
  */
 import { eq } from "drizzle-orm";
 
@@ -68,6 +68,41 @@ async function main() {
       // Always put the row back the way we found it.
       await db.update(chefs).set({ skillTags: original }).where(eq(chefs.id, victim.id));
       console.log("  ↳ restored the test chef's original tags");
+    }
+  }
+
+  console.log("\naddress + travel radius (the other fields the office could not write):");
+  {
+    // Mirrors the normalisation in the server action: "1011ab" / "1011 AB" → "1011 AB",
+    // so geocode-backfill always gets the shape PDOK expects.
+    const norm = (raw: string) => {
+      const up = raw.trim().toUpperCase();
+      const m = up.replace(/\s+/g, "").match(/^(\d{4})([A-Z]{2})$/);
+      return m ? `${m[1]} ${m[2]}` : up || null;
+    };
+    ok("lowercase no-space postcode normalises", norm("1011ab") === "1011 AB");
+    ok("already-correct postcode is unchanged", norm("1011 AB") === "1011 AB");
+    ok("extra whitespace is collapsed", norm("  1011   ab ") === "1011 AB");
+    ok("a non-Dutch postcode is kept verbatim, not silently dropped", norm("SW1A 1AA") === "SW1A 1AA");
+    ok("empty becomes null", norm("   ") === null);
+  }
+  {
+    const [c] = await db
+      .select({ id: chefs.id, postcode: chefs.postcode, travelRadiusKm: chefs.travelRadiusKm })
+      .from(chefs).limit(1);
+    if (c) {
+      const before = { postcode: c.postcode, travelRadiusKm: c.travelRadiusKm };
+      try {
+        await db.update(chefs).set({ postcode: "1011 AB", travelRadiusKm: 25 }).where(eq(chefs.id, c.id));
+        const [after] = await db
+          .select({ postcode: chefs.postcode, travelRadiusKm: chefs.travelRadiusKm })
+          .from(chefs).where(eq(chefs.id, c.id));
+        ok("postcode persists", after?.postcode === "1011 AB");
+        ok("travel radius persists as a number", after?.travelRadiusKm === 25);
+      } finally {
+        await db.update(chefs).set(before).where(eq(chefs.id, c.id));
+        console.log("  ↳ restored the test chef's address fields");
+      }
     }
   }
 
