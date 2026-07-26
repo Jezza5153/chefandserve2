@@ -20,12 +20,14 @@ export function ExistingPlacements({
   setPlacementStatus,
   replyComment,
   completePlacementAction,
+  chefValtUit,
 }: {
   existingPlacements: { placement: Placement; chef: Chef }[];
   commentsByPlacement: Map<string, PlacementComment[]>;
   setPlacementStatus: (formData: FormData) => Promise<void>;
   replyComment: (formData: FormData) => Promise<void>;
   completePlacementAction: (formData: FormData) => Promise<void>;
+  chefValtUit: (formData: FormData) => Promise<void>;
 }) {
   return (
     <section className="mt-10">
@@ -85,6 +87,43 @@ export function ExistingPlacements({
                     action={completePlacementAction}
                     placementId={placement.id}
                   />
+                )}
+                {/* DASH-PANIC: the 09:40 sick call. Reason is required — it decides
+                    whether the chef's reliability score takes the hit (ziek/no-show)
+                    or not (anders: klant verzette, onze fout). Submitting lands
+                    straight in the dashboard fill drawer. */}
+                {["accepted", "confirmed"].includes(placement.status) && (
+                  <details className="relative">
+                    <summary className="cursor-pointer list-none rounded-full border border-red-200 bg-white px-3 py-1.5 font-ui text-[11px] font-medium text-red-700 hover:bg-red-50">
+                      Chef valt uit
+                    </summary>
+                    <form
+                      action={chefValtUit}
+                      className="absolute right-0 z-10 mt-2 w-72 rounded-lg border border-ink-200 bg-white p-3 shadow-lg"
+                    >
+                      <input type="hidden" name="placementId" value={placement.id} />
+                      <label className="block font-ui text-[10px] uppercase tracking-[0.15em] text-ink-500">
+                        Waarom valt {chef.fullName.split(" ")[0]} uit?
+                      </label>
+                      <select name="reason" required defaultValue="ziek" className={`${fieldClass} mt-1`}>
+                        <option value="ziek">Ziek gemeld</option>
+                        <option value="no_show">Niet komen opdagen</option>
+                        <option value="anders">Anders (telt niet mee tegen de chef)</option>
+                      </select>
+                      <input
+                        name="note"
+                        maxLength={300}
+                        placeholder="Notitie (optioneel)"
+                        className={`${fieldClass} mt-2 placeholder-ink-500`}
+                      />
+                      <button
+                        type="submit"
+                        className="mt-2 w-full rounded bg-red-700 px-3 py-2 font-ui text-[11px] font-semibold uppercase tracking-[0.12em] text-white hover:bg-red-800"
+                      >
+                        Bevestig uitval → zoek vervanging
+                      </button>
+                    </form>
+                  </details>
                 )}
               </div>
             </div>
