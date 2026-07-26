@@ -227,11 +227,15 @@ Documented here because a doc that only lists strengths is not a reference.
   and a chef with no languages recorded silently passes a language requirement.
 - The scorer quantises to ~60 distinct values and the candidate query has **no `ORDER BY`**,
   so large groups tie exactly and the "top 10" can differ between identical requests.
-- The good ranker is only reachable with an existing `shiftId`. There is no tool that takes a
-  free-text requirement. `scoreChefForShift(chef, ScorableShift)` is already pure, so this is a
-  small gap to close, not a rewrite.
-- Near-misses are computed and **discarded**, so "no match" dead-ends instead of saying which
-  constraint to relax.
+- ~~The good ranker is only reachable with an existing `shiftId`.~~ **Fixed** —
+  `chefs.match_requirement` runs the same pure `scoreChefForShift` over a requirement literal,
+  so a described need gets a ranked, explained shortlist with no shift row. Hard requirements
+  (city, skills, rate, experience, language) genuinely exclude there, and a chef whose data
+  cannot verify a constraint is kept with a "Niet te toetsen" warning rather than silently
+  passing.
+- ~~Near-misses are discarded, so "no match" dead-ends.~~ **Fixed in
+  `chefs.match_requirement`** — it returns `nearMisses` naming who failed on which single
+  constraint. `shifts.suggest_chefs` still discards them.
 
 **The assistant is not fast.**
 

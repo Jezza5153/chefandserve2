@@ -7,7 +7,12 @@
 import { z } from "zod";
 
 import { defineTool } from "@/lib/ai/tools/registry";
-import { plannerCockpit, suggestChefsForShift, shiftMargin } from "@/lib/ai/read-model/staffing";
+import {
+  plannerCockpit,
+  suggestChefsForShift,
+  shiftMargin,
+  matchChefsToRequirement,
+} from "@/lib/ai/read-model/staffing";
 
 export const plannerCockpitTool = defineTool({
   name: "planner.cockpit",
@@ -68,6 +73,58 @@ export const shiftsMargin = defineTool({
     return {
       data,
       summary: `${data.shift.client ?? "Dienst"} (${data.shift.role}): marge €${data.total.marginEur.toLocaleString("nl-NL")} totaal (€${data.perChef.marginEur}/chef) — ${toneNl[data.tone] ?? data.tone}.`,
+    };
+  },
+});
+
+export const chefsMatchRequirement = defineTool({
+  name: "chefs.match_requirement",
+  title: "Beste chefs voor een omschrijving",
+  description:
+    "De best passende chefs voor een omschreven behoefte, ZONDER dat er al een dienst in het systeem staat. " +
+    'Gebruik dit zodra Maarten hardop nadenkt: "wie kan zaterdag in Rotterdam patisserie", "ik zoek een sous-chef voor volgende week vrijdag". ' +
+    "Zelfde score, redenen en waarschuwingen als shifts.suggest_chefs — dat blijft de keuze zodra er wél een shiftId is. " +
+    "Geeft naast de treffers ook `nearMisses`: chefs die op ÉÉN eis afvielen, met welke eis dat was. " +
+    "Noem die altijd als er weinig of geen treffers zijn, zodat Maarten weet wat hij kan loslaten. Read-only.",
+  risk: "read",
+  permission: { resource: "shifts", action: "read" },
+  input: z.object({
+    roleNeeded: z
+      .enum([
+        "keukenhulp", "commis", "chef_de_partie", "sous_chef", "chef_de_cuisine",
+        "executive_chef", "patissier", "banqueting", "breakfast", "roomservice",
+        "runner", "host", "bediening",
+      ])
+      .describe("Welk vakniveau er nodig is. Verplicht — dit is de harde eis in de score."),
+    date: z.string().optional().describe("Datum JJJJ-MM-DD. Zet beschikbaarheid + dubbel-geboekt-check aan."),
+    city: z.string().optional(),
+    segment: z.string().optional().describe("Bijv. hotel, fine_dining, michelin, banqueting."),
+    minExperience: z.number().int().min(0).max(50).optional(),
+    languageRequired: z.string().optional(),
+    maxRateCents: z.number().int().positive().optional().describe("Max uurtarief in centen (€35 = 3500)."),
+    skillTags: z.array(z.string()).optional(),
+    clientId: z.string().optional().describe("Klant-id: past hun favorieten/blokkades en locatie toe (clients.find)."),
+    limit: z.number().int().min(1).max(20).optional(),
+  }),
+  run: async (input) => {
+    const { matches, nearMisses, notes } = await matchChefsToRequirement(input);
+    if (matches.length === 0) {
+      // Never dead-end: say WHICH constraint emptied the list.
+      const by = new Map<string, number>();
+      for (const n of nearMisses) by.set(n.blockedBy, (by.get(n.blockedBy) ?? 0) + 1);
+      const breakdown = [...by.entries()].map(([why, n]) => `${n}× ${why}`).join(" · ");
+      return {
+        data: { count: 0, matches, nearMisses, notes },
+        summary: nearMisses.length
+          ? `Geen chef voldoet aan álle eisen. Dichtstbij: ${breakdown}.`
+          : "Geen chefs gevonden die aan de voorfilters voldoen.",
+      };
+    }
+    return {
+      data: { count: matches.length, matches, nearMisses, notes },
+      summary:
+        `${matches.length} chef(s) — beste: ${matches[0].chefName} (score ${matches[0].score}).` +
+        (nearMisses.length ? ` ${nearMisses.length} vielen op één eis af.` : ""),
     };
   },
 });

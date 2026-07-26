@@ -40,7 +40,7 @@ import { rosterOverview, rosterPublish, rosterAutofill, rosterCopyLastWeek } fro
 import { clientsHistory, clientsHealth, clientsReachability, clientsShiftTemplates } from "@/lib/ai/tools/clients";
 import { clientsLossMaking, invoicingUnbilled, clientsSignoffBacklog, reportsPlatformKpi, chefsAtRisk } from "@/lib/ai/tools/kpi";
 import { clientsOverpromise, reportsPlannedVsActual } from "@/lib/ai/tools/overpromise";
-import { plannerCockpitTool, shiftsSuggestChefs, shiftsMargin } from "@/lib/ai/tools/staffing";
+import { plannerCockpitTool, shiftsSuggestChefs, shiftsMargin, chefsMatchRequirement } from "@/lib/ai/tools/staffing";
 import { contactsTimeline, contactsLog } from "@/lib/ai/tools/contacts";
 import { chefsSemanticSearch, clientsSemanticSearch } from "@/lib/ai/tools/semantic";
 import { knowledgeSearch } from "@/lib/ai/tools/knowledge";
@@ -126,6 +126,7 @@ export const ALL_TOOLS: AnyTool[] = [
   risksScan,
   escalationsList,
   shiftsSuggestChefs,
+  chefsMatchRequirement,
   chefsSemanticSearch,
   clientsSemanticSearch,
   shiftsMargin,

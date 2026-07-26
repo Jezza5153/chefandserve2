@@ -7,7 +7,7 @@
 > **No other document may state a number** — link to a section of this file instead.
 > If you are about to type a count into a doc, you are in the wrong file.
 
-Generated from commit `a4de800`.
+Generated from commit `caffd0a`.
 
 ## Schema
 
@@ -60,14 +60,14 @@ Generated from commit `a4de800`.
 
 ## AI tools
 
-- **111** tools defined via `defineTool` across `src/lib/ai/tools/`
-- Registries: **100** owner (`ALL_TOOLS`) · **6** chef · **5** klant (`portal-index.ts`)
-- By risk tier: **6** financial · **20** outbound · **79** read · **6** self
+- **112** tools defined via `defineTool` across `src/lib/ai/tools/`
+- Registries: **101** owner (`ALL_TOOLS`) · **6** chef · **5** klant (`portal-index.ts`)
+- By risk tier: **6** financial · **20** outbound · **80** read · **6** self
   - `read` needs no confirmation; `outbound` and `financial` require an HMAC confirm token.
 
 <details><summary>All tool names</summary>
 
-`audit.search` · `board.recent` · `briefing.daily` · `business.overview` · `chefs.approve_profile_change` · `chefs.at_risk` · `chefs.availability` · `chefs.enrich_from_cv` · `chefs.feedback` · `chefs.find` · `chefs.history_at_client` · `chefs.intel_snapshot` · `chefs.list_profile_changes` · `chefs.pending_cv_suggestions` · `chefs.profile_completeness` · `chefs.reachability` · `chefs.reject_profile_change` · `chefs.request_profile_data` · `chefs.semantic_search` · `chefs.send_availability_reminder` · `chefs.trends` · `chefs.update_contact` · `chefs.work_summary` · `client_onboarding.missing` · `clients.decide_shift_request` · `clients.find` · `clients.health` · `clients.history` · `clients.intel_snapshot` · `clients.loss_making` · `clients.overpromise` · `clients.reachability` · `clients.semantic_search` · `clients.shift_requests` · `clients.shift_templates` · `clients.signoff_backlog` · `contacts.log` · `contacts.timeline` · `demand.forecast` · `documents.expiring` · `documents.list_for_chef` · `email.send` · `email.send_to_chef` · `email.send_to_client` · `email.status` · `escalations.list` · `feedback.review` · `hours.approve` · `hours.detail` · `hours.list_awaiting_approval` · `hours.reject` · `hours.send_reminder` · `inbound.list` · `inboxes.grant_access` · `inboxes.list` · `inboxes.revoke_access` · `insights.leaderboards` · `intake.convert` · `intake.list` · `integrations.health` · `invoicing.unbilled` · `knowledge.search` · `match.intel` · `memory.forget` · `memory.list` · `memory.remember` · `mijn.beoordeling` · `mijn.beschikbaarheid` · `mijn.diensten` · `mijn.documenten` · `mijn.profiel` · `mijn.uren` · `onboarding.missing` · `onboarding.request_missing` · `onze.aanvragen` · `onze.dienst_detail` · `onze.diensten` · `onze.uren` · `onze.vaste_diensten` · `payroll.read` · `placements.cancel` · `placements.complete` · `placements.confirm` · `placements.propose` · `placements.reply` · `planner.cockpit` · `privacy.list_requests` · `ratings.trends` · `reminders.complete` · `reminders.create` · `reminders.list` · `reports.business_kpi` · `reports.chefs` · `reports.clients` · `reports.planned_vs_actual` · `reports.platform_kpi` · `risks.scan` · `roster.autofill` · `roster.copy_last_week` · `roster.overview` · `roster.publish` · `shifts.create` · `shifts.detail` · `shifts.find` · `shifts.interested_chefs` · `shifts.margin` · `shifts.open_soon` · `shifts.suggest_chefs` · `shifts.update` · `system.health` · `watchdog.findings`
+`audit.search` · `board.recent` · `briefing.daily` · `business.overview` · `chefs.approve_profile_change` · `chefs.at_risk` · `chefs.availability` · `chefs.enrich_from_cv` · `chefs.feedback` · `chefs.find` · `chefs.history_at_client` · `chefs.intel_snapshot` · `chefs.list_profile_changes` · `chefs.match_requirement` · `chefs.pending_cv_suggestions` · `chefs.profile_completeness` · `chefs.reachability` · `chefs.reject_profile_change` · `chefs.request_profile_data` · `chefs.semantic_search` · `chefs.send_availability_reminder` · `chefs.trends` · `chefs.update_contact` · `chefs.work_summary` · `client_onboarding.missing` · `clients.decide_shift_request` · `clients.find` · `clients.health` · `clients.history` · `clients.intel_snapshot` · `clients.loss_making` · `clients.overpromise` · `clients.reachability` · `clients.semantic_search` · `clients.shift_requests` · `clients.shift_templates` · `clients.signoff_backlog` · `contacts.log` · `contacts.timeline` · `demand.forecast` · `documents.expiring` · `documents.list_for_chef` · `email.send` · `email.send_to_chef` · `email.send_to_client` · `email.status` · `escalations.list` · `feedback.review` · `hours.approve` · `hours.detail` · `hours.list_awaiting_approval` · `hours.reject` · `hours.send_reminder` · `inbound.list` · `inboxes.grant_access` · `inboxes.list` · `inboxes.revoke_access` · `insights.leaderboards` · `intake.convert` · `intake.list` · `integrations.health` · `invoicing.unbilled` · `knowledge.search` · `match.intel` · `memory.forget` · `memory.list` · `memory.remember` · `mijn.beoordeling` · `mijn.beschikbaarheid` · `mijn.diensten` · `mijn.documenten` · `mijn.profiel` · `mijn.uren` · `onboarding.missing` · `onboarding.request_missing` · `onze.aanvragen` · `onze.dienst_detail` · `onze.diensten` · `onze.uren` · `onze.vaste_diensten` · `payroll.read` · `placements.cancel` · `placements.complete` · `placements.confirm` · `placements.propose` · `placements.reply` · `planner.cockpit` · `privacy.list_requests` · `ratings.trends` · `reminders.complete` · `reminders.create` · `reminders.list` · `reports.business_kpi` · `reports.chefs` · `reports.clients` · `reports.planned_vs_actual` · `reports.platform_kpi` · `risks.scan` · `roster.autofill` · `roster.copy_last_week` · `roster.overview` · `roster.publish` · `shifts.create` · `shifts.detail` · `shifts.find` · `shifts.interested_chefs` · `shifts.margin` · `shifts.open_soon` · `shifts.suggest_chefs` · `shifts.update` · `system.health` · `watchdog.findings`
 
 </details>
 
@@ -77,7 +77,7 @@ Generated from commit `a4de800`.
   - These score **tool routing only** — `brain.plan` is called, no tool is executed. A tool that
     throws on every call still scores a pass. Result quality is not measured anywhere.
   - ⚠️ Duplicate case ids (one masks the other in the log): `G-complete`
-- **104** smoke scripts — `scripts/smoke-*`
+- **105** smoke scripts — `scripts/smoke-*`
 
 ## Feature flags
 
