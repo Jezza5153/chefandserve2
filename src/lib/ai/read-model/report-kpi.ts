@@ -6,6 +6,7 @@
  */
 import { sql } from "drizzle-orm";
 
+import { getKpiBaselines, type KpiBaselines } from "@/lib/domain/kpi-baselines";
 import { db } from "@/lib/db/client";
 import { getBusinessSnapshot, type BusinessSnapshot } from "@/lib/ai/read-model/business";
 
@@ -17,10 +18,12 @@ export type KpiReportData = {
   generatedAtLabel: string;
   snapshot: BusinessSnapshot;
   months: KpiMonth[];
+  /** Forward steering numbers — same definitions as /admin/business/insights (docs/METRICS.md). */
+  baselines: KpiBaselines;
 };
 
 export async function buildKpiReportData(now: Date): Promise<KpiReportData> {
-  const snapshot = await getBusinessSnapshot();
+  const [snapshot, baselines] = await Promise.all([getBusinessSnapshot(), getKpiBaselines()]);
 
   // Last 6 calendar months (incl. current), revenue + margin from logged hours (Amsterdam months).
   const since = new Date(now);
@@ -69,5 +72,6 @@ export async function buildKpiReportData(now: Date): Promise<KpiReportData> {
     generatedAtLabel: now.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
     snapshot,
     months,
+    baselines,
   };
 }

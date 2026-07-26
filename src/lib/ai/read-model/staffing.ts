@@ -15,6 +15,7 @@ import {
 } from "@/lib/domain/matching";
 import { getPlannerCockpit } from "@/lib/domain/planner-intel";
 import { estimateMargin } from "@/lib/domain/travel";
+import { getMoneyAssumptions } from "@/lib/business-settings";
 import { formatChefRole, formatShiftRole } from "@/lib/labels";
 
 function shapeMatch(m: MatchResult) {
@@ -130,9 +131,16 @@ export async function shiftMargin(shiftId: string) {
   if (s.clientRateCents == null || s.chefRateCents == null) {
     return { shift, priced: false as const };
   }
+  // CONTRIBUTIEMARGE-INDICATIE: the raw rate spread overstated margin by the
+  // werkgeverslasten (sociale premies, vakantiegeld, pensioen) — exactly while the
+  // owner is calibrating pricing. Uplift the chef cost by the owner-tuned assumption
+  // (money-assumptions page). Still an INDICATIE: travel/no-show/bad debt excluded —
+  // see docs/METRICS.md.
+  const assumptions = await getMoneyAssumptions();
+  const chefRateLoaded = Math.round(s.chefRateCents * (1 + assumptions.employerChargesPct / 100));
   const per = estimateMargin({
     clientRateCents: s.clientRateCents,
-    chefRateCents: s.chefRateCents,
+    chefRateCents: chefRateLoaded,
     hours: hoursPerChef,
     travelCents: 0,
   });

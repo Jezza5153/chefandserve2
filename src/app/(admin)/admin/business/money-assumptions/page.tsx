@@ -24,6 +24,7 @@ const FIELDS: { key: string; label: string; suffix: string; step: string }[] = [
   { key: "zzpIncomeTaxReservePct", label: "ZZP: reservering inkomstenbelasting", suffix: "%", step: "0.1" },
   { key: "zzpZvwPct", label: "ZZP: Zvw-bijdrage", suffix: "%", step: "0.1" },
   { key: "vatPct", label: "BTW", suffix: "%", step: "0.1" },
+  { key: "employerChargesPct", label: "Werkgeverslasten bovenop cheftarief (indicatie)", suffix: "%", step: "0.5" },
 ];
 
 async function save(formData: FormData) {

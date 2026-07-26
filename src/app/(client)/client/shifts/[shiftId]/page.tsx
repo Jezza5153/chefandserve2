@@ -67,7 +67,7 @@ export default async function ClientShiftHubPage({
   searchParams,
 }: {
   params: Promise<{ shiftId: string }>;
-  searchParams: Promise<{ ok?: string; err?: string }>;
+  searchParams: Promise<{ ok?: string; err?: string; fav?: string }>;
 }) {
   const { client, session } = await requireClientSelf();
   const { shiftId } = await params;
@@ -104,6 +104,25 @@ export default async function ClientShiftHubPage({
 
   // Server action: klant sends an opmerking about a proposed chef. Writes a
   // placement_comments row (visibility='client_visible'), NEVER placements.notes.
+  /* RATING-LOOP: one-tap "vaste favoriet" after a happy rating. Klant-owned data
+   * (clients.favoriteChefIds) written under the klant's own auth — auth IS the lookup;
+   * the chefId comes from the form but only lands in THIS klant's own array, and the
+   * matcher tiering (favEnabled) makes it real. Internal effect only. */
+  async function setFavoriteChefAction(formData: FormData) {
+    "use server";
+    const { client } = await requireClientSelf();
+    const chefId = String(formData.get("chefId") ?? "").trim();
+    if (!chefId) redirect(`/client/shifts/${shiftId}`);
+    const [row] = await db
+      .select({ fav: clients.favoriteChefIds })
+      .from(clients)
+      .where(eq(clients.id, client.id))
+      .limit(1);
+    const next = [...new Set([...(row?.fav ?? []), chefId])];
+    await db.update(clients).set({ favoriteChefIds: next }).where(eq(clients.id, client.id));
+    redirect(`/client/shifts/${shiftId}?ok=favoriet`);
+  }
+
   async function sendChefComment(formData: FormData) {
     "use server";
     const placementId = String(formData.get("placementId") ?? "");
@@ -299,8 +318,27 @@ export default async function ClientShiftHubPage({
         </p>
       ) : null}
       {sp.ok === "rated" ? (
+        <div className="mt-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <p>✓ Bedankt voor je feedback over de chef. Chef &amp; Serve neemt die mee.</p>
+          {sp.fav ? (
+            <form action={setFavoriteChefAction} className="mt-2">
+              <input type="hidden" name="chefId" value={sp.fav} />
+              <button
+                type="submit"
+                className="rounded-full border border-emerald-600 bg-white px-3.5 py-1.5 font-ui text-[11px] font-medium uppercase tracking-[0.12em] text-emerald-800 hover:bg-emerald-100"
+              >
+                ★ Zet deze chef als vaste favoriet
+              </button>
+              <span className="ml-2 text-xs text-emerald-700">
+                Favorieten krijgen voorrang bij het inplannen voor jullie.
+              </span>
+            </form>
+          ) : null}
+        </div>
+      ) : null}
+      {sp.ok === "favoriet" ? (
         <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
-          ✓ Bedankt voor je feedback over de chef. Chef &amp; Serve neemt die mee.
+          ★ Vastgelegd — deze chef krijgt voorrang bij jullie volgende aanvragen.
         </p>
       ) : null}
       {sp.err === "duplicate" ? (

@@ -59,7 +59,7 @@ export const shiftsMargin = defineTool({
   name: "shifts.margin",
   title: "Marge van een dienst",
   description:
-    "Is een dienst winstgevend? Omzet (klanttarief) − loonkosten (cheftarief) over de duur van de dienst — per chef én totaal (× aantal plekken), in EUR, met een tone (gezond/laag/negatief). Gebruik shifts.find voor het shiftId.",
+    "Is een dienst winstgevend? Contributiemarge-INDICATIE: omzet (klanttarief) − chefkosten inclusief werkgeverslasten (percentage uit de geld-aannames, instelbaar op /admin/business/money-assumptions) — per chef én totaal, in EUR, met een tone. Reiskosten/no-show/oninbaar zitten er NIET in; zeg dat erbij als het om een krappe marge gaat. Gebruik shifts.find voor het shiftId.",
   risk: "read",
   permission: { resource: "shifts", action: "read" },
   input: z.object({ shiftId: z.string().min(1, "shiftId is verplicht") }),

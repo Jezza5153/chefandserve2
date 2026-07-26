@@ -14,6 +14,7 @@ import { RatingForm } from "./RatingForm";
 import { db } from "@/lib/db/client";
 import { chefs, clients, placements, shifts } from "@/lib/db/schema";
 import { submitRating } from "@/lib/domain/ratings";
+import { createLowRatingFollowUp } from "@/lib/domain/rating-follow-up";
 import { requireAuth } from "@/lib/permissions";
 
 export const metadata = { title: "Feedback", robots: { index: false } };
@@ -50,7 +51,7 @@ export default async function RateShiftPage({
 
   // The placement to rate: a completed placement on this shift.
   const [placement] = await db
-    .select({ id: placements.id, chefName: chefs.fullName })
+    .select({ id: placements.id, chefId: placements.chefId, chefName: chefs.fullName })
     .from(placements)
     .innerJoin(chefs, eq(chefs.id, placements.chefId))
     .where(
@@ -79,11 +80,27 @@ export default async function RateShiftPage({
       tags,
       comment,
     });
-    redirect(
-      res.ok
-        ? `/client/shifts/${shiftId}?ok=rated`
-        : `/client/shifts/${shiftId}/rate?err=${res.error}`,
-    );
+    if (!res.ok) redirect(`/client/shifts/${shiftId}/rate?err=${res.error}`);
+
+    // RATING-LOOP: close the moment. A delighted klant gets the one-tap "vaste
+    // favoriet" offer (the matcher's favourite tiering is live); a disappointed one
+    // creates an internal follow-up on the owner's agenda — the klant never sees
+    // that (ratings are internal-only V1).
+    if (stars >= 4 && placement?.chefId) {
+      redirect(`/client/shifts/${shiftId}?ok=rated&fav=${placement.chefId}`);
+    }
+    if (stars > 0 && stars <= 3) {
+      await createLowRatingFollowUp({
+        clientId: c.id,
+        companyName: c.companyName,
+        chefId: placement?.chefId ?? null,
+        chefName: placement?.chefName ?? null,
+        shiftId,
+        stars,
+        createdBy: s.user.id,
+      }).catch(() => {}); // best-effort — the rating itself is already saved
+    }
+    redirect(`/client/shifts/${shiftId}?ok=rated`);
   }
 
   return (
