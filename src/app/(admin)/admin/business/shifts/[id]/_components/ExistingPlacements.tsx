@@ -1,6 +1,8 @@
 import Link from "next/link";
 
+import { ChefCard } from "@/components/ChefCard";
 import { fieldClass } from "@/components/forms/Fields";
+import type { ChefCardData } from "@/lib/domain/chef-cards";
 import { listVisibleComments } from "@/lib/domain/comments";
 import { formatChefRole } from "@/lib/labels";
 import type { Chef, Placement } from "@/lib/db/schema";
@@ -21,6 +23,7 @@ export function ExistingPlacements({
   replyComment,
   completePlacementAction,
   chefValtUit,
+  cards,
 }: {
   existingPlacements: { placement: Placement; chef: Chef }[];
   commentsByPlacement: Map<string, PlacementComment[]>;
@@ -28,6 +31,7 @@ export function ExistingPlacements({
   replyComment: (formData: FormData) => Promise<void>;
   completePlacementAction: (formData: FormData) => Promise<void>;
   chefValtUit: (formData: FormData) => Promise<void>;
+  cards: Map<string, ChefCardData>;
 }) {
   return (
     <section className="mt-10">
@@ -42,12 +46,20 @@ export function ExistingPlacements({
           >
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <Link
-                  href={`/admin/business/chefs/${chef.id}`}
-                  className="font-serif text-base text-ink-900 hover:text-burgundy hover:underline"
-                >
-                  {chef.fullName}
-                </Link>
+                {cards.get(chef.id) ? (
+                  <ChefCard data={cards.get(chef.id)!}>
+                    <span className="font-serif text-base text-ink-900 hover:text-burgundy hover:underline">
+                      {chef.fullName}
+                    </span>
+                  </ChefCard>
+                ) : (
+                  <Link
+                    href={`/admin/business/chefs/${chef.id}`}
+                    className="font-serif text-base text-ink-900 hover:text-burgundy hover:underline"
+                  >
+                    {chef.fullName}
+                  </Link>
+                )}
                 <p className="mt-0.5 text-xs text-ink-500">
                   {formatChefRole(chef.vakniveau)} · {chef.city ?? "—"}
                   {placement.matchScore && ` · match-score: ${placement.matchScore}`}
