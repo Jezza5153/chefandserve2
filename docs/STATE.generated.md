@@ -7,7 +7,7 @@
 > **No other document may state a number** — link to a section of this file instead.
 > If you are about to type a count into a doc, you are in the wrong file.
 
-Generated from commit `caffd0a`.
+Generated from commit `577138c`.
 
 ## Schema
 
@@ -77,7 +77,7 @@ Generated from commit `caffd0a`.
   - These score **tool routing only** — `brain.plan` is called, no tool is executed. A tool that
     throws on every call still scores a pass. Result quality is not measured anywhere.
   - ⚠️ Duplicate case ids (one masks the other in the log): `G-complete`
-- **105** smoke scripts — `scripts/smoke-*`
+- **108** smoke scripts — `scripts/smoke-*`
 
 ## Feature flags
 

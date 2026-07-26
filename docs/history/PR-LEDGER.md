@@ -15,6 +15,13 @@
 
 _(add new rows here)_
 
+- #324 · 2026-07-26 · ChefCard hover primitive (face/tenure/hours/rating/intel/birthday) + getChefCards batch loader; photo route opened to internal chefs:read · src/components/ChefCard.tsx, src/lib/domain/chef-cards.ts, api/chef-photo
+- #323 · 2026-07-26 · "Chef valt uit" one-motion sick-call: reason-gated cancel via transitionPlacement → fill drawer; ziek/no-show feeds reliability, "anders" never does · shifts/[id] page + ExistingPlacements
+- #322 · 2026-07-26 · Dashboard people dimension: BenchStrip (vrij vandaag, phone-first), names in day tables, birthdays/jubilea/milestones card, loading.tsx skeleton, query consolidation · admin/business
+- #321 · 2026-07-26 · Admin chef form: skill tags + street/huisnummer/postcode/reisafstand — office could write none of these; dashboard "Aanvullen" CTA was a dead end · chefs/[id] BasicsForm
+- #320 · 2026-07-26 · chefs.match_requirement: rank chefs against a described need without a shift row; near-miss tier ends "geen chefs gevonden" dead ends · ai tools/staffing + read-model
+- #319 · 2026-07-26 · chefs.find repaired (text[] casts; threw on every query in prod) + doc set rebuilt: FEATURES/AI/METRICS/STATE.generated, MEMORY.md 204KB→8.7KB · sweeping
+
 ---
 
 ## Archive — as inherited from MEMORY.md
