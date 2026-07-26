@@ -215,9 +215,14 @@ Documented here because a doc that only lists strengths is not a reference.
   it surfaces as an apology rather than an error.
 - The admin chef directory search uses `like()` (case-**sensitive**) — `amsterdam` finds
   nothing, `Amsterdam` works — and searches only name/email/city.
-- **The live ranking formula is three variables**:
-  `score = vakniveau×0.5 + segment×0.3 + ervaring×0.2`. Skill tags, reliability, travel radius,
-  chef-avoid lists and klant favourites are all behind `MATCHING_*` flags that default off.
+- **The base ranking formula is three variables**:
+  `score = vakniveau×0.5 + segment×0.3 + ervaring×0.2`, then multiplicative adjusters that are
+  each behind a `MATCHING_*` flag. In production (verified 2026-07-26) `MATCHING_PREFS_ENABLED`,
+  `MATCHING_FAVORITES_ENABLED` and `MATCHING_MARGIN_GUARD_ENABLED` are **on** — so travel
+  radius, chef-avoid signals, klant favourite/block tiering and the margin guard *do* count.
+  `MATCHING_TAGS_ENABLED` and `MATCHING_RELIABILITY_ENABLED` are **dark**, so skill tags and
+  no-show/reliability history contribute nothing. (Skill tags would be moot anyway — no chef
+  in production has any.) Flag state lives in MEMORY.md, never here.
 - `minExperience` and `languageRequired` produce **warning strings with no effect on rank**,
   and a chef with no languages recorded silently passes a language requirement.
 - The scorer quantises to ~60 distinct values and the candidate query has **no `ORDER BY`**,
