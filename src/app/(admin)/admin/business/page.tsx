@@ -26,6 +26,8 @@ import { EmergencyDrawer } from "@/components/dashboard/drawer/EmergencyDrawer";
 import { emergencyModeEnabled, syncEmergencies, listOpenEscalations } from "@/lib/domain/emergencies";
 import { db } from "@/lib/db/client";
 import {
+  chefAvailability,
+  chefMetricsDaily,
   chefSubmissions,
   chefs,
   clientChangeRequests,
@@ -48,6 +50,7 @@ import { loadSignalStates, isSignalHidden } from "@/lib/domain/dashboard-signal-
 import { toCard, type CardType } from "@/lib/domain/dashboard-cards";
 import { AutoRefresh } from "@/components/admin/AutoRefresh";
 import { CommandBar } from "@/components/dashboard/CommandBar";
+import { BenchStrip } from "@/components/dashboard/BenchStrip";
 import { aiEnabled } from "@/lib/ai/config";
 import { snoozeSignal, dismissSignal } from "./_actions";
 import { formatShiftRole } from "@/lib/labels";
@@ -108,7 +111,6 @@ export default async function BusinessDashboardPage({
     activeChefRows,
     dataReqRows,
     [latestPayroll],
-    [{ activeChefs }],
     [{ openShifts }],
     [{ proposedAwaiting }],
     [{ acceptedNotConfirmed }],
@@ -122,6 +124,14 @@ export default async function BusinessDashboardPage({
     [{ confirmedPrevWeek }],
     [{ pendingProfileChanges }],
     [{ pendingClientChanges }],
+    chefNameRows,
+    blockedTodayRows,
+    lifetimeRows,
+    roll,
+    unbilledList,
+    weekSeries,
+    openEscalations,
+    myButtons,
   ] = await Promise.all([
     db
       .select({
@@ -173,6 +183,10 @@ export default async function BusinessDashboardPage({
         postcode: chefs.postcode,
         transportMode: chefs.transportMode,
         preferences: chefs.preferences,
+        // DASH-PEOPLE: the human dimension — bench strip, birthdays, anniversaries.
+        dateOfBirth: chefs.dateOfBirth,
+        joinedAt: chefs.joinedAt,
+        availableForEmergency: chefs.availableForEmergency,
       })
       .from(chefs)
       .where(and(isNull(chefs.deletedAt), eq(chefs.status, "active"))),
@@ -184,7 +198,6 @@ export default async function BusinessDashboardPage({
       .where(eq(profileDataRequests.status, "sent"))
       .limit(10),
     db.select({ closedAt: payrollBatches.createdAt }).from(payrollBatches).orderBy(desc(payrollBatches.createdAt)).limit(1),
-    db.select({ activeChefs: sql<number>`count(*)::int` }).from(chefs).where(and(isNull(chefs.deletedAt), eq(chefs.status, "active"))),
     db.select({ openShifts: sql<number>`count(*)::int` }).from(shifts).where(and(eq(shifts.status, "open"), gte(shifts.startsAt, now))),
     db.select({ proposedAwaiting: sql<number>`count(*)::int` }).from(placements).where(eq(placements.status, "proposed")),
     db.select({ acceptedNotConfirmed: sql<number>`count(*)::int` }).from(placements).where(eq(placements.status, "accepted")),
@@ -200,15 +213,35 @@ export default async function BusinessDashboardPage({
     db.select({ confirmedPrevWeek: sql<number>`count(*)::int` }).from(placements).where(and(eq(placements.status, "confirmed"), gte(placements.confirmedAt, twoWeeksAgo), lt(placements.confirmedAt, weekAgo))),
     db.select({ pendingProfileChanges: sql<number>`count(*)::int` }).from(profileChangeRequests).where(eq(profileChangeRequests.status, "pending")),
     db.select({ pendingClientChanges: sql<number>`count(*)::int` }).from(clientChangeRequests).where(eq(clientChangeRequests.status, "pending")),
+    // DASH-PEOPLE: id→name for EVERY non-deleted chef (any status) — placements on the
+    // horizon can reference onboarding chefs, so the active-only rows above are not enough.
+    db.select({ id: chefs.id, fullName: chefs.fullName }).from(chefs).where(isNull(chefs.deletedAt)),
+    // Chefs who explicitly blocked TODAY ("no row = available" — this only excludes real blocks).
+    db
+      .select({ chefId: chefAvailability.chefId })
+      .from(chefAvailability)
+      .where(and(sql`${chefAvailability.date} = ${todayKey}::date`, eq(chefAvailability.available, false))),
+    // Lifetime totals per chef (FINAL hours only) — milestones + tenure at a glance.
+    db
+      .select({
+        chefId: chefMetricsDaily.chefId,
+        totalMinutes: sql<number>`coalesce(sum(${chefMetricsDaily.hoursWorkedMinutes}), 0)::int`,
+        totalShifts: sql<number>`coalesce(sum(${chefMetricsDaily.completedShifts}), 0)::int`,
+      })
+      .from(chefMetricsDaily)
+      .groupBy(chefMetricsDaily.chefId),
+    // Previously 5 sequential awaits AFTER this block — each its own neon-http round trip,
+    // serialized for no reason. ~100-150ms off every render by riding the same Promise.all.
+    getPlatformRollups(),
+    getUnbilledHoursByClient(),
+    getPlatformTimeSeries({ bucket: "week" }),
+    listOpenEscalations(),
+    listSavedSearches(session.user.id, "chef_search"),
   ]);
+  const activeChefs = activeChefRows.length;
 
-  // KPI-5: owner money overview (week/maand/YTD FINAL-hours rollups).
-  const roll = await getPlatformRollups();
-  // Proactive billing nudge: approved hours not yet on any invoice.
-  const unbilledList = await getUnbilledHoursByClient();
   const unbilledCents = unbilledList.reduce((sum, u) => sum + u.totalCents, 0);
   // Anomaly: a noise-guarded week-over-week revenue swing (C5).
-  const weekSeries = await getPlatformTimeSeries({ bucket: "week" });
   const revSwing = detectSwing(weekSeries.points, "revenueCents");
 
   /* ---- derive per-shift intel + day metrics ---- */
@@ -242,6 +275,81 @@ export default async function BusinessDashboardPage({
 
   const todayShifts = horizonShifts.filter((s) => shiftDayKey.get(s.id) === todayKey);
   const tomorrowShifts = horizonShifts.filter((s) => shiftDayKey.get(s.id) === tomorrowKey);
+
+  /* ---- DASH-PEOPLE: the human dimension --------------------------------- */
+  // Names on the day tables: id→name over ALL non-deleted chefs (placements can
+  // reference onboarding chefs that the active-only rows miss).
+  const chefName = new Map(chefNameRows.map((c) => [c.id, c.fullName]));
+  const chefNamesByShift = new Map<string, string[]>();
+  for (const pl of horizonPlacements) {
+    const nm = chefName.get(pl.chefId);
+    if (!nm) continue;
+    if (!chefNamesByShift.has(pl.shiftId)) chefNamesByShift.set(pl.shiftId, []);
+    chefNamesByShift.get(pl.shiftId)!.push(nm);
+  }
+
+  // The bench: who can Maarten CALL today? Active chefs minus everyone already placed
+  // today minus explicit availability blocks. "No row = available" means this can only
+  // exclude a real block — an empty chef_availability table simply excludes nobody.
+  const workingToday = chefsByDay.get(todayKey) ?? new Set<string>();
+  const blockedToday = new Set(blockedTodayRows.map((r) => r.chefId));
+  const lifetimeByChef = new Map(lifetimeRows.map((r) => [r.chefId, r]));
+  const benchRows = activeChefRows
+    .filter((c) => !workingToday.has(c.id) && !blockedToday.has(c.id))
+    .map((c) => ({
+      id: c.id,
+      fullName: c.fullName,
+      vakniveau: c.vakniveau,
+      city: c.city,
+      phone: c.phone,
+      spoed: c.availableForEmergency,
+      totalHours: Math.round((lifetimeByChef.get(c.id)?.totalMinutes ?? 0) / 60),
+    }))
+    // Spoed-ready first, then the most proven — the panic call order.
+    .sort((a, b) => Number(b.spoed) - Number(a.spoed) || b.totalHours - a.totalHours || a.fullName.localeCompare(b.fullName));
+
+  // Birthdays within 14 days (Feb-29 celebrates on Feb-28 in common years — same rule as
+  // workers/reminders.ts) + work anniversaries + shift/hour milestones coming up.
+  type PeopleMoment = { chefId: string; name: string; label: string; sub: string; icon: "gift" | "award" | "star" };
+  const peopleMoments: PeopleMoment[] = [];
+  const msDay = 864e5;
+  const isLeapYear = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const daysUntil = (month: number, day: number): number => {
+    // month 1-12; compare Amsterdam calendar days via the existing key helpers.
+    const [ty, tm, td] = todayKey.split("-").map(Number);
+    for (let y = ty; y <= ty + 1; y++) {
+      const m = month;
+      let d = day;
+      if (m === 2 && d === 29 && !isLeapYear(y)) { d = 28; }
+      const diff = Math.round((Date.UTC(y, m - 1, d) - Date.UTC(ty, tm - 1, td)) / msDay);
+      if (diff >= 0) return diff;
+    }
+    return 999;
+  };
+  const dayWord = (n: number) => (n === 0 ? "vandaag" : n === 1 ? "morgen" : `over ${n} dagen`);
+  for (const c of activeChefRows) {
+    if (c.dateOfBirth) {
+      const [, bm, bd] = c.dateOfBirth.split("-").map(Number);
+      const n = daysUntil(bm, bd);
+      if (n <= 14) peopleMoments.push({ chefId: c.id, name: c.fullName, label: `Jarig ${dayWord(n)}`, sub: "stuur een berichtje", icon: "gift" });
+    }
+    const j = new Date(c.joinedAt);
+    const jn = daysUntil(j.getUTCMonth() + 1, j.getUTCDate());
+    const years = new Date().getUTCFullYear() - j.getUTCFullYear() + (jn > 300 ? 0 : jn === 0 ? 0 : 1);
+    if (jn <= 14 && years >= 1) {
+      peopleMoments.push({ chefId: c.id, name: c.fullName, label: `${years} jaar bij ons ${dayWord(jn)}`, sub: "werkjubileum", icon: "award" });
+    }
+    const life = lifetimeByChef.get(c.id);
+    if (life) {
+      for (const m of [10, 25, 50, 100, 250, 500]) {
+        if (life.totalShifts >= m - 3 && life.totalShifts < m) {
+          peopleMoments.push({ chefId: c.id, name: c.fullName, label: `Bijna ${m}e dienst (${life.totalShifts})`, sub: "mijlpaal in zicht", icon: "star" });
+          break;
+        }
+      }
+    }
+  }
+  peopleMoments.sort((a, b) => a.label.localeCompare(b.label));
 
   function dayMetrics(dayShifts: typeof horizonShifts, dayKey: string) {
     let slots = 0;
@@ -357,7 +465,7 @@ export default async function BusinessDashboardPage({
   // behind EMERGENCY_MODE_ENABLED, so this is a no-op until the owner flips it.
   if (emergencyModeEnabled()) {
     await syncEmergencies().catch(() => {});
-    for (const e of await listOpenEscalations()) {
+    for (const e of openEscalations) {
       items.push({
         kind: "emergency",
         tone: "red",
@@ -378,7 +486,7 @@ export default async function BusinessDashboardPage({
   const rankedAll = rankAttentionItems(items);
   const signalStates = await loadSignalStates(session.user.id);
   // B3: the owner's own pinned chef-searches → quick-action buttons on the toolbar.
-  const myButtons = await listSavedSearches(session.user.id, "chef_search");
+
   const ranked = rankedAll.filter((it) => !isSignalHidden(signalStates.get(it.signalKey ?? ""), it.fingerprint, now));
   const visible = ranked.slice(0, 6);
 
@@ -564,8 +672,8 @@ export default async function BusinessDashboardPage({
             <div className="px-5 pt-4 pb-2">
               <h2 className="font-serif text-xl text-ink-900">Vandaag &amp; morgen</h2>
             </div>
-            <DayTable title={`Vandaag · ${cap(now.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }))}`} accent shifts={todayShifts} countByShift={countByShift} />
-            <DayTable title={`Morgen · ${cap(new Date(now.getTime() + 864e5).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }))}`} shifts={tomorrowShifts} countByShift={countByShift} />
+            <DayTable title={`Vandaag · ${cap(now.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }))}`} accent shifts={todayShifts} countByShift={countByShift} namesByShift={chefNamesByShift} />
+            <DayTable title={`Morgen · ${cap(new Date(now.getTime() + 864e5).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }))}`} shifts={tomorrowShifts} countByShift={countByShift} namesByShift={chefNamesByShift} />
             {horizonShifts.length === 0 && (
               <div className="px-5 py-10 text-center">
                 <p className="font-serif text-lg text-ink-900">Geen diensten vandaag of morgen</p>
@@ -624,6 +732,30 @@ export default async function BusinessDashboardPage({
                 </Link>
               )}
             </section>
+
+            {/* DASH-PEOPLE: the call list — who is NOT working today. Above spotlight on
+                purpose: in a panic this is the second thing Maarten needs after the queue. */}
+            <BenchStrip rows={benchRows} />
+
+            {/* DASH-PEOPLE: birthdays, jubilea, milestones — the boss who remembers. */}
+            {peopleMoments.length > 0 && (
+              <section className="rounded-xl border border-ink-200 bg-white p-5">
+                <h2 className="font-serif text-lg text-ink-900">Deze week bij je chefs</h2>
+                <div className="mt-3 space-y-3">
+                  {peopleMoments.slice(0, 6).map((m) => (
+                    <Link key={`${m.chefId}:${m.label}`} href={`/admin/business/chefs/${m.chefId}`} className="flex items-center gap-3 hover:opacity-80">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-burgundy/10 text-burgundy">
+                        <Icon name={m.icon} className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-ink-900">{m.name}</p>
+                        <p className="truncate text-xs text-ink-500">{m.label} · {m.sub}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {spotlight.length > 0 && (
               <section className="rounded-xl border border-ink-200 bg-white p-5">
@@ -783,7 +915,7 @@ function BezettingCard({ label, date, metrics, href, cta, accent }: { label: str
   );
 }
 
-function DayTable({ title, shifts: dayShifts, countByShift, accent }: { title: string; shifts: { id: string; startsAt: Date; endsAt: Date; roleNeeded: string; status: string; headcount: number; city: string | null; companyName: string | null }[]; countByShift: Map<string, number>; accent?: boolean }) {
+function DayTable({ title, shifts: dayShifts, countByShift, namesByShift, accent }: { title: string; shifts: { id: string; startsAt: Date; endsAt: Date; roleNeeded: string; status: string; headcount: number; city: string | null; companyName: string | null }[]; countByShift: Map<string, number>; namesByShift: Map<string, string[]>; accent?: boolean }) {
   if (dayShifts.length === 0) return null;
   return (
     <>
@@ -799,7 +931,15 @@ function DayTable({ title, shifts: dayShifts, countByShift, accent }: { title: s
             return (
               <tr key={s.id} className="hover:bg-bg-gray">
                 <td className="px-5 py-3 font-ui text-[13px] text-ink-900 whitespace-nowrap align-top">{hhmm(s.startsAt)}–{hhmm(s.endsAt)}</td>
-                <td className="px-2 py-3 align-top"><p className="text-ink-900">{s.companyName ?? "Onbekende klant"}</p><p className="text-xs text-ink-500">{formatShiftRole(s.roleNeeded)}{s.city ? ` · ${s.city}` : ""}</p></td>
+                <td className="px-2 py-3 align-top">
+                  <p className="text-ink-900">{s.companyName ?? "Onbekende klant"}</p>
+                  <p className="text-xs text-ink-500">{formatShiftRole(s.roleNeeded)}{s.city ? ` · ${s.city}` : ""}</p>
+                  {/* DASH-PEOPLE: names, not counts — "wie komt er vanavond?" answered from
+                      the row Maarten is already looking at. */}
+                  {(namesByShift.get(s.id) ?? []).length > 0 && (
+                    <p className="mt-0.5 text-xs text-burgundy">{(namesByShift.get(s.id) ?? []).join(" · ")}</p>
+                  )}
+                </td>
                 <td className="px-2 py-3 align-top"><span className={`inline-flex items-center gap-1.5 ${chip.text}`}><span className={`h-2 w-2 rounded-full ${chip.dot}`} />{chip.label}</span></td>
                 <td className={`px-2 py-3 align-top font-ui ${chip.text}`}>{cnt} / {s.headcount}</td>
                 <td className="px-3 py-3 align-top text-ink-500"><Link href={`/admin/business/shifts/${s.id}`}><Icon name="chevron-right" className="h-[18px] w-[18px]" /></Link></td>

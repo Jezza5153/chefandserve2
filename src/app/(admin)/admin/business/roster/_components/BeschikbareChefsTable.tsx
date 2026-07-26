@@ -14,6 +14,7 @@ export type ChefRow = {
   niveau: string | null;
   skills: string[];
   locatie: string | null;
+  phone: string | null;
 };
 
 const TH = "px-4 py-2 font-ui text-[10px] font-medium uppercase tracking-[0.2em] text-burgundy";
@@ -35,6 +36,7 @@ export function BeschikbareChefsTable({ rows, total }: { rows: ChefRow[]; total:
               <th className={`${TH} px-2`}>Niveau</th>
               <th className={`${TH} px-2`}>Vaardigheden</th>
               <th className={`${TH} px-2`}>Locatie</th>
+              <th className={`${TH} px-2`}>Bel</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-100">
@@ -65,6 +67,27 @@ export function BeschikbareChefsTable({ rows, total }: { rows: ChefRow[]; total:
                   )}
                 </td>
                 <td className="whitespace-nowrap px-2 align-middle text-ink-600">{c.locatie ?? "—"}</td>
+                {/* DASH-PEOPLE: an idle-chef list you cannot call is a report, not a tool. */}
+                <td className="whitespace-nowrap px-2 align-middle">
+                  {c.phone ? (
+                    <span className="flex items-center gap-1">
+                      <a href={`tel:${c.phone}`} title={`Bel ${c.fullName}`} className="rounded-full border border-ink-200 p-1 text-ink-700 hover:border-burgundy hover:text-burgundy">
+                        <Icon name="phone" className="h-3.5 w-3.5" />
+                      </a>
+                      <a
+                        href={`https://wa.me/${c.phone.replace(/\D/g, "").replace(/^06/, "316").replace(/^00/, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`WhatsApp ${c.fullName}`}
+                        className="rounded-full border border-ink-200 p-1 text-ink-700 hover:border-emerald-600 hover:text-emerald-700"
+                      >
+                        <Icon name="message-circle" className="h-3.5 w-3.5" />
+                      </a>
+                    </span>
+                  ) : (
+                    <span className="text-ink-300">—</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

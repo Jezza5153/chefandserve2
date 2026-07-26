@@ -109,9 +109,11 @@ percentage or a trend.
 
 "How long from shift request to confirmed chef." The single most important operational KPI
 after fill rate, and it does not exist anywhere.
-**Blocked on:** there is no `placements.confirmed_at`. Add it, then have the snapshot worker
-keep a `time_to_fill_seconds_sum` / `_count` pair — exactly the pattern
-`approval_sla_minutes_sum` already uses.
+**Blocked on: nothing — correction (2026-07-26).** An earlier version of this file claimed
+`placements.confirmed_at` does not exist. It does (schema.ts ~1536, alongside `proposed_at`
+and `responded_at`); the dashboard already filters on it. So time-to-fill is
+`shifts.created_at → placements.confirmed_at`, computable today. The snapshot worker can keep
+a `time_to_fill_seconds_sum` / `_count` pair — the `approval_sla_minutes_sum` pattern.
 
 ### 3. No-show and late-cancellation rate
 
