@@ -77,6 +77,8 @@ const CARD_TYPE: Record<AttentionKind, CardType> = {
   change_request: "task",
   inbox: "task",
   missing_data: "task",
+  doc_expiring: "task",
+  chef_contact_stale: "task",
   system: "task",
 };
 
@@ -92,6 +94,8 @@ const DRAWER_ROUTE: Record<AttentionKind, DrawerRoute> = {
   change_request: "shift",
   inbox: "queue",
   missing_data: "queue",
+  doc_expiring: "queue",
+  chef_contact_stale: "queue",
   system: "queue",
 };
 
@@ -103,6 +107,8 @@ const NEXT_ACTION: Record<AttentionKind, string> = {
   underfilled_shift: "Vul de resterende plek(ken)",
   accepted_unconfirmed: "Bevestig de dienst met de klant",
   proposed_no_response: "Volg de voorgestelde chef(s) op",
+  doc_expiring: "Vraag een nieuw document aan vóór het verloopt",
+  chef_contact_stale: "Bel of app — een klein contactmoment houdt de relatie warm",
   hours_to_approve: "Keur de getekende uren",
   change_request: "Beoordeel het wijzigingsverzoek",
   inbox: "Behandel de nieuwe aanmelding(en)",

@@ -15,6 +15,8 @@ export type AttentionKind =
   | "change_request" // chef/client profile-change or profile-update awaiting review
   | "inbox" // new chef/client submissions
   | "missing_data" // chef/client profile gaps
+  | "doc_expiring" // a compliance document (VOG/certificaat/ID) expires within 30 days
+  | "chef_contact_stale" // an active chef nobody has spoken to in weeks — relationships rot silently
   | "system"; // integration/system warnings
 
 export type AttentionTone = "red" | "amber" | "blue" | "grey";
@@ -46,7 +48,9 @@ const PRIORITY: Record<AttentionKind, number> = {
   change_request: 7,
   inbox: 8,
   missing_data: 9,
-  system: 10,
+  doc_expiring: 10,
+  chef_contact_stale: 11,
+  system: 12,
 };
 
 /**
