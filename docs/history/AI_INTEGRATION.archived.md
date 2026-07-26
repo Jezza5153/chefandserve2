@@ -1,3 +1,17 @@
+> ## ⚠️ ARCHIVED 2026-07-26 — superseded by [AI.md](../../AI.md)
+>
+> This was a pre-launch **plan** ("what we're building toward"), written before the AI layer
+> shipped, with a status banner added later. Most of its concrete detail never matched what
+> was built: the camelCase tool names in §5 (`searchChefs`, `proposePlacement`, `suggestRoster`)
+> never existed — the real convention is `resource.action`; §2 claims an OpenAI/Claude/OSS
+> router where there is one OpenAI brain; RAG reindexing is attributed to the wrong service;
+> and the audit shape in §8 (`_pa`, `ai.proposePlacement`) is not what the sink writes.
+>
+> Kept for provenance — it records the reasoning behind the design. **Do not use it as a
+> reference for how anything works.**
+
+---
+
 # Chef & Serve — AI integration prep
 
 > Living document. **Update this whenever a new phase ships** so when we wire AI into the system (Phase 9+), every data source, operation, and decision-point is already catalogued. No archaeology needed.

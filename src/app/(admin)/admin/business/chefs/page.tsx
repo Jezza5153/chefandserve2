@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import Link from "next/link";
 
 import { db } from "@/lib/db/client";
@@ -9,6 +9,9 @@ import { listSavedSearches } from "@/lib/domain/saved-searches";
 import { saveCurrentSearch, removeSavedSearch } from "./_actions";
 
 export const metadata = { title: "Chefs" };
+
+/** Row cap for the list query. No pagination yet — the banner below says so honestly. */
+const LIST_LIMIT = 200;
 
 type FilterStatus =
   | "all"
@@ -77,11 +80,20 @@ export default async function ChefsListPage({
   const whereParts = [isNull(chefs.deletedAt)];
   if (status !== "all") whereParts.push(eq(chefs.status, status));
   if (q) {
+    // ilike, NOT like: Postgres LIKE is case-SENSITIVE, so `utrecht` used to find nothing
+    // while `Utrecht` worked. And array columns (text[]) have no implicit cast to text —
+    // `col ILIKE …` on one raises 42883 — so they go through array_to_string.
+    const like_ = `%${q}%`;
     whereParts.push(
       or(
-        like(chefs.fullName, `%${q}%`),
-        like(chefs.email, `%${q}%`),
-        like(chefs.city, `%${q}%`),
+        ilike(chefs.fullName, like_),
+        ilike(chefs.email, like_),
+        ilike(chefs.city, like_),
+        ilike(chefs.specialties, like_),
+        ilike(chefs.recentVenues, like_),
+        sql`array_to_string(coalesce(${chefs.segments}, '{}'), ' ') ilike ${like_}`,
+        sql`array_to_string(coalesce(${chefs.skillTags}, '{}'), ' ') ilike ${like_}`,
+        sql`array_to_string(coalesce(${chefs.ownerTags}, '{}'), ' ') ilike ${like_}`,
       )!,
     );
   }
@@ -123,7 +135,7 @@ export default async function ChefsListPage({
     .from(chefs)
     .where(and(...whereParts))
     .orderBy(desc(chefs.joinedAt))
-    .limit(200);
+    .limit(LIST_LIMIT);
 
   // Counts per status (for the filter pills)
   const counts = await db
@@ -172,14 +184,23 @@ export default async function ChefsListPage({
           action="/admin/business/chefs"
           className="ml-auto flex items-center gap-2"
         >
+          {/* Carry EVERY active filter through the search. Without these hidden inputs a
+              GET form submits only `q`, so typing a name silently wiped the pills Maarten
+              had just clicked and dumped him back on the unfiltered list. */}
           {status !== "active" && (
             <input type="hidden" name="status" value={status} />
+          )}
+          {Object.entries({
+            transport, pref, employment, data: dataFilter,
+            niveau, segment, rating, spoed, ownertag,
+          }).map(([k, v]) =>
+            v ? <input key={k} type="hidden" name={k} value={String(v)} /> : null,
           )}
           <input
             type="search"
             name="q"
             defaultValue={q}
-            placeholder="Zoek op naam, email, stad…"
+            placeholder="Zoek op naam, e-mail, stad, specialiteit, tag…"
             className="rounded border border-ink-200 bg-white px-3 py-2 text-sm placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy"
           />
           <button
@@ -308,6 +329,14 @@ export default async function ChefsListPage({
         </div>
       ) : (
         <div className="mt-8 overflow-x-auto rounded-lg border border-ink-200 bg-white">
+          {/* The query is capped at 200 with no pagination. Silently truncating reads as
+              "this is everyone" — say it out loud instead. */}
+          {rows.length === LIST_LIMIT && (
+            <p className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+              Eerste {LIST_LIMIT} getoond (nieuwste eerst) — er kunnen er meer zijn. Verfijn je
+              filters om de rest te zien.
+            </p>
+          )}
           <table className="w-full">
             <thead className="bg-bg-gray text-left">
               <tr>

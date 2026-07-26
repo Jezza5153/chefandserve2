@@ -8,7 +8,8 @@
 > AI change. Newest consolidated contract: `tool-contracts/2026-06-additions.md`.
 
 **Companion docs (do not duplicate, link only):**
-- [`../../AI_INTEGRATION.md`](../../AI_INTEGRATION.md) — strategic 4-layer architecture, data inventory, phased rollout plan. **Read that first** for the why and the eventual shape. This folder is the operational underbelly.
+- [`../../AI.md`](../../AI.md) — how the assistant works today: agent loop, tools, confirm gate, RAG, proactive jobs, known gaps. **Read that first.** This folder is the operational underbelly (per-tool contracts, safety rules, playbooks).
+- Counts of any kind (tools, eval cases, workers) live in [`../STATE.generated.md`](../STATE.generated.md) — never restate them here.
 - [`../../MEMORY.md`](../../MEMORY.md) — single source of truth for "what is currently shipped".
 - [`../../WORKFLOW.md`](../../WORKFLOW.md) — process map. Every workflow playbook here cites a section in WORKFLOW.md.
 - [`../../BUILD_PLAN.md`](../../BUILD_PLAN.md) and [`../../ROADMAP.md`](../../ROADMAP.md) — sequence + scope.

@@ -1,7 +1,7 @@
 # AI build roadmap — the order, the gates, the definition of done
 
 > **Design-only deliverable (no code in this PR).** The *what* and the *shape* of the AI
-> layer already live in this folder + `AI_INTEGRATION.md`. This file is the **build
+> layer already live in this folder + `AI.md`. This file is the **build
 > sequence**: the order to build in, the hard preconditions before each stage, and a
 > concrete "done" bar so nobody guesses. Matching **stays rule-based** until Stage 1
 > ships and is proven.

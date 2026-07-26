@@ -2,7 +2,7 @@
 
 > The contract between the indexer worker, the embeddings store, and the retriever. When the AI ships, this is what `workers/embedding-refresh.ts` must produce.
 
-Pairs with [`rag-source-catalog.md`](./rag-source-catalog.md) (which sources, which visibility) and the strategic vision in [`../../AI_INTEGRATION.md`](../../AI_INTEGRATION.md) (Layer 2).
+Pairs with [`rag-source-catalog.md`](./rag-source-catalog.md) (which sources, which visibility) and the strategic vision in [`../../AI.md`](../../AI.md) (Layer 2).
 
 Status: **not built yet**. `workers/embedding-refresh.ts` is a no-op stub. pgvector extension is enabled on Neon. This doc is the spec the worker must satisfy before flipping it on.
 
@@ -55,7 +55,7 @@ CREATE INDEX ai_embeddings_tenant_idx ON ai_embeddings(tenant_scope);
 | `clients.notes` | Same pattern as chefs.notes. Prepend `"Klant <companyName>, segment <segment>, locatie <city>: "`. |
 | `shifts.notes` + `whenDescription` | One chunk per shift. Prepend `"Shift bij <client.companyName> op <date>, rol <role>: "`. |
 | `chef_documents` CV text (uploaded by chef themselves) | Page-by-page OCR (only for `type='cv'` AND `uploadedBy = chef.userId`). Never OCR ID documents. |
-| Project docs (`docs/`, `MEMORY.md`, `WORKFLOW.md`, `AI_INTEGRATION.md`) | Markdown heading-aware chunking: each H2/H3 section becomes a chunk; prepend the section path. |
+| Project docs (`docs/`, `MEMORY.md`, `WORKFLOW.md`, `AI.md`) | Markdown heading-aware chunking: each H2/H3 section becomes a chunk; prepend the section path. |
 | `email_messages` (bodies, where access-filtered) | One chunk per email; redact emails/phones/BSN/IBAN before embedding. |
 | `contact_logs` | One chunk per row. Plain-text. Admin-only visibility. |
 | `placements` outcomes joined with ratings + hours | One chunk per completed placement. Prepend `"Placement: chef <chefName> at <clientCompanyName> on <shiftDate>, rating <stars>, hours discrepancy <minutes>: "`. |

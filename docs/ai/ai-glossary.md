@@ -330,7 +330,7 @@ Object storage. Bucket: `chefandserve`. Chef documents at `chefs/<chefId>/<docId
 
 ### RAG
 
-Retrieval-Augmented Generation. The AI's Layer 2 (per `AI_INTEGRATION.md`). Embeddings + retrieval rules in [`rag-ingestion-contract.md`](./rag-ingestion-contract.md).
+Retrieval-Augmented Generation. The AI's Layer 2 (per `AI.md`). Embeddings + retrieval rules in [`rag-ingestion-contract.md`](./rag-ingestion-contract.md).
 
 ### Recovery code
 
