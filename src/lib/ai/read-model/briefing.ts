@@ -10,7 +10,7 @@
  * DETERMINISTIC (no LLM), so the cron needs no OpenAI key and the output never drifts.
  * Read-only, owner-scoped (the owner spans all tenants).
  */
-import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { chefs, clients, placementComments, shiftHours, shifts } from "@/lib/db/schema";
@@ -58,7 +58,7 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
   const tStart = amsterdamMidnightUtc(todayKey);
   const tEnd = amsterdamMidnightUtc(addDaysToKey(todayKey, 1));
 
-  const [yShifts, problemRows, newComments, tShifts, awaiting, expiring, riskScan] = await Promise.all([
+  const [yShifts, problemRows, newComments, tShifts, awaiting, expiring, riskScan, birthdayRows, staleRows, draftRows, benchRows] = await Promise.all([
     // Yesterday — shifts that ran
     db
       .select({ client: clients.companyName })
@@ -97,9 +97,64 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
     listHoursAwaitingApproval(),
     expiringDocumentsForAi({ days: 14, limit: 5 }),
     scanRisksForAi(now),
+    // FLYWHEEL: the people-dimension the dashboard got — in the briefing, where a
+    // one-owner relationship business actually plans its calls.
+    db.execute(sql`
+      select full_name as "fullName",
+             to_char(date_of_birth, 'DD-MM') as "dayMonth"
+      from chefs
+      where deleted_at is null and status = 'active' and date_of_birth is not null
+        -- Wraparound-safe week window: a plain BETWEEN on 'MM-DD' strings returns
+        -- nothing for the Dec-28→Jan-04 week. When the window crosses New Year the
+        -- condition flips to an OR.
+        and (
+          case
+            when to_char(now() at time zone 'Europe/Amsterdam', 'MM-DD')
+                 <= to_char((now() at time zone 'Europe/Amsterdam') + interval '7 days', 'MM-DD')
+            then to_char(date_of_birth, 'MM-DD')
+                 between to_char(now() at time zone 'Europe/Amsterdam', 'MM-DD')
+                 and to_char((now() at time zone 'Europe/Amsterdam') + interval '7 days', 'MM-DD')
+            else to_char(date_of_birth, 'MM-DD') >= to_char(now() at time zone 'Europe/Amsterdam', 'MM-DD')
+                 or to_char(date_of_birth, 'MM-DD') <= to_char((now() at time zone 'Europe/Amsterdam') + interval '7 days', 'MM-DD')
+          end
+        )
+      order by to_char(date_of_birth, 'MM-DD') limit 5
+    `),
+    db.execute(sql`
+      select c.full_name as "fullName",
+             extract(day from now() - coalesce(max(cl.created_at), c.joined_at))::int as "daysSilent"
+      from chefs c
+      left join contact_logs cl on cl.target_type = 'chef' and cl.target_id = c.id
+      where c.deleted_at is null and c.status = 'active'
+      group by c.id, c.full_name, c.joined_at
+      having coalesce(max(cl.created_at), c.joined_at) < now() - interval '21 days'
+      order by coalesce(max(cl.created_at), c.joined_at) asc limit 1
+    `),
+    // Preplan concepts awaiting review — drafts are invisible on the planbord until
+    // published, so without this line they can be silently forgotten.
+    db.execute(sql`
+      select count(*)::int as n from placements p
+      join shifts s on s.id = p.shift_id
+      where p.status = 'draft' and s.starts_at >= ${tStart}
+    `),
+    // Chefs NOT placed today ("no availability row = unknown", so phrased as "niet ingepland").
+    db.execute(sql`
+      select count(*)::int as n from chefs c
+      where c.deleted_at is null and c.status = 'active'
+        and not exists (
+          select 1 from placements p join shifts s on s.id = p.shift_id
+          where p.chef_id = c.id and p.status in ('accepted','confirmed')
+            and s.starts_at >= ${tStart} and s.starts_at < ${tEnd}
+        )
+    `),
   ]);
 
   const openToday = tShifts.filter((s) => s.status === "open" || s.status === "request").length;
+  const rowsOf = (r: unknown) => (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? []));
+  const birthdays = rowsOf(birthdayRows) as { fullName: string; dayMonth: string }[];
+  const stale = rowsOf(staleRows) as { fullName: string; daysSilent: number }[];
+  const bench = (rowsOf(benchRows) as { n: number }[])[0]?.n ?? 0;
+  const drafts = (rowsOf(draftRows) as { n: number }[])[0]?.n ?? 0;
 
   // ---- compose the Dutch briefing ----
   const gisteren: string[] = ["📋 *Gisteren*"];
@@ -136,6 +191,9 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
   if (awaiting.length === 0 && expiring.length === 0 && openToday === 0) {
     vandaag.push("• Niets urgents — rustige dag op de planning.");
   }
+  if (drafts > 0) {
+    vandaag.push(`• 🤖 AI heeft ${plural(drafts, "concept-plek", "concept-plekken")} vooringevuld — review & publiceer op het planbord.`);
+  }
 
   const risico: string[] = [];
   if (riskScan.risks.length > 0) {
@@ -143,7 +201,17 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
     for (const r of riskScan.risks.slice(0, 3)) risico.push(`• ${r.ernst === "hoog" ? "🔴" : "🟠"} ${r.melding}`);
   }
 
+  // ---- mensen ----
+  const mensen: string[] = [];
+  if (birthdays.length > 0 || stale.length > 0 || bench > 0) {
+    mensen.push("👥 *Je mensen*");
+    for (const b of birthdays) mensen.push(`• 🎂 ${b.fullName} is binnenkort jarig (${b.dayMonth}) — stuur een berichtje.`);
+    if (stale.length > 0) mensen.push(`• 📞 ${stale[0]!.fullName} al ${stale[0]!.daysSilent} dagen niet gesproken — bel of app vandaag even.`);
+    if (bench > 0) mensen.push(`• ${plural(bench, "chef", "chefs")} vandaag niet ingepland — jouw bellijst bij uitval.`);
+  }
+
   const sections = [gisteren.join("\n"), vandaag.join("\n")];
+  if (mensen.length > 0) sections.push(mensen.join("\n"));
   if (risico.length > 0) sections.push(risico.join("\n"));
   const text = `Goedemorgen Maarten — je dagstart voor ${dutchDate(now)}.\n\n${sections.join("\n\n")}`;
 

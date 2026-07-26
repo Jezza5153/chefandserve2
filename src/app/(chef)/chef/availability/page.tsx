@@ -15,12 +15,12 @@
  * The user can NEVER write to a different chefId — the lookup IS the auth.
  */
 
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { chefAvailability, chefs } from "@/lib/db/schema";
+import { chefAvailability, chefs, shifts } from "@/lib/db/schema";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { recordChefEvent } from "@/lib/chef-events";
 import { sanitizeSkillTags, skillTagsByCategory } from "@/lib/domain/skill-tags";
@@ -277,6 +277,35 @@ async function repeatLastWeek(): Promise<void> {
 }
 
 /** CHEF-PR1: save chef-authored work preferences (feeds matching later). */
+/* FLYWHEEL: the positive half of availability. Every other action on this page writes
+ * available:false (blocking); until now a chef could never SAY "ik kan die dag". Explicit
+ * available:true rows upgrade the whole chain — "no row" means unknown, a true row means
+ * the chef themself confirmed — and matching/the bench strip read exactly this table. */
+async function confirmDays(fd: FormData): Promise<void> {
+  "use server";
+  const { chefId } = await requireChefSelf();
+  const raw = fd.getAll("days").map(String);
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const max = new Date(today);
+  max.setUTCDate(max.getUTCDate() + 14);
+  const dates: Date[] = [];
+  for (const d of raw) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+    const dt = new Date(`${d}T00:00:00Z`);
+    if (dt >= today && dt <= max) dates.push(dt);
+  }
+  if (dates.length === 0) return;
+  await db
+    .insert(chefAvailability)
+    .values(dates.map((d) => ({ chefId, date: d, available: true })))
+    .onConflictDoUpdate({
+      target: [chefAvailability.chefId, chefAvailability.date],
+      set: { available: true },
+    });
+  revalidatePath("/chef/availability");
+}
+
 async function savePreferences(fd: FormData): Promise<void> {
   "use server";
   const { chefId } = await requireChefSelf();
@@ -348,6 +377,36 @@ export default async function ChefAvailabilityPage() {
     );
   const blockedDates = rows.map((r) => isoOf(new Date(r.date)));
 
+  // FLYWHEEL: explicit "ik kan" rows (next 14 days) + the payoff count.
+  const confirmedRows = await db
+    .select({ date: chefAvailability.date })
+    .from(chefAvailability)
+    .where(
+      and(
+        eq(chefAvailability.chefId, chefId),
+        gte(chefAvailability.date, today),
+        eq(chefAvailability.available, true),
+      ),
+    );
+  const confirmedDates = new Set(confirmedRows.map((r) => isoOf(new Date(r.date))));
+  let payoffCount = 0;
+  if (confirmedDates.size > 0) {
+    const openRows = await db
+      .select({ startsAt: shifts.startsAt })
+      .from(shifts)
+      .where(and(inArray(shifts.status, ["request", "open"]), gte(shifts.startsAt, today)));
+    payoffCount = openRows.filter((r) => confirmedDates.has(isoOf(new Date(r.startsAt)))).length;
+  }
+  const nextSeven: { iso: string; label: string }[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setUTCDate(d.getUTCDate() + i);
+    nextSeven.push({
+      iso: isoOf(d),
+      label: d.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", timeZone: "Europe/Amsterdam" }),
+    });
+  }
+
   const likes = new Set(chef?.preferences ?? []);
   const avoid = new Set(chef?.avoidPreferences ?? []);
   const skills = new Set(chef?.skillTags ?? []);
@@ -369,6 +428,52 @@ export default async function ChefAvailabilityPage() {
       </div>
 
       {/* 1 — Quick blocks */}
+      <section className={`${card} border-emerald-200`}>
+        <p className={sectionLabel}>{t.availability.confirmTitle}</p>
+        <p className="mt-1 text-sm text-ink-700">{t.availability.confirmIntro}</p>
+        {payoffCount > 0 && (
+          <p className="mt-2 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            ✓ {t.availability.confirmPayoff.replace("{n}", String(payoffCount))}
+          </p>
+        )}
+        <form action={confirmDays} className="mt-3">
+          <div className="flex flex-wrap gap-2">
+            {nextSeven.map((d) => {
+              const isBlocked = blockedDates.includes(d.iso);
+              const isConfirmed = confirmedDates.has(d.iso);
+              return (
+                <label
+                  key={d.iso}
+                  className={`cursor-pointer rounded-full border px-3 py-1.5 font-ui text-[12px] ${
+                    isBlocked
+                      ? "cursor-not-allowed border-ink-100 bg-bg-gray text-ink-300 line-through"
+                      : isConfirmed
+                        ? "border-emerald-600 bg-emerald-600 text-white"
+                        : "border-ink-200 bg-white text-ink-700 hover:border-emerald-600"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    name="days"
+                    value={d.iso}
+                    defaultChecked={isConfirmed}
+                    disabled={isBlocked}
+                    className="sr-only"
+                  />
+                  {d.label}
+                </label>
+              );
+            })}
+          </div>
+          <button
+            type="submit"
+            className="mt-3 rounded bg-emerald-700 px-4 py-2 font-ui text-[11px] font-semibold uppercase tracking-[0.12em] text-white hover:bg-emerald-800"
+          >
+            {t.availability.confirmCta}
+          </button>
+        </form>
+      </section>
+
       <section className={card}>
         <p className={sectionLabel}>{t.availability.quickTitle}</p>
         <div className="mt-3 flex flex-wrap gap-2">

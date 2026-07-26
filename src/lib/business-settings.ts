@@ -25,6 +25,11 @@ export const SETTING_KEYS = {
   hoursReminders: "hours_reminders",
   dailyBriefing: "daily_briefing",
   moneyAssumptions: "money_assumptions",
+  /* FLYWHEEL: the availability-reminder worker gated on this key since it shipped, but
+   * the key was never declared here and no UI wrote it — so the worker was unreachable
+   * except by a manual DB insert. The one dataset everything drinks from
+   * (chef_availability) had a reminder loop that could never be switched on. */
+  availabilityReminders: "availability_reminders",
 } as const;
 
 /** Raw jsonb value for a key (cached). Returns {} when no row exists. */
