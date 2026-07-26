@@ -131,8 +131,12 @@ Decisions that need a person. Resolved ones move to the PR ledger.
 6. **How do matching attributes get filled?** No intake path writes `vakniveau`, `skillTags`,
    rate, radius or geo. Chef self-declares, admin sets at intake, or CV extraction
    auto-applies? This blocks any richer matching.
-7. **Does a hard requirement exclude or only demote?** Today `minExperience` and
-   `languageRequired` do neither — they append a warning with no effect on rank.
+7. **Does a hard requirement exclude or only demote — on the SHIFT path?** In
+   `shifts.suggest_chefs` / `findMatchesForShift`, `minExperience` and `languageRequired` do
+   neither: they append a warning with no effect on rank, and a chef with no languages
+   recorded passes a language requirement without even that. `chefs.match_requirement` (#320)
+   settles it the other way — hard requirements exclude, into a reported near-miss tier.
+   Worth aligning the shift path once that has been used in anger.
 
 ### Low-priority follow-ups
 
