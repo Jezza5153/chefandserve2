@@ -15,6 +15,8 @@
 
 _(add new rows here)_
 
+- #328 · 2026-07-26 · Attention rail krijgt mensen-signalen: chef_contact_stale (21d, join-date fallback) + doc_expiring (30d spiegel van de mailer); QueueDrawer proposed_no_response krijgt de App/Mail/Log-jaagwidgets · dashboard-intel, dashboard-cards, QueueDrawer
+
 - #326 · 2026-07-26 · SPOED quick-create (4 velden → fill drawer, isEmergency, DST-correct) + bestand-samenstelling KPI-card + chefs-list quality sort ipv nieuwste-eerst · dashboard, spoed/, chefs list, domain/shifts
 
 - #324 · 2026-07-26 · ChefCard hover primitive (face/tenure/hours/rating/intel/birthday) + getChefCards batch loader; photo route opened to internal chefs:read · src/components/ChefCard.tsx, src/lib/domain/chef-cards.ts, api/chef-photo
