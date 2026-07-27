@@ -89,6 +89,10 @@ const GOLDEN: RouteCase[] = [
   { id: "G-margin", q: "Is de dienst bij Lute van zaterdag winstgevend?", expect: ["shifts.margin", "shifts.find"] },
   { id: "G-trends", q: "Dreigt chef Marco af te haken — hoe ontwikkelt hij zich?", expect: ["chefs.trends", "chefs.find"] },
   { id: "G-know", q: "Wat hebben we genoteerd over allergieën en speciale wensen bij onze klanten?", expect: ["knowledge.search", "clients.find"] },
+  // Dossier-routes (Batch: kennis bereikbaar zonder embeddings). Nameless prompts —
+  // GOLDEN scoort de EERSTE stap, en met een naam erin is chefs.find terecht stap 1.
+  { id: "G-dossier-chef", q: "Vertel me alles wat we intern weten over deze chef — intake, voorkeuren, karakter.", expect: ["chefs.dossier", "chefs.find"] },
+  { id: "G-dossier-klant", q: "Waarom staat die kok op de blacklist bij deze klant?", expect: ["clients.dossier", "clients.find", "knowledge.search"] },
   { id: "G-shift", q: "Wat is de stand van de dienst bij Lute van zaterdag — wie staat erop?", expect: ["shifts.detail", "shifts.find"] },
   { id: "G-hist", q: "Heeft chef Daniel eerder bij Hotel Okura gewerkt en hoe ging dat?", expect: ["chefs.history_at_client", "chefs.find", "clients.find"] },
   { id: "G-log", q: "Noteer dat ik chef Daniel net telefonisch sprak — hij kan zaterdag invallen.", expect: ["contacts.log", "chefs.find"] },

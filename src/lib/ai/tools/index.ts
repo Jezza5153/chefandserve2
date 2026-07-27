@@ -47,6 +47,7 @@ import { plannerCockpitTool, shiftsSuggestChefs, shiftsMargin, chefsMatchRequire
 import { contactsTimeline, contactsLog } from "@/lib/ai/tools/contacts";
 import { chefsSemanticSearch, clientsSemanticSearch } from "@/lib/ai/tools/semantic";
 import { knowledgeSearch } from "@/lib/ai/tools/knowledge";
+import { chefsDossier, clientsDossier } from "@/lib/ai/tools/dossier";
 import { auditSearch, documentsListForChef, documentsExpiring, privacyListRequests, emailStatus, payrollRead } from "@/lib/ai/tools/oversight";
 import { briefingDaily } from "@/lib/ai/tools/briefing";
 import { shiftsDetail, shiftsInterestedChefs } from "@/lib/ai/tools/shift-detail";
@@ -135,6 +136,8 @@ export const ALL_TOOLS: AnyTool[] = [
   shiftsMargin,
   contactsTimeline,
   knowledgeSearch,
+  chefsDossier,
+  clientsDossier,
   reportsBusinessKpi,
   reportsChefs,
   reportsClients,
