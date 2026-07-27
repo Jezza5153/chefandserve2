@@ -14,7 +14,7 @@
  * the model never needs the phone number that happens to sit in an old note (contact
  * details have their own tools: chefs.reachability / clients.reachability).
  */
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@/lib/db/client";
@@ -25,13 +25,20 @@ import { redact } from "@/lib/ai/rag/redact";
 /** Notes blobs run to a few KB; the tool-result truncator would cut mid-sentence. */
 const MAX_CHARS = 4000;
 
-function shape(notes: string | null): { text: string; truncated: boolean } {
+function shape(notes: string | null): { text: string; truncated: boolean; newestDate: string | null } {
   const raw = (notes ?? "").trim();
-  if (!raw) return { text: "", truncated: false };
-  const { text } = redact(raw);
+  if (!raw) return { text: "", truncated: false, newestDate: null };
+  const { text } = redact(raw); // redact the FULL text, then truncate — never the reverse
+  // The injected blocks list notes newest-first, so the first date in the text is the
+  // most recent one. Handing it back lets the model age its answer ("uit juni 2023")
+  // instead of being told to date a note it has no date for.
+  const newestDate =
+    text.match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1] ??
+    text.match(/\b(\d{2}\/\d{2}\/\d{4})\b/)?.[1] ??
+    null;
   return text.length > MAX_CHARS
-    ? { text: `${text.slice(0, MAX_CHARS)}\n…(ingekort)`, truncated: true }
-    : { text, truncated: false };
+    ? { text: `${text.slice(0, MAX_CHARS)}\n…(ingekort — de nieuwste notities staan bovenaan)`, truncated: true, newestDate }
+    : { text, truncated: false, newestDate };
 }
 
 export const chefsDossier = defineTool({
@@ -46,12 +53,13 @@ export const chefsDossier = defineTool({
     const [row] = await db
       .select({ name: chefs.fullName, notes: chefs.notes, vakniveau: chefs.vakniveau, city: chefs.city })
       .from(chefs)
-      .where(eq(chefs.id, input.chefId))
+      // deletedAt guard: an AVG-erased chef must stay erased for the assistant too.
+      .where(and(eq(chefs.id, input.chefId), isNull(chefs.deletedAt)))
       .limit(1);
     if (!row) throw new Error("deze chef bestaat niet (meer)");
-    const { text, truncated } = shape(row.notes);
+    const { text, truncated, newestDate } = shape(row.notes);
     return {
-      data: { name: row.name, vakniveau: row.vakniveau, city: row.city, notes: text, truncated },
+      data: { name: row.name, vakniveau: row.vakniveau, city: row.city, notes: text, truncated, newestNoteDate: newestDate },
       summary: text
         ? `Dossier van ${row.name}${truncated ? " (ingekort)" : ""} — vat samen wat relevant is voor de vraag en zeg erbij hoe oud een notitie is.`
         : `Over ${row.name} is nog niets genoteerd. Zeg dat eerlijk in plaats van te gokken.`,
@@ -71,12 +79,12 @@ export const clientsDossier = defineTool({
     const [row] = await db
       .select({ name: clients.companyName, notes: clients.notes, city: clients.city, segment: clients.segment })
       .from(clients)
-      .where(eq(clients.id, input.clientId))
+      .where(and(eq(clients.id, input.clientId), isNull(clients.deletedAt)))
       .limit(1);
     if (!row) throw new Error("deze klant bestaat niet (meer)");
-    const { text, truncated } = shape(row.notes);
+    const { text, truncated, newestDate } = shape(row.notes);
     return {
-      data: { name: row.name, city: row.city, segment: row.segment, notes: text, truncated },
+      data: { name: row.name, city: row.city, segment: row.segment, notes: text, truncated, newestNoteDate: newestDate },
       summary: text
         ? `Dossier van ${row.name}${truncated ? " (ingekort)" : ""} — vat samen wat relevant is voor de vraag; noem blacklist-redenen alleen als er naar gevraagd wordt.`
         : `Over ${row.name} is nog niets genoteerd. Zeg dat eerlijk in plaats van te gokken.`,

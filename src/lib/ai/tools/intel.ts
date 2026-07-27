@@ -14,7 +14,7 @@ export const chefsIntelSnapshot = defineTool({
   name: "chefs.intel_snapshot",
   title: "Chef intel-snapshot",
   description:
-    "Het complete intel-beeld van één chef: Maarten's oordeel ('best ingezet voor' / risico / volgende actie), werkpatronen (drukste dag, dagdeel ontbijt/lunch/diner, rollen), verdiensten per klant + totaal/30d, wat de chef vaak afwijst, en hoe lang geleden hij werkte (reactivatie-signaal). Gebruik voor 'vertel me over chef X' of 'wie kan ik morgen bellen'. chefId via chefs.find.",
+    "Het GEMETEN intel-beeld van één chef: Maarten's ingevulde oordeel ('best ingezet voor' / risico / volgende actie) plus werkpatronen uit de plaatsingen van dit systeem (drukste dag, dagdeel, rollen), verdiensten per klant + totaal/30d, wat de chef vaak afwijst, en hoe lang geleden hij werkte (reactivatie-signaal). Gebruik dit voor CIJFERS en patronen. Voor de VERHALEN — intakes, karakter, voorkeuren, tarief-afspraken uit het oude systeem — is chefs.dossier de juiste tool; bij 'vertel me over chef X' zijn beide nuttig, begin dan met chefs.dossier. chefId via chefs.find.",
   risk: "read",
   permission: { resource: "chefs", action: "read" },
   input: z.object({ chefId: z.string().min(1, "chefId is verplicht") }),
@@ -33,7 +33,7 @@ export const clientsIntelSnapshot = defineTool({
   name: "clients.intel_snapshot",
   title: "Klant intel-snapshot",
   description:
-    "Het complete intel-beeld van één klant: Maarten's oordeel (beste chef-type / waar ze écht om geven / verborgen risico / volgende actie), boekingspatronen (drukste dag, rollen) en de vaste chefs. Gebruik voor 'vertel me over klant X' of 'welke klant vraagt aandacht'. clientId via clients.find.",
+    "Het GEMETEN intel-beeld van één klant: Maarten's ingevulde oordeel (beste chef-type / waar ze écht om geven / verborgen risico / volgende actie), boekingspatronen uit dit systeem (drukste dag, rollen) en de vaste chefs. Gebruik dit voor CIJFERS en patronen. Voor de VERHALEN — relatie-historie, evaluaties, briefings en blacklist-redenen uit het oude systeem — is clients.dossier de juiste tool; bij 'vertel me over klant X' zijn beide nuttig, begin dan met clients.dossier. clientId via clients.find.",
   risk: "read",
   permission: { resource: "clients", action: "read" },
   input: z.object({ clientId: z.string().min(1, "clientId is verplicht") }),
