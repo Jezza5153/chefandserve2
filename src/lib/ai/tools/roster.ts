@@ -25,11 +25,13 @@ export const rosterOverview = defineTool({
   permission: { resource: "roster", action: "read" },
   input: z.object({
     period: z.enum(["today", "this_week", "next_week", "this_month"]).optional(),
+    date: z.string().optional().describe("Losse dag JJJJ-MM-DD (ook in het verleden) — overschrijft period."),
   }),
   run: async (input, ctx) => {
     const period = input.period ?? "this_week";
     const res = await loadRosterAiSummary({
       period,
+      date: input.date,
       userId: ctx.actor.requestedByUserId,
       now: new Date(),
     });

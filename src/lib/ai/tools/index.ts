@@ -21,6 +21,7 @@ import { chefsUpdateContact } from "@/lib/ai/tools/chef-update-contact";
 import { remindersCreate, remindersList, remindersComplete } from "@/lib/ai/tools/reminders";
 import { agendaVandaag, agendaRemember } from "@/lib/ai/tools/agenda";
 import { chefsMomenten } from "@/lib/ai/tools/people-moments";
+import { invoicingOpen, chefsUitbetalingen, clientsStil } from "@/lib/ai/tools/money";
 import { memoryRemember, memoryList, memoryForget } from "@/lib/ai/tools/memory";
 import {
   chefsListProfileChanges,
@@ -172,6 +173,9 @@ export const ALL_TOOLS: AnyTool[] = [
   remindersCreate,
   agendaVandaag,
   chefsMomenten,
+  invoicingOpen,
+  chefsUitbetalingen,
+  clientsStil,
   agendaRemember,
   remindersList,
   remindersComplete,

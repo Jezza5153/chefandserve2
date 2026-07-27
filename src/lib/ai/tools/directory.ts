@@ -79,19 +79,32 @@ export const shiftsFind = defineTool({
   name: "shifts.find",
   title: "Diensten opzoeken",
   description:
-    'Zoek diensten (shifts) op klantnaam, rol, locatie of stad — bijv. "hotel Okura", "sous-chef", "Amsterdam". Filter optioneel op status (request, open, filled, completed, cancelled). Read-only.',
+    'Zoek diensten (shifts) op klantnaam, rol, locatie of stad — én op datum: vul bij ELKE datumvraag ("zaterdag", "volgende week") from/to in als JJJJ-MM-DD, anders krijg je gewoon de nieuwste 25. Filter optioneel op status. Read-only.',
   risk: "read",
   permission: { resource: "shifts", action: "read" },
   input: z.object({
     query: z.string().optional(),
     status: z.enum(["request", "open", "filled", "completed", "cancelled"]).optional(),
+    from: z.string().optional().describe("Vanaf-datum JJJJ-MM-DD (Amsterdamse dag). Voor élke datumvraag verplicht invullen."),
+    to: z.string().optional().describe("Tot-en-met-datum JJJJ-MM-DD. Zelfde dag als from = precies die dag."),
     limit: z.number().int().min(1).max(25).optional(),
   }),
   run: async (input) => {
-    const rows = await findShifts({ q: input.query, status: input.status, limit: input.limit });
+    const { shifts: rows, totalMatched } = await findShifts({
+      q: input.query,
+      status: input.status,
+      from: input.from,
+      to: input.to,
+      limit: input.limit,
+    });
     return {
-      data: { count: rows.length, shifts: rows },
-      summary: rows.length ? `${rows.length} dienst(en) gevonden.` : "Geen diensten gevonden.",
+      data: { count: rows.length, totalMatched, shifts: rows },
+      summary:
+        rows.length === 0
+          ? "Geen diensten gevonden."
+          : totalMatched > rows.length
+            ? `${rows.length} van ${totalMatched} diensten getoond — verfijn met from/to of status.`
+            : `${rows.length} dienst(en) gevonden.`,
     };
   },
 });
