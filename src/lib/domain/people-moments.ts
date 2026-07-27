@@ -67,9 +67,11 @@ export async function getPeopleMoments(opts: { windowDays?: number } = {}): Prom
         fullName: chefs.fullName,
         dateOfBirth: chefs.dateOfBirth,
         joinedAt: chefs.joinedAt,
-        // Migration guard: a chef with oude-systeem historie has a joinedAt equal to
-        // the IMPORT date, not their real start — see the anniversary suppression below.
-        hasLegacyHistory: sql<boolean>`${chefs.notes} like '%Historie oud systeem%'`,
+        // Migration guard: EVERY imported chef (204×, provenance line "Geïmporteerd uit
+        // oud systeem (Medewerkers.csv)") has joinedAt = IMPORT date, not their real
+        // start — not only the ones with a ShiftManager stats line. See the anniversary
+        // suppression below.
+        hasLegacyHistory: sql<boolean>`(${chefs.notes} like '%Medewerkers.csv%' or ${chefs.notes} like '%Historie oud systeem%')`,
       })
       .from(chefs)
       .where(and(isNull(chefs.deletedAt), eq(chefs.status, "active"))),

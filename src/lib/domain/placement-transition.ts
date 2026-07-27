@@ -18,6 +18,7 @@ import { withTx } from "@/lib/db/tx";
 import { recordAuditCore } from "@/lib/audit";
 import { chefs, clients, placements, shifts } from "@/lib/db/schema";
 import { assertChefDeployable } from "@/lib/domain/chef-deployability-gate";
+import { isChefBlockedByShiftClient } from "@/lib/domain/matching";
 import { recomputeShiftStatus } from "@/lib/domain/shift-status";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { sendReplacementHandover } from "@/lib/domain/replacement-handover";
@@ -56,21 +57,34 @@ export async function transitionPlacement(args: {
   // no extra query, behaviour unchanged.
   let overrodeBlock = false;
   let overrideBlockers: string[] = [];
-  if (env.COMPLIANCE_HARDGATE_ENABLED === "true" && args.newStatus === "confirmed") {
+  if (
+    (env.COMPLIANCE_HARDGATE_ENABLED === "true" || env.KLANT_BLACKLIST_GATE_ENABLED === "true") &&
+    args.newStatus === "confirmed"
+  ) {
     const [pl] = await db
-      .select({ chefId: placements.chefId })
+      .select({ chefId: placements.chefId, shiftId: placements.shiftId })
       .from(placements)
       .where(eq(placements.id, args.placementId))
       .limit(1);
     if (pl?.chefId) {
-      const gate = await assertChefDeployable(pl.chefId);
-      if (!gate.deployable) {
+      const blockers: string[] = [];
+      if (env.COMPLIANCE_HARDGATE_ENABLED === "true") {
+        const gate = await assertChefDeployable(pl.chefId);
+        if (!gate.deployable) blockers.push(...gate.blockers);
+      }
+      // Klant-blacklist gate at the financial commit — same contract as P3a-2: the
+      // confirm re-affirms, so a klant-blocked chef needs an explicit human reason here
+      // even if the propose was pushed through earlier (or predates the blacklist).
+      if (env.KLANT_BLACKLIST_GATE_ENABLED === "true" && (await isChefBlockedByShiftClient(pl.shiftId, pl.chefId))) {
+        blockers.push("door deze klant geblokkeerd");
+      }
+      if (blockers.length > 0) {
         const reason = args.override?.reason?.trim() ?? "";
         if (!args.override || reason.length < 10) {
-          return { ok: false, reason: "blocked", blockers: gate.blockers };
+          return { ok: false, reason: "blocked", blockers };
         }
         overrodeBlock = true;
-        overrideBlockers = gate.blockers;
+        overrideBlockers = blockers;
       }
     }
   }

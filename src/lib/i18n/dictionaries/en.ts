@@ -303,6 +303,7 @@ export const en: Dict = {
       full: "Sorry — this urgent shift was just picked up by another chef.",
       conflict: "You already have a shift that overlaps with this one.",
       blocked: "You've blocked this day in your availability.",
+      klant_blocked: "This shift can't be assigned to you — please contact the office.",
       already: "You're already on this shift.",
       closed: "This shift can no longer be claimed.",
       not_emergency: "This shift isn't an urgent shift.",

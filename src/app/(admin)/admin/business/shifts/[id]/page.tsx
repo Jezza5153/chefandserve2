@@ -73,7 +73,7 @@ export default async function ShiftDetailPage({
     sp.info === "al-voorgesteld"
       ? { tone: "info" as const, text: "Deze chef is al voorgesteld voor deze dienst." }
       : sp.info === "geblokkeerd" || sp.err === "geblokkeerd"
-        ? { tone: "err" as const, text: "Deze chef is niet inzetbaar (VOG/ID/contract). Los het blokkeerpunt op, of geef vrij met reden." }
+        ? { tone: "err" as const, text: "Deze chef is geblokkeerd — door inzetbaarheid (VOG/ID/contract) of door de klant-blacklist. Zie het rode paneel bij de chef hieronder: geef daar vrij met reden, of los het blokkeerpunt op." }
         : sp.ok === "cancelled"
           ? { tone: "ok" as const, text: "Dienst geannuleerd. Bevestigde chefs zijn op de hoogte gebracht." }
           : sp.err === "already-cancelled"

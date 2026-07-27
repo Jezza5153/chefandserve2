@@ -24,6 +24,10 @@ export function latestLegacyNoteLine(notes: string | null | undefined, maxLen = 
     text = text.trim();
     return text.length > maxLen ? `${text.slice(0, maxLen - 1).trimEnd()}…` : text;
   }
+  // No dated notes, but there IS an oude-systeem stats line (22 chefs in prod have
+  // stats without communicatie) → still better than "Nog weinig bekend".
+  const h = legacyHistory(notes);
+  if (h) return `±${h.hours} uur gewerkt in het oude systeem (${h.invites} uitnodigingen).`;
   return null;
 }
 

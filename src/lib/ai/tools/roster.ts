@@ -65,7 +65,7 @@ export const rosterPublish = defineTool({
   name: "roster.publish",
   title: "Concept-rooster publiceren",
   description:
-    "Publiceert alle CONCEPT-plaatsingen (drafts) voor een periode: elke chef krijgt zijn uitnodiging en elke klant ziet de voorgestelde chef. Concepten die intussen niet meer kunnen (chef geblokkeerd of dubbel geboekt) worden overgeslagen en teruggemeld. Daarna accepteren de chefs zelf en bevestig jij.",
+    "Publiceert alle CONCEPT-plaatsingen (drafts) voor een periode: elke chef krijgt zijn uitnodiging en elke klant ziet de voorgestelde chef. Concepten die intussen niet meer kunnen (chef geblokkeerd op die dag, op de blacklist van de klant, of dubbel geboekt) worden overgeslagen en teruggemeld. Daarna accepteren de chefs zelf en bevestig jij.",
   risk: "outbound",
   permission: { resource: "shifts", action: "write" },
   input: z.object({
@@ -87,7 +87,7 @@ export const rosterPublish = defineTool({
     const skippedLine =
       res.skipped.length > 0
         ? ` ${res.skipped.length} overgeslagen (${res.skipped
-            .map((s) => `${s.chefName}: ${s.reason === "blocked" ? "geblokkeerd" : "dubbel geboekt"}`)
+            .map((s) => `${s.chefName}: ${s.reason === "blocked" ? "geblokkeerd op die dag" : s.reason === "klant_blocked" ? "op de blacklist van deze klant" : "dubbel geboekt"}`)
             .join("; ")}).`
         : "";
     return {

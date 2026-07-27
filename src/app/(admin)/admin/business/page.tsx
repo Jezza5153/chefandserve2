@@ -226,9 +226,11 @@ export default async function BusinessDashboardPage({
         dateOfBirth: chefs.dateOfBirth,
         joinedAt: chefs.joinedAt,
         availableForEmergency: chefs.availableForEmergency,
-        // Oude-systeem historie (parsed uit notes) — the bench "most proven" sort
-        // would otherwise degrade to alphabetical while chef_metrics_daily is empty.
-        notes: chefs.notes,
+        // Oude-systeem historie — ONLY the stats line, not the whole notes blob (this
+        // page auto-refreshes; ~215 full blobs per render would be pure waste). The
+        // bench "most proven" sort would otherwise degrade to alphabetical while
+        // chef_metrics_daily is empty.
+        legacyLine: sql<string | null>`substring(${chefs.notes} from 'Historie oud systeem: [0-9]+ uitnodigingen · ±[0-9]+ uur gewerkt')`,
       })
       .from(chefs)
       .where(and(isNull(chefs.deletedAt), eq(chefs.status, "active")))
@@ -385,14 +387,19 @@ export default async function BusinessDashboardPage({
       city: c.city,
       phone: c.phone,
       spoed: c.availableForEmergency,
-      // New-system hours first; migrated chefs fall back to their oude-systeem
-      // historie so "most proven" ranks veterans above unknowns, not A above Z.
-      totalHours:
-        Math.round((lifetimeByChef.get(c.id)?.totalMinutes ?? 0) / 60) ||
-        (legacyHistory(c.notes)?.hours ?? 0),
+      // Kept SEPARATE: the strip must never present oude-systeem uren as new-system
+      // hours (they render as "±N u (oude systeem)"), and the rank must be the SUM —
+      // an || would drop a veteran to the bottom the day their first new shift lands.
+      totalHours: Math.round((lifetimeByChef.get(c.id)?.totalMinutes ?? 0) / 60),
+      legacyHours: legacyHistory(c.legacyLine)?.hours ?? 0,
     }))
-    // Spoed-ready first, then the most proven — the panic call order.
-    .sort((a, b) => Number(b.spoed) - Number(a.spoed) || b.totalHours - a.totalHours || a.fullName.localeCompare(b.fullName));
+    // Spoed-ready first, then the most proven (old + new together) — the panic call order.
+    .sort(
+      (a, b) =>
+        Number(b.spoed) - Number(a.spoed) ||
+        b.totalHours + b.legacyHours - (a.totalHours + a.legacyHours) ||
+        a.fullName.localeCompare(b.fullName),
+    );
 
   // People moments — same domain function as chefs.momenten (AI) and the briefing.
   const momentIcon: Record<string, "gift" | "award" | "star"> = { birthday: "gift", anniversary: "award", milestone: "star" };
@@ -1138,7 +1145,7 @@ function DoneFlash({ done }: { done: string }) {
     snoozed: { msg: "Signaal gesnoozed — komt over 4 uur terug.", tone: "info" },
     opgelost: { msg: "✓ Gemarkeerd als opgelost. Komt terug als de situatie verandert.", tone: "good" },
     "reden-vereist": { msg: "Geef een reden op om een signaal als opgelost te markeren.", tone: "warn" },
-    geblokkeerd: { msg: "Niet voorgesteld — deze chef is niet inzetbaar. Los het blokkeerpunt op, of geef vrij met reden.", tone: "warn" },
+    geblokkeerd: { msg: "Niet voorgesteld — deze chef is geblokkeerd (inzetbaarheid of klant-blacklist). Geef vrij met reden in het rode paneel bij de chef, of los het blokkeerpunt op.", tone: "warn" },
     "spoed-opgelost": { msg: "✓ Spoedsituatie opgelost. Gelogd.", tone: "good" },
     "spoed-stilgelegd": { msg: "Spoedsituatie stilgelegd (loos alarm / extern afgehandeld).", tone: "info" },
     "spoed-ongewijzigd": { msg: "Niets gewijzigd — de spoedsituatie was al afgehandeld.", tone: "warn" },

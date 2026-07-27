@@ -25,7 +25,10 @@ export type BenchRow = {
   city: string | null;
   phone: string | null;
   spoed: boolean;
+  /** FINAL new-system hours. */
   totalHours: number;
+  /** Oude-systeem historie — always labelled as such, never mixed into totalHours. */
+  legacyHours: number;
 };
 
 /** wa.me needs digits with country code; Dutch 06… becomes 316…. */
@@ -72,7 +75,12 @@ export function BenchStrip({ rows, cards }: { rows: BenchRow[]; cards: Map<strin
                   )}
                 </span>
                 <span className="block truncate text-xs text-ink-500">
-                  {[c.vakniveau ? formatChefRole(c.vakniveau) : null, c.city, c.totalHours > 0 ? `${c.totalHours} u gewerkt` : null]
+                  {[
+                    c.vakniveau ? formatChefRole(c.vakniveau) : null,
+                    c.city,
+                    c.totalHours > 0 ? `${c.totalHours} u gewerkt` : null,
+                    c.legacyHours > 0 ? `±${c.legacyHours} u (oude systeem)` : null,
+                  ]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
