@@ -24,7 +24,8 @@ _Last verified against production: 2026-07-26 (flags re-verified after the eveni
 | Dev DB branch | `ep-green-mouse` |
 | Hosting | Vercel (web) · Railway (`workers/supervisor.ts`) |
 | Migration head on `main` | see [STATE.generated.md](docs/STATE.generated.md#schema) |
-| Roster in prod | 8 matchable chefs (7 active + 1 onboarding), 3 archived |
+| Roster in prod | **215 chefs** (204 geïmporteerd uit Medewerkers.csv, #335 — 24 zonder vakniveau, bewust ongetypeerd) · 3 archived |
+| Klanten in prod | **47 actief** (41 geïmporteerd uit export_debiteur_contacten.csv — Baut ×4 / Park Plaza ×2 als aparte venues; 61 contactrollen; 6 bedrijven hadden alleen interne C&S-contacten → echte contactpersoon nog vast te leggen, staat in hun notes) |
 | AI model | `gpt-5.4`, fallback `gpt-4.1-mini`, budget 25/day |
 | 2FA | `TOTP_ENFORCE=true` |
 
