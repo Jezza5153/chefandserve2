@@ -240,7 +240,7 @@ export function Planbord({
       const skip =
         res.skipped.length > 0
           ? ` ${res.skipped.length} overgeslagen (${res.skipped
-              .map((s) => `${s.chefName}: ${s.reason === "blocked" ? "geblokkeerd" : "dubbel"}`)
+              .map((s) => `${s.chefName}: ${s.reason === "blocked" ? "geblokkeerd" : s.reason === "klant_blocked" ? "klant-blacklist" : "dubbel"}`)
               .join("; ")}).`
           : "";
       setMsg(

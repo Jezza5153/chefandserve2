@@ -85,6 +85,10 @@ export async function findChefs(opts: FindChefsInput): Promise<FindChefsResult> 
       ilike(chefs.city, like),
       ilike(chefs.specialties, like),
       ilike(chefs.recentVenues, like),
+      // MATCH-only on the notes blob (oude-systeem kennis: venues, tarieven, talen,
+      // vervoer). The notes text itself is deliberately NOT in the returned row —
+      // this tool serves all portals' routing; the content stays owner-surface-only.
+      ilike(chefs.notes, like),
       sql`${arrayText(chefs.segments)} ilike ${like}`,
       sql`${arrayText(chefs.skillTags)} ilike ${like}`,
       sql`${arrayText(chefs.languages)} ilike ${like}`,

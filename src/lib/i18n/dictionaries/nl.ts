@@ -304,6 +304,7 @@ export const nl = {
       full: "Helaas — deze spoeddienst is net door een andere chef opgepakt.",
       conflict: "Je hebt al een shift die hiermee overlapt.",
       blocked: "Je hebt deze dag geblokkeerd in je beschikbaarheid.",
+      klant_blocked: "Deze dienst kan niet aan jou worden toegewezen — neem even contact op met kantoor.",
       already: "Je staat al op deze dienst.",
       closed: "Deze dienst kan niet meer geclaimd worden.",
       not_emergency: "Deze dienst is geen spoeddienst.",

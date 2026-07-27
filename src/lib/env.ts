@@ -283,6 +283,9 @@ const serverSchema = z.object({
   // placements.compliance_override). AI can never override. Default off → live
   // proposal behaviour unchanged until the owner is ready to enforce it.
   COMPLIANCE_HARDGATE_ENABLED: z.enum(["true", "false"]).optional(),
+  /** Klant-blacklist hard-gate: a chef in clients.blockedChefIds can't be proposed/
+   *  published at that klant without a human override-with-reason. */
+  KLANT_BLACKLIST_GATE_ENABLED: z.enum(["true", "false"]).optional(),
 
   // CHEF-PR4b — owner clock-out digest. When on, a daily ticker POSTs
   // /api/cron/clockout-digest, which surfaces planned-vs-actual overruns + the

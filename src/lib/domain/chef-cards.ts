@@ -15,6 +15,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { chefDocuments, chefMetricsDaily, chefs } from "@/lib/db/schema";
+import { legacyHistory } from "@/lib/legacy-notes";
 import { CHEF_AVERAGE_MIN_COUNT } from "@/lib/rating-tags";
 
 export type ChefCardData = {
@@ -38,6 +39,9 @@ export type ChefCardData = {
   bestUsedFor: string | null;
   /** Days until the next birthday when within 30; null otherwise or unknown DOB. */
   birthdayInDays: number | null;
+  /** Hours worked in the OLD system (parsed from the injected notes) — a migrated
+   *  veteran must never render as "nieuw in het bestand". Null when no history. */
+  legacyHours: number | null;
 };
 
 const isLeapYear = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
@@ -74,6 +78,7 @@ export async function getChefCards(chefIds: string[]): Promise<Map<string, ChefC
         averageRating: chefs.averageRating,
         ratingCount: chefs.ratingCount,
         intel: chefs.intel,
+        notes: chefs.notes,
       })
       .from(chefs)
       .where(and(inArray(chefs.id, ids), isNull(chefs.deletedAt))),
@@ -140,6 +145,7 @@ export async function getChefCards(chefIds: string[]): Promise<Map<string, ChefC
       tenureYears,
       bestUsedFor: c.intel?.bestUsedFor?.trim() || null,
       birthdayInDays,
+      legacyHours: legacyHistory(c.notes)?.hours ?? null,
     });
   }
   return out;

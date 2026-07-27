@@ -91,6 +91,10 @@ export default async function ChefsListPage({
         ilike(chefs.city, like_),
         ilike(chefs.specialties, like_),
         ilike(chefs.recentVenues, like_),
+        // The notes blob carries the oude-systeem kennis (venues, tarieven, talen,
+        // vervoer, wie-via-wie) — without this, "Okura" of "geen auto" vindt niets
+        // zolang de gestructureerde kolommen nog leeg zijn.
+        ilike(chefs.notes, like_),
         sql`array_to_string(coalesce(${chefs.segments}, '{}'), ' ') ilike ${like_}`,
         sql`array_to_string(coalesce(${chefs.skillTags}, '{}'), ' ') ilike ${like_}`,
         sql`array_to_string(coalesce(${chefs.ownerTags}, '{}'), ' ') ilike ${like_}`,

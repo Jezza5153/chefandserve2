@@ -19,7 +19,7 @@ import {
   users,
 } from "@/lib/db/schema";
 import { type LatLng } from "@/lib/domain/geo";
-import { scoreChefForShift } from "@/lib/domain/matching";
+import { isChefBlockedByShiftClient, scoreChefForShift } from "@/lib/domain/matching";
 import { estimateTravel, type TransportMode } from "@/lib/domain/travel";
 import { env } from "@/lib/env";
 import { createNotification, notifyUser } from "@/lib/integrations";
@@ -137,6 +137,10 @@ export async function listOpenShiftsForChef(chefId: string, daysAhead = 28): Pro
         gt(shifts.startsAt, now),
         lt(shifts.startsAt, horizon),
         sql`${shifts.status} not in ('cancelled','completed')`,
+        // Klant-blacklist: don't even SHOW the shift to a chef this klant blocked —
+        // the claim path re-checks (race safety), but rendering it with an
+        // "Accepteer nu"-knop would be a promise the claim then breaks.
+        sql`not (${chefId} = any(coalesce(${clients.blockedChefIds}, '{}')))`,
       ),
     )
     .orderBy(asc(shifts.startsAt));
@@ -309,6 +313,7 @@ export type ClaimResult =
         | "closed"
         | "opted_out"
         | "blocked"
+        | "klant_blocked"
         | "conflict"
         | "already"
         | "full";
@@ -342,6 +347,13 @@ export async function claimEmergencyShift(args: {
     .where(and(eq(chefAvailability.chefId, args.chefId), eq(chefAvailability.available, false)));
   if (blockedRows.some((b) => amsterdamDayKey(b.date) === dayKey)) {
     return { ok: false, reason: "blocked" };
+  }
+
+  // Klant-blacklist gate (Opus-review blocker): the claim inserts a CONFIRMED placement
+  // with no human in the loop — without this check a chef the klant blocked could
+  // self-confirm at exactly that klant. There is deliberately NO override on this path.
+  if (env.KLANT_BLACKLIST_GATE_ENABLED === "true" && (await isChefBlockedByShiftClient(args.shiftId, args.chefId))) {
+    return { ok: false, reason: "klant_blocked" };
   }
 
   // Already live on THIS shift (same chef) → idempotent guard.

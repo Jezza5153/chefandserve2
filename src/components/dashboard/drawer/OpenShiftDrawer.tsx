@@ -282,9 +282,10 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
                     </ul>
                   )}
                 </div>
-                {/* Blocked (P3a) or negative-margin (P3c-2) chefs lose the one-click button →
-                    the matching override-with-reason panel renders below. */}
+                {/* Blocked (P3a/klant-blacklist) or negative-margin (P3c-2) chefs lose the
+                    one-click button → the matching override-with-reason panel renders below. */}
                 {gateByChef.get(m.chef.id)?.deployable === false ||
+                m.warnings.includes("door klant geblokkeerd") ||
                 marginByChef.get(m.chef.id)?.tone === "negative" ? null : (
                   <form action={proposeFromDashboard}>
                     <input type="hidden" name="shiftId" value={shift.id} />
@@ -300,21 +301,30 @@ export async function OpenShiftDrawer({ shiftId }: { shiftId: string }) {
                 )}
               </div>
 
-              {/* P3a compliance hard-gate: blocked chef → red blocker chips + override-with-reason. */}
-              {gateByChef.get(m.chef.id)?.deployable === false && (
+              {/* Hard-gates (P3a compliance + klant-blacklist): blocked chef → red blocker
+                  chips + override-with-reason. One merged panel; the reason posts as
+                  overrideReason, which is what BOTH gates in proposePlacement read. */}
+              {(gateByChef.get(m.chef.id)?.deployable === false ||
+                m.warnings.includes("door klant geblokkeerd")) && (
                 <div className="mt-2">
                   <OverrideDeployabilityBlock
                     action={proposeFromDashboard}
                     hidden={{ shiftId: shift.id, chefId: m.chef.id, matchScore: m.score }}
-                    blockers={gateByChef.get(m.chef.id)!.blockers}
+                    blockers={[
+                      ...(gateByChef.get(m.chef.id)?.deployable === false ? gateByChef.get(m.chef.id)!.blockers : []),
+                      ...(m.warnings.includes("door klant geblokkeerd") ? ["door deze klant geblokkeerd"] : []),
+                    ]}
                     cta="Stel voor"
                   />
                 </div>
               )}
 
-              {/* P3c-2 margin guard: negative-margin candidate (not compliance-blocked) → justify
-                  the deliberate loss with a reason (audited placements.margin_override). */}
+              {/* P3c-2 margin guard: negative-margin candidate (not gate-blocked) → justify
+                  the deliberate loss with a reason (audited placements.margin_override).
+                  A gate-blocked chef gets the gate panel above instead — its overrideReason
+                  is the field the hard-gates actually read (marginOverrideReason is not). */}
               {gateByChef.get(m.chef.id)?.deployable !== false &&
+                !m.warnings.includes("door klant geblokkeerd") &&
                 marginByChef.get(m.chef.id)?.tone === "negative" && (
                   <div className="mt-2">
                     <OverrideDeployabilityBlock

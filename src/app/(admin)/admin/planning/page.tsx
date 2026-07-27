@@ -144,7 +144,7 @@ export default async function PlanningPage({
           }`}
         >
           {sp.ok === "geblokkeerd" ? (
-            "Niet doorgevoerd — deze kok is niet inzetbaar (VOG/ID/contract). Los het blokkeerpunt op, of geef vrij met reden via het dashboard."
+            "Niet doorgevoerd — deze kok is geblokkeerd (inzetbaarheid of klant-blacklist). Open de dienst-pagina: daar staat het rode paneel om met reden vrij te geven of de blokkade op te lossen."
           ) : sp.ok === "al-voorgesteld" ? (
             "Deze kok was al voorgesteld voor die dienst — geen dubbel voorstel verstuurd."
           ) : sp.ok === "bevestigd" ? (

@@ -183,8 +183,9 @@ export function MatchSuggestions({
                     </p>
                   )}
                 </div>
-                {/* P3a: a compliance-blocked chef loses the one-click button → override panel below. */}
-                {!compBlocked && (
+                {/* P3a/klant-blacklist: a blocked chef loses the one-click button → override
+                    panel below. sig.isBlocked = klant-blacklist; compBlocked = compliance. */}
+                {!compBlocked && !sig.isBlocked && (
                   <form action={propose}>
                     <input type="hidden" name="chefId" value={m.chef.id} />
                     <input type="hidden" name="matchScore" value={m.score} />
@@ -195,13 +196,17 @@ export function MatchSuggestions({
                 )}
               </div>
 
-              {/* P3a compliance hard-gate: blocked chef → red blocker chips + override-with-reason. */}
-              {compBlocked && compGate && (
+              {/* Hard-gates: blocked chef → red blocker chips + override-with-reason. One
+                  panel, merged blockers — the reason waives what is listed, nothing more. */}
+              {(compBlocked || sig.isBlocked) && (
                 <div className="mt-3">
                   <OverrideDeployabilityBlock
                     action={propose}
                     hidden={{ chefId: m.chef.id, matchScore: m.score }}
-                    blockers={compGate.blockers}
+                    blockers={[
+                      ...(compBlocked && compGate ? compGate.blockers : []),
+                      ...(sig.isBlocked ? ["door deze klant geblokkeerd"] : []),
+                    ]}
                   />
                 </div>
               )}

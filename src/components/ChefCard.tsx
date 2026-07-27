@@ -57,6 +57,7 @@ export function ChefCard({
   const sub = [data.vakniveau ? formatChefRole(data.vakniveau) : null, data.city].filter(Boolean).join(" · ");
   const facts: string[] = [];
   if (data.totalHours > 0) facts.push(`${data.totalHours} u gewerkt`);
+  if (data.legacyHours) facts.push(`±${data.legacyHours} u (oude systeem)`);
   if (data.totalShifts > 0) facts.push(`${data.totalShifts} diensten`);
   if (data.rating) facts.push(`★ ${Number(data.rating.average).toFixed(1)} (${data.rating.count})`);
   if (data.tenureYears >= 1) facts.push(`${data.tenureYears} jaar bij ons`);
@@ -123,9 +124,12 @@ export function ChefCard({
               ))}
             </span>
           )}
-          {data.totalShifts === 0 && (
+          {data.totalShifts === 0 && !data.legacyHours && (
             <span className="mt-3 block text-xs text-ink-500">Nog geen afgeronde diensten — nieuw in het bestand.</span>
           )}
+          {data.totalShifts === 0 && data.legacyHours ? (
+            <span className="mt-3 block text-xs text-ink-500">Nog geen diensten in het nieuwe systeem — wél historie hierboven.</span>
+          ) : null}
 
           {data.bestUsedFor && (
             <span className="mt-2.5 block rounded-lg bg-burgundy/[0.04] px-2.5 py-2 text-xs text-ink-700">
