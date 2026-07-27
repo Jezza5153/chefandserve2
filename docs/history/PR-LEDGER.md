@@ -15,6 +15,8 @@
 
 _(add new rows here)_
 
+- #335 · 2026-07-27 · 204 echte chefs geïmporteerd uit het oude systeem (Medewerkers.csv): BSN/IBAN AES-versleuteld, vakniveau/skills/preferences uit positie-kolommen, 200 gegeocodeerd via PDOK; importer idempotent op e-mail, herbruikbaar voor klanten · scripts/import-medewerkers.ts
+
 - #333 · 2026-07-27 · Owner-screenshot gap gedicht: chefs.momenten tool (verjaardagen/jubilea/mijlpalen, data-gap-eerlijk) uit één domain-fn met dashboard+briefing; mini-markdown rendering in de chat (letterlijke ** weg) · people-moments, AssistantChat
 
 - #332 · 2026-07-27 · Portfolio-rest, AI-integrated: contributiemarge (werkgeverslasten-aanname) + tarief-dekking; agenda.vandaag/remember tools + Vandaag/Belofte-kaart; rating→favoriet + ≤3★ auto-nabellen; KPI-stuurgetallen (vulgraad vooruit, time-to-fill, geboekte omzet) op insights + platform-KPI-tool · breed
