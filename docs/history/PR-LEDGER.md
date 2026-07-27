@@ -15,6 +15,8 @@
 
 _(add new rows here)_
 
+- #336 · 2026-07-27 · AI-check fix-batch: bellijst-datumbug (22:00Z≠00:00Z, runtime bewezen), shifts.find+roster met echte datums (grootste "zelfverzekerd fout"-klasse), álle 57 wees-tools gerouteerd in 15 regels, geld nu model-zichtbaar (invoicing.open, chefs.uitbetalingen, clients.stil) · playbook, directory, roster, briefing, money
+
 - #335 · 2026-07-27 · 204 echte chefs geïmporteerd uit het oude systeem (Medewerkers.csv): BSN/IBAN AES-versleuteld, vakniveau/skills/preferences uit positie-kolommen, 200 gegeocodeerd via PDOK; importer idempotent op e-mail, herbruikbaar voor klanten · scripts/import-medewerkers.ts
 
 - #333 · 2026-07-27 · Owner-screenshot gap gedicht: chefs.momenten tool (verjaardagen/jubilea/mijlpalen, data-gap-eerlijk) uit één domain-fn met dashboard+briefing; mini-markdown rendering in de chat (letterlijke ** weg) · people-moments, AssistantChat

@@ -64,6 +64,8 @@ async function loadAvailableChefsForDay(dayKey: string, dayShiftIds: string[]): 
 
 export async function loadRosterAiSummary(args: {
   period: RosterPeriod;
+  /** Optional explicit day (YYYY-MM-DD, past allowed) — overrides period with a day view. */
+  date?: string;
   userId: string;
   now: Date;
 }): Promise<{ text: string; facts: Record<string, unknown> }> {
@@ -73,7 +75,14 @@ export async function loadRosterAiSummary(args: {
   let dateKey: string;
   let startUtc: Date;
   let endUtc: Date;
-  if (args.period === "today") {
+  if (args.date && /^\d{4}-\d{2}-\d{2}$/.test(args.date)) {
+    // A concrete day beats a named period — "hoe zag 12 juli eruit" was unanswerable
+    // (period only reached today/this_week/next_week/this_month, never the past).
+    view = "day";
+    dateKey = args.date;
+    startUtc = amsterdamMidnightUtc(args.date);
+    endUtc = amsterdamMidnightUtc(addDaysToKey(args.date, 1));
+  } else if (args.period === "today") {
     view = "day";
     dateKey = todayKey;
     startUtc = amsterdamMidnightUtc(todayKey);

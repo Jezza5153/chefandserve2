@@ -13,7 +13,7 @@
  * because that eval never executes a tool. Always go through `arrayText()` below, and keep
  * scripts/smoke-chefs-find.ts green — it RUNS the query.
  */
-import { and, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { chefAvailability, chefs, clients, shifts } from "@/lib/db/schema";
@@ -238,12 +238,26 @@ export type ShiftHit = {
 export async function findShifts(opts: {
   q?: string;
   status?: ShiftStatus;
+  /** ISO date (YYYY-MM-DD), inclusive — shifts starting on/after this Amsterdam day. */
+  from?: string;
+  /** ISO date (YYYY-MM-DD), inclusive — shifts starting on/before this Amsterdam day. */
+  to?: string;
   limit?: number;
-}): Promise<ShiftHit[]> {
+}): Promise<{ shifts: ShiftHit[]; totalMatched: number }> {
   const q = opts.q?.trim();
   const like = q ? `%${q}%` : null;
   const conds: SQL[] = [];
   if (opts.status) conds.push(eq(shifts.status, opts.status));
+  // Date questions were the largest "confidently wrong" class: without a range this
+  // returned the 25 furthest-future shifts and the model picked plausible rows out of
+  // them. from/to filter on the AMSTERDAM calendar day of startsAt.
+  const dayOk = (d?: string) => d && /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (dayOk(opts.from)) {
+    conds.push(sql`(${shifts.startsAt} at time zone 'Europe/Amsterdam')::date >= ${opts.from}::date`);
+  }
+  if (dayOk(opts.to)) {
+    conds.push(sql`(${shifts.startsAt} at time zone 'Europe/Amsterdam')::date <= ${opts.to}::date`);
+  }
   if (like) {
     const m = or(
       ilike(clients.companyName, like),
@@ -269,8 +283,17 @@ export async function findShifts(opts: {
     .from(shifts)
     .leftJoin(clients, eq(shifts.clientId, clients.id))
     .where(conds.length ? and(...conds) : undefined)
-    .orderBy(desc(shifts.startsAt))
+    // A future range reads chronologically; the no-range default stays newest-first.
+    .orderBy(dayOk(opts.from) ? asc(shifts.startsAt) : desc(shifts.startsAt))
     .limit(clampLimit(opts.limit));
 
-  return rows as ShiftHit[];
+  // Total matched alongside the capped rows, so truncation is visible instead of
+  // silently passing as "the answer".
+  const [{ n }] = (await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(shifts)
+    .leftJoin(clients, eq(shifts.clientId, clients.id))
+    .where(conds.length ? and(...conds) : undefined)) as { n: number }[];
+
+  return { shifts: rows as ShiftHit[], totalMatched: n };
 }

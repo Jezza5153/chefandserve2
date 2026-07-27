@@ -64,6 +64,10 @@ const GOLDEN: RouteCase[] = [
   { id: "G-belofte", q: "Leg even vast dat ik morgen vóór 12 uur het contract naar het hotel moet mailen", expect: ["agenda.remember"] },
   // A promise NAMING a chef legitimately routes chefs.find first (id resolution per the
   // playbook) — that chain belongs in MULTI, not in first-step GOLDEN scoring.
+  { id: "G-facturen-open", q: "Welke facturen staan er nog open bij klanten?", expect: ["invoicing.open"] },
+  { id: "G-uitbetalingen", q: "Wie van de chefs wacht er nog op geld van ons?", expect: ["chefs.uitbetalingen"] },
+  { id: "G-stille-klant", q: "Welke klant heeft het langst niet meer geboekt?", expect: ["clients.stil"] },
+  { id: "G-diensten-datum", q: "Welke diensten staan er op 15 augustus gepland?", expect: ["shifts.find"] },
   { id: "G-jarig", q: "Is er binnenkort iemand jarig in het team?", expect: ["chefs.momenten"] },
   { id: "G-agenda-vandaag", q: "Wat heb ik vandaag allemaal beloofd en gepland staan?", expect: ["agenda.vandaag"] },
   { id: "G1", q: "Welke uren wachten nog op goedkeuring?", expect: ["hours.list_awaiting_approval"] },

@@ -154,7 +154,10 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
         -- feature set exists to grow — respect it here too).
         and not exists (
           select 1 from chef_availability a
-          where a.chef_id = c.id and a.date = ${tStart} and a.available = false
+          -- chef_availability.date stores UTC-MIDNIGHT of the Amsterdam day; tStart is
+          -- amsterdamMidnightUtc (22:00Z the previous day in summer) — they NEVER match.
+          -- Compare on the day KEY with a ::date cast, like staffing.ts does.
+          where a.chef_id = c.id and a.date = ${todayKey}::date and a.available = false
         )
     `),
   ]);
