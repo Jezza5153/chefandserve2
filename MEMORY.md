@@ -30,6 +30,11 @@ _Last verified against production: 2026-07-26 (flags re-verified after the eveni
 
 **Waiting on a person, not on code:**
 
+0. **⚠️ OpenAI quota exhausted (2026-07-27)** — the shared account hit its billing limit.
+   The PRODUCTION assistant errors (circuit breaker serves the friendly fallback) and the
+   CI eval gate fails with "exceeded quota" until the account is topped up. Top up first,
+   then re-run any red eval before reading it as a regression.
+
 1. **`RESEND_INBOUND_SECRET`** — needs setting on the Resend dashboard webhook. The whole
    inbound-mail pipeline (svix webhook → `inbound_messages` → inbox UI → AI tool) is built
    and dark behind it.
