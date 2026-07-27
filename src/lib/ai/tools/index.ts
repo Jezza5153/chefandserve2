@@ -20,6 +20,7 @@ import { emailSend, emailSendToClient, emailSendToChef } from "@/lib/ai/tools/co
 import { chefsUpdateContact } from "@/lib/ai/tools/chef-update-contact";
 import { remindersCreate, remindersList, remindersComplete } from "@/lib/ai/tools/reminders";
 import { agendaVandaag, agendaRemember } from "@/lib/ai/tools/agenda";
+import { chefsMomenten } from "@/lib/ai/tools/people-moments";
 import { memoryRemember, memoryList, memoryForget } from "@/lib/ai/tools/memory";
 import {
   chefsListProfileChanges,
@@ -170,6 +171,7 @@ export const ALL_TOOLS: AnyTool[] = [
   // personal — Maarten's own to-remember list
   remindersCreate,
   agendaVandaag,
+  chefsMomenten,
   agendaRemember,
   remindersList,
   remindersComplete,

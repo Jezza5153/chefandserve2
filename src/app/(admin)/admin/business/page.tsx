@@ -56,6 +56,7 @@ import { BenchStrip } from "@/components/dashboard/BenchStrip";
 import { ChefCard } from "@/components/ChefCard";
 import { getChefCards, type ChefCardData } from "@/lib/domain/chef-cards";
 import { agendaToday } from "@/lib/ai/read-model/agenda";
+import { getPeopleMoments } from "@/lib/domain/people-moments";
 import { createAgendaEvent } from "@/lib/domain/agenda-events";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { aiEnabled } from "@/lib/ai/config";
@@ -383,48 +384,15 @@ export default async function BusinessDashboardPage({
     // Spoed-ready first, then the most proven — the panic call order.
     .sort((a, b) => Number(b.spoed) - Number(a.spoed) || b.totalHours - a.totalHours || a.fullName.localeCompare(b.fullName));
 
-  // Birthdays within 14 days (Feb-29 celebrates on Feb-28 in common years — same rule as
-  // workers/reminders.ts) + work anniversaries + shift/hour milestones coming up.
-  type PeopleMoment = { chefId: string; name: string; label: string; sub: string; icon: "gift" | "award" | "star" };
-  const peopleMoments: PeopleMoment[] = [];
-  const msDay = 864e5;
-  const isLeapYear = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
-  const daysUntil = (month: number, day: number): number => {
-    // month 1-12; compare Amsterdam calendar days via the existing key helpers.
-    const [ty, tm, td] = todayKey.split("-").map(Number);
-    for (let y = ty; y <= ty + 1; y++) {
-      const m = month;
-      let d = day;
-      if (m === 2 && d === 29 && !isLeapYear(y)) { d = 28; }
-      const diff = Math.round((Date.UTC(y, m - 1, d) - Date.UTC(ty, tm - 1, td)) / msDay);
-      if (diff >= 0) return diff;
-    }
-    return 999;
-  };
-  const dayWord = (n: number) => (n === 0 ? "vandaag" : n === 1 ? "morgen" : `over ${n} dagen`);
-  for (const c of activeChefRows) {
-    if (c.dateOfBirth) {
-      const [, bm, bd] = c.dateOfBirth.split("-").map(Number);
-      const n = daysUntil(bm, bd);
-      if (n <= 14) peopleMoments.push({ chefId: c.id, name: c.fullName, label: `Jarig ${dayWord(n)}`, sub: "stuur een berichtje", icon: "gift" });
-    }
-    const j = new Date(c.joinedAt);
-    const jn = daysUntil(j.getUTCMonth() + 1, j.getUTCDate());
-    const years = new Date().getUTCFullYear() - j.getUTCFullYear() + (jn > 300 ? 0 : jn === 0 ? 0 : 1);
-    if (jn <= 14 && years >= 1) {
-      peopleMoments.push({ chefId: c.id, name: c.fullName, label: `${years} jaar bij ons ${dayWord(jn)}`, sub: "werkjubileum", icon: "award" });
-    }
-    const life = lifetimeByChef.get(c.id);
-    if (life) {
-      for (const m of [10, 25, 50, 100, 250, 500]) {
-        if (life.totalShifts >= m - 3 && life.totalShifts < m) {
-          peopleMoments.push({ chefId: c.id, name: c.fullName, label: `Bijna ${m}e dienst (${life.totalShifts})`, sub: "mijlpaal in zicht", icon: "star" });
-          break;
-        }
-      }
-    }
-  }
-  peopleMoments.sort((a, b) => a.label.localeCompare(b.label));
+  // People moments — same domain function as chefs.momenten (AI) and the briefing.
+  const momentIcon: Record<string, "gift" | "award" | "star"> = { birthday: "gift", anniversary: "award", milestone: "star" };
+  const peopleMoments = (await getPeopleMoments()).map((m) => ({
+    chefId: m.chefId,
+    name: m.name,
+    label: m.label,
+    sub: m.kind === "birthday" ? "stuur een berichtje" : m.kind === "anniversary" ? "werkjubileum" : "mijlpaal in zicht",
+    icon: momentIcon[m.kind] ?? "star",
+  }));
 
   // One batched load (3 queries total) for every chef name this page will render —
   // the ChefCard hover data: face, tenure, hours, rating, best-used-for, birthday.

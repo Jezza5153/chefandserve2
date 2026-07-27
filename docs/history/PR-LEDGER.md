@@ -15,6 +15,8 @@
 
 _(add new rows here)_
 
+- #333 · 2026-07-27 · Owner-screenshot gap gedicht: chefs.momenten tool (verjaardagen/jubilea/mijlpalen, data-gap-eerlijk) uit één domain-fn met dashboard+briefing; mini-markdown rendering in de chat (letterlijke ** weg) · people-moments, AssistantChat
+
 - #332 · 2026-07-27 · Portfolio-rest, AI-integrated: contributiemarge (werkgeverslasten-aanname) + tarief-dekking; agenda.vandaag/remember tools + Vandaag/Belofte-kaart; rating→favoriet + ≤3★ auto-nabellen; KPI-stuurgetallen (vulgraad vooruit, time-to-fill, geboekte omzet) op insights + platform-KPI-tool · breed
 
 - #331 · 2026-07-26 · Flywheel: Bel+App CTA op elk chef-gevonden-oppervlak (incl. AI, web-only nummer); beschikbaarheids-loop (toggle-strip + donderdag-reminder + +8 match-boost met reden); briefing 'Je mensen'; preplan aan met review-regel. Opus-review pre-merge: 2 blockers + 8 fixes toegepast · breed
