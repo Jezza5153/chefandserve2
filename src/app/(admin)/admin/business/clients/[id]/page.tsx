@@ -38,6 +38,8 @@ import { ClientHealthCard } from "./_components/ClientHealthCard";
 import { KlantBreinCard } from "./_components/KlantBreinCard";
 import { KlantPatronenCard } from "./_components/KlantPatronenCard";
 import { KlantSnapshotCard } from "./_components/KlantSnapshotCard";
+import { KnowledgeNotesCard } from "@/components/admin/KnowledgeNotesCard";
+import { latestLegacyNoteLine } from "@/lib/legacy-notes";
 import { Klant360 } from "./_components/Klant360";
 import { PortalAccessSection } from "./_components/PortalAccessSection";
 
@@ -478,8 +480,14 @@ export default async function ClientDetailPage({
 
       <ClientHealthCard verdict={clientHealth} />
 
-      {/* PR-INTEL-P2: "Voor je belt" — composed brein + patronen glance */}
-      <KlantSnapshotCard snapshot={snapshot} />
+      {/* PR-INTEL-P2: "Voor je belt" — composed brein + patronen glance; falls back
+          to the newest oude-systeem notitie so it never claims ignorance while the
+          notes are filled. */}
+      <KlantSnapshotCard snapshot={snapshot} legacyHeadline={latestLegacyNoteLine(client.notes)} />
+
+      {/* Kennis & notities — favorieten/blacklist met redenen, briefings en
+          relatie-historie uit het oude systeem, read-first. */}
+      <KnowledgeNotesCard notes={client.notes} />
 
       {/* PR-INTEL: Patronen & relaties — booking patterns + vaste chefs */}
       <KlantPatronenCard patterns={snapshot.patterns} />

@@ -7,7 +7,9 @@
  * an empty chef_availability table excludes nobody — the strip says "niet ingepland",
  * it never promises "confirmed free".
  *
- * Sort order is the panic order: spoed-ready first, then most proven (lifetime hours).
+ * Sort order is the panic order: spoed-ready first, then most proven (lifetime hours,
+ * oude-systeem historie counts). Capped — 204 real chefs must not become a 10.000px
+ * rail; the counter links to the full directory.
  */
 import Link from "next/link";
 
@@ -33,14 +35,20 @@ function waHref(phone: string): string {
   return `https://wa.me/${intl}`;
 }
 
+const BENCH_CAP = 8;
+
 export function BenchStrip({ rows, cards }: { rows: BenchRow[]; cards: Map<string, ChefCardData> }) {
+  const shown = rows.slice(0, BENCH_CAP);
   return (
     <section className="rounded-xl border border-ink-200 bg-white p-5">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="font-serif text-lg text-ink-900">Vrij vandaag</h2>
-        <span className="font-ui text-[11px] text-ink-500">
-          {rows.length} {rows.length === 1 ? "chef" : "chefs"} niet ingepland
-        </span>
+        <Link
+          href="/admin/business/chefs"
+          className="font-ui text-[11px] text-ink-500 underline-offset-4 hover:text-burgundy hover:underline"
+        >
+          {rows.length} {rows.length === 1 ? "chef" : "chefs"} niet ingepland →
+        </Link>
       </div>
       {rows.length === 0 ? (
         <p className="mt-3 text-sm text-ink-500">
@@ -49,7 +57,7 @@ export function BenchStrip({ rows, cards }: { rows: BenchRow[]; cards: Map<strin
         </p>
       ) : (
         <ul className="mt-3 divide-y divide-ink-100">
-          {rows.map((c) => (
+          {shown.map((c) => (
             <li key={c.id} className="flex items-center gap-3 py-2">
               <CardOrLink card={cards.get(c.id)} chefId={c.id}>
                 <span className="flex items-center gap-1.5 truncate text-sm text-ink-900">

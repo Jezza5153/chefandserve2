@@ -23,6 +23,7 @@ import { buildIcs, placementUid } from "@/lib/calendar/ics";
 import { db } from "@/lib/db/client";
 import { chefAvailability, chefs, clients, placements, shifts } from "@/lib/db/schema";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
+import { isChefBlockedByShiftClient } from "@/lib/domain/matching";
 import { recomputeShiftStatus } from "@/lib/domain/shift-status";
 import { transitionPlacement } from "@/lib/domain/placement-transition";
 import { amsterdamCalendarDayUTC } from "@/lib/tz-day";
@@ -34,7 +35,7 @@ import { formatChefRole } from "@/lib/labels";
 export type PublishSkip = {
   placementId: string;
   chefName: string;
-  reason: "blocked" | "conflict";
+  reason: "blocked" | "conflict" | "klant_blocked";
 };
 
 export type PublishResult = {
@@ -93,6 +94,15 @@ export async function publishDraftsForPeriod(args: {
       .limit(1);
     if (blocked.length > 0) {
       skipped.push({ placementId: d.placementId, chefName: d.chefName, reason: "blocked" });
+      continue;
+    }
+
+    // 1a-bis. Klant-blacklist gate: publishing flips draft → proposed WITHOUT going
+    // through proposePlacement, so the blacklist must be enforced here too. No
+    // override on the bulk path — push the single chef through the shift page if
+    // it really must happen (that path carries the override-with-reason UI).
+    if (env.KLANT_BLACKLIST_GATE_ENABLED === "true" && (await isChefBlockedByShiftClient(d.shiftId, d.chefId))) {
+      skipped.push({ placementId: d.placementId, chefName: d.chefName, reason: "klant_blocked" });
       continue;
     }
 

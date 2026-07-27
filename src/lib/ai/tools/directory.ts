@@ -13,6 +13,7 @@ export const chefsFind = defineTool({
   description:
     'Zoek chefs. Combineer gerust meerdere eisen — ze worden ALLEMAAL toegepast (EN), niet één ervan. ' +
     'Gebruik `query` alleen voor losse tekst (een naam, een gerecht, een hotel waar iemand werkte: "Daniel", "sushi", "Okura"). ' +
+    'De vrije tekst zoekt óók in de interne notities (oude-systeem kennis) — een chef kan dus matchen op iets uit zijn historie; de notitietekst zelf komt niet mee in het antwoord. ' +
     'Zet elke concrete eis in zijn eigen veld: city, vakniveau, segment, skillTags, language, maxRateCents, minRating, availableOn. ' +
     'Bijv. "sous-chef in Utrecht die NL spreekt onder €35" → vakniveau=sous_chef, city=Utrecht, language=NL, maxRateCents=3500. ' +
     'Laat alles leeg voor de best beoordeelde chefs. Archiveerde chefs blijven standaard buiten beeld. ' +

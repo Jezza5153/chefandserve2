@@ -57,6 +57,7 @@ import { ChefCard } from "@/components/ChefCard";
 import { getChefCards, type ChefCardData } from "@/lib/domain/chef-cards";
 import { agendaToday } from "@/lib/ai/read-model/agenda";
 import { getPeopleMoments } from "@/lib/domain/people-moments";
+import { legacyHistory } from "@/lib/legacy-notes";
 import { createAgendaEvent } from "@/lib/domain/agenda-events";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { aiEnabled } from "@/lib/ai/config";
@@ -225,9 +226,13 @@ export default async function BusinessDashboardPage({
         dateOfBirth: chefs.dateOfBirth,
         joinedAt: chefs.joinedAt,
         availableForEmergency: chefs.availableForEmergency,
+        // Oude-systeem historie (parsed uit notes) — the bench "most proven" sort
+        // would otherwise degrade to alphabetical while chef_metrics_daily is empty.
+        notes: chefs.notes,
       })
       .from(chefs)
-      .where(and(isNull(chefs.deletedAt), eq(chefs.status, "active"))),
+      .where(and(isNull(chefs.deletedAt), eq(chefs.status, "active")))
+      .orderBy(chefs.fullName),
     // Chefs with an outstanding (sent, not completed) profile-data request → spotlight "opgevraagd".
     db
       .select({ chefId: profileDataRequests.chefId, fullName: chefs.fullName })
@@ -297,7 +302,8 @@ export default async function BusinessDashboardPage({
     // practice, not a feeling — this is the quiet-Tuesday work list.
     db.execute(sql`
       select c.id, c.full_name as "fullName",
-             extract(day from now() - coalesce(max(cl.created_at), c.joined_at))::int as "daysSilent"
+             extract(day from now() - coalesce(max(cl.created_at), c.joined_at))::int as "daysSilent",
+             count(*) over ()::int as "totalStale"
       from ${chefs} c
       left join contact_logs cl on cl.target_type = 'chef' and cl.target_id = c.id
       where c.deleted_at is null and c.status = 'active'
@@ -379,7 +385,11 @@ export default async function BusinessDashboardPage({
       city: c.city,
       phone: c.phone,
       spoed: c.availableForEmergency,
-      totalHours: Math.round((lifetimeByChef.get(c.id)?.totalMinutes ?? 0) / 60),
+      // New-system hours first; migrated chefs fall back to their oude-systeem
+      // historie so "most proven" ranks veterans above unknowns, not A above Z.
+      totalHours:
+        Math.round((lifetimeByChef.get(c.id)?.totalMinutes ?? 0) / 60) ||
+        (legacyHistory(c.notes)?.hours ?? 0),
     }))
     // Spoed-ready first, then the most proven — the panic call order.
     .sort((a, b) => Number(b.spoed) - Number(a.spoed) || b.totalHours - a.totalHours || a.fullName.localeCompare(b.fullName));
@@ -454,8 +464,9 @@ export default async function BusinessDashboardPage({
   const tomorrowMetrics = dayMetrics(tomorrowShifts, tomorrowKey);
   const tomorrowAttention = tomorrowShifts.filter((s) => needsAttention(intel(s))).length;
 
-  /* ---- chef completeness (missing-data count + spotlight) ---- */
-  const requestedChefIds = new Set(dataReqRows.map((r) => r.chefId));
+  /* ---- chef completeness (missing-data count; the spotlight card is gone — it was
+         the 4th duplicate of this same fact, the attention item is the one surface) ---- */
+  void dataReqRows; // query kept in the Promise.all (positional destructure); no longer rendered
   const missingChefs = activeChefRows
     .map((c) => {
       const comp = getProfileCompleteness({
@@ -478,18 +489,6 @@ export default async function BusinessDashboardPage({
     .filter((c) => c.comp.missingCritical.length > 0 || !c.comp.canEstimateTravel);
   const missingDataCount = missingChefs.length;
 
-  function missingLabel(c: (typeof missingChefs)[number]): string {
-    if (requestedChefIds.has(c.id)) return "Gegevens opgevraagd";
-    if (c.comp.missingCritical.length > 0) return `${cap(c.comp.missingCritical[0])} ontbreekt`;
-    if (!c.comp.canEstimateTravel) return "Postcode ontbreekt";
-    return "Profiel onvolledig";
-  }
-  const spotlight = missingChefs.slice(0, 4).map((c) => ({
-    id: c.id,
-    name: c.name,
-    status: missingLabel(c),
-    tone: requestedChefIds.has(c.id) ? ("blue" as const) : ("amber" as const),
-  }));
 
   /* ---- build the Aandacht-nodig queue ---- */
   const items: AttentionItem[] = [];
@@ -535,10 +534,13 @@ export default async function BusinessDashboardPage({
     items.push({ kind: "doc_expiring", tone: "amber", icon: "clock", title: `${expiringDocs.length} ${plural(expiringDocs.length, "document verloopt", "documenten verlopen")} binnen 30 dagen`, detail: `eerste: ${first.chefName} (${firstDate})`, href: `/admin/business/chefs/${first.chefId}`, cta: "Bekijk", signalKey: "doc_expiring", fingerprint: `${expiringDocs.length}:${first.chefId}` });
   }
   {
-    const stale = (Array.isArray(staleContacts) ? staleContacts : (staleContacts as { rows?: unknown[] }).rows ?? []) as { id: string; fullName: string; daysSilent: number }[];
+    const stale = (Array.isArray(staleContacts) ? staleContacts : (staleContacts as { rows?: unknown[] }).rows ?? []) as { id: string; fullName: string; daysSilent: number; totalStale: number }[];
     if (stale.length > 0) {
       const worst = stale[0]!;
-      items.push({ kind: "chef_contact_stale", tone: "blue", icon: "user-round", title: `${stale.length} ${plural(stale.length, "chef", "chefs")} 3+ weken niet gesproken`, detail: `stilste: ${worst.fullName} (${worst.daysSilent} dagen)`, href: `/admin/business/chefs/${worst.id}`, cta: "Bel of app", signalKey: "chef_contact_stale", fingerprint: `${stale.length}:${worst.id}` });
+      // Honest count (window over the FULL stale set, not the LIMIT-3 sample), framed
+      // as today's doable bite — a 200-strong backlog must not become a guilt banner.
+      const total = worst.totalStale ?? stale.length;
+      items.push({ kind: "chef_contact_stale", tone: "blue", icon: "user-round", title: `${total} ${plural(total, "chef", "chefs")} 3+ weken niet gesproken — bel er vandaag ${Math.min(3, total)}`, detail: `stilste: ${worst.fullName} (${worst.daysSilent} dagen)`, href: `/admin/business/chefs/${worst.id}`, cta: "Bel of app", signalKey: "chef_contact_stale", fingerprint: `${total}:${worst.id}` });
     }
   }
 
@@ -735,19 +737,23 @@ export default async function BusinessDashboardPage({
         {/* Keep the rail + banner quietly current; strip the ?done= toast after ~6s. */}
         <AutoRefresh seconds={60} clearParam="done" />
 
-        {/* Rooster overzicht — bezetting / loonkost */}
-        <section className="mt-6">
-          <div className="flex items-baseline justify-between">
-            <h2 className="font-serif text-xl text-ink-900">Rooster overzicht</h2>
-            <Link href="/admin/business/roster" className="flex items-center gap-1 font-ui text-[12px] font-medium text-burgundy hover:underline">
-              Bekijk volledig rooster <Icon name="arrow-right" className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <BezettingCard label="Vandaag" date={cap(now.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }))} accent metrics={todayMetrics} href="/admin/business/roster" cta="Bekijk vandaag" />
-            <BezettingCard label="Morgen" date={cap(new Date(now.getTime() + 864e5).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }))} metrics={tomorrowMetrics} href="/admin/business/roster" cta="Bekijk morgen" />
-          </div>
-        </section>
+        {/* Rooster overzicht — bezetting / loonkost. Collapses when there are no
+            shifts in the window: two €0/0%-cards as the first content block train
+            the eye to skip the page; the DayTable empty state carries the CTA. */}
+        {horizonShifts.length > 0 && (
+          <section className="mt-6">
+            <div className="flex items-baseline justify-between">
+              <h2 className="font-serif text-xl text-ink-900">Rooster overzicht</h2>
+              <Link href="/admin/business/roster" className="flex items-center gap-1 font-ui text-[12px] font-medium text-burgundy hover:underline">
+                Bekijk volledig rooster <Icon name="arrow-right" className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <BezettingCard label="Vandaag" date={cap(now.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }))} accent metrics={todayMetrics} href="/admin/business/roster" cta="Bekijk vandaag" />
+              <BezettingCard label="Morgen" date={cap(new Date(now.getTime() + 864e5).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Amsterdam" }))} metrics={tomorrowMetrics} href="/admin/business/roster" cta="Bekijk morgen" />
+            </div>
+          </section>
+        )}
 
         {/* Vandaag & morgen table + right rail */}
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -816,8 +822,12 @@ export default async function BusinessDashboardPage({
               )}
             </section>
 
-            {/* FLYWHEEL: today's commitments — intakes, opvolgingen, beloftes. Above the
-                bench: what you PROMISED outranks who you could call. */}
+            {/* DASH-PEOPLE: the call list — who is NOT working today. Directly under the
+                queue on purpose: with a 200+ real roster, queue → bellen is the panic
+                path; the agenda (and its form) moved one card down. */}
+            <BenchStrip rows={benchRows} cards={chefCards} />
+
+            {/* FLYWHEEL: today's commitments — intakes, opvolgingen, beloftes. */}
             <section className="rounded-xl border border-ink-200 bg-white p-5">
               <div className="flex items-baseline justify-between gap-2">
                 <h2 className="font-serif text-lg text-ink-900">Vandaag op de agenda</h2>
@@ -867,10 +877,6 @@ export default async function BusinessDashboardPage({
               </form>
             </section>
 
-            {/* DASH-PEOPLE: the call list — who is NOT working today. Above spotlight on
-                purpose: in a panic this is the second thing Maarten needs after the queue. */}
-            <BenchStrip rows={benchRows} cards={chefCards} />
-
             {/* DASH-PEOPLE: birthdays, jubilea, milestones — the boss who remembers. */}
             {peopleMoments.length > 0 && (
               <section className="rounded-xl border border-ink-200 bg-white p-5">
@@ -891,48 +897,44 @@ export default async function BusinessDashboardPage({
               </section>
             )}
 
-            {spotlight.length > 0 && (
-              <section className="rounded-xl border border-ink-200 bg-white p-5">
-                <h2 className="font-serif text-lg text-ink-900">Chef spotlight</h2>
-                <div className="mt-3 space-y-3">
-                  {spotlight.map((c) => (
-                    <Link key={c.id} href={`/admin/business/chefs/${c.id}`} className="flex items-center gap-3 hover:opacity-80">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-burgundy/10 font-ui text-[12px] font-semibold text-burgundy">{initials(c.name)}</span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-ink-900">{c.name}</p>
-                        <p className="truncate text-xs text-ink-500">{c.status}</p>
-                      </div>
-                      <span role="img" aria-label={c.tone === "blue" ? "Gegevens opgevraagd" : "Profiel onvolledig"} className={`h-2 w-2 rounded-full ${c.tone === "blue" ? "bg-blue-500" : "bg-amber-500"}`} />
-                    </Link>
-                  ))}
-                </div>
-                <Link href="/admin/business/chefs" className="mt-4 flex items-center gap-1 font-ui text-[12px] font-medium text-burgundy hover:underline">
-                  Naar chefs <Icon name="arrow-right" className="h-3.5 w-3.5" />
-                </Link>
-              </section>
-            )}
           </div>
         </div>
 
-        {/* KPI strip */}
+        {/* KPI strip — zero-value operational cards hide themselves (a row of dead
+            zeros erodes trust in the numbers that ARE real); they reappear with data.
+            "Spoed-inzetbaar 0" was actively misleading: the import never set the
+            spoed-flag, so 0 reads as "nobody can help" over a 200-strong roster. */}
         <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-          <OpsCard icon="calendar" label="Diensten · deze week" value={shiftsThisWeek} href="/admin/planning" cta="Naar planning"
-            lines={[{ text: `${openShifts} open` }, deltaLine(shiftsDelta)]} />
+          {(shiftsThisWeek > 0 || openShifts > 0) && (
+            <OpsCard icon="calendar" label="Diensten · deze week" value={shiftsThisWeek} href="/admin/planning" cta="Naar planning"
+              lines={[{ text: `${openShifts} open` }, deltaLine(shiftsDelta)]} />
+          )}
           <OpsCard icon="users" label="Chefs" value={activeChefs} href="/admin/business/chefs" cta="Naar chefs"
             lines={[{ text: "actief" }, missingDataCount > 0 ? { text: `${missingDataCount} mist profieldata`, tone: "amber" } : { text: "data compleet", tone: "muted" }]} />
           <OpsCard icon="inbox" label="Inbox" value={inboxCount} badge={inboxCount} href="/admin/business/inbox" cta="Naar inbox"
             lines={[{ text: "nieuwe aanvragen" }, { text: `${newChefSubs} chef · ${newClientSubs} klant`, tone: "muted" }]} />
-          <OpsCard icon="clock" label="Uren" value={hoursToApprove} href="/admin/business/hours?filter=wacht_op_mij" cta="Naar uren"
-            lines={[{ text: "te keuren" }, hoursKlantTimeout > 0 ? { text: `${hoursKlantTimeout} wacht op klant`, tone: "amber" } : { text: "geen achterstand", tone: "muted" }]} />
-          <OpsCard icon="check-circle" label="Bevestigd" value={confirmedThisWeek} href="/admin/business/shifts" cta="Naar shifts"
-            lines={[{ text: "deze week" }, deltaLine(confirmedDelta)]} />
-          {/* DASH-PEOPLE: was "Profieldata" — a duplicate of the amber line on the Chefs
-              card two tiles away. Replaced with the bestand shape: what CAN I field? */}
-          <OpsCard icon="shield-check" label="Spoed-inzetbaar" value={spoedCount} href="/admin/business/chefs?spoed=1" cta="Naar chefs"
-            lines={[{ text: niveauMix || "nog geen niveaus ingevuld", tone: "muted" }, withRate < activeChefRows.length ? { text: `${withRate}/${activeChefRows.length} met tarief — vul aan voor marge`, tone: "amber" } : missingDataCount > 0 ? { text: `${missingDataCount} mist profieldata`, tone: "amber" } : { text: "profieldata compleet", tone: "emerald" }]} />
+          {(hoursToApprove > 0 || hoursKlantTimeout > 0) && (
+            <OpsCard icon="clock" label="Uren" value={hoursToApprove} href="/admin/business/hours?filter=wacht_op_mij" cta="Naar uren"
+              lines={[{ text: "te keuren" }, hoursKlantTimeout > 0 ? { text: `${hoursKlantTimeout} wacht op klant`, tone: "amber" } : { text: "geen achterstand", tone: "muted" }]} />
+          )}
+          {confirmedThisWeek > 0 && (
+            <OpsCard icon="check-circle" label="Bevestigd" value={confirmedThisWeek} href="/admin/business/shifts" cta="Naar shifts"
+              lines={[{ text: "deze week" }, deltaLine(confirmedDelta)]} />
+          )}
+          {spoedCount > 0 && (
+            <OpsCard icon="shield-check" label="Spoed-inzetbaar" value={spoedCount} href="/admin/business/chefs?spoed=1" cta="Naar chefs"
+              lines={[{ text: niveauMix || "nog geen niveaus ingevuld", tone: "muted" }, withRate < activeChefRows.length ? { text: `${withRate}/${activeChefRows.length} met tarief — vul aan voor marge`, tone: "amber" } : missingDataCount > 0 ? { text: `${missingDataCount} mist profieldata`, tone: "amber" } : { text: "profieldata compleet", tone: "emerald" }]} />
+          )}
         </div>
 
-        {/* KPI-5: money overview (FINAL hours) */}
+        {/* KPI-5: money overview (FINAL hours). All-zero → one muted line instead of
+            three €0-cards: dead sections train the eye to skip the whole page. */}
+        {roll.ytd.revenueCents === 0 && unbilledCents === 0 && revenueAtRiskCents === 0 && !revSwing ? (
+          <div className="mt-6">
+            <h2 className="mb-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-500">Omzet &amp; marge</h2>
+            <p className="text-sm text-ink-500">Nog geen financiële data in het nieuwe systeem — verschijnt zodra de eerste uren zijn goedgekeurd.</p>
+          </div>
+        ) : (
         <div className="mt-6">
           <h2 className="mb-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-500">Omzet &amp; marge</h2>
           <MoneyStrip week={roll.week} month={roll.month} ytd={roll.ytd} />
@@ -981,6 +983,7 @@ export default async function BusinessDashboardPage({
             </div>
           ) : null}
         </div>
+        )}
 
         {/* Operational footer — system/integration health lives on the
             super_admin /admin/system + /admin/business/integrations surfaces
@@ -1235,10 +1238,6 @@ function plural(n: number, one: string, many: string): string {
   return n === 1 ? one : many;
 }
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
-}
 
 function deltaLine(d: ReturnType<typeof weekDelta>): { text: string; tone: "muted" | "emerald" | "red" } {
   if (d.mode === "hidden") return { text: " ", tone: "muted" };

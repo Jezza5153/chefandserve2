@@ -33,6 +33,8 @@ import { buildChefTrends } from "@/lib/domain/chef-trends";
 import { getOnboardingReadiness, getProfileCompleteness } from "@/lib/domain/profile-completeness";
 import { computeChefInzetbaarheid } from "@/lib/domain/chef-inzetbaarheid";
 import { getChefIntelSnapshot } from "@/lib/domain/intel";
+import { latestLegacyNoteLine } from "@/lib/legacy-notes";
+import { KnowledgeNotesCard } from "@/components/admin/KnowledgeNotesCard";
 import { getChefReliability } from "@/lib/chef-events";
 import {
   createProfileDataRequest,
@@ -606,8 +608,14 @@ export default async function ChefDetailPage({
         doActivatePortal={doActivatePortal}
       />
 
-      {/* PR-INTEL-P2: the "voor je belt" glance — composed from the snapshot. */}
-      <ChefSnapshotCard snapshot={snapshot} />
+      {/* PR-INTEL-P2: the "voor je belt" glance — composed from the snapshot; falls
+          back to the newest oude-systeem notitie so the card never claims ignorance
+          about a chef whose notes are filled. */}
+      <ChefSnapshotCard snapshot={snapshot} legacyHeadline={latestLegacyNoteLine(chef.notes)} />
+
+      {/* Kennis & notities — the injected ShiftManager cards + eigen notities,
+          read-first and high on the page (the edit-textarea stays in Bewerken). */}
+      <KnowledgeNotesCard notes={chef.notes} editHref="#bewerken" />
 
       {/* PR-INTEL: patterns & relationships — when/what/who-with + earnings. */}
       <ChefPatronenCard patterns={snapshot.patterns} />

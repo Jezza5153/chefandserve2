@@ -785,6 +785,22 @@ export async function chefIsInActiveShift(chefId: string, at: Date = new Date())
   return !!row;
 }
 
+/**
+ * Is this chef on the klant-blacklist of the shift's klant? The blocklist was a
+ * ranking-time filter only — audit finding: a blocked chef could still be proposed,
+ * drafted-and-published, or AI-proposed at the klant that blocked them. This is the
+ * shared guard for those seams.
+ */
+export async function isChefBlockedByShiftClient(shiftId: string, chefId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ blocked: clients.blockedChefIds })
+    .from(shifts)
+    .innerJoin(clients, eq(clients.id, shifts.clientId))
+    .where(eq(shifts.id, shiftId))
+    .limit(1);
+  return (row?.blocked ?? []).includes(chefId);
+}
+
 /** Outcome of {@link proposePlacement}. `already_proposed` means a live
  * (proposed/accepted/confirmed) row already exists — nothing changed, no
  * second notification fires. `proposed` covers a fresh row AND a re-proposal
@@ -860,6 +876,18 @@ export async function proposePlacement(
       overrodeBlock = true;
       overrideBlockers = gate.blockers;
     }
+  }
+
+  // Klant-blacklist HARD-GATE: same override contract as P3a — a human may push
+  // through WITH a reason (audited); the AI propose-tool passes no override and can
+  // therefore never bypass it.
+  if (env.KLANT_BLACKLIST_GATE_ENABLED === "true" && (await isChefBlockedByShiftClient(shiftId, chefId))) {
+    const reason = options.override?.reason?.trim() ?? "";
+    if (!options.override || reason.length < OVERRIDE_MIN_REASON) {
+      return { status: "blocked", blockers: ["door deze klant geblokkeerd"] };
+    }
+    overrodeBlock = true;
+    overrideBlockers = [...overrideBlockers, "door deze klant geblokkeerd"];
   }
 
   const now = new Date();

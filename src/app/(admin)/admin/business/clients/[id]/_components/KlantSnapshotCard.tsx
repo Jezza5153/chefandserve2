@@ -19,7 +19,14 @@ const FULL_DAY: Record<string, string> = {
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export function KlantSnapshotCard({ snapshot }: { snapshot: ClientIntelSnapshot }) {
+export function KlantSnapshotCard({
+  snapshot,
+  legacyHeadline,
+}: {
+  snapshot: ClientIntelSnapshot;
+  /** Fallback headline mined from clients.notes (oude systeem) when brein + patterns are empty. */
+  legacyHeadline?: string | null;
+}) {
   const { brein, patterns } = snapshot;
   const topRole = patterns.roleMix[0];
   const repeatChef = patterns.repeatChefs[0];
@@ -46,6 +53,11 @@ export function KlantSnapshotCard({ snapshot }: { snapshot: ClientIntelSnapshot 
       <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">Voor je belt</p>
       {headline ? (
         <p className="mt-1.5 font-serif text-lg text-ink-900">{headline}</p>
+      ) : legacyHeadline ? (
+        <>
+          <p className="mt-1.5 font-serif text-lg text-ink-900">{legacyHeadline}</p>
+          <p className="mt-0.5 text-[11px] text-ink-400">Laatste notitie uit het oude systeem — zie “Kennis &amp; notities” hieronder.</p>
+        </>
       ) : (
         <p className="mt-1.5 text-sm text-ink-500">
           Nog weinig bekend — vul &ldquo;Maarten&rsquo;s brein&rdquo; in of laat de klant eerst
