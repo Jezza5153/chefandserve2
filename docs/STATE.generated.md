@@ -7,7 +7,7 @@
 > **No other document may state a number** — link to a section of this file instead.
 > If you are about to type a count into a doc, you are in the wrong file.
 
-Generated from commit `4923d6a`.
+Generated from commit `10f77dc`.
 
 ## Schema
 
@@ -60,20 +60,20 @@ Generated from commit `4923d6a`.
 
 ## AI tools
 
-- **114** tools defined via `defineTool` across `src/lib/ai/tools/`
-- Registries: **103** owner (`ALL_TOOLS`) · **6** chef · **5** klant (`portal-index.ts`)
-- By risk tier: **6** financial · **20** outbound · **81** read · **7** self
+- **115** tools defined via `defineTool` across `src/lib/ai/tools/`
+- Registries: **104** owner (`ALL_TOOLS`) · **6** chef · **5** klant (`portal-index.ts`)
+- By risk tier: **6** financial · **20** outbound · **82** read · **7** self
   - `read` needs no confirmation; `outbound` and `financial` require an HMAC confirm token.
 
 <details><summary>All tool names</summary>
 
-`agenda.remember` · `agenda.vandaag` · `audit.search` · `board.recent` · `briefing.daily` · `business.overview` · `chefs.approve_profile_change` · `chefs.at_risk` · `chefs.availability` · `chefs.enrich_from_cv` · `chefs.feedback` · `chefs.find` · `chefs.history_at_client` · `chefs.intel_snapshot` · `chefs.list_profile_changes` · `chefs.match_requirement` · `chefs.pending_cv_suggestions` · `chefs.profile_completeness` · `chefs.reachability` · `chefs.reject_profile_change` · `chefs.request_profile_data` · `chefs.semantic_search` · `chefs.send_availability_reminder` · `chefs.trends` · `chefs.update_contact` · `chefs.work_summary` · `client_onboarding.missing` · `clients.decide_shift_request` · `clients.find` · `clients.health` · `clients.history` · `clients.intel_snapshot` · `clients.loss_making` · `clients.overpromise` · `clients.reachability` · `clients.semantic_search` · `clients.shift_requests` · `clients.shift_templates` · `clients.signoff_backlog` · `contacts.log` · `contacts.timeline` · `demand.forecast` · `documents.expiring` · `documents.list_for_chef` · `email.send` · `email.send_to_chef` · `email.send_to_client` · `email.status` · `escalations.list` · `feedback.review` · `hours.approve` · `hours.detail` · `hours.list_awaiting_approval` · `hours.reject` · `hours.send_reminder` · `inbound.list` · `inboxes.grant_access` · `inboxes.list` · `inboxes.revoke_access` · `insights.leaderboards` · `intake.convert` · `intake.list` · `integrations.health` · `invoicing.unbilled` · `knowledge.search` · `match.intel` · `memory.forget` · `memory.list` · `memory.remember` · `mijn.beoordeling` · `mijn.beschikbaarheid` · `mijn.diensten` · `mijn.documenten` · `mijn.profiel` · `mijn.uren` · `onboarding.missing` · `onboarding.request_missing` · `onze.aanvragen` · `onze.dienst_detail` · `onze.diensten` · `onze.uren` · `onze.vaste_diensten` · `payroll.read` · `placements.cancel` · `placements.complete` · `placements.confirm` · `placements.propose` · `placements.reply` · `planner.cockpit` · `privacy.list_requests` · `ratings.trends` · `reminders.complete` · `reminders.create` · `reminders.list` · `reports.business_kpi` · `reports.chefs` · `reports.clients` · `reports.planned_vs_actual` · `reports.platform_kpi` · `risks.scan` · `roster.autofill` · `roster.copy_last_week` · `roster.overview` · `roster.publish` · `shifts.create` · `shifts.detail` · `shifts.find` · `shifts.interested_chefs` · `shifts.margin` · `shifts.open_soon` · `shifts.suggest_chefs` · `shifts.update` · `system.health` · `watchdog.findings`
+`agenda.remember` · `agenda.vandaag` · `audit.search` · `board.recent` · `briefing.daily` · `business.overview` · `chefs.approve_profile_change` · `chefs.at_risk` · `chefs.availability` · `chefs.enrich_from_cv` · `chefs.feedback` · `chefs.find` · `chefs.history_at_client` · `chefs.intel_snapshot` · `chefs.list_profile_changes` · `chefs.match_requirement` · `chefs.momenten` · `chefs.pending_cv_suggestions` · `chefs.profile_completeness` · `chefs.reachability` · `chefs.reject_profile_change` · `chefs.request_profile_data` · `chefs.semantic_search` · `chefs.send_availability_reminder` · `chefs.trends` · `chefs.update_contact` · `chefs.work_summary` · `client_onboarding.missing` · `clients.decide_shift_request` · `clients.find` · `clients.health` · `clients.history` · `clients.intel_snapshot` · `clients.loss_making` · `clients.overpromise` · `clients.reachability` · `clients.semantic_search` · `clients.shift_requests` · `clients.shift_templates` · `clients.signoff_backlog` · `contacts.log` · `contacts.timeline` · `demand.forecast` · `documents.expiring` · `documents.list_for_chef` · `email.send` · `email.send_to_chef` · `email.send_to_client` · `email.status` · `escalations.list` · `feedback.review` · `hours.approve` · `hours.detail` · `hours.list_awaiting_approval` · `hours.reject` · `hours.send_reminder` · `inbound.list` · `inboxes.grant_access` · `inboxes.list` · `inboxes.revoke_access` · `insights.leaderboards` · `intake.convert` · `intake.list` · `integrations.health` · `invoicing.unbilled` · `knowledge.search` · `match.intel` · `memory.forget` · `memory.list` · `memory.remember` · `mijn.beoordeling` · `mijn.beschikbaarheid` · `mijn.diensten` · `mijn.documenten` · `mijn.profiel` · `mijn.uren` · `onboarding.missing` · `onboarding.request_missing` · `onze.aanvragen` · `onze.dienst_detail` · `onze.diensten` · `onze.uren` · `onze.vaste_diensten` · `payroll.read` · `placements.cancel` · `placements.complete` · `placements.confirm` · `placements.propose` · `placements.reply` · `planner.cockpit` · `privacy.list_requests` · `ratings.trends` · `reminders.complete` · `reminders.create` · `reminders.list` · `reports.business_kpi` · `reports.chefs` · `reports.clients` · `reports.planned_vs_actual` · `reports.platform_kpi` · `risks.scan` · `roster.autofill` · `roster.copy_last_week` · `roster.overview` · `roster.publish` · `shifts.create` · `shifts.detail` · `shifts.find` · `shifts.interested_chefs` · `shifts.margin` · `shifts.open_soon` · `shifts.suggest_chefs` · `shifts.update` · `system.health` · `watchdog.findings`
 
 </details>
 
 ## Evals & smokes
 
-- **102** eval cases — 69 GOLDEN · 13 CHAOS · 4 MULTI · 16 SAFETY (`scripts/eval-ai.mts`)
+- **103** eval cases — 70 GOLDEN · 13 CHAOS · 4 MULTI · 16 SAFETY (`scripts/eval-ai.mts`)
   - These score **tool routing only** — `brain.plan` is called, no tool is executed. A tool that
     throws on every call still scores a pass. Result quality is not measured anywhere.
   - ⚠️ Duplicate case ids (one masks the other in the log): `G-complete`
@@ -81,9 +81,9 @@ Generated from commit `4923d6a`.
 
 ## Feature flags
 
-- **28** `*_ENABLED` flags declared in `src/lib/env.ts` (validated by zod — a typo fails loudly).
+- **29** `*_ENABLED` flags declared in `src/lib/env.ts` (validated by zod — a typo fails loudly).
 
-`AI_ENABLED` · `AI_SHORTLIST_ACTIONS_ENABLED` · `ARRIVAL_TRUST_ENABLED` · `BOARD_ENABLED` · `CHEF_AI_CHAT_ENABLED` · `CHEF_OPEN_SHIFTS_ENABLED` · `CHEF_WHATSAPP_ENABLED` · `CLOCKOUT_DIGEST_ENABLED` · `CLOCK_OUT_RECOVERY_ENABLED` · `COMPLIANCE_HARDGATE_ENABLED` · `CV_AI_PROFILING_ENABLED` · `DND_DURING_SHIFT_ENABLED` · `EMERGENCY_CLAIM_ENABLED` · `EMERGENCY_MODE_ENABLED` · `I18N_ENABLED` · `KPI_FORECAST_ENABLED` · `MATCHING_FAVORITES_ENABLED` · `MATCHING_MARGIN_GUARD_ENABLED` · `MATCHING_PREFS_ENABLED` · `MATCHING_RELIABILITY_ENABLED` · `MATCHING_TAGS_ENABLED` · `MONEY_EXPLAINER_ENABLED` · `OFFER_EXPIRY_SWEEP_ENABLED` · `REMINDERS_ENABLED` · `REPLACEMENT_HANDOVER_ENABLED` · `SHIFT_REMINDERS_ENABLED` · `SHIFT_SIGNALS_ENABLED` · `WEB_PUSH_ENABLED`
+`AI_ENABLED` · `AI_SHORTLIST_ACTIONS_ENABLED` · `ARRIVAL_TRUST_ENABLED` · `BOARD_ENABLED` · `CHEF_AI_CHAT_ENABLED` · `CHEF_OPEN_SHIFTS_ENABLED` · `CHEF_WHATSAPP_ENABLED` · `CLOCKOUT_DIGEST_ENABLED` · `CLOCK_OUT_RECOVERY_ENABLED` · `COMPLIANCE_HARDGATE_ENABLED` · `CV_AI_PROFILING_ENABLED` · `DND_DURING_SHIFT_ENABLED` · `EMERGENCY_CLAIM_ENABLED` · `EMERGENCY_MODE_ENABLED` · `I18N_ENABLED` · `KPI_FORECAST_ENABLED` · `MATCHING_FAVORITES_ENABLED` · `MATCHING_MARGIN_GUARD_ENABLED` · `MATCHING_PREFS_ENABLED` · `MATCHING_RELIABILITY_ENABLED` · `MATCHING_TAGS_ENABLED` · `MONEY_EXPLAINER_ENABLED` · `OFFER_EXPIRY_SWEEP_ENABLED` · `RATING_FOLLOWUP_ENABLED` · `REMINDERS_ENABLED` · `REPLACEMENT_HANDOVER_ENABLED` · `SHIFT_REMINDERS_ENABLED` · `SHIFT_SIGNALS_ENABLED` · `WEB_PUSH_ENABLED`
 
 - ⚠️ **8** more are read straight off `process.env` and are NOT in the zod schema.
   A typo in one of these fails **silently** — the feature just stays off forever.

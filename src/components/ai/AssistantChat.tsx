@@ -344,7 +344,7 @@ export function AssistantChat({
                 m.role === "user" ? "bg-ink-900 text-white" : "bg-ink-100 text-ink-900"
               }`}
             >
-              {m.content}
+              {m.role === "assistant" ? <RichText text={m.content} /> : m.content}
             </span>
             {m.role === "assistant" ? (
               <div className="mt-0.5 flex items-center gap-1.5">
@@ -490,3 +490,50 @@ export function AssistantChat({
     </div>
   );
 }
+
+
+/* ---- mini-markdown (CHAT-MD) ----------------------------------------------
+ * The model answers with **bold**, *italic*, `code` and bullet lines; until now the
+ * widget rendered those literally ("**herinnering**" with visible asterisks — a real
+ * owner screenshot). Full markdown is overkill for a chat bubble; this parses exactly
+ * the subset the playbook produces, as React nodes — no innerHTML, so no injection
+ * surface: model output stays DATA.
+ */
+function inlineMd(text: string, keyBase: string): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  // **bold** · *italic* · `code`
+  const re = /(\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`\n]+`)/g;
+  let last = 0;
+  let i = 0;
+  for (const m of text.matchAll(re)) {
+    if (m.index! > last) out.push(text.slice(last, m.index));
+    const tok = m[0];
+    const key = `${keyBase}:${i++}`;
+    if (tok.startsWith("**")) out.push(<strong key={key}>{tok.slice(2, -2)}</strong>);
+    else if (tok.startsWith("`")) out.push(<code key={key} className="rounded bg-black/10 px-1 text-[12px]">{tok.slice(1, -1)}</code>);
+    else out.push(<em key={key}>{tok.slice(1, -1)}</em>);
+    last = m.index! + tok.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+function RichText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split("\n").map((line, i) => {
+        const bullet = /^\s*[-•]\s+/.test(line);
+        const content = inlineMd(bullet ? line.replace(/^\s*[-•]\s+/, "") : line, String(i));
+        return (
+          <span key={i} className={bullet ? "flex gap-1.5" : undefined}>
+            {i > 0 && !bullet ? null : null}
+            {bullet && <span aria-hidden>•</span>}
+            <span>{content}</span>
+            {"\n"}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
