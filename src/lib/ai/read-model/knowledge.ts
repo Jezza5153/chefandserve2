@@ -12,6 +12,7 @@ import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { chefs, clients, shifts } from "@/lib/db/schema";
 import { retrieveKnowledge, type RetrievedChunk } from "@/lib/ai/rag/retrieve";
+import { searchKnowledgeByKeyword } from "@/lib/ai/read-model/knowledge-keyword";
 
 export type KnowledgeHit = {
   sourceLabel: string; // human headline, e.g. "Notitie over chef Lisa de Vries"
@@ -23,7 +24,7 @@ export type KnowledgeHit = {
 
 export type KnowledgeSearchResult =
   | { available: false }
-  | { available: true; count: number; hits: KnowledgeHit[] };
+  | { available: true; count: number; hits: KnowledgeHit[]; via: "semantisch" | "trefwoord" };
 
 const uniq = (xs: string[]) => [...new Set(xs)];
 
@@ -91,8 +92,21 @@ function labelFor(
 
 export async function searchKnowledgeForOwner(query: string, limit: number): Promise<KnowledgeSearchResult> {
   const chunks = await retrieveKnowledge({ query, actor: { kind: "internal" }, limit });
-  if (chunks === null) return { available: false };
-  if (chunks.length === 0) return { available: true, count: 0, hits: [] };
+
+  // No corpus (embeddings off / not yet ingested / OpenAI quota out) OR a semantic miss:
+  // fall back to a redacted keyword pass over the SAME admin-only sources. Answering
+  // "kennisbank niet beschikbaar" while 260 filled notities sit in Postgres is the worst
+  // of both worlds — the data exists, only the index does not.
+  if (chunks === null || chunks.length === 0) {
+    const kw = await searchKnowledgeByKeyword(query, limit);
+    if (kw.length === 0) return chunks === null ? { available: false } : { available: true, count: 0, hits: [], via: "semantisch" };
+    return {
+      available: true,
+      count: kw.length,
+      via: "trefwoord",
+      hits: kw.map((h) => ({ ...h, similarityPct: 0 })),
+    };
+  }
 
   const names = await resolveNames(chunks);
   const hits: KnowledgeHit[] = chunks.map((h) => ({
@@ -102,5 +116,5 @@ export async function searchKnowledgeForOwner(query: string, limit: number): Pro
     snippet: h.text,
     similarityPct: Math.round(h.similarity * 100),
   }));
-  return { available: true, count: hits.length, hits };
+  return { available: true, count: hits.length, hits, via: "semantisch" };
 }

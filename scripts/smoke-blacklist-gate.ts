@@ -15,6 +15,8 @@ process.env.KLANT_BLACKLIST_GATE_ENABLED = "true";
 process.env.EMERGENCY_CLAIM_ENABLED = "true";
 process.env.CHEF_OPEN_SHIFTS_ENABLED = "true";
 
+export {}; // module-marker: zonder top-level import ziet tsc dit als globaal script
+
 async function main() {
   const url = process.env.DATABASE_URL ?? "";
   if (url.includes("ep-icy-scene")) {

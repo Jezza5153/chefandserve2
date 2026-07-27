@@ -30,16 +30,24 @@ export const knowledgeSearch = defineTool({
       return {
         data: { available: false },
         summary:
-          "Kennisbank-zoeken is nu niet beschikbaar (embeddings staan uit of de notities zijn nog niet geïndexeerd).",
+          "Kennisbank-zoeken is nu niet beschikbaar (embeddings staan uit of de notities zijn nog niet geïndexeerd) en ook op trefwoord vond ik niets.",
       };
     }
     if (result.count === 0) {
       return {
-        data: { available: true, count: 0, hits: [] },
+        data: { available: true, count: 0, hits: [], via: result.via },
         summary: `Niets gevonden in de kennisbank voor "${input.query}".`,
       };
     }
     const top = result.hits[0];
+    // Say WHICH path answered: on the keyword path there is no meaning-matching, so a
+    // synonym ("auto" vs "vervoer") can miss — Maarten must be able to weigh that.
+    if (result.via === "trefwoord") {
+      return {
+        data: result,
+        summary: `${result.count} fragment(en) gevonden op trefwoord (semantisch zoeken staat uit of vond niets) — eerste: ${top.sourceLabel}. Let op: dit matcht op de letterlijke term, niet op betekenis; probeer een synoniem als je iets mist.`,
+      };
+    }
     return {
       data: result,
       summary: `${result.count} fragment(en) gevonden — beste match: ${top.sourceLabel} (${top.similarityPct}%).`,
