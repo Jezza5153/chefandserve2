@@ -57,6 +57,7 @@ import { ChefCard } from "@/components/ChefCard";
 import { getChefCards, type ChefCardData } from "@/lib/domain/chef-cards";
 import { agendaToday } from "@/lib/ai/read-model/agenda";
 import { getPeopleMoments } from "@/lib/domain/people-moments";
+import { getLegacySummary } from "@/lib/domain/legacy-ops";
 import { legacyHistory } from "@/lib/legacy-notes";
 import { createAgendaEvent } from "@/lib/domain/agenda-events";
 import { recordAuditFromRequest } from "@/lib/audit";
@@ -403,6 +404,7 @@ export default async function BusinessDashboardPage({
 
   // People moments — same domain function as chefs.momenten (AI) and the briefing.
   const momentIcon: Record<string, "gift" | "award" | "star"> = { birthday: "gift", anniversary: "award", milestone: "star" };
+  const legacySummary = await getLegacySummary();
   const peopleMoments = (await getPeopleMoments()).map((m) => ({
     chefId: m.chefId,
     name: m.name,
@@ -940,6 +942,16 @@ export default async function BusinessDashboardPage({
           <div className="mt-6">
             <h2 className="mb-3 font-ui text-[11px] font-medium uppercase tracking-[0.18em] text-ink-500">Omzet &amp; marge</h2>
             <p className="text-sm text-ink-500">Nog geen financiële data in het nieuwe systeem — verschijnt zodra de eerste uren zijn goedgekeurd.</p>
+            {legacySummary ? (
+              /* A zero here is a migration artefact, not a dead business: show what the
+                 archive of the old system says so the section carries context, not a void. */
+              <p className="mt-1 text-sm text-ink-600">
+                Ter referentie, uit het oude systeem ({legacySummary.van} t/m {legacySummary.tot}):{" "}
+                <strong className="text-ink-900">{legacySummary.diensten.toLocaleString("nl-NL")} diensten</strong> en{" "}
+                <strong className="text-ink-900">{legacySummary.uren.toLocaleString("nl-NL")} gewerkte uren</strong>
+                {legacySummary.bezettingPct != null ? `, bezetting ${legacySummary.bezettingPct}%` : ""}.
+              </p>
+            ) : null}
           </div>
         ) : (
         <div className="mt-6">

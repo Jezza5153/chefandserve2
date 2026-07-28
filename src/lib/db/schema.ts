@@ -4137,3 +4137,61 @@ export const chefClientHistory = pgTable(
     index("chef_client_history_client_idx").on(t.clientId),
   ],
 );
+
+/**
+ * legacy_ops_days — the daily operational archive from the OLD system (ShiftManager).
+ *
+ * Our own KPI surfaces read `placements`/`shifts`, which start empty: every fill-rate,
+ * seasonality and forecast number in this system is currently 0 while the agency has in
+ * fact been running 30–40 shifts a day since 2022. This table carries that curve over,
+ * one row per calendar day, so baselines and seasonality have something real to stand on.
+ *
+ * Read-only after import; deliberately SEPARATE from our own tables — a legacy day is not
+ * a placement, and mixing them would corrupt every operational query in the app.
+ */
+export const legacyOpsDays = pgTable(
+  "legacy_ops_days",
+  {
+    /** The Amsterdam calendar day (YYYY-MM-DD) — the old system's own day bucket. */
+    day: date("day").primaryKey(),
+    /** Orders (diensten) planned that day. */
+    orders: integer("orders").notNull().default(0),
+    /** Slots filled / total — the honest fill-rate numerator and denominator. */
+    slotsFilled: integer("slots_filled").notNull().default(0),
+    slotsTotal: integer("slots_total").notNull().default(0),
+    /** Hours filled / total, as the old system counted them. */
+    hoursFilled: integer("hours_filled").notNull().default(0),
+    hoursTotal: integer("hours_total").notNull().default(0),
+    source: text("source").notNull().default("shiftmanager"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+);
+
+/**
+ * legacy_client_months — shifts per klant per month in the old system.
+ *
+ * The demand shape per relationship: which klant books how much, in which months. Feeds
+ * seasonality ("Deining piekt in juli") and the quiet-klant signal with real history
+ * instead of a system that has never seen them book.
+ *
+ * `clientName` is the OLD system's label, kept verbatim; `clientId` is filled where it
+ * matches a current klant and stays NULL for the ones we no longer serve (they are still
+ * worth keeping — a klant that stopped is exactly what "welke klant verloren we" needs).
+ */
+export const legacyClientMonths = pgTable(
+  "legacy_client_months",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    clientName: text("client_name").notNull(),
+    clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
+    /** First day of the month (YYYY-MM-01). */
+    month: date("month").notNull(),
+    shifts: integer("shifts").notNull().default(0),
+    source: text("source").notNull().default("shiftmanager"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("legacy_client_months_unique").on(t.clientName, t.month),
+    index("legacy_client_months_client_idx").on(t.clientId),
+  ],
+);
