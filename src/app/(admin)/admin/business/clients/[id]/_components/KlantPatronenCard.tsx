@@ -8,6 +8,17 @@
 import type { ClientPatterns } from "@/lib/domain/intel";
 import { formatChefRole } from "@/lib/labels";
 
+/** What the old system recorded for this klant — see getLegacyForClient(). */
+type LegacyKlant = { diensten: number; eersteMaand: string; laatsteMaand: string };
+
+const MAAND_NL = ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
+
+/** "2023-04" → "april 2023" */
+const maandLabel = (m: string): string => {
+  const nr = Number(m.slice(5, 7));
+  return nr >= 1 && nr <= 12 ? `${MAAND_NL[nr - 1]} ${m.slice(0, 4)}` : m;
+};
+
 const FULL_DAY: Record<string, string> = {
   Ma: "maandag",
   Di: "dinsdag",
@@ -20,7 +31,7 @@ const FULL_DAY: Record<string, string> = {
 
 const LABEL = "font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500";
 
-export function KlantPatronenCard({ patterns }: { patterns: ClientPatterns }) {
+export function KlantPatronenCard({ patterns, legacy }: { patterns: ClientPatterns; legacy?: LegacyKlant | null }) {
   const maxDay = Math.max(1, ...patterns.bookingDays.map((d) => d.count));
   const hasData = patterns.bookingDays.some((d) => d.count > 0);
 
@@ -38,10 +49,24 @@ export function KlantPatronenCard({ patterns }: { patterns: ClientPatterns }) {
         ) : null}
       </div>
 
-      {!hasData ? (
-        <p className="mt-3 text-sm text-ink-500">
-          Nog geen boekingspatroon — deze klant heeft nog geen diensten.
+      {/* Saying "nog geen diensten" above a klant that booked hundreds in the old system
+          reads as a broken system, so the archive answers first and the zero gets its real
+          meaning: nothing has run HERE yet. Never added to our own counts. */}
+      {legacy ? (
+        <p className="mt-3 text-sm text-ink-600">
+          In het oude systeem{" "}
+          <strong className="text-ink-900">{legacy.diensten.toLocaleString("nl-NL")} diensten</strong>, van{" "}
+          {maandLabel(legacy.eersteMaand)} tot {maandLabel(legacy.laatsteMaand)}.
+          {!hasData ? " In dit systeem nog geen diensten." : ""}
         </p>
+      ) : null}
+
+      {!hasData ? (
+        legacy ? null : (
+          <p className="mt-3 text-sm text-ink-500">
+            Nog geen boekingspatroon — deze klant heeft nog geen diensten.
+          </p>
+        )
       ) : (
         <>
           <div className="mt-5">

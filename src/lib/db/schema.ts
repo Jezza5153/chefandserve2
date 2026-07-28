@@ -4170,10 +4170,16 @@ export const legacyOpsMonths = pgTable("legacy_ops_months", {
  * legacy_client_totals — how much each klant booked in the old system, and when they
  * started and stopped.
  *
- * The old system served 435 different klanten; this system knows 47. The difference is not
- * noise — it includes the biggest accounts the agency ever had. `clientId` is filled where
- * the name still matches a current klant and stays NULL for the rest, which is exactly what
- * "welke klanten zijn we kwijt" needs to be answerable at all.
+ * The old system served 435 different klanten; this system knows 47. `clientId` is filled
+ * where the name matches a current klant (via besteMatch in domain/legacy-match.ts) and
+ * stays NULL for the rest.
+ *
+ * NULL means "no klant here under this name" and nothing else. It is NOT "lost klant": the
+ * old system is still running and still booking, so an unlinked name is just as likely to be
+ * an account nobody migrated yet, or the same venue re-registered under a new debiteur.
+ * Reading NULL as loss is how this table first produced the headline that the agency had
+ * lost Hilton Schiphol, which had in fact never stopped booking. Ask
+ * getLegacyClientDemand() for the status instead of inferring it from this column.
  */
 export const legacyClientTotals = pgTable(
   "legacy_client_totals",
