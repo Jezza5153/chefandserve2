@@ -19,7 +19,14 @@ import { db } from "@/lib/db/client";
 import { chefAvailability, chefs, clients, shifts } from "@/lib/db/schema";
 import { CHEF_AVERAGE_MIN_COUNT } from "@/lib/rating-tags";
 
-const clampLimit = (n: number | undefined): number => Math.min(Math.max(n ?? 10, 1), 25);
+/**
+ * Display cap. 25 keeps an assistant tool-result readable and cheap.
+ *
+ * `max` exists for the one caller that must NOT be capped: the group-message preview shows
+ * who is about to be messaged, and a silently truncated list there means someone believes
+ * they reached the whole group when they reached the first 25 of it.
+ */
+const clampLimit = (n: number | undefined, max = 25): number => Math.min(Math.max(n ?? 10, 1), max);
 
 /** A text[] column flattened for substring search. See the array warning above. */
 const arrayText = (col: unknown): SQL => sql`array_to_string(coalesce(${col}, '{}'), ' ')`;
@@ -62,6 +69,12 @@ export type FindChefsInput = {
   /** Include archived/inactive chefs. Default false — they must not rank as live ones. */
   includeInactive?: boolean;
   limit?: number;
+  /**
+   * Raise the display cap. Only for callers that need the COMPLETE set rather than a
+   * readable sample — currently just the group-message preview. Everything else should
+   * keep the default so tool results stay small.
+   */
+  maxLimit?: number;
 };
 
 /**
@@ -176,7 +189,7 @@ export async function findChefs(opts: FindChefsInput): Promise<FindChefsResult> 
       desc(chefs.ratingCount),
       chefs.fullName, // deterministic tail — the same query returns the same order
     )
-    .limit(clampLimit(opts.limit));
+    .limit(clampLimit(opts.limit, opts.maxLimit));
 
   return { chefs: rows as ChefHit[], notes };
 }

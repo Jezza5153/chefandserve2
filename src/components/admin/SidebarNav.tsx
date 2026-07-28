@@ -62,6 +62,7 @@ const PLANNER_MAIN: Item[] = [
   { label: "Rooster", href: "/admin/business/roster", icon: "calendar-days" },
   { label: "Diensten", href: "/admin/business/shifts", icon: "list" },
   { label: "Chefs", href: "/admin/business/chefs", icon: "users" },
+  { label: "Groepsbericht", href: "/admin/business/chefs/bericht", icon: "message" },
   { label: "Herinneringen", href: "/admin/business/reminders", icon: "bell" },
   { label: "Prikbord", href: "/admin/business/board", icon: "message" },
   { label: "Instellingen", href: "/admin/account/instellingen", icon: "settings" },
