@@ -89,6 +89,17 @@ export default async function NewShiftPage({
       clientRateCents: clientRateEur > 0 ? Math.round(clientRateEur * 100) : null,
       chefRateCents: chefRateEur > 0 ? Math.round(chefRateEur * 100) : null,
       notes,
+      // Kenmerken: leeg gelaten velden blijven NULL — een dienst zonder eisen is
+      // een dienst zonder eisen, geen dienst die "nee" zegt tegen alles.
+      dressCode: String(formData.get("dressCode") ?? "").trim() || null,
+      languageRequired: String(formData.get("languageRequired") ?? "").trim() || null,
+      minExperience: Number(formData.get("minExperience") ?? 0) || null,
+      kitchenType: String(formData.get("kitchenType") ?? "").trim() || null,
+      soloOrTeam: String(formData.get("soloOrTeam") ?? "") || null,
+      serviceStyle: String(formData.get("serviceStyle") ?? "") || null,
+      parkingAvailable: formData.get("parkingAvailable") === "on" ? true : null,
+      mealIncluded: formData.get("mealIncluded") === "on" ? true : null,
+      startFlexible: formData.get("startFlexible") === "on" ? true : null,
       createdBy: session.user.id,
     });
     if (!result.ok) throw new Error(result.error);
@@ -191,6 +202,52 @@ export default async function NewShiftPage({
           name="chefRateEur"
           type="number"
         />
+        {/* Kenmerken — dit is wat de chef vooraf wil weten en wat de matcher straks kan
+            gebruiken. Alles optioneel: leeg laten betekent "geen eis", niet "nee". */}
+        <fieldset className="md:col-span-2 rounded-lg border border-ink-200 p-4">
+          <legend className="px-1 font-ui text-[10px] uppercase tracking-[0.18em] text-ink-500">
+            Kenmerken van deze dienst
+          </legend>
+          <p className="mb-3 text-xs text-ink-500">
+            Wat een chef vooraf wil weten. Laat leeg wat niet van toepassing is.
+          </p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Kledingeis" name="dressCode" placeholder="zwart uniform, eigen messen" />
+            <Field label="Taal vereist" name="languageRequired" placeholder="Nederlands, Engels" />
+            <Field label="Minimale ervaring (jaren)" name="minExperience" type="number" />
+            <Field label="Keukentype" name="kitchenType" placeholder="à la carte, banqueting" />
+            <label className="flex flex-col gap-1">
+              <span className="font-ui text-[10px] uppercase tracking-wider text-ink-500">Solo of team</span>
+              <select name="soloOrTeam" defaultValue="" className="rounded border border-ink-300 px-2 py-2 text-sm">
+                <option value="">niet opgegeven</option>
+                <option value="solo">solo</option>
+                <option value="team">in een team</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-ui text-[10px] uppercase tracking-wider text-ink-500">Servicestijl</span>
+              <select name="serviceStyle" defaultValue="" className="rounded border border-ink-300 px-2 py-2 text-sm">
+                <option value="">niet opgegeven</option>
+                <option value="prep">voorbereiding</option>
+                <option value="live">live cooking</option>
+                <option value="buffet">buffet</option>
+                <option value="fine_dining">fine dining</option>
+              </select>
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-5">
+            <label className="flex items-center gap-2 text-sm text-ink-700">
+              <input type="checkbox" name="parkingAvailable" /> Parkeren beschikbaar
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink-700">
+              <input type="checkbox" name="mealIncluded" /> Maaltijd inbegrepen
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink-700">
+              <input type="checkbox" name="startFlexible" /> Starttijd is flexibel
+            </label>
+          </div>
+        </fieldset>
+
         <div className="md:col-span-2">
           <Field
             label="Notities (alleen Maarten ziet dit)"
@@ -220,6 +277,9 @@ type FieldProps = {
   required?: boolean;
   as?: "input" | "textarea" | "select";
   options?: { value: string; label: string }[];
+  /** Example text — for the optional requirement fields, where "wat kan ik hier invullen"
+      is the actual barrier to filling them in at all. */
+  placeholder?: string;
 };
 
 function Field({
@@ -230,6 +290,7 @@ function Field({
   required,
   as = "input",
   options,
+  placeholder,
 }: FieldProps) {
   const baseClass =
     "w-full rounded border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder-ink-500 focus:border-burgundy focus:outline-none focus:ring-1 focus:ring-burgundy";
@@ -260,6 +321,7 @@ function Field({
           name={name}
           defaultValue={defaultValue}
           required={required}
+          placeholder={placeholder}
           className={baseClass}
         />
       )}

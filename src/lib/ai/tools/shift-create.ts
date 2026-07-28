@@ -36,6 +36,17 @@ export const shiftsCreate = defineTool({
     city: z.string().optional(),
     location: z.string().optional(),
     notes: z.string().max(2000).optional(),
+    // Kenmerken: wat de chef vooraf wil weten. Optioneel — een klant die niets
+    // eist, eist niets; een leeg veld is geen "nee".
+    dressCode: z.string().max(200).optional().describe("Kledingeis, bv. 'zwart uniform, eigen messen'."),
+    languageRequired: z.string().max(100).optional().describe("Vereiste taal, bv. 'Nederlands' of 'Engels'."),
+    minExperience: z.number().int().min(0).max(40).optional().describe("Minimale ervaring in jaren."),
+    kitchenType: z.string().max(100).optional().describe("Keukentype, bv. 'à la carte' of 'banqueting'."),
+    soloOrTeam: z.enum(["solo", "team"]).optional().describe("Werkt de chef alleen of in een team."),
+    serviceStyle: z.enum(["prep", "live", "buffet", "fine_dining"]).optional().describe("Servicestijl."),
+    parkingAvailable: z.boolean().optional().describe("Is er parkeergelegenheid."),
+    mealIncluded: z.boolean().optional().describe("Krijgt de chef een maaltijd."),
+    startFlexible: z.boolean().optional().describe("Mag de starttijd schuiven."),
   }),
   describeAction: (i) =>
     `Nieuwe dienst aanmaken: ${i.roleNeeded}${(i.headcount ?? 1) > 1 ? ` ×${i.headcount}` : ""} op ${fmt(i.startsAt)}–${fmt(i.endsAt)} voor klant ${i.clientId}${i.city ? ` (${i.city})` : ""}.`,
@@ -49,6 +60,15 @@ export const shiftsCreate = defineTool({
       city: input.city ?? null,
       location: input.location ?? null,
       notes: input.notes ?? null,
+      dressCode: input.dressCode ?? null,
+      languageRequired: input.languageRequired ?? null,
+      minExperience: input.minExperience ?? null,
+      kitchenType: input.kitchenType ?? null,
+      soloOrTeam: input.soloOrTeam ?? null,
+      serviceStyle: input.serviceStyle ?? null,
+      parkingAvailable: input.parkingAvailable ?? null,
+      mealIncluded: input.mealIncluded ?? null,
+      startFlexible: input.startFlexible ?? null,
       createdBy: ctx.actor.requestedByUserId,
     });
     if (!res.ok) return { data: res, summary: `Niet gelukt: ${res.error}` };
