@@ -43,6 +43,7 @@ const REQ_STATUS_LABELS: Record<string, string> = {
  */
 export function Chef360({
   chef,
+  legacy,
   onboarding,
   hasIdFront,
   hasIdBack,
@@ -56,6 +57,8 @@ export function Chef360({
   doRequestData,
 }: {
   chef: ChefRow;
+  /** The chef's record in the OLD system — a fallback for the counters we start at zero. */
+  legacy?: { urenGewerkt: number; uitnodigingen: number; beoordeling: number | null; klanten: number } | null;
   onboarding: ReturnType<typeof getOnboardingReadiness>;
   hasIdFront: boolean;
   hasIdBack: boolean;
@@ -256,16 +259,59 @@ export function Chef360({
       </details>
 
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Snap label="Uren gewerkt" value={`${workSummary.totalHoursWorked} u`} note="goedgekeurd" />
+        {/* Our own counters start at zero for every migrated chef. Printing "0 u" beside
+            notes that read "±1.149 uur gewerkt" makes the page contradict itself, so where
+            we have nothing the old system answers — labelled, never added to our figures. */}
+        <Snap
+          label="Uren gewerkt"
+          value={
+            workSummary.totalHoursWorked > 0
+              ? `${workSummary.totalHoursWorked} u`
+              : legacy && legacy.urenGewerkt > 0
+                ? `${legacy.urenGewerkt.toLocaleString("nl-NL")} u`
+                : "0 u"
+          }
+          note={
+            workSummary.totalHoursWorked > 0
+              ? "goedgekeurd"
+              : legacy && legacy.urenGewerkt > 0
+                ? "oud systeem"
+                : "goedgekeurd"
+          }
+        />
         <Snap
           label="Diensten afgerond"
-          value={String(workSummary.completedShifts)}
-          note={workSummary.upcomingShifts > 0 ? `${workSummary.upcomingShifts} gepland` : undefined}
+          value={
+            workSummary.completedShifts > 0
+              ? String(workSummary.completedShifts)
+              : legacy && legacy.uitnodigingen > 0
+                ? String(legacy.uitnodigingen)
+                : "0"
+          }
+          note={
+            workSummary.upcomingShifts > 0
+              ? `${workSummary.upcomingShifts} gepland`
+              : workSummary.completedShifts === 0 && legacy && legacy.uitnodigingen > 0
+                ? `oud systeem · ${legacy.klanten} klant${legacy.klanten === 1 ? "" : "en"}`
+                : undefined
+          }
         />
         <Snap
           label="Beoordeling"
-          value={workSummary.averageRating != null ? `${workSummary.averageRating.toFixed(1)}★` : "—"}
-          note={workSummary.ratingCount > 0 ? `${workSummary.ratingCount} reviews` : "geen reviews"}
+          value={
+            workSummary.averageRating != null
+              ? `${workSummary.averageRating.toFixed(1)}★`
+              : legacy?.beoordeling != null
+                ? `${legacy.beoordeling}/10`
+                : "—"
+          }
+          note={
+            workSummary.ratingCount > 0
+              ? `${workSummary.ratingCount} reviews`
+              : legacy?.beoordeling != null
+                ? "oud systeem (1-10)"
+                : "geen reviews"
+          }
         />
         <Snap
           label="Laatst gewerkt"

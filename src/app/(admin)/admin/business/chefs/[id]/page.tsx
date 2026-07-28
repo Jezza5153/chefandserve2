@@ -659,6 +659,7 @@ export default async function ChefDetailPage({
           opening a chef shows WHO they are first, before the editing chrome. */}
       <Chef360
         chef={chef}
+        legacy={legacyProfile}
         onboarding={onboarding}
         hasIdFront={hasIdFront}
         hasIdBack={hasIdBack}
