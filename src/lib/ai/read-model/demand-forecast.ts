@@ -59,6 +59,12 @@ export type DemandForecast = {
   rows: WeekRoleDemand[]; // open > 0 only, sorted by week then biggest gap first
   shortfalls: { isoWeek: string; weekNo: number; role: string; open: number }[];
   totalOpen: number;
+  /**
+   * How many shifts are planned in the window at all. Without it, totalOpen = 0 is
+   * ambiguous: it reads the same whether every shift is staffed or nothing is planned,
+   * and the caller then reports an empty agenda as good coverage.
+   */
+  totalShifts: number;
 };
 
 export async function buildDemandForecast(now: Date, weeks = 6): Promise<DemandForecast> {
@@ -84,7 +90,7 @@ export async function buildDemandForecast(now: Date, weeks = 6): Promise<DemandF
       ),
     );
   if (upcoming.length === 0) {
-    return { weeks, from: iso(from), to: iso(to), rows: [], shortfalls: [], totalOpen: 0 };
+    return { weeks, from: iso(from), to: iso(to), rows: [], shortfalls: [], totalOpen: 0, totalShifts: 0 };
   }
 
   // Confirmed placements = filled slots (matches the roster "gevuld = confirmed" rule).
@@ -132,5 +138,5 @@ export async function buildDemandForecast(now: Date, weeks = 6): Promise<DemandF
     .sort((a, b) => a.weekStart.localeCompare(b.weekStart) || b.open - a.open);
   const shortfalls = rows.map((r) => ({ isoWeek: r.isoWeek, weekNo: r.weekNo, role: r.role, open: r.open }));
   const totalOpen = rows.reduce((sum, r) => sum + r.open, 0);
-  return { weeks, from: iso(from), to: iso(to), rows, shortfalls, totalOpen };
+  return { weeks, from: iso(from), to: iso(to), rows, shortfalls, totalOpen, totalShifts: upcoming.length };
 }

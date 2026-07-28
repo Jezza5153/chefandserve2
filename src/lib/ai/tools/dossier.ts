@@ -19,6 +19,7 @@ import { z } from "zod";
 
 import { db } from "@/lib/db/client";
 import { chefs, clients } from "@/lib/db/schema";
+import { getLegacyForClient } from "@/lib/domain/legacy-ops";
 import { defineTool } from "@/lib/ai/tools/registry";
 import { redact } from "@/lib/ai/rag/redact";
 
@@ -71,7 +72,7 @@ export const clientsDossier = defineTool({
   name: "clients.dossier",
   title: "Wat weten we over deze klant",
   description:
-    'Alles wat we INTERN over één klant genoteerd hebben: relatie-historie en evaluaties uit het oude systeem, briefings (kleding, parkeren, eigen messen), tarieven, en de favorieten- en blacklist-namen mét reden. Gebruik dit bij "wat moet ik weten voor ik naar X bel", "waarom staat Y op hun blacklist", "wat zijn de afspraken bij X". Werkt altijd — leest het dossier zelf, niet de zoekindex. Gebruik clients.find voor het clientId. Read-only, intern.',
+    'Alles wat we INTERN over één klant genoteerd hebben: relatie-historie en evaluaties uit het oude systeem (inclusief hoeveel diensten ze daar afnamen en tussen welke maanden), briefings (kleding, parkeren, eigen messen), tarieven, en de favorieten- en blacklist-namen mét reden. Gebruik dit bij "wat moet ik weten voor ik naar X bel", "waarom staat Y op hun blacklist", "wat zijn de afspraken bij X". Werkt altijd — leest het dossier zelf, niet de zoekindex. Gebruik clients.find voor het clientId. Read-only, intern.',
   risk: "read",
   permission: { resource: "clients", action: "read" },
   input: z.object({ clientId: z.string().min(1, "clientId is verplicht") }),
@@ -83,11 +84,27 @@ export const clientsDossier = defineTool({
       .limit(1);
     if (!row) throw new Error("deze klant bestaat niet (meer)");
     const { text, truncated, newestDate } = shape(row.notes);
+    // The archive line belongs in the dossier, not only on the admin page: without it
+    // "vertel me over Hotel X" answers with nothing for a klant we served for four years.
+    const oud = await getLegacyForClient(input.clientId);
+    const oudRegel = oud
+      ? `In het oude systeem ${oud.diensten.toLocaleString("nl-NL")} diensten, van ${oud.eersteMaand} tot ${oud.laatsteMaand}.`
+      : "";
     return {
-      data: { name: row.name, city: row.city, segment: row.segment, notes: text, truncated, newestNoteDate: newestDate },
+      data: {
+        name: row.name,
+        city: row.city,
+        segment: row.segment,
+        notes: text,
+        truncated,
+        newestNoteDate: newestDate,
+        oudeSysteem: oud,
+      },
       summary: text
-        ? `Dossier van ${row.name}${truncated ? " (ingekort)" : ""} — vat samen wat relevant is voor de vraag; noem blacklist-redenen alleen als er naar gevraagd wordt.`
-        : `Over ${row.name} is nog niets genoteerd. Zeg dat eerlijk in plaats van te gokken.`,
+        ? `Dossier van ${row.name}${truncated ? " (ingekort)" : ""} — vat samen wat relevant is voor de vraag; noem blacklist-redenen alleen als er naar gevraagd wordt.${oudRegel ? ` ${oudRegel} Tel dat NOOIT op bij de cijfers van dit systeem.` : ""}`
+        : oudRegel
+          ? `Over ${row.name} staat hier nog geen notitie, maar het is geen onbekende: ${oudRegel} Zeg dat zo — niet "we weten niets".`
+          : `Over ${row.name} is nog niets genoteerd. Zeg dat eerlijk in plaats van te gokken.`,
     };
   },
 });
