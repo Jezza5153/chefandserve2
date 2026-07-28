@@ -14,6 +14,7 @@ import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { chefs, clients, placementComments, shiftHours, shifts } from "@/lib/db/schema";
+import { legeAgendaZin } from "@/lib/lege-agenda";
 import { addDaysToKey, amsterdamDayKey, amsterdamMidnightUtc } from "@/lib/roster-format";
 import { expiringDocumentsForAi } from "@/lib/ai/read-model/oversight";
 import { listHoursAwaitingApproval } from "@/lib/ai/read-model/hours";
@@ -58,7 +59,7 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
   const tStart = amsterdamMidnightUtc(todayKey);
   const tEnd = amsterdamMidnightUtc(addDaysToKey(todayKey, 1));
 
-  const [yShifts, problemRows, newComments, tShifts, awaiting, expiring, riskScan, birthdayRows, staleRows, draftRows, benchRows] = await Promise.all([
+  const [yShifts, problemRows, newComments, tShifts, awaiting, expiring, riskScan, birthdayRows, staleRows, draftRows, benchRows, weekShiftRows] = await Promise.all([
     // Yesterday — shifts that ran
     db
       .select({ client: clients.companyName })
@@ -160,8 +161,15 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
           where a.chef_id = c.id and a.date = ${todayKey}::date and a.available = false
         )
     `),
+    // Hoeveel diensten liepen er de afgelopen week überhaupt? Zonder dit getal leest
+    // "alle uren zijn rond" hetzelfde bij een afgeronde week als bij een lege week.
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(shifts)
+      .where(and(gte(shifts.startsAt, weekAgo), lt(shifts.startsAt, tStart))),
   ]);
 
+  const weekShiftCount = (Array.isArray(weekShiftRows) ? weekShiftRows : []).at(0)?.n ?? 0;
   const openToday = tShifts.filter((s) => s.status === "open" || s.status === "request").length;
   const rowsOf = (r: unknown) => (Array.isArray(r) ? r : ((r as { rows?: unknown[] }).rows ?? []));
   const birthdays = rowsOf(birthdayRows) as { fullName: string; dayMonth: string }[];
@@ -173,11 +181,16 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
   const gisteren: string[] = ["📋 *Gisteren*"];
   gisteren.push(
     yShifts.length === 0
-      ? "• Geen diensten gedraaid."
+      ? `• ${legeAgendaZin("gisteren", { verwijsNaarArchief: false })}`
       : `• ${plural(yShifts.length, "dienst", "diensten")} gedraaid (${names(yShifts.map((s) => s.client))}).`,
   );
   if (problemRows.length === 0) {
-    gisteren.push("• Alle uren van de afgelopen week zijn rond. 👍");
+    // Zonder diensten valt er niets te tekenen of goed te keuren; dat is geen 👍.
+    gisteren.push(
+      weekShiftCount > 0
+        ? "• Alle uren van de afgelopen week zijn rond. 👍"
+        : "• Er liepen deze week geen diensten in dit systeem, dus er is ook niets te tekenen of goed te keuren.",
+    );
   } else {
     const byStatus = PROBLEM_STATUSES.map((st) => {
       const rows = problemRows.filter((r) => r.status === st);
@@ -192,7 +205,7 @@ export async function buildDailyBriefing(now: Date): Promise<DailyBriefing> {
   const vandaag: string[] = ["🔭 *Vandaag*"];
   vandaag.push(
     tShifts.length === 0
-      ? "• Geen diensten gepland."
+      ? `• ${legeAgendaZin("vandaag")}`
       : `• ${plural(tShifts.length, "dienst", "diensten")}${openToday > 0 ? ` — ⚠ ${openToday} nog niet ingevuld` : " — allemaal ingevuld"}.`,
   );
   if (awaiting.length > 0) {
