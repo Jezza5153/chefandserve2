@@ -25,7 +25,7 @@ export const opsHistory = defineTool({
   name: "ops.history",
   title: "Historie uit het oude systeem",
   description:
-    'De operationele historie uit het OUDE systeem (2022 t/m de overstap): hoeveel diensten en gewerkte uren per maand, de bezettingsgraad, en welke klanten hoeveel boekten — inclusief klanten die we niet meer bedienen. Gebruik dit bij vragen over VROEGER of over wat NORMAAL is: "hoe druk is juli normaal", "hoeveel diensten deden we vorig jaar", "welke klant boekte het meest", "welke klanten zijn we kwijt", "is dit een normale week". Let op: dit is het oude systeem — tel het NOOIT op bij de cijfers van dit systeem, noem ze apart. Read-only.',
+    'De operationele cijfers uit het OUDE systeem (2022 tot nu): hoeveel diensten en gewerkte uren per maand, de bezettingsgraad, en welke klanten hoeveel boekten. Gebruik dit bij vragen over VROEGER of over wat NORMAAL is: "hoe druk is juli normaal", "hoeveel diensten deden we vorig jaar", "welke klant boekte het meest", "welke klanten zijn we kwijt", "is dit een normale week". Twee dingen om nooit door elkaar te halen: (1) het oude systeem draait NOG — het boekt door, dus een klant die daar staat en hier niet is meestal nog niet overgezet in plaats van kwijt (view per_klant geeft per klant de status); (2) tel deze cijfers NOOIT op bij die van dit systeem, noem ze apart. Read-only.',
   risk: "read",
   permission: { resource: "shifts", action: "read" },
   input: z.object({
@@ -69,12 +69,20 @@ export const opsHistory = defineTool({
 
     if (view === "per_klant") {
       const rows = await getLegacyClientDemand(input.limit ?? 15);
-      const kwijt = rows.filter((r) => r.nietMeerActief);
+      const overzetten = rows.filter((r) => r.status === "nog_niet_overgezet");
+      const opgevolgd = rows.filter((r) => r.status === "opgevolgd");
+      const kwijt = rows.filter((r) => r.status === "weggevallen");
       return {
         data: { bron: "oude systeem", klanten: rows },
         summary:
           `Oude systeem, top ${rows.length} klanten: ${rows.slice(0, 3).map((r) => `${r.klant} (${r.diensten})`).join(", ")}.` +
-          (kwijt.length ? ` ${kwijt.length} daarvan staan niet meer als actieve klant in dit systeem — noem dat als het over verloren klanten gaat.` : ""),
+          (overzetten.length
+            ? ` LET OP: ${overzetten.length} boeken NOG STEEDS in het oude systeem maar staan hier nog niet als klant (${overzetten.slice(0, 3).map((r) => r.klant).join(", ")}) — accounts om over te zetten, GEEN verloren klanten.`
+            : "") +
+          (opgevolgd.length
+            ? ` ${opgevolgd.length} regels zijn onder een nieuwe naam voortgezet (${opgevolgd.slice(0, 2).map((r) => `${r.klant} → ${r.voortgezetAls}`).join("; ")}) — noem die niet als verlies.`
+            : "") +
+          (kwijt.length ? ` ${kwijt.length} klanten boeken al een tijd niet meer en staan hier ook niet — die zijn wél weggevallen.` : ""),
       };
     }
 

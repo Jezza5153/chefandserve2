@@ -26,6 +26,7 @@ _Last verified against production: 2026-07-26 (flags re-verified after the eveni
 | Migration head on `main` | see [STATE.generated.md](docs/STATE.generated.md#schema) |
 | Roster in prod | **215 chefs** (204 uit Medewerkers.csv #335; 24 zonder vakniveau) · **189 dragen de oud-systeem-kennis** (communicatie-notes + gewerkte uren, ShiftManager-extract 2026-07-27) · 3 archived |
 | Klanten in prod | **47 actief** (41 geïmporteerd uit export_debiteur_contacten.csv — Baut ×4 / Park Plaza ×2 als aparte venues; 61 contactrollen; 6 bedrijven hadden alleen interne C&S-contacten — echte namen+telefoons staan inmiddels in de notes via de ShiftManager-extract) · **alle 41 verrijkt** met favorieten/blacklists (met redenen), briefings, tarieven, betaaltermijnen en relatie-historie uit het oude systeem |
+| Oud systeem (ShiftManager) | **Draait nog parallel** — boekte 381 diensten in juli 2026. Het archief in `legacy_ops_months`/`legacy_client_totals` loopt 2022-01 t/m 2026-08. Een klant die daar boekt maar hier ontbreekt is **niet overgezet**, geen verloren klant: `ops.history` (view per_klant) geeft de status. Tel de twee systemen nooit bij elkaar op. |
 | AI model | `gpt-5.4`, fallback `gpt-4.1-mini`, budget 25/day |
 | 2FA | `TOTP_ENFORCE=true` |
 

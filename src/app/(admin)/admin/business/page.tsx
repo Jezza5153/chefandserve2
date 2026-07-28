@@ -946,7 +946,8 @@ export default async function BusinessDashboardPage({
               /* A zero here is a migration artefact, not a dead business: show what the
                  archive of the old system says so the section carries context, not a void. */
               <p className="mt-1 text-sm text-ink-600">
-                Ter referentie, uit het oude systeem ({legacySummary.van?.slice(0, 7)} t/m {legacySummary.tot?.slice(0, 7)}):{" "}
+                Ter referentie, uit het oude systeem — dat nog parallel doorloopt ({legacySummary.van?.slice(0, 7)} t/m{" "}
+                {legacySummary.tot?.slice(0, 7)}):{" "}
                 <strong className="text-ink-900">{legacySummary.diensten.toLocaleString("nl-NL")} diensten</strong> en{" "}
                 <strong className="text-ink-900">{legacySummary.uren.toLocaleString("nl-NL")} gewerkte uren</strong>
                 {legacySummary.bezettingPct != null ? `, bezetting ${legacySummary.bezettingPct}%` : ""}.

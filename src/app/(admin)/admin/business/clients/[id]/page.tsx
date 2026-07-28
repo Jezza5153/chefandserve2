@@ -19,6 +19,7 @@ import { buildClientTrends, getClientRecentShifts, getClientSummary } from "@/li
 import { clientDocTypes, listClientDocuments } from "@/lib/domain/client-documents";
 import { computeClientHealth } from "@/lib/domain/client-health";
 import { getClientIntelSnapshot } from "@/lib/domain/intel";
+import { getLegacyForClient } from "@/lib/domain/legacy-ops";
 import { getClientDailySeries } from "@/lib/domain/metrics-history";
 import {
   activatePortalUser,
@@ -91,7 +92,7 @@ export default async function ClientDetailPage({
 
   // KPI-3: Klant 360 — live point-in-time summary + 8-week snapshot trends.
   // PR-INTEL: booking patterns + chef relationships (weekday histogram, role mix, vaste chefs).
-  const [clientSummary, clientSeries, snapshot, recentShifts, clientDocs, docTypes] =
+  const [clientSummary, clientSeries, snapshot, recentShifts, clientDocs, docTypes, legacyKlant] =
     await Promise.all([
       getClientSummary(id),
       getClientDailySeries(id, 90),
@@ -99,6 +100,7 @@ export default async function ClientDetailPage({
       getClientRecentShifts(id),
       listClientDocuments(id),
       clientDocTypes(id),
+      getLegacyForClient(id),
     ]);
   if (!snapshot) notFound();
   const clientTrends = buildClientTrends(clientSeries);
@@ -490,7 +492,7 @@ export default async function ClientDetailPage({
       <KnowledgeNotesCard notes={client.notes} />
 
       {/* PR-INTEL: Patronen & relaties — booking patterns + vaste chefs */}
-      <KlantPatronenCard patterns={snapshot.patterns} />
+      <KlantPatronenCard patterns={snapshot.patterns} legacy={legacyKlant} />
 
       {/* PR-INTEL: Maarten's brein — the six judgment fields (internal-only) */}
       <KlantBreinCard intel={client.intel} saveAction={saveClientIntel} />
