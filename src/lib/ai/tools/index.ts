@@ -49,6 +49,7 @@ import { chefsSemanticSearch, clientsSemanticSearch } from "@/lib/ai/tools/seman
 import { knowledgeSearch } from "@/lib/ai/tools/knowledge";
 import { chefsDossier, clientsDossier } from "@/lib/ai/tools/dossier";
 import { opsHistory } from "@/lib/ai/tools/legacy-ops";
+import { ratesCard } from "@/lib/ai/tools/rates";
 import { auditSearch, documentsListForChef, documentsExpiring, privacyListRequests, emailStatus, payrollRead } from "@/lib/ai/tools/oversight";
 import { briefingDaily } from "@/lib/ai/tools/briefing";
 import { shiftsDetail, shiftsInterestedChefs } from "@/lib/ai/tools/shift-detail";
@@ -140,6 +141,7 @@ export const ALL_TOOLS: AnyTool[] = [
   chefsDossier,
   clientsDossier,
   opsHistory,
+  ratesCard,
   reportsBusinessKpi,
   reportsChefs,
   reportsClients,
