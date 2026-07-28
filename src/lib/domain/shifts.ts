@@ -25,6 +25,23 @@ export type CreateShiftArgs = {
   clientRateCents?: number | null;
   chefRateCents?: number | null;
   notes?: string | null;
+  /**
+   * Shift requirements — the other half of the matching brain.
+   *
+   * These nine columns existed from the start and had ZERO writers: no form, no template,
+   * no tool set a single one, so every shift carried NULL and the two chef screens that
+   * render them always showed nothing. A klant who needs a French-speaking fine-dining
+   * chef had no way to say so.
+   */
+  dressCode?: string | null;
+  languageRequired?: string | null;
+  minExperience?: number | null;
+  kitchenType?: string | null;
+  soloOrTeam?: string | null;
+  serviceStyle?: string | null;
+  parkingAvailable?: boolean | null;
+  mealIncluded?: boolean | null;
+  startFlexible?: boolean | null;
   /** SPOED: eligible for emergency claim + flagged in the roster. Default false. */
   isEmergency?: boolean;
   createdBy: string;
@@ -76,6 +93,15 @@ export async function createShift(args: CreateShiftArgs): Promise<CreateShiftRes
       clientRateCents,
       chefRateCents,
       notes: args.notes ?? null,
+      dressCode: args.dressCode ?? null,
+      languageRequired: args.languageRequired ?? null,
+      minExperience: args.minExperience ?? null,
+      kitchenType: args.kitchenType ?? null,
+      soloOrTeam: args.soloOrTeam ?? null,
+      serviceStyle: args.serviceStyle ?? null,
+      parkingAvailable: args.parkingAvailable ?? null,
+      mealIncluded: args.mealIncluded ?? null,
+      startFlexible: args.startFlexible ?? null,
       isEmergency: args.isEmergency ?? false,
       status: "open",
       createdBy: args.createdBy,
@@ -112,6 +138,15 @@ export type UpdateShiftArgs = {
   chefRateCents?: number;
   city?: string;
   location?: string;
+  dressCode?: string | null;
+  languageRequired?: string | null;
+  minExperience?: number | null;
+  kitchenType?: string | null;
+  soloOrTeam?: string | null;
+  serviceStyle?: string | null;
+  parkingAvailable?: boolean | null;
+  mealIncluded?: boolean | null;
+  startFlexible?: boolean | null;
 };
 export type UpdateShiftResult =
   | { ok: true; shiftId: string; changed: string[] }
@@ -134,6 +169,15 @@ export async function updateShift(args: UpdateShiftArgs): Promise<UpdateShiftRes
       chefRateCents: shifts.chefRateCents,
       city: shifts.city,
       location: shifts.location,
+      dressCode: shifts.dressCode,
+      languageRequired: shifts.languageRequired,
+      minExperience: shifts.minExperience,
+      kitchenType: shifts.kitchenType,
+      soloOrTeam: shifts.soloOrTeam,
+      serviceStyle: shifts.serviceStyle,
+      parkingAvailable: shifts.parkingAvailable,
+      mealIncluded: shifts.mealIncluded,
+      startFlexible: shifts.startFlexible,
       status: shifts.status,
     })
     .from(shifts)
@@ -170,6 +214,19 @@ export async function updateShift(args: UpdateShiftArgs): Promise<UpdateShiftRes
   if (args.chefRateCents != null && args.chefRateCents !== shift.chefRateCents) changed.push("cheftarief");
   if (args.city != null && args.city !== shift.city) changed.push("stad");
   if (args.location != null && args.location !== shift.location) changed.push("locatie");
+  // De kenmerken tellen mee in `changed`, anders zou "alleen de kledingeis aanpassen"
+  // stilletjes als "niets gewijzigd" wegvallen.
+  const KENMERK_LABEL: Record<string, string> = {
+    dressCode: "kledingeis", languageRequired: "taal", minExperience: "minimale ervaring",
+    kitchenType: "keukentype", soloOrTeam: "solo of team", serviceStyle: "servicestijl",
+    parkingAvailable: "parkeren", mealIncluded: "maaltijd", startFlexible: "flexibele start",
+  };
+  for (const veld of Object.keys(KENMERK_LABEL) as (keyof typeof KENMERK_LABEL)[]) {
+    const nieuweWaarde = (args as Record<string, unknown>)[veld];
+    if (nieuweWaarde !== undefined && nieuweWaarde !== (shift as Record<string, unknown>)[veld]) {
+      changed.push(KENMERK_LABEL[veld]);
+    }
+  }
   if (changed.length === 0) return { ok: true, shiftId: args.shiftId, changed };
 
   const updated = await db
@@ -183,6 +240,17 @@ export async function updateShift(args: UpdateShiftArgs): Promise<UpdateShiftRes
       chefRateCents: args.chefRateCents ?? shift.chefRateCents,
       city: args.city ?? shift.city,
       location: args.location ?? shift.location,
+      // `?? shift.x` en niet `?? null`: een veld dat niet meegestuurd wordt hoort
+      // ongemoeid te blijven, niet gewist te worden.
+      dressCode: args.dressCode ?? shift.dressCode,
+      languageRequired: args.languageRequired ?? shift.languageRequired,
+      minExperience: args.minExperience ?? shift.minExperience,
+      kitchenType: args.kitchenType ?? shift.kitchenType,
+      soloOrTeam: args.soloOrTeam ?? shift.soloOrTeam,
+      serviceStyle: args.serviceStyle ?? shift.serviceStyle,
+      parkingAvailable: args.parkingAvailable ?? shift.parkingAvailable,
+      mealIncluded: args.mealIncluded ?? shift.mealIncluded,
+      startFlexible: args.startFlexible ?? shift.startFlexible,
       updatedAt: new Date(),
     })
     .where(and(eq(shifts.id, args.shiftId), inArray(shifts.status, ["request", "open", "filled"])))

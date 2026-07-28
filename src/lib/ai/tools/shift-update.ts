@@ -41,6 +41,17 @@ export const shiftsUpdate = defineTool({
     chefRateCents: z.number().int().min(0).optional(),
     city: z.string().optional(),
     location: z.string().optional(),
+    // Kenmerken van de dienst. Een veld dat je niet meestuurt blijft ongemoeid —
+    // dit wist nooit iets wat er al stond.
+    dressCode: z.string().max(200).optional().describe("Kledingeis."),
+    languageRequired: z.string().max(100).optional().describe("Vereiste taal."),
+    minExperience: z.number().int().min(0).max(40).optional().describe("Minimale ervaring in jaren."),
+    kitchenType: z.string().max(100).optional().describe("Keukentype."),
+    soloOrTeam: z.enum(["solo", "team"]).optional(),
+    serviceStyle: z.enum(["prep", "live", "buffet", "fine_dining"]).optional(),
+    parkingAvailable: z.boolean().optional(),
+    mealIncluded: z.boolean().optional(),
+    startFlexible: z.boolean().optional(),
   }),
   describeAction: (i) => {
     const parts: string[] = [];
@@ -52,6 +63,17 @@ export const shiftsUpdate = defineTool({
     if (i.chefRateCents != null) parts.push(`cheftarief → ${euro(i.chefRateCents)}`);
     if (i.city != null) parts.push(`stad → ${i.city}`);
     if (i.location != null) parts.push(`locatie → ${i.location}`);
+    // Kenmerken horen ook in de bevestigingszin: "wijzig de kledingeis" moet zichtbaar
+    // zijn in wat je goedkeurt, anders keur je een lege wijziging goed.
+    if (i.dressCode != null) parts.push(`kledingeis → ${i.dressCode}`);
+    if (i.languageRequired != null) parts.push(`taal → ${i.languageRequired}`);
+    if (i.minExperience != null) parts.push(`min. ervaring → ${i.minExperience} jaar`);
+    if (i.kitchenType != null) parts.push(`keuken → ${i.kitchenType}`);
+    if (i.soloOrTeam != null) parts.push(`${i.soloOrTeam === "solo" ? "solo" : "in een team"}`);
+    if (i.serviceStyle != null) parts.push(`stijl → ${i.serviceStyle}`);
+    if (i.parkingAvailable != null) parts.push(i.parkingAvailable ? "parkeren beschikbaar" : "geen parkeren");
+    if (i.mealIncluded != null) parts.push(i.mealIncluded ? "maaltijd inbegrepen" : "geen maaltijd");
+    if (i.startFlexible != null) parts.push(i.startFlexible ? "flexibele start" : "vaste start");
     return `Dienst ${i.shiftId} wijzigen: ${parts.length ? parts.join(" · ") : "(geen velden opgegeven)"}.`;
   },
   run: async (input, ctx) => {
@@ -66,6 +88,15 @@ export const shiftsUpdate = defineTool({
       chefRateCents: input.chefRateCents,
       city: input.city,
       location: input.location,
+      dressCode: input.dressCode,
+      languageRequired: input.languageRequired,
+      minExperience: input.minExperience,
+      kitchenType: input.kitchenType,
+      soloOrTeam: input.soloOrTeam,
+      serviceStyle: input.serviceStyle,
+      parkingAvailable: input.parkingAvailable,
+      mealIncluded: input.mealIncluded,
+      startFlexible: input.startFlexible,
     });
     if (!res.ok) return { data: res, summary: `Niet gelukt: ${res.error}` };
     return {
