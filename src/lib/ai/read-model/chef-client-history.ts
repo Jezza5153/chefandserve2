@@ -7,7 +7,7 @@
 import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { chefs, clients, placements, ratings, shifts } from "@/lib/db/schema";
+import { chefClientHistory, chefs, clients, placements, ratings, shifts } from "@/lib/db/schema";
 import { formatChefRole } from "@/lib/labels";
 
 const dayNl = (d: Date | string) => new Date(d).toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" });
@@ -19,7 +19,7 @@ export async function chefHistoryAtClientForAi(chefId: string, clientId: string)
   ]);
   if (!chef || !client) return null;
 
-  const [placementRows, ratingRows] = await Promise.all([
+  const [placementRows, ratingRows, legacyRows] = await Promise.all([
     db
       .select({ status: placements.status, role: shifts.roleNeeded, at: shifts.startsAt })
       .from(placements)
@@ -31,6 +31,20 @@ export async function chefHistoryAtClientForAi(chefId: string, clientId: string)
       .from(ratings)
       .where(and(eq(ratings.chefId, chefId), eq(ratings.clientId, clientId)))
       .orderBy(desc(ratings.createdAt)),
+    // Oude-systeem historie bij deze klant. For the 204 migrated chefs this is the ONLY
+    // track record that exists — our own placements start empty — so leaving it out made
+    // the tool answer "nog nooit gewerkt" about someone with thousands of hours there.
+    db
+      .select({
+        minutes: chefClientHistory.legacyMinutes,
+        invites: chefClientHistory.legacyInvites,
+        rating: chefClientHistory.legacyRating,
+        ratingCount: chefClientHistory.legacyRatingCount,
+        source: chefClientHistory.source,
+      })
+      .from(chefClientHistory)
+      .where(and(eq(chefClientHistory.chefId, chefId), eq(chefClientHistory.clientId, clientId)))
+      .limit(1),
   ]);
 
   const worked = placementRows.filter((p) => p.status === "completed" || p.status === "confirmed").length;
@@ -54,5 +68,21 @@ export async function chefHistoryAtClientForAi(chefId: string, clientId: string)
       avg != null ? `${avg}★ (${ratingRows.length} beoordeling${ratingRows.length === 1 ? "" : "en"})` : "nog geen beoordeling",
     tags,
     opmerkingen: comments,
+    // Explicitly labelled as the OLD system's numbers, on its own 1..10 rating scale, so
+    // nothing here can be mistaken for our own placements or our own 1..5 ratings.
+    oudeSysteem: legacyRows[0]
+      ? {
+          urenGewerkt: Math.round(legacyRows[0].minutes / 60),
+          uitnodigingen: legacyRows[0].invites,
+          beoordeling:
+            legacyRows[0].ratingCount > 0
+              ? `${legacyRows[0].rating}/10 (${legacyRows[0].ratingCount}×, schaal van het oude systeem)`
+              : "niet beoordeeld",
+          let_op:
+            legacyRows[0].source === "shiftmanager:debiteur"
+              ? "Deze uren zijn van het HELE bedrijf, niet van deze ene vestiging — het oude systeem telde per debiteur."
+              : undefined,
+        }
+      : null,
   };
 }

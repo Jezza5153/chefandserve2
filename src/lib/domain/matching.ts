@@ -16,6 +16,7 @@ import { db } from "@/lib/db/client";
 import {
   chefAvailability,
   chefs,
+  chefClientHistory,
   clients,
   placements,
   shifts,
@@ -624,6 +625,22 @@ export async function findMatchesForShift(
   // score ties (composite quantises to ~60 values), never enough to beat a vakniveau gap.
   const confirmedSet = new Set(availabilityRows.filter((r) => r.available).map((r) => r.chefId));
 
+  // Oude-systeem historie bij DEZE klant. "Die heeft daar al eens gestaan" is the planner's
+  // strongest human signal, and for the 204 migrated chefs it exists nowhere else — our own
+  // `placements` start empty. Same shape as the self-confirm boost: a flat bump big enough
+  // to break score ties, never enough to beat a vakniveau gap, and always with a visible
+  // reason so nobody has to guess why someone moved up.
+  const legacyPairRows = await db
+    .select({
+      chefId: chefClientHistory.chefId,
+      minutes: chefClientHistory.legacyMinutes,
+      rating: chefClientHistory.legacyRating,
+      ratingCount: chefClientHistory.legacyRatingCount,
+    })
+    .from(chefClientHistory)
+    .where(eq(chefClientHistory.clientId, shift.clientId));
+  const legacyPair = new Map(legacyPairRows.map((r) => [r.chefId, r]));
+
   // 3. Exclude chefs already placed on this shift
   const alreadyPlaced = await db
     .select({ chefId: placements.chefId })
@@ -731,9 +748,15 @@ export async function findMatchesForShift(
     const ccp = chefClientPrefAdjust(tag.score, chefClientPrefByChef.get(chef.id), shift.isEmergency === true);
 
     const selfConfirmed = confirmedSet.has(chef.id);
+    // Worked there before (old system): +6, or +10 when the klant also rated them well
+    // (that rating is on the old 1..10 scale — 8+ is "graag terug").
+    const pair = legacyPair.get(chef.id);
+    const pairHours = pair ? Math.round(pair.minutes / 60) : 0;
+    const pairRated = pair && pair.ratingCount > 0 ? Number(pair.rating) : 0;
+    const legacyBoost = pairHours > 0 ? (pairRated >= 8 ? 10 : 6) : 0;
     results.push({
       chef,
-      score: Math.min(100, ccp.score + (selfConfirmed ? 8 : 0)),
+      score: Math.min(100, ccp.score + (selfConfirmed ? 8 : 0) + legacyBoost),
       scoreBreakdown: { vakniveau: v, segment: s, experience: e },
       // P3b annotations match the existing Dutch strings so the shift-detail
       // allWarnings Set dedupes "door klant geblokkeerd" against staffing-intelligence.
@@ -745,6 +768,13 @@ export async function findMatchesForShift(
         ...ccp.reasons,
         ...(favoriteSet.has(chef.id) ? ["klant-favoriet"] : []),
         ...(selfConfirmed ? ["heeft zelf aangegeven deze dag te kunnen"] : []),
+        ...(pairHours > 0
+          ? [
+              pairRated >= 8
+                ? `heeft hier al ±${pairHours} uur gewerkt (oude systeem, beoordeling ${pairRated}/10)`
+                : `heeft hier al ±${pairHours} uur gewerkt (oude systeem)`,
+            ]
+          : []),
       ],
       warnings: [
         ...warnings,

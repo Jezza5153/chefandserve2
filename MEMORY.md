@@ -41,9 +41,13 @@ _Last verified against production: 2026-07-26 (flags re-verified after the eveni
    and dark behind it.
 2. **OpenAI key rotation** — a test key was once exposed in chat. After rotating, update
    Vercel + Railway + local `.env.local`.
-3. **Verify tonight's embedding run** — owner set `OPENAI_API_KEY` on Railway 2026-07-26
-   after 61 nights of `mode=observe`; `select count(embedding) from chefs` should read 8
-   after the 03:00 run. If still 0, the audit log will say `observe` again.
+3. **`OPENAI_API_KEY` staat NIET op Railway** — bewezen, niet vermoed: de audit-rij van
+   28-07-2026 zegt nog steeds `worker.embedding_refresh {"mode":"observe", chefs:{scanned:215,
+   stale:212, updated:0}}`. Observe = geen sleutel op de Railway-service (hij staat wél op
+   Vercel). Twee losse blokkades dus: (a) het OpenAI-account heeft geen quota, (b) Railway
+   mist de sleutel. Pas als BEIDE opgelost zijn krijgen de chefs hun profielvector; de
+   kennisbank (ai_embeddings) hangt alleen op (a) via de Vercel-cron `/api/cron/rag-ingest`.
+   Daarna heelt het zichzelf 's nachts — handmatig forceren kan met `npm run embeddings:backfill`.
 
 _Resolved 2026-07-26: migration `0076` applied to prod (verified via information_schema) and
 `AI_MEMORY_MINING_ENABLED=true` set + redeployed — memory mining is live. `I18N_ENABLED`,

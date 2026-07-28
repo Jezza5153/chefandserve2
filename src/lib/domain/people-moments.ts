@@ -67,11 +67,12 @@ export async function getPeopleMoments(opts: { windowDays?: number } = {}): Prom
         fullName: chefs.fullName,
         dateOfBirth: chefs.dateOfBirth,
         joinedAt: chefs.joinedAt,
-        // Migration guard: EVERY imported chef (204×, provenance line "Geïmporteerd uit
-        // oud systeem (Medewerkers.csv)") has joinedAt = IMPORT date, not their real
-        // start — not only the ones with a ShiftManager stats line. See the anniversary
-        // suppression below.
-        hasLegacyHistory: sql<boolean>`(${chefs.notes} like '%Medewerkers.csv%' or ${chefs.notes} like '%Historie oud systeem%')`,
+        // Migration guard: chefs imported from the old system got joinedAt = IMPORT date.
+        // 167 of them have since been given their real (oldest-note) start date, so the
+        // test is the DATE itself, not a notes marker: anything still inside the migration
+        // window is a placeholder and must not fire a jubileum. Self-correcting — the day
+        // a chef gets a real date, their anniversary starts working.
+        joinedAtIsPlaceholder: sql<boolean>`${chefs.joinedAt} >= timestamptz '2026-07-26'`,
       })
       .from(chefs)
       .where(and(isNull(chefs.deletedAt), eq(chefs.status, "active"))),
@@ -103,11 +104,10 @@ export async function getPeopleMoments(opts: { windowDays?: number } = {}): Prom
     const j = new Date(c.joinedAt);
     const jn = daysUntilNext(j.getUTCMonth() + 1, j.getUTCDate(), now);
     const anniversaryYear = now.getUTCFullYear() + (jn > 300 ? 0 : jn === 0 ? 0 : 1) - j.getUTCFullYear();
-    // Anniversary bomb guard: the 204 migrated chefs all carry joinedAt = import day,
-    // so without this they'd ALL hit "1 jaar bij ons" on the same day next July —
-    // 204 fake jubilea at once. Suppressed until their real start dates are backfilled
-    // from the old system (mining round 2); birthdays and milestones are unaffected.
-    if (jn <= windowDays && anniversaryYear >= 1 && !c.hasLegacyHistory) {
+    // Anniversary bomb guard: a chef whose joinedAt is still the import placeholder would
+    // otherwise fire a fake "1 jaar bij ons" — together with every other migrated chef, on
+    // the same day. Birthdays and milestones are unaffected.
+    if (jn <= windowDays && anniversaryYear >= 1 && !c.joinedAtIsPlaceholder) {
       out.push({
         chefId: c.id,
         name: c.fullName,

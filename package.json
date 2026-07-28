@@ -17,7 +17,9 @@
     "db:seed:demo": "tsx src/lib/db/seed-demo.ts",
     "db:seed:forms": "tsx src/lib/db/seed-forms.ts",
     "docs:state": "tsx scripts/gen-docs-state.ts",
-    "docs:state:check": "tsx scripts/gen-docs-state.ts --check"
+    "docs:state:check": "tsx scripts/gen-docs-state.ts --check",
+    "embeddings:check": "scripts/with-prod-env.sh scripts/backfill-embeddings.ts",
+    "embeddings:backfill": "scripts/with-prod-env.sh scripts/backfill-embeddings.ts --execute"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.4",
