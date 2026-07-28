@@ -3,17 +3,18 @@
  * View the snapshot + lines + totals, and act: send → mark paid, or void.
  * Buttons are gated by status; the domain re-checks atomically.
  */
-import { asc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { db } from "@/lib/db/client";
-import { invoiceLines, invoices } from "@/lib/db/schema";
+import { invoices } from "@/lib/db/schema";
 import { formatEuro } from "@/lib/hours-labels";
 import { invoiceStatusView, invoiceToneClasses } from "@/lib/invoice-labels";
 import { requirePermission } from "@/lib/permissions";
+import { BTW_TARIEVEN, HANDMATIGE_SOORTEN, SOORT_LABEL, listInvoiceLines } from "@/lib/domain/invoice-lines";
 
-import { markPaidAction, sendInvoiceAction, voidInvoiceAction } from "../actions";
+import { addLineAction, markPaidAction, removeLineAction, sendInvoiceAction, voidInvoiceAction } from "../actions";
 
 export const metadata = { title: "Factuur", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -41,11 +42,8 @@ export default async function InvoiceDetailPage({
   const [inv] = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
   if (!inv) notFound();
 
-  const lines = await db
-    .select()
-    .from(invoiceLines)
-    .where(eq(invoiceLines.invoiceId, inv.id))
-    .orderBy(asc(invoiceLines.shiftDate));
+  const lines = await listInvoiceLines(inv.id);
+  const isConcept = inv.status === "draft";
 
   const view = invoiceStatusView(inv.status, "admin");
 
@@ -148,15 +146,109 @@ export default async function InvoiceDetailPage({
         <ul className="mt-3 divide-y divide-ink-100">
           {lines.map((l) => (
             <li key={l.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-              <span className="min-w-0 text-ink-700">{l.description}</span>
-              <span className="shrink-0 font-mono text-ink-900">{formatEuro(l.amountCents)}</span>
+              <span className="min-w-0 text-ink-700">
+                {l.description}
+                {l.kind !== "hours" ? (
+                  <span className="ml-2 rounded-full bg-bg-gray px-2 py-0.5 font-ui text-[10px] uppercase tracking-wider text-ink-500">
+                    {l.soortLabel}
+                  </span>
+                ) : null}
+                {l.vatRateBps !== 2100 ? (
+                  <span className="ml-2 text-xs text-ink-500">{Math.round(l.vatRateBps / 100)}% btw</span>
+                ) : null}
+              </span>
+              <span className="flex shrink-0 items-center gap-3">
+                <span className={`font-mono ${l.amountCents < 0 ? "text-emerald-700" : "text-ink-900"}`}>
+                  {formatEuro(l.amountCents)}
+                </span>
+                {isConcept && l.handmatig ? (
+                  <form action={removeLineAction}>
+                    <input type="hidden" name="lineId" value={l.id} />
+                    <input type="hidden" name="invoiceId" value={inv.id} />
+                    <button
+                      type="submit"
+                      className="font-ui text-[10px] uppercase tracking-wider text-ink-400 hover:text-red-700"
+                      title="Regel verwijderen"
+                    >
+                      verwijderen
+                    </button>
+                  </form>
+                ) : null}
+              </span>
             </li>
           ))}
         </ul>
 
+        {/* Vrije regel toevoegen — alleen op een concept. No-show, reiskosten, materiaal,
+            een vaste vergoeding of een korting hadden tot nu toe geen plek en verlieten
+            het systeem, waardoor omzet en marge structureel onvolledig waren. */}
+        {isConcept ? (
+          <form action={addLineAction} className="mt-4 flex flex-wrap items-end gap-2 border-t border-ink-200 pt-4">
+            <input type="hidden" name="invoiceId" value={inv.id} />
+            <label className="flex flex-col gap-1">
+              <span className="font-ui text-[10px] uppercase tracking-wider text-ink-500">Soort</span>
+              <select name="kind" className="rounded border border-ink-300 px-2 py-1.5 text-sm" defaultValue="fee">
+                {HANDMATIGE_SOORTEN.map((k) => (
+                  <option key={k} value={k}>
+                    {SOORT_LABEL[k]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-1 flex-col gap-1" style={{ minWidth: "14rem" }}>
+              <span className="font-ui text-[10px] uppercase tracking-wider text-ink-500">Omschrijving</span>
+              <input
+                name="description"
+                required
+                placeholder="bv. no-show 12 juli, reiskosten Utrecht"
+                className="rounded border border-ink-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-ui text-[10px] uppercase tracking-wider text-ink-500">Bedrag (€)</span>
+              <input
+                name="amountEur"
+                type="number"
+                step="0.01"
+                required
+                placeholder="0,00"
+                className="w-28 rounded border border-ink-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-ui text-[10px] uppercase tracking-wider text-ink-500">Btw</span>
+              <select name="vatRateBps" className="rounded border border-ink-300 px-2 py-1.5 text-sm" defaultValue="2100">
+                {BTW_TARIEVEN.map((t) => (
+                  <option key={t.bps} value={t.bps}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="submit"
+              className="rounded-full bg-burgundy px-4 py-2 font-ui text-[11px] font-medium uppercase tracking-[0.15em] text-white hover:bg-burgundy-900"
+            >
+              Regel toevoegen
+            </button>
+            <p className="w-full text-xs text-ink-500">
+              Een korting voer je in als negatief bedrag. Urenregels komen uit de urenregistratie en kun je hier niet
+              weghalen.
+            </p>
+          </form>
+        ) : null}
+
         <dl className="mt-4 space-y-1 border-t border-ink-200 pt-4 text-sm">
           <Row k="Subtotaal (excl. btw)" v={formatEuro(inv.subtotalCents)} mono />
-          <Row k={`Btw ${Math.round(inv.vatRateBps / 100)}%`} v={formatEuro(inv.vatCents)} mono />
+          <Row
+            k={
+              new Set(lines.map((l) => l.vatRateBps)).size > 1
+                ? "Btw (gemengd tarief)"
+                : `Btw ${Math.round(inv.vatRateBps / 100)}%`
+            }
+            v={formatEuro(inv.vatCents)}
+            mono
+          />
           <div className="flex items-center justify-between pt-1 font-semibold text-ink-900">
             <dt>Totaal</dt>
             <dd className="font-mono">{formatEuro(inv.totalCents)}</dd>

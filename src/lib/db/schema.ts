@@ -3529,6 +3529,24 @@ export const invoices = pgTable(
   }),
 );
 
+/**
+ * What a line on an invoice actually IS.
+ *
+ * Until this existed a line could only be born from an approved hour, so a no-show fee, a
+ * travel reimbursement, materials, a fixed fee or a discount had nowhere to live and left
+ * the system entirely — which is why revenue and margin were structurally incomplete.
+ * One enum on purpose: surcharges and expense claims both need to land here too, and three
+ * parallel "what kind of line" columns would be the same axis modelled three times.
+ */
+export const invoiceLineKindEnum = pgEnum("invoice_line_kind", [
+  "hours",     // billed from an approved shift_hours row — the only kind that existed before
+  "surcharge", // night/weekend/holiday/spoed on top of an hours line
+  "expense",   // a chef's approved declaration, passed on to the klant
+  "fee",       // no-show, late cancellation, minimum call-out
+  "discount",  // negative amount, e.g. a goodwill correction
+  "other",
+]);
+
 export const invoiceLines = pgTable("invoice_lines", {
   id: uuid("id").primaryKey().defaultRandom(),
   invoiceId: uuid("invoice_id")
@@ -3543,7 +3561,17 @@ export const invoiceLines = pgTable("invoice_lines", {
   shiftDate: timestamp("shift_date", { withTimezone: false, mode: "date" }),
   workedMinutes: integer("worked_minutes"),
   rateCents: integer("rate_cents"), // client rate per hour
-  amountCents: integer("amount_cents").notNull(), // line total, ex BTW
+  amountCents: integer("amount_cents").notNull(), // line total, ex BTW — negative for a discount
+  /** What this line is. Existing rows are all billed hours, hence the default. */
+  kind: invoiceLineKindEnum("kind").notNull().default("hours"),
+  /**
+   * BTW for THIS line, in basis points. Catering mixes 21% (service) and 9% (food), which a
+   * single rate on the invoice header cannot express. Defaults to the NL standard rate so
+   * every existing row keeps the exact behaviour it had.
+   */
+  vatRateBps: integer("vat_rate_bps").notNull().default(2100),
+  /** Free lines are typed by a human; hours lines are generated. Null for generated ones. */
+  createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
