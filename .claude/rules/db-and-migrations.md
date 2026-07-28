@@ -42,7 +42,9 @@ Verify afterwards via `information_schema` (table/column/enum present) — never
 
 `drizzle/manual_*.sql` are NOT tracked in `drizzle/meta/_journal.json` — `npm run db:migrate`
 never applies them. They must be applied BY HAND, per Neon branch (psql or a one-off script).
-Currently: `manual_pgvector_prep.sql` (pgvector extension) and `manual_ai_embeddings.sql`
+Currently: `manual_pgvector_prep.sql` (pgvector extension), `manual_ai_embeddings.sql`
+and `manual_legacy_ops_monthly.sql` (the legacy archive tables — hand-written because
+drizzle-kit hung on its interactive rename prompt, so no snapshot exists for it)
 (the RAG table — pgvector column type predates drizzle support). Both are applied on dev
 (`ep-green-mouse`) AND prod (`ep-icy-scene`) as of 2026-06-10 (dev: 843 rows live).
 ⚠ A FRESH Neon branch created from scratch + `db:migrate` will silently miss these — RAG

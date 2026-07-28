@@ -1,3 +1,14 @@
+-- HANDMATIGE migratie — bewust BUITEN drizzle/meta/_journal.json.
+--
+-- Waarom hier en niet als 0079: dit bestand is met de hand geschreven (drizzle-kit
+-- bleef hangen op zijn interactieve hernoem-vraag) en dus nooit door db:generate
+-- gegaan, waardoor er ook geen 0079-snapshot bestaat. Zolang het als 0079_*.sql op
+-- schijf lag, zou de eerstvolgende db:generate een botsende 0079 wegschrijven. De
+-- manual_*-conventie (zie .claude/rules/db-and-migrations.md) is precies hiervoor.
+--
+-- Al toegepast op dev EN prod op 2026-07-28, geverifieerd via information_schema.
+-- Idempotent: opnieuw draaien is onschadelijk.
+--
 -- Vervangt de dagelijkse variant uit 0078 door de granulariteit die we ook echt
 -- volledig kunnen overzetten: per maand. Beide 0078-tabellen waren leeg.
 DROP TABLE IF EXISTS "legacy_client_months";--> statement-breakpoint
