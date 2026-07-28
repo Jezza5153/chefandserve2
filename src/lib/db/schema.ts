@@ -4096,3 +4096,44 @@ export const agendaEvents = pgTable(
   }),
 );
 export type AgendaEventRow = typeof agendaEvents.$inferSelect;
+
+/**
+ * chef_client_history — what a chef did at a klant in the OLD system (ShiftManager).
+ *
+ * The matcher's strongest human signal is "die heeft daar al eens gestaan en het ging
+ * goed", and for the 204 migrated chefs that history lives nowhere in this system:
+ * `placements` starts empty. The old system tracked it per (chef, klant) pair —
+ * uitnodigingen, gewerkte minuten and a 1..10 rating — so this table carries it over
+ * as clearly-labelled LEGACY data, next to (never mixed into) our own placements and
+ * our own 1..5 ratings.
+ *
+ * Read-only after import: nothing writes here except the migration script. When a pair
+ * builds new history in this system, the new placements are the truth and this stays
+ * the prologue.
+ */
+export const chefClientHistory = pgTable(
+  "chef_client_history",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    chefId: text("chef_id")
+      .notNull()
+      .references(() => chefs.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    /** Times this chef was invited for a shift at this klant. */
+    legacyInvites: integer("legacy_invites").notNull().default(0),
+    /** Minutes actually worked there (the old system's own total). */
+    legacyMinutes: integer("legacy_minutes").notNull().default(0),
+    /** The old system's rating on a 1..10 scale — NOT our 1..5 rating. Null when unrated. */
+    legacyRating: numeric("legacy_rating", { precision: 4, scale: 2 }),
+    legacyRatingCount: integer("legacy_rating_count").notNull().default(0),
+    /** Where it came from, so a later source can be told apart. */
+    source: text("source").notNull().default("shiftmanager"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("chef_client_history_pair_unique").on(t.chefId, t.clientId),
+    index("chef_client_history_client_idx").on(t.clientId),
+  ],
+);
