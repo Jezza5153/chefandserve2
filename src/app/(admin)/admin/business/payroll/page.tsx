@@ -144,6 +144,10 @@ async function markExported(formData: FormData) {
       .where(eq(payrollBatchLines.batchId, batchId));
 
     for (const l of lines) {
+      // A payroll line can now also be an approved expense claim, which has no hours row
+      // to flip. Skipping those instead of assuming every line has one is what keeps the
+      // export from throwing halfway through a batch.
+      if (!l.shiftHoursId) continue;
       await tx
         .update(shiftHours)
         .set({
