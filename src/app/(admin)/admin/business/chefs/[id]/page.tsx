@@ -34,6 +34,7 @@ import { getOnboardingReadiness, getProfileCompleteness } from "@/lib/domain/pro
 import { computeChefInzetbaarheid } from "@/lib/domain/chef-inzetbaarheid";
 import { getChefIntelSnapshot } from "@/lib/domain/intel";
 import { latestLegacyNoteLine } from "@/lib/legacy-notes";
+import { getLegacyChefProfile } from "@/lib/domain/chef-legacy-profile";
 import { KnowledgeNotesCard } from "@/components/admin/KnowledgeNotesCard";
 import { getChefReliability } from "@/lib/chef-events";
 import {
@@ -157,6 +158,10 @@ export default async function ChefDetailPage({
     getChefDailySeries(id, 90), // KPI-2: 90d of snapshot rows → 8-week trends
     getChefIntelSnapshot(id), // PR-INTEL: brein + patterns + decline signals + reactivation
   ]);
+  // De overgezette staat van dienst, als CIJFERS (uit chef_client_history) — niet als
+  // tekst in de notities. Zonder dit beweerde "Patronen & relaties" dat er geen
+  // werkpatroon was terwijl er honderden uren historie onder stonden.
+  const legacyProfile = await getLegacyChefProfile(id);
   if (!snapshot) notFound();
   // KPI-2: pure trend layer over the snapshot rows (sparklines + noise-guarded deltas
   // + honest churn signal). Rendered alongside the point-in-time numbers below.
@@ -618,7 +623,7 @@ export default async function ChefDetailPage({
       <KnowledgeNotesCard notes={chef.notes} editHref="#bewerken" />
 
       {/* PR-INTEL: patterns & relationships — when/what/who-with + earnings. */}
-      <ChefPatronenCard patterns={snapshot.patterns} />
+      <ChefPatronenCard patterns={snapshot.patterns} legacy={legacyProfile} />
 
       {/* PR-INTEL: "Maarten's brein" — the editable judgment layer (internal). */}
       <ChefBreinCard intel={chef.intel} saveAction={saveChefIntel} />

@@ -22,6 +22,7 @@ import {
   writeCvSuggestions,
 } from "@/lib/domain/profile-suggestions";
 import { createProfileDataRequest } from "@/lib/domain/profile-data-requests";
+import { getLegacyChefProfile } from "@/lib/domain/chef-legacy-profile";
 
 export const chefsWorkSummary = defineTool({
   name: "chefs.work_summary",
@@ -36,9 +37,15 @@ export const chefsWorkSummary = defineTool({
     if (!data) throw new Error("deze chef bestaat niet (meer)");
     const rating =
       data.averageRating != null ? `${data.averageRating}★ (${data.ratingCount})` : "nog geen beoordeling";
+    // Migrated track record — for the 204 overgezette chefs this system has no placements
+    // yet, so reporting "0 uur" would be true about the database and false about the chef.
+    const legacy = await getLegacyChefProfile(input.chefId);
+    const legacyTxt = legacy
+      ? ` In het oude systeem: ±${legacy.urenGewerkt} uur bij ${legacy.klanten} klant(en)${legacy.beoordeling != null ? `, beoordeling ${legacy.beoordeling}/10 (${legacy.beoordelingen}×, schaal oude systeem)` : ""}.`
+      : "";
     return {
-      data,
-      summary: `${data.chef.name}: ${data.totalHoursWorked} uur gewerkt over ${data.completedShifts} afgeronde dienst(en), ${data.upcomingShifts} komend, ${rating}.`,
+      data: { ...data, oudeSysteem: legacy },
+      summary: `${data.chef.name}: ${data.totalHoursWorked} uur gewerkt over ${data.completedShifts} afgeronde dienst(en) in dit systeem, ${data.upcomingShifts} komend, ${rating}.${legacyTxt}`,
     };
   },
 });
