@@ -575,6 +575,13 @@
       "when": 1785260609903,
       "tag": "0081_declaraties",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1785261334273,
+      "tag": "0082_factuur_aanmaningen",
+      "breakpoints": true
     }
   ]
 }
