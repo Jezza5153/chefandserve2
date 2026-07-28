@@ -19,6 +19,7 @@ import {
   voidInvoice,
 } from "@/lib/domain/invoicing";
 import { requirePermission } from "@/lib/permissions";
+import { addInvoiceLine, deleteInvoiceLine, type InvoiceLineKind } from "@/lib/domain/invoice-lines";
 
 const LIST = "/admin/business/invoices";
 
@@ -103,6 +104,61 @@ export async function voidInvoiceAction(formData: FormData): Promise<void> {
   redirect(
     res.ok
       ? `${LIST}/${invoiceId}?ok=voided`
+      : `${LIST}/${invoiceId}?error=${encodeURIComponent(res.error)}`,
+  );
+}
+
+/**
+ * Add a free line to a DRAFT invoice — a no-show fee, travel costs, materials, a fixed
+ * fee or a discount. Everything that is not a worked hour used to leave the system here,
+ * which is why revenue and margin were structurally incomplete rather than merely small.
+ */
+export async function addLineAction(formData: FormData): Promise<void> {
+  const session = await requirePermission("invoices", "write");
+  await assertImpersonationAllowed();
+  const invoiceId = String(formData.get("invoiceId") ?? "");
+  if (!invoiceId) redirect(LIST);
+
+  const kind = String(formData.get("kind") ?? "fee") as InvoiceLineKind;
+  const description = String(formData.get("description") ?? "");
+  const amountEur = Number(String(formData.get("amountEur") ?? "").replace(",", "."));
+  const vatRateBps = Number(formData.get("vatRateBps") ?? 2100);
+
+  if (!Number.isFinite(amountEur)) {
+    redirect(`${LIST}/${invoiceId}?error=${encodeURIComponent("Vul een geldig bedrag in.")}`);
+  }
+
+  const res = await addInvoiceLine({
+    invoiceId,
+    kind,
+    description,
+    amountCents: Math.round(amountEur * 100),
+    vatRateBps,
+    userId: session.user.id,
+  });
+
+  revalidatePath(`${LIST}/${invoiceId}`);
+  redirect(
+    res.ok
+      ? `${LIST}/${invoiceId}?ok=line-added`
+      : `${LIST}/${invoiceId}?error=${encodeURIComponent(res.error)}`,
+  );
+}
+
+/** Remove a hand-added line from a DRAFT invoice. Hours lines are refused by the domain. */
+export async function removeLineAction(formData: FormData): Promise<void> {
+  const session = await requirePermission("invoices", "write");
+  await assertImpersonationAllowed();
+  const invoiceId = String(formData.get("invoiceId") ?? "");
+  const lineId = String(formData.get("lineId") ?? "");
+  if (!invoiceId || !lineId) redirect(LIST);
+
+  const res = await deleteInvoiceLine({ lineId, userId: session.user.id });
+
+  revalidatePath(`${LIST}/${invoiceId}`);
+  redirect(
+    res.ok
+      ? `${LIST}/${invoiceId}?ok=line-removed`
       : `${LIST}/${invoiceId}?error=${encodeURIComponent(res.error)}`,
   );
 }
