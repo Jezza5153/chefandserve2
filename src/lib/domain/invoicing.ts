@@ -28,9 +28,9 @@ import {
   invoiceLines,
   invoices,
   shiftHours,
-  shifts,
-} from "@/lib/db/schema";
+  shifts, chefExpenseClaims } from "@/lib/db/schema";
 import { withTx, type TxConn } from "@/lib/db/tx";
+import { CATEGORIE_LABEL, getDoorTeBelastenDeclaraties } from "@/lib/domain/expense-claims";
 import { recipientsForClient } from "@/lib/domain/client-recipients";
 import { computeChefAmountCents } from "@/lib/hours-labels";
 import { formatChefRole } from "@/lib/labels";
@@ -170,7 +170,12 @@ export async function generateInvoiceForPeriod(args: {
     )
     .orderBy(shifts.startsAt);
 
-  if (candidates.length === 0) return { ok: true, status: "empty" };
+  // Goedgekeurde declaraties die doorbelast mogen worden en nog nergens op staan. Ze
+  // horen op DEZELFDE factuur als de uren waar ze bij horen — apart nasturen betekent in
+  // de praktijk dat ze blijven liggen.
+  const declaraties = await getDoorTeBelastenDeclaraties(args.clientId);
+
+  if (candidates.length === 0 && declaraties.length === 0) return { ok: true, status: "empty" };
 
   // 4. Lines + money. Lines are ex-BTW; BTW is added once on the invoice.
   const lineValues = candidates.map((c) => {
@@ -187,7 +192,17 @@ export async function generateInvoiceForPeriod(args: {
       amountCents,
     };
   });
-  const subtotalCents = lineValues.reduce((sum, l) => sum + l.amountCents, 0);
+  const declaratieRegels = declaraties.map((d) => ({
+    claimId: d.id,
+    kind: "expense" as const,
+    description: `${CATEGORIE_LABEL[d.categorie] ?? d.categorie}${d.omschrijving ? ` — ${d.omschrijving}` : ""} (${d.chefNaam})`,
+    amountCents: d.sellAmountCents,
+    vatRateBps: VAT_RATE_BPS,
+  }));
+
+  const subtotalCents =
+    lineValues.reduce((sum, l) => sum + l.amountCents, 0) +
+    declaratieRegels.reduce((sum, l) => sum + l.amountCents, 0);
   const vatCents = Math.round((subtotalCents * VAT_RATE_BPS) / 10_000);
   const totalCents = subtotalCents + vatCents;
 
@@ -204,7 +219,8 @@ export async function generateInvoiceForPeriod(args: {
       clientId: args.clientId,
       periodStart: periodStart.toISOString().slice(0, 10),
       periodEnd: periodEnd.toISOString().slice(0, 10),
-      lineCount: lineValues.length,
+      lineCount: lineValues.length + declaratieRegels.length,
+      declaraties: declaratieRegels.length,
       subtotalCents,
       totalCents,
     },
@@ -251,6 +267,24 @@ export async function generateInvoiceForPeriod(args: {
         await tx
           .insert(invoiceLines)
           .values(lineValues.map((l) => ({ ...l, invoiceId: inserted[0].id })));
+        for (const d of declaratieRegels) {
+          const [regel] = await tx
+            .insert(invoiceLines)
+            .values({
+              invoiceId: inserted[0].id,
+              kind: d.kind,
+              description: d.description,
+              amountCents: d.amountCents,
+              vatRateBps: d.vatRateBps,
+            })
+            .returning({ id: invoiceLines.id });
+          // In dezelfde transactie terugschrijven: dit is de enige bescherming tegen het
+          // twee keer doorbelasten van hetzelfde bonnetje.
+          await tx
+            .update(chefExpenseClaims)
+            .set({ invoiceLineId: regel.id, updatedAt: new Date() })
+            .where(and(eq(chefExpenseClaims.id, d.claimId), isNull(chefExpenseClaims.invoiceLineId)));
+        }
         await recordAuditCore({ ...auditBase, resourceId: inserted[0].id }, tx);
         return { kind: "created", id: inserted[0].id, number: inserted[0].number };
       });
@@ -284,7 +318,7 @@ export async function generateInvoiceForPeriod(args: {
     status: "created",
     invoiceId: result.id,
     number: result.number,
-    lineCount: lineValues.length,
+    lineCount: lineValues.length + declaratieRegels.length,
     subtotalCents,
     vatCents,
     totalCents,

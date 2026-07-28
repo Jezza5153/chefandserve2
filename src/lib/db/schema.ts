@@ -2316,6 +2316,18 @@ export const chefExpenseClaims = pgTable(
     description: text("description"),
     /** R2 key for the receipt photo (upload UI deferred; slot designed now). */
     receiptR2Key: text("receipt_r2_key"),
+    /**
+     * What we charge the klant for this cost, if we pass it on at all.
+     *
+     * Separate from `amountCents` because passing travel costs on with a mark-up is real
+     * margin, and folding the two into one number makes it impossible to see afterwards
+     * whether a cost was absorbed or billed. NULL = not passed on.
+     */
+    sellAmountCents: integer("sell_amount_cents"),
+    /** Which klant carries it. Derived from the shift when there is one. */
+    clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
+    /** Set once the cost is on a klant invoice — the guard against billing it twice. */
+    invoiceLineId: uuid("invoice_line_id"),
     status: chefRequestStatusEnum("status").notNull().default("pending"),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
     decidedBy: text("decided_by").references(() => users.id, { onDelete: "set null" }),
@@ -3422,9 +3434,14 @@ export const payrollBatchLines = pgTable("payroll_batch_lines", {
   batchId: uuid("batch_id")
     .notNull()
     .references(() => payrollBatches.id, { onDelete: "cascade" }),
-  shiftHoursId: uuid("shift_hours_id")
-    .notNull()
-    .references(() => shiftHours.id, { onDelete: "restrict" }),
+  /**
+   * NOT NULL was dropped here on purpose: a payroll line is no longer always an hours
+   * line. An approved expense claim is money owed to the chef too, and it has no
+   * shift_hours row — leaving this NOT NULL is what kept declarations out of payroll
+   * entirely. Exactly one of shiftHoursId / expenseClaimId is set.
+   */
+  shiftHoursId: uuid("shift_hours_id").references(() => shiftHours.id, { onDelete: "restrict" }),
+  expenseClaimId: uuid("expense_claim_id").references(() => chefExpenseClaims.id, { onDelete: "restrict" }),
   amountCents: integer("amount_cents").notNull(),
   clientAmountCents: integer("client_amount_cents").notNull(),
   /** 'pending' | 'exported' | 'rejected' */
