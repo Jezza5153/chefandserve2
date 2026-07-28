@@ -10,10 +10,11 @@
  * own placements — different systems, different definitions of "filled". Surfaces show them
  * side by side ("nieuw systeem / oude systeem"), never added up.
  */
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { legacyClientTotals, legacyOpsMonths } from "@/lib/db/schema";
+import { clients, legacyClientTotals, legacyOpsMonths } from "@/lib/db/schema";
+import { besteMatch, isOpvolgerVan } from "@/lib/domain/legacy-match";
 
 export type LegacySeason = {
   /** "2025-07" */
@@ -22,7 +23,25 @@ export type LegacySeason = {
   urenGewerkt: number;
   /** 0..100, or null when that month has no slots at all. */
   bezettingPct: number | null;
+  /**
+   * False for the month we are in and any month after it. The agenda holds shifts that are
+   * booked but have not happened, so the newest rows are partial by nature — August showing
+   * 24 diensten against July's 381 is three days of forward bookings, not a collapse, and
+   * anything that averages or compares months has to leave these out.
+   */
+  afgerond: boolean;
 };
+
+/** The month we are in, in the timezone the agency actually works in. */
+function huidigeMaand(): string {
+  const delen = new Intl.DateTimeFormat("nl-NL", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  const bij = (type: string) => delen.find((d) => d.type === type)?.value ?? "";
+  return `${bij("year")}-${bij("month")}`;
+}
 
 /** Month-by-month totals from the archive, newest first. */
 export async function getLegacyMonths(limit = 24): Promise<LegacySeason[]> {
@@ -39,11 +58,13 @@ export async function getLegacyMonths(limit = 24): Promise<LegacySeason[]> {
     .orderBy(desc(sql`to_char(${legacyOpsMonths.month}, 'YYYY-MM')`))
     .limit(limit)) as { month: string; diensten: number; uren: number; slotsF: number; slotsT: number }[];
 
+  const nu = huidigeMaand();
   return rows.map((r) => ({
     month: r.month,
     diensten: r.diensten,
     urenGewerkt: r.uren,
     bezettingPct: r.slotsT > 0 ? Math.round((r.slotsF / r.slotsT) * 100) : null,
+    afgerond: r.month < nu,
   }));
 }
 
@@ -65,11 +86,13 @@ export async function getLegacySameMonth(month: number): Promise<LegacySeason[]>
     .groupBy(sql`to_char(${legacyOpsMonths.month}, 'YYYY-MM')`)
     .orderBy(desc(sql`to_char(${legacyOpsMonths.month}, 'YYYY-MM')`))) as { month: string; diensten: number; uren: number; slotsF: number; slotsT: number }[];
 
+  const nu = huidigeMaand();
   return rows.map((r) => ({
     month: r.month,
     diensten: r.diensten,
     urenGewerkt: r.uren,
     bezettingPct: r.slotsT > 0 ? Math.round((r.slotsF / r.slotsT) * 100) : null,
+    afgerond: r.month < nu,
   }));
 }
 
@@ -106,85 +129,95 @@ export type LegacyClientDemand = {
 /** How recent a klant's last month must be to still count as booking. */
 const ACTIEF_MARGE_MAANDEN = 3;
 
-/**
- * Words that say nothing about WHICH venue this is — legal forms, the word "hotel", the
- * city everything sits in. Two names sharing only these are not the same venue.
- */
-const NIETSZEGGEND = new Set([
-  "bv", "b", "v", "nv", "n", "hotel", "hotels", "by", "the", "de", "het", "van", "der", "den",
-  "group", "exploitatie", "main", "restaurant", "amsterdam", "aan", "zee", "com", "opco",
-]);
-
-const kenmerkend = (naam: string): Set<string> =>
-  new Set(
-    naam
-      .toLowerCase()
-      .replace(/[^a-z0-9 ]+/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length > 2 && !NIETSZEGGEND.has(w)),
-  );
+export type LegacyClientOverzicht = {
+  /** The biggest `limit` klanten, for display. */
+  klanten: LegacyClientDemand[];
+  /** Counts over the WHOLE archive, never over the slice above. */
+  totalen: Record<LegacyClientStatus, number>;
+  /** Every klant still booking there without a record here — the actionable list. */
+  teMigreren: LegacyClientDemand[];
+};
 
 /**
- * The old system re-registered debiteuren instead of renaming them, so one venue can appear
- * as "Hilton | Hotel Operational Company B.V. Schiphol" (stopped) and "Hilton / Schiphol"
- * (still booking). Without this, the first reads as a lost klant while the venue never left.
+ * Demand per klant across the whole archive — with where each klant stands now.
  *
- * Two entries are the same venue when they share at least two distinctive words AND one of
- * those is long enough to actually identify something ("schiphol", "parkinn" — not "aan zee").
+ * The counts and the migrate-list are computed over every row and returned separately from
+ * the display slice on purpose. When they were derived from the top-N, the four klanten
+ * worth acting on ranked 19th and lower, so the default call reported none of them and
+ * ended on the loss count — the correction was invisible at exactly the size the assistant
+ * actually asks for.
  */
-function zelfdeLocatie(a: Set<string>, b: Set<string>): boolean {
-  const gedeeld = [...a].filter((w) => b.has(w));
-  return gedeeld.length >= 2 && gedeeld.some((w) => w.length >= 5);
-}
-
-/** Demand per klant across the whole archive — with where each klant stands now. */
-export async function getLegacyClientDemand(limit = 25): Promise<LegacyClientDemand[]> {
+export async function getLegacyClientDemand(limit = 25): Promise<LegacyClientOverzicht> {
   const [{ recentste } = { recentste: null }] = (await db
     .select({ recentste: sql<string | null>`to_char(max(${legacyOpsMonths.month}), 'YYYY-MM')` })
     .from(legacyOpsMonths)) as { recentste: string | null }[];
   const grens = recentste ? maandMin(ankerMaand(recentste), ACTIEF_MARGE_MAANDEN) : null;
 
-  // The whole table, not just the top `limit`: an entry can be succeeded by a smaller one
-  // further down the list, and slicing first would hide that.
-  const rows = (await db
-    .select({
-      klant: legacyClientTotals.clientName,
-      clientId: legacyClientTotals.clientId,
-      diensten: legacyClientTotals.shifts,
-      eerste: legacyClientTotals.firstMonth,
-      laatste: legacyClientTotals.lastMonth,
-    })
-    .from(legacyClientTotals)
-    .orderBy(desc(legacyClientTotals.shifts))) as { klant: string; clientId: string | null; diensten: number; eerste: string; laatste: string }[];
+  const [rows, huidigeKlanten] = await Promise.all([
+    db
+      .select({
+        klant: legacyClientTotals.clientName,
+        clientId: legacyClientTotals.clientId,
+        diensten: legacyClientTotals.shifts,
+        eerste: legacyClientTotals.firstMonth,
+        laatste: legacyClientTotals.lastMonth,
+      })
+      .from(legacyClientTotals)
+      .orderBy(desc(legacyClientTotals.shifts)) as Promise<
+      { klant: string; clientId: string | null; diensten: number; eerste: string; laatste: string }[]
+    >,
+    db
+      .select({ id: clients.id, naam: clients.companyName })
+      .from(clients)
+      .where(isNull(clients.deletedAt)) as Promise<{ id: string; naam: string }[]>,
+  ]);
 
-  const basis = rows.map((r) => ({
-    klant: r.klant,
-    clientId: r.clientId,
-    diensten: r.diensten,
-    eersteMaand: r.eerste,
-    laatsteMaand: r.laatste,
-    status: (r.clientId != null
-      ? "in_dit_systeem"
-      : grens && r.laatste >= grens
-        ? "nog_niet_overgezet"
-        : "weggevallen") as LegacyClientStatus,
-    woorden: kenmerkend(r.klant),
-  }));
+  // Re-match here as well as in the importer. The stored clientId is only as good as the
+  // last import run, and telling the owner "go migrate this account" about a klant they
+  // already have is the same class of error as calling them lost.
+  const kandidaten = huidigeKlanten.map((c) => ({ waarde: c.id, naam: c.naam }));
+  const basis = rows.map((r) => {
+    const clientId = r.clientId ?? besteMatch(r.klant, kandidaten);
+    return {
+      klant: r.klant,
+      clientId,
+      diensten: r.diensten,
+      eersteMaand: r.eerste,
+      laatsteMaand: r.laatste,
+      status: (clientId != null
+        ? "in_dit_systeem"
+        : grens && r.laatste >= grens
+          ? "nog_niet_overgezet"
+          : "weggevallen") as LegacyClientStatus,
+    };
+  });
 
+  // An entry only counts as succeeded by one that is itself still alive.
   const levend = basis.filter((r) => r.status !== "weggevallen");
-  const uit: LegacyClientDemand[] = [];
-  for (const r of basis.slice(0, limit)) {
-    const { woorden, ...rest } = r;
-    if (r.status === "weggevallen") {
-      const opvolger = levend.find((l) => zelfdeLocatie(woorden, l.woorden));
-      if (opvolger) {
-        uit.push({ ...rest, status: "opgevolgd", voortgezetAls: opvolger.klant });
-        continue;
-      }
-    }
-    uit.push(rest);
-  }
-  return uit;
+  const beoordeeld: LegacyClientDemand[] = basis.map((r) => {
+    if (r.status !== "weggevallen") return r;
+    const opvolger = levend.find((l) =>
+      isOpvolgerVan(
+        { naam: r.klant, eerste: r.eersteMaand, laatste: r.laatsteMaand },
+        { naam: l.klant, eerste: l.eersteMaand, laatste: l.laatsteMaand },
+      ),
+    );
+    return opvolger ? { ...r, status: "opgevolgd", voortgezetAls: opvolger.klant } : r;
+  });
+
+  const totalen: Record<LegacyClientStatus, number> = {
+    in_dit_systeem: 0,
+    nog_niet_overgezet: 0,
+    opgevolgd: 0,
+    weggevallen: 0,
+  };
+  for (const r of beoordeeld) totalen[r.status]++;
+
+  return {
+    klanten: beoordeeld.slice(0, limit),
+    totalen,
+    teMigreren: beoordeeld.filter((r) => r.status === "nog_niet_overgezet").sort((a, b) => b.diensten - a.diensten),
+  };
 }
 
 /**
@@ -199,8 +232,7 @@ export async function getLegacyClientDemand(limit = 25): Promise<LegacyClientDem
  * So: the newest month we have, but never later than the month we are actually in.
  */
 function ankerMaand(archiefMax: string): string {
-  const nu = new Date();
-  const huidig = `${nu.getUTCFullYear()}-${String(nu.getUTCMonth() + 1).padStart(2, "0")}`;
+  const huidig = huidigeMaand();
   return archiefMax < huidig ? archiefMax : huidig;
 }
 
@@ -212,9 +244,15 @@ function maandMin(maand: string, n: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-/** One-line archive summary for a surface that wants context, not a table. */
+/**
+ * One-line archive summary for a surface that wants context, not a table.
+ *
+ * `bijgewerkt` is here because everything else in this file speaks in the present tense
+ * ("boekt nog", "nog niet overgezet") off a snapshot that is only as fresh as the last
+ * import run. Without a date next to it, a year-old snapshot still sounds like today.
+ */
 export async function getLegacySummary(): Promise<{
-  maanden: number; diensten: number; uren: number; bezettingPct: number | null; van: string | null; tot: string | null;
+  maanden: number; diensten: number; uren: number; bezettingPct: number | null; van: string | null; tot: string | null; bijgewerkt: string | null;
 } | null> {
   const [r] = (await db
     .select({
@@ -225,8 +263,9 @@ export async function getLegacySummary(): Promise<{
       slotsT: sql<number>`coalesce(sum(${legacyOpsMonths.slotsTotal}), 0)::int`,
       van: sql<string | null>`to_char(min(${legacyOpsMonths.month}), 'YYYY-MM-DD')`,
       tot: sql<string | null>`to_char(max(${legacyOpsMonths.month}), 'YYYY-MM-DD')`,
+      bijgewerkt: sql<string | null>`to_char(max(${legacyOpsMonths.createdAt}), 'YYYY-MM-DD')`,
     })
-    .from(legacyOpsMonths)) as { maanden: number; diensten: number; uren: number; slotsF: number; slotsT: number; van: string | null; tot: string | null }[];
+    .from(legacyOpsMonths)) as { maanden: number; diensten: number; uren: number; slotsF: number; slotsT: number; van: string | null; tot: string | null; bijgewerkt: string | null }[];
   if (!r || r.maanden === 0) return null;
   return {
     maanden: r.maanden,
@@ -235,6 +274,7 @@ export async function getLegacySummary(): Promise<{
     bezettingPct: r.slotsT > 0 ? Math.round((r.slotsF / r.slotsT) * 100) : null,
     van: r.van,
     tot: r.tot,
+    bijgewerkt: r.bijgewerkt,
   };
 }
 

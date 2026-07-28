@@ -17,10 +17,16 @@
  * placements, and mixing them would corrupt every operational query. Anything that wants
  * history reads the legacy tables explicitly and labels them.
  *
- * Klant matching: the old label carries venue AND city ("Hilton | … B.V. Schiphol"), so an
- * exact match is rare. Falls back to "does a current klant name occur inside it". Names
- * that match nothing are KEPT with clientId = null — those are the klanten we no longer
- * serve, which is exactly what "welke klant zijn we kwijt" needs.
+ * Klant matching goes through `besteMatch()` (src/lib/domain/legacy-match.ts), NOT through
+ * string containment. Containment was tried first and matched on word order: it missed
+ * "Renaissance Hotel Amsterdam" against our own "Renaissance Amsterdam Hotel", and dropped
+ * "Showw B.V." for being too short — four klanten we already serve were then reported as
+ * accounts still to migrate.
+ *
+ * Names that match nothing are KEPT with clientId = null. That means "no klant here under
+ * this name" and NOTHING more: it is not evidence the klant is gone, because the old system
+ * is still running and still booking. Reading null as "lost klant" is the exact mistake this
+ * comment exists to prevent.
  *
  * Idempotent: months keyed on the month, klanten on the name; re-running updates.
  */
@@ -30,6 +36,7 @@ import { isNull } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
 import { clients, legacyClientTotals, legacyOpsMonths } from "@/lib/db/schema";
+import { besteMatch } from "@/lib/domain/legacy-match";
 import { recordAuditCore } from "@/lib/audit";
 
 const args = process.argv.slice(2);
@@ -41,15 +48,6 @@ if (!monthsPath || !klantenPath) {
   console.error("Usage: --months=legacy-months.csv --klanten=legacy-klanten.csv [--execute]");
   process.exit(2);
 }
-
-const norm = (s: string) =>
-  s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/\b(b\.?v\.?|n\.?v\.?)\b/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
 
 async function main() {
   const host = (process.env.DATABASE_URL ?? "").match(/@([^/]+)/)?.[1] ?? "?";
@@ -68,25 +66,21 @@ async function main() {
   }
 
   // klanten: naam;;diensten;;eersteMaand;;laatsteMaand
+  //
+  // The name is the conflict key, so punctuation that renders identically must not produce
+  // two rows: the old system writes both "V'Leisure" and "V’Leisure" and that alone stored
+  // one klant twice, double-counting 608 diensten.
+  const nette = (naam: string) => naam.replace(/[\u2018\u2019\u02bc]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/\s+/g, " ").trim();
   const klantRows: { name: string; shifts: number; first: string; last: string }[] = [];
   for (const line of readFileSync(klantenPath!, "utf-8").split("\n")) {
     const p = line.trim().split(";;");
     if (p.length < 4 || !p[0]) continue;
-    klantRows.push({ name: p[0].trim(), shifts: Number(p[1]) || 0, first: p[2].trim(), last: p[3].trim() });
+    klantRows.push({ name: nette(p[0]), shifts: Number(p[1]) || 0, first: p[2].trim(), last: p[3].trim() });
   }
 
   const known = await db.select({ id: clients.id, name: clients.companyName }).from(clients).where(isNull(clients.deletedAt));
-  const byExact = new Map(known.map((c) => [c.name, c.id]));
-  const byNorm = new Map(known.map((c) => [norm(c.name), c.id]));
-  const matchClient = (name: string): string | null => {
-    const exact = byExact.get(name);
-    if (exact) return exact;
-    const n = norm(name);
-    const direct = byNorm.get(n);
-    if (direct) return direct;
-    for (const [kn, id] of byNorm) if (kn.length > 6 && n.includes(kn)) return id;
-    return null;
-  };
+  const kandidaten = known.map((c) => ({ waarde: c.id, naam: c.name }));
+  const matchClient = (name: string): string | null => besteMatch(name, kandidaten);
 
   let matched = 0;
   let unmatched = 0;
@@ -129,7 +123,7 @@ async function main() {
   console.log(
     `  totaal: ${totOrders.toLocaleString("nl-NL")} diensten · ${totHours.toLocaleString("nl-NL")} gewerkte uren · bezetting ${slotsT ? Math.round((slotsF / slotsT) * 100) : 0}%`,
   );
-  console.log(`  klanten herkend in dit systeem: ${matched} · niet meer actief: ${unmatched} (bewust bewaard)`);
+  console.log(`  klanten gekoppeld aan een klant hier: ${matched} · geen koppeling gevonden: ${unmatched} (bewaard; dat betekent NIET dat ze weg zijn)`);
 
   if (EXECUTE && monthRows.size > 0) {
     await recordAuditCore({

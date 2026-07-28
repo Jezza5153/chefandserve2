@@ -48,47 +48,56 @@ export const opsHistory = defineTool({
 
     if (view === "per_maand") {
       const months = await getLegacyMonths(input.limit ?? 12);
-      const top = months[0];
+      // The newest rows are forward bookings for a month that has not happened yet; quoting
+      // one as "meest recent" turns three days of bookings into a fake collapse.
+      const laatsteVolle = months.find((m) => m.afgerond);
+      const lopend = months.filter((m) => !m.afgerond);
       return {
         data: { bron: "oude systeem", periode: `${summary.van} t/m ${summary.tot}`, maanden: months },
-        summary: `Oude systeem, laatste ${months.length} maanden. Meest recent (${top?.month}): ${top?.diensten ?? 0} diensten, ${top?.urenGewerkt ?? 0} uur, bezetting ${top?.bezettingPct ?? "-"}%.`,
+        summary:
+          `Oude systeem, laatste ${months.length} maanden. Laatste AFGERONDE maand (${laatsteVolle?.month}): ${laatsteVolle?.diensten ?? 0} diensten, ${laatsteVolle?.urenGewerkt ?? 0} uur, bezetting ${laatsteVolle?.bezettingPct ?? "-"}%.` +
+          (lopend.length
+            ? ` ${lopend.map((m) => m.month).join(" en ")} ${lopend.length > 1 ? "zijn" : "is"} nog niet afgerond (alleen wat al geboekt staat) — vergelijk die niet met een volle maand.`
+            : ""),
       };
     }
 
     if (view === "zelfde_maand") {
       const m = input.maand ?? new Date().getMonth() + 1;
       const rows = await getLegacySameMonth(m);
-      const gem = rows.length ? Math.round(rows.reduce((a, r) => a + r.diensten, 0) / rows.length) : 0;
+      const vol = rows.filter((r) => r.afgerond);
+      const gem = vol.length ? Math.round(vol.reduce((a, r) => a + r.diensten, 0) / vol.length) : 0;
+      const lopend = rows.filter((r) => !r.afgerond);
       return {
         data: { bron: "oude systeem", maand: MONTH_NL[m - 1], jaren: rows },
-        summary: rows.length
-          ? `${MONTH_NL[m - 1]} in het oude systeem: gemiddeld ${gem} diensten per jaar (${rows.map((r) => `${r.month.slice(0, 4)}: ${r.diensten}`).join(", ")}).`
-          : `Geen historie voor ${MONTH_NL[m - 1]} in het archief.`,
+        summary: vol.length
+          ? `${MONTH_NL[m - 1]} in het oude systeem: gemiddeld ${gem} diensten per jaar over ${vol.length} afgeronde ${vol.length === 1 ? "jaar" : "jaren"} (${vol.map((r) => `${r.month.slice(0, 4)}: ${r.diensten}`).join(", ")}).` +
+            (lopend.length
+              ? ` ${lopend.map((r) => `${r.month.slice(0, 4)}: ${r.diensten}`).join(", ")} telt niet mee — die maand loopt nog.`
+              : "")
+          : `Geen afgeronde ${MONTH_NL[m - 1]} in het archief.`,
       };
     }
 
     if (view === "per_klant") {
-      const rows = await getLegacyClientDemand(input.limit ?? 15);
-      const overzetten = rows.filter((r) => r.status === "nog_niet_overgezet");
-      const opgevolgd = rows.filter((r) => r.status === "opgevolgd");
-      const kwijt = rows.filter((r) => r.status === "weggevallen");
+      const { klanten, totalen, teMigreren } = await getLegacyClientDemand(input.limit ?? 15);
       return {
-        data: { bron: "oude systeem", klanten: rows },
+        data: { bron: "oude systeem", klanten, totalen, nogOverzetten: teMigreren },
         summary:
-          `Oude systeem, top ${rows.length} klanten: ${rows.slice(0, 3).map((r) => `${r.klant} (${r.diensten})`).join(", ")}.` +
-          (overzetten.length
-            ? ` LET OP: ${overzetten.length} boeken NOG STEEDS in het oude systeem maar staan hier nog niet als klant (${overzetten.slice(0, 3).map((r) => r.klant).join(", ")}) — accounts om over te zetten, GEEN verloren klanten.`
+          `Oude systeem, top ${klanten.length} klanten: ${klanten.slice(0, 3).map((r) => `${r.klant} (${r.diensten})`).join(", ")}.` +
+          ` Over het HELE archief: ${totalen.in_dit_systeem} staan hier als klant, ${totalen.opgevolgd} zijn onder een nieuwe naam voortgezet, ${totalen.nog_niet_overgezet} boeken daar nog zonder account hier, ${totalen.weggevallen} boeken al langer niet meer.` +
+          (teMigreren.length
+            ? ` Om over te zetten: ${teMigreren.slice(0, 5).map((r) => `${r.klant} (${r.diensten})`).join(", ")} — dat zijn GEEN verloren klanten.`
             : "") +
-          (opgevolgd.length
-            ? ` ${opgevolgd.length} regels zijn onder een nieuwe naam voortgezet (${opgevolgd.slice(0, 2).map((r) => `${r.klant} → ${r.voortgezetAls}`).join("; ")}) — noem die niet als verlies.`
-            : "") +
-          (kwijt.length ? ` ${kwijt.length} klanten boeken al een tijd niet meer en staan hier ook niet — die zijn wél weggevallen.` : ""),
+          ` Alleen de laatste groep is verlies, en ook daarvan geldt: "geen klant hier onder deze naam" is geen bewijs dat ze weg zijn.`,
       };
     }
 
     return {
       data: { bron: "oude systeem", ...summary },
-      summary: `Oude systeem (${summary.van} t/m ${summary.tot}): ${summary.diensten.toLocaleString("nl-NL")} diensten, ${summary.uren.toLocaleString("nl-NL")} gewerkte uren, gemiddelde bezetting ${summary.bezettingPct ?? "-"}%. Dit staat LOS van de cijfers van dit systeem.`,
+      summary:
+        `Oude systeem (${summary.van} t/m ${summary.tot}, incl. wat daar al vooruit geboekt staat): ${summary.diensten.toLocaleString("nl-NL")} diensten, ${summary.uren.toLocaleString("nl-NL")} gewerkte uren, gemiddelde bezetting ${summary.bezettingPct ?? "-"}%. Dit staat LOS van de cijfers van dit systeem.` +
+        (summary.bijgewerkt ? ` Momentopname van ${summary.bijgewerkt} — zeg dat erbij als het antwoord over "nu" gaat.` : ""),
     };
   },
 });
