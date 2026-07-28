@@ -18,6 +18,7 @@ import { CancelShiftSection } from "./CancelShiftSection";
 import { RejectWithReason } from "./RejectWithReason";
 import { ShiftSignals } from "./ShiftSignals";
 import { arrivalTrustEnabled } from "@/lib/domain/arrival";
+import { briefingRegels } from "@/lib/domain/klant-briefing";
 import {
   asShiftSignalKind,
   recordShiftSignal,
@@ -624,6 +625,38 @@ export default async function ChefShiftDetailPage({
               ) : null}
             </div>
           )}
+
+          {/* Praktisch — waar meld je je, waar parkeer je, wat draag je, wat neem je mee.
+              Dit stond tot nu toe alleen in de interne klantnotities: 28 van de 47 klanten
+              hadden parkeerinfo die geen enkele chef ooit zag. Alleen wat een mens
+              bewust heeft vrijgegeven komt hier terecht. */}
+          {briefingRegels({
+            arrivalInstructions: client?.arrivalInstructions ?? null,
+            parkingInfo: client?.parkingInfo ?? null,
+            dressCodeDefault: shift.dressCode ?? client?.dressCodeDefault ?? null,
+            bringAlong: client?.bringAlong ?? null,
+          }).length > 0 ? (
+            <div className="mt-4 rounded-lg border border-ink-200 bg-bg-gray/40 p-4">
+              <p className="font-ui text-[10px] uppercase tracking-[0.18em] text-burgundy">
+                Praktisch
+              </p>
+              <dl className="mt-2 space-y-2 text-sm">
+                {briefingRegels({
+                  arrivalInstructions: client?.arrivalInstructions ?? null,
+                  parkingInfo: client?.parkingInfo ?? null,
+                  // De dienst wint van de klantstandaard: een gala kan een andere kledingeis
+                  // hebben dan de gewone dienst bij dezelfde klant.
+                  dressCodeDefault: shift.dressCode ?? client?.dressCodeDefault ?? null,
+                  bringAlong: client?.bringAlong ?? null,
+                }).map((r) => (
+                  <div key={r.label}>
+                    <dt className="font-ui text-[10px] uppercase tracking-wider text-ink-500">{r.label}</dt>
+                    <dd className="text-ink-800">{r.tekst}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ) : null}
 
           {client?.nonNegotiables && client.nonNegotiables.length > 0 ? (
             <div className="mt-4">

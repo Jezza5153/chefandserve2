@@ -63,7 +63,7 @@ export async function createShift(args: CreateShiftArgs): Promise<CreateShiftRes
     return { ok: false, error: `Onbekende rol "${args.roleNeeded}".` };
   }
   const [client] = await db
-    .select({ id: clients.id, companyName: clients.companyName })
+    .select({ id: clients.id, companyName: clients.companyName, dressCodeDefault: clients.dressCodeDefault })
     .from(clients)
     .where(and(eq(clients.id, args.clientId), isNull(clients.deletedAt)))
     .limit(1);
@@ -93,7 +93,9 @@ export async function createShift(args: CreateShiftArgs): Promise<CreateShiftRes
       clientRateCents,
       chefRateCents,
       notes: args.notes ?? null,
-      dressCode: args.dressCode ?? null,
+      // Valt terug op de klantstandaard: bij een hotel dat altijd een witte koksbuis wil
+      // hoef je dat niet bij elke dienst opnieuw in te typen. Per dienst overschrijven kan.
+      dressCode: args.dressCode ?? client.dressCodeDefault ?? null,
       languageRequired: args.languageRequired ?? null,
       minExperience: args.minExperience ?? null,
       kitchenType: args.kitchenType ?? null,

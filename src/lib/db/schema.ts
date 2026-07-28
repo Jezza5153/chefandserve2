@@ -1102,6 +1102,24 @@ export const clients = pgTable("clients", {
    *  jas", "eigen messen"). Plain strings; admin-populated (set UI is admin-lane). */
   nonNegotiables: jsonb("non_negotiables").$type<string[]>(),
 
+  /* ----- Praktische aankomstinfo — CHEF-ZICHTBAAR -----
+   *
+   * Deliberately separate columns rather than reusing `notes`. The notes blob is the
+   * owner's internal judgment layer: it quotes conflicts, names other klanten and records
+   * rates, and it is owner-surface-only for exactly that reason. But the practical half of
+   * it — where to park, what to wear, where to report — is precisely what a chef needs the
+   * evening before, and today it reaches nobody: 28 of 47 klanten have parking details
+   * sitting in notes that no chef has ever seen.
+   *
+   * These fields are filled by promoting a line out of the notes ON PURPOSE, one human
+   * decision per field, so nothing internal leaks by accident. */
+  arrivalInstructions: text("arrival_instructions"),
+  parkingInfo: text("parking_info"),
+  /** Default dress code; prefills a new shift's own dressCode. */
+  dressCodeDefault: text("dress_code_default"),
+  /** What the chef should bring, e.g. "eigen messen, zwarte schoenen". */
+  bringAlong: text("bring_along"),
+
   createdBy: text("created_by").references(() => users.id, {
     onDelete: "set null",
   }),

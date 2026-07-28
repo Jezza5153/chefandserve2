@@ -20,6 +20,7 @@ import { clientDocTypes, listClientDocuments } from "@/lib/domain/client-documen
 import { computeClientHealth } from "@/lib/domain/client-health";
 import { getClientIntelSnapshot } from "@/lib/domain/intel";
 import { getLegacyForClient } from "@/lib/domain/legacy-ops";
+import { setKlantBriefingVeld, voorstellenUitNotities, type BriefingVeld } from "@/lib/domain/klant-briefing";
 import { getClientDailySeries } from "@/lib/domain/metrics-history";
 import {
   activatePortalUser,
@@ -37,6 +38,7 @@ import { ClientShiftsSection } from "./_components/ClientShiftsSection";
 import { ClientTypeSection } from "./_components/ClientTypeSection";
 import { ClientHealthCard } from "./_components/ClientHealthCard";
 import { KlantBreinCard } from "./_components/KlantBreinCard";
+import { BriefingSection } from "./_components/BriefingSection";
 import { KlantPatronenCard } from "./_components/KlantPatronenCard";
 import { KlantSnapshotCard } from "./_components/KlantSnapshotCard";
 import { KnowledgeNotesCard } from "@/components/admin/KnowledgeNotesCard";
@@ -102,6 +104,7 @@ export default async function ClientDetailPage({
       clientDocTypes(id),
       getLegacyForClient(id),
     ]);
+  const briefingVoorstellen = voorstellenUitNotities(client.notes);
   if (!snapshot) notFound();
   const clientTrends = buildClientTrends(clientSeries);
   // Klant 360 verdict — "goede klant?" (computed inline; summary + status already loaded).
@@ -116,6 +119,28 @@ export default async function ClientDetailPage({
     pendingSignoff: clientSummary.pendingSignoff,
     signoffAvgHours: clientSummary.signoffAvgHours,
   });
+
+  /**
+   * Briefing opslaan — het enige deel van het dossier dat de chef te zien krijgt.
+   * Bewust per veld en met de hand: de notities bevatten tarieven en blacklist-redenen,
+   * dus er gaat niets automatisch over de grens.
+   */
+  async function updateBriefing(formData: FormData) {
+    "use server";
+    const session = await requirePermission("clients", "write");
+    const velden: BriefingVeld[] = ["arrivalInstructions", "parkingInfo", "dressCodeDefault", "bringAlong"];
+    for (const veld of velden) {
+      await setKlantBriefingVeld(id, veld, String(formData.get(veld) ?? ""));
+    }
+    await recordAuditFromRequest({
+      userId: session.user.id,
+      action: "clients.briefing_updated",
+      resource: "clients",
+      resourceId: id,
+      after: { ingevuld: velden.filter((v) => String(formData.get(v) ?? "").trim()).length },
+    }).catch(() => {});
+    redirect(`/admin/business/clients/${id}`);
+  }
 
   // PR-2B: set client_type + client_tags (the "wat voor klant" signal).
   async function updateClientType(formData: FormData) {
@@ -492,6 +517,17 @@ export default async function ClientDetailPage({
       <KnowledgeNotesCard notes={client.notes} />
 
       {/* PR-INTEL: Patronen & relaties — booking patterns + vaste chefs */}
+      <BriefingSection
+        huidig={{
+          arrivalInstructions: client.arrivalInstructions,
+          parkingInfo: client.parkingInfo,
+          dressCodeDefault: client.dressCodeDefault,
+          bringAlong: client.bringAlong,
+        }}
+        voorstellen={briefingVoorstellen}
+        opslaan={updateBriefing}
+      />
+
       <KlantPatronenCard patterns={snapshot.patterns} legacy={legacyKlant} />
 
       {/* PR-INTEL: Maarten's brein — the six judgment fields (internal-only) */}
