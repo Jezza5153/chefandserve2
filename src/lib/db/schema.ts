@@ -4139,59 +4139,58 @@ export const chefClientHistory = pgTable(
 );
 
 /**
- * legacy_ops_days — the daily operational archive from the OLD system (ShiftManager).
+ * legacy_ops_months — the monthly operational curve of the OLD system (ShiftManager).
  *
- * Our own KPI surfaces read `placements`/`shifts`, which start empty: every fill-rate,
- * seasonality and forecast number in this system is currently 0 while the agency has in
- * fact been running 30–40 shifts a day since 2022. This table carries that curve over,
- * one row per calendar day, so baselines and seasonality have something real to stand on.
+ * Every KPI in this system reads 0 — not because the agency stood still, but because our
+ * own `shifts`/`placements` start empty while 30–40 diensten a day ran from 2022 on. This
+ * carries that curve over so baselines, seasonality and "is dit een normale maand" have
+ * something real underneath them.
  *
- * Read-only after import; deliberately SEPARATE from our own tables — a legacy day is not
- * a placement, and mixing them would corrupt every operational query in the app.
+ * MONTHLY, not daily, on purpose: the source is the old system's Weekoverzicht, and the
+ * monthly rollup is what survives the transfer honestly and completely. Daily granularity
+ * would add weekday patterns; that is a later pass, not a blocker for the insight.
+ *
+ * Read-only after import and deliberately SEPARATE from our own tables — a legacy month is
+ * not a set of placements, and summing them would corrupt every operational query.
  */
-export const legacyOpsDays = pgTable(
-  "legacy_ops_days",
-  {
-    /** The Amsterdam calendar day (YYYY-MM-DD) — the old system's own day bucket. */
-    day: date("day").primaryKey(),
-    /** Orders (diensten) planned that day. */
-    orders: integer("orders").notNull().default(0),
-    /** Slots filled / total — the honest fill-rate numerator and denominator. */
-    slotsFilled: integer("slots_filled").notNull().default(0),
-    slotsTotal: integer("slots_total").notNull().default(0),
-    /** Hours filled / total, as the old system counted them. */
-    hoursFilled: integer("hours_filled").notNull().default(0),
-    hoursTotal: integer("hours_total").notNull().default(0),
-    source: text("source").notNull().default("shiftmanager"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-);
+export const legacyOpsMonths = pgTable("legacy_ops_months", {
+  /** First day of the month (YYYY-MM-01). */
+  month: date("month").primaryKey(),
+  orders: integer("orders").notNull().default(0),
+  /** Slots filled / total — the honest fill-rate numerator and denominator. */
+  slotsFilled: integer("slots_filled").notNull().default(0),
+  slotsTotal: integer("slots_total").notNull().default(0),
+  hoursFilled: integer("hours_filled").notNull().default(0),
+  hoursTotal: integer("hours_total").notNull().default(0),
+  source: text("source").notNull().default("shiftmanager"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /**
- * legacy_client_months — shifts per klant per month in the old system.
+ * legacy_client_totals — how much each klant booked in the old system, and when they
+ * started and stopped.
  *
- * The demand shape per relationship: which klant books how much, in which months. Feeds
- * seasonality ("Deining piekt in juli") and the quiet-klant signal with real history
- * instead of a system that has never seen them book.
- *
- * `clientName` is the OLD system's label, kept verbatim; `clientId` is filled where it
- * matches a current klant and stays NULL for the ones we no longer serve (they are still
- * worth keeping — a klant that stopped is exactly what "welke klant verloren we" needs).
+ * The old system served 435 different klanten; this system knows 47. The difference is not
+ * noise — it includes the biggest accounts the agency ever had. `clientId` is filled where
+ * the name still matches a current klant and stays NULL for the rest, which is exactly what
+ * "welke klanten zijn we kwijt" needs to be answerable at all.
  */
-export const legacyClientMonths = pgTable(
-  "legacy_client_months",
+export const legacyClientTotals = pgTable(
+  "legacy_client_totals",
   {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    /** The old system's own label, verbatim (it encodes the venue too). */
     clientName: text("client_name").notNull(),
     clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
-    /** First day of the month (YYYY-MM-01). */
-    month: date("month").notNull(),
     shifts: integer("shifts").notNull().default(0),
+    /** YYYY-MM of the first and last month they booked in. */
+    firstMonth: text("first_month").notNull(),
+    lastMonth: text("last_month").notNull(),
     source: text("source").notNull().default("shiftmanager"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("legacy_client_months_unique").on(t.clientName, t.month),
-    index("legacy_client_months_client_idx").on(t.clientId),
+    uniqueIndex("legacy_client_totals_name_unique").on(t.clientName),
+    index("legacy_client_totals_client_idx").on(t.clientId),
   ],
 );
