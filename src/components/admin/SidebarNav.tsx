@@ -42,6 +42,11 @@ const MAIN: Item[] = [
   { label: "Team", href: "/admin/business/team", icon: "user-round" },
   { label: "Instellingen", href: "/admin/account/instellingen", icon: "settings" },
   { label: "Bedrijf", href: "/admin/business/instellingen", icon: "settings" },
+  // Twee eigenaarsschermen die bestonden maar in geen enkele navigatie stonden, dus
+  // alleen te vinden door de URL te kennen. Tarieven voedt de voorvulling bij het
+  // aanmaken van een dienst; geld-aannames voedt de Money Explainer.
+  { label: "Tarieven", href: "/admin/business/tarieven", icon: "settings" },
+  { label: "Geld-aannames", href: "/admin/business/money-assumptions", icon: "settings" },
 ];
 
 /**

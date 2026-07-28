@@ -8,6 +8,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { recordAuditFromRequest } from "@/lib/audit";
 import { db } from "@/lib/db/client";
 import { clients, placements, shifts, vakniveauEnum } from "@/lib/db/schema";
+import { getNormVoor, type Vakniveau } from "@/lib/domain/rate-card";
 
 export const SHIFT_ROLE_VALUES = vakniveauEnum.enumValues;
 export type ShiftRole = (typeof SHIFT_ROLE_VALUES)[number];
@@ -51,6 +52,16 @@ export async function createShift(args: CreateShiftArgs): Promise<CreateShiftRes
     .limit(1);
   if (!client) return { ok: false, error: "Deze klant bestaat niet (meer)." };
 
+  // Rate card fallback. This sits in createShift and not in the form, because the admin
+  // form, the shift templates and the assistant's shifts.create all come through here —
+  // filling it in three places would guarantee they drift apart. A rate that WAS given is
+  // never touched: the norm fills a blank, it does not correct a decision.
+  const norm = args.clientRateCents == null || args.chefRateCents == null
+    ? await getNormVoor(args.roleNeeded as Vakniveau)
+    : null;
+  const clientRateCents = args.clientRateCents ?? norm?.klantCents ?? null;
+  const chefRateCents = args.chefRateCents ?? norm?.chefCents ?? null;
+
   const [shift] = await db
     .insert(shifts)
     .values({
@@ -62,8 +73,8 @@ export async function createShift(args: CreateShiftArgs): Promise<CreateShiftRes
       headcount: Math.max(1, args.headcount ?? 1),
       city: args.city ?? null,
       location: args.location ?? null,
-      clientRateCents: args.clientRateCents ?? null,
-      chefRateCents: args.chefRateCents ?? null,
+      clientRateCents,
+      chefRateCents,
       notes: args.notes ?? null,
       isEmergency: args.isEmergency ?? false,
       status: "open",
@@ -76,7 +87,15 @@ export async function createShift(args: CreateShiftArgs): Promise<CreateShiftRes
     action: "shifts.create",
     resource: "shifts",
     resourceId: shift.id,
-    after: { clientId: args.clientId, roleNeeded: args.roleNeeded, headcount: args.headcount ?? 1 },
+    after: {
+      clientId: args.clientId,
+      roleNeeded: args.roleNeeded,
+      headcount: args.headcount ?? 1,
+      clientRateCents,
+      chefRateCents,
+      // Worth knowing later whether a rate was a decision or a default.
+      tariefUitNorm: norm != null && (args.clientRateCents == null || args.chefRateCents == null),
+    },
   });
 
   return { ok: true, shiftId: shift.id, client: client.companyName };
