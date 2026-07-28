@@ -1,5 +1,5 @@
 /**
- * Reads over the legacy operational archive (`legacy_ops_days`, `legacy_client_months`).
+ * Reads over the legacy operational archive (`legacy_ops_months`, `legacy_client_totals`).
  *
  * The new system's own KPI numbers are honest but empty: no shifts have run in it yet, so
  * fill rate, seasonality and demand all read 0. The agency itself has been running 30–40
@@ -10,10 +10,10 @@
  * own placements — different systems, different definitions of "filled". Surfaces show them
  * side by side ("nieuw systeem / oude systeem"), never added up.
  */
-import { and, desc, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db/client";
-import { legacyClientMonths, legacyOpsDays } from "@/lib/db/schema";
+import { legacyClientTotals, legacyOpsMonths } from "@/lib/db/schema";
 
 export type LegacySeason = {
   /** "2025-07" */
@@ -28,15 +28,15 @@ export type LegacySeason = {
 export async function getLegacyMonths(limit = 24): Promise<LegacySeason[]> {
   const rows = (await db
     .select({
-      month: sql<string>`to_char(${legacyOpsDays.day}, 'YYYY-MM')`,
-      diensten: sql<number>`sum(${legacyOpsDays.orders})::int`,
-      uren: sql<number>`sum(${legacyOpsDays.hoursFilled})::int`,
-      slotsF: sql<number>`sum(${legacyOpsDays.slotsFilled})::int`,
-      slotsT: sql<number>`sum(${legacyOpsDays.slotsTotal})::int`,
+      month: sql<string>`to_char(${legacyOpsMonths.month}, 'YYYY-MM')`,
+      diensten: sql<number>`sum(${legacyOpsMonths.orders})::int`,
+      uren: sql<number>`sum(${legacyOpsMonths.hoursFilled})::int`,
+      slotsF: sql<number>`sum(${legacyOpsMonths.slotsFilled})::int`,
+      slotsT: sql<number>`sum(${legacyOpsMonths.slotsTotal})::int`,
     })
-    .from(legacyOpsDays)
-    .groupBy(sql`to_char(${legacyOpsDays.day}, 'YYYY-MM')`)
-    .orderBy(desc(sql`to_char(${legacyOpsDays.day}, 'YYYY-MM')`))
+    .from(legacyOpsMonths)
+    .groupBy(sql`to_char(${legacyOpsMonths.month}, 'YYYY-MM')`)
+    .orderBy(desc(sql`to_char(${legacyOpsMonths.month}, 'YYYY-MM')`))
     .limit(limit)) as { month: string; diensten: number; uren: number; slotsF: number; slotsT: number }[];
 
   return rows.map((r) => ({
@@ -54,16 +54,16 @@ export async function getLegacyMonths(limit = 24): Promise<LegacySeason[]> {
 export async function getLegacySameMonth(month: number): Promise<LegacySeason[]> {
   const rows = (await db
     .select({
-      month: sql<string>`to_char(${legacyOpsDays.day}, 'YYYY-MM')`,
-      diensten: sql<number>`sum(${legacyOpsDays.orders})::int`,
-      uren: sql<number>`sum(${legacyOpsDays.hoursFilled})::int`,
-      slotsF: sql<number>`sum(${legacyOpsDays.slotsFilled})::int`,
-      slotsT: sql<number>`sum(${legacyOpsDays.slotsTotal})::int`,
+      month: sql<string>`to_char(${legacyOpsMonths.month}, 'YYYY-MM')`,
+      diensten: sql<number>`sum(${legacyOpsMonths.orders})::int`,
+      uren: sql<number>`sum(${legacyOpsMonths.hoursFilled})::int`,
+      slotsF: sql<number>`sum(${legacyOpsMonths.slotsFilled})::int`,
+      slotsT: sql<number>`sum(${legacyOpsMonths.slotsTotal})::int`,
     })
-    .from(legacyOpsDays)
-    .where(sql`extract(month from ${legacyOpsDays.day}) = ${month}`)
-    .groupBy(sql`to_char(${legacyOpsDays.day}, 'YYYY-MM')`)
-    .orderBy(desc(sql`to_char(${legacyOpsDays.day}, 'YYYY-MM')`))) as { month: string; diensten: number; uren: number; slotsF: number; slotsT: number }[];
+    .from(legacyOpsMonths)
+    .where(sql`extract(month from ${legacyOpsMonths.month}) = ${month}`)
+    .groupBy(sql`to_char(${legacyOpsMonths.month}, 'YYYY-MM')`)
+    .orderBy(desc(sql`to_char(${legacyOpsMonths.month}, 'YYYY-MM')`))) as { month: string; diensten: number; uren: number; slotsF: number; slotsT: number }[];
 
   return rows.map((r) => ({
     month: r.month,
@@ -87,15 +87,14 @@ export type LegacyClientDemand = {
 export async function getLegacyClientDemand(limit = 25): Promise<LegacyClientDemand[]> {
   const rows = (await db
     .select({
-      klant: legacyClientMonths.clientName,
-      clientId: sql<string | null>`max(${legacyClientMonths.clientId})`,
-      diensten: sql<number>`sum(${legacyClientMonths.shifts})::int`,
-      eerste: sql<string>`to_char(min(${legacyClientMonths.month}), 'YYYY-MM')`,
-      laatste: sql<string>`to_char(max(${legacyClientMonths.month}), 'YYYY-MM')`,
+      klant: legacyClientTotals.clientName,
+      clientId: legacyClientTotals.clientId,
+      diensten: legacyClientTotals.shifts,
+      eerste: legacyClientTotals.firstMonth,
+      laatste: legacyClientTotals.lastMonth,
     })
-    .from(legacyClientMonths)
-    .groupBy(legacyClientMonths.clientName)
-    .orderBy(desc(sql`sum(${legacyClientMonths.shifts})`))
+    .from(legacyClientTotals)
+    .orderBy(desc(legacyClientTotals.shifts))
     .limit(limit)) as { klant: string; clientId: string | null; diensten: number; eerste: string; laatste: string }[];
 
   return rows.map((r) => ({
@@ -110,22 +109,22 @@ export async function getLegacyClientDemand(limit = 25): Promise<LegacyClientDem
 
 /** One-line archive summary for a surface that wants context, not a table. */
 export async function getLegacySummary(): Promise<{
-  dagen: number; diensten: number; uren: number; bezettingPct: number | null; van: string | null; tot: string | null;
+  maanden: number; diensten: number; uren: number; bezettingPct: number | null; van: string | null; tot: string | null;
 } | null> {
   const [r] = (await db
     .select({
-      dagen: sql<number>`count(*)::int`,
-      diensten: sql<number>`coalesce(sum(${legacyOpsDays.orders}), 0)::int`,
-      uren: sql<number>`coalesce(sum(${legacyOpsDays.hoursFilled}), 0)::int`,
-      slotsF: sql<number>`coalesce(sum(${legacyOpsDays.slotsFilled}), 0)::int`,
-      slotsT: sql<number>`coalesce(sum(${legacyOpsDays.slotsTotal}), 0)::int`,
-      van: sql<string | null>`to_char(min(${legacyOpsDays.day}), 'YYYY-MM-DD')`,
-      tot: sql<string | null>`to_char(max(${legacyOpsDays.day}), 'YYYY-MM-DD')`,
+      maanden: sql<number>`count(*)::int`,
+      diensten: sql<number>`coalesce(sum(${legacyOpsMonths.orders}), 0)::int`,
+      uren: sql<number>`coalesce(sum(${legacyOpsMonths.hoursFilled}), 0)::int`,
+      slotsF: sql<number>`coalesce(sum(${legacyOpsMonths.slotsFilled}), 0)::int`,
+      slotsT: sql<number>`coalesce(sum(${legacyOpsMonths.slotsTotal}), 0)::int`,
+      van: sql<string | null>`to_char(min(${legacyOpsMonths.month}), 'YYYY-MM-DD')`,
+      tot: sql<string | null>`to_char(max(${legacyOpsMonths.month}), 'YYYY-MM-DD')`,
     })
-    .from(legacyOpsDays)) as { dagen: number; diensten: number; uren: number; slotsF: number; slotsT: number; van: string | null; tot: string | null }[];
-  if (!r || r.dagen === 0) return null;
+    .from(legacyOpsMonths)) as { maanden: number; diensten: number; uren: number; slotsF: number; slotsT: number; van: string | null; tot: string | null }[];
+  if (!r || r.maanden === 0) return null;
   return {
-    dagen: r.dagen,
+    maanden: r.maanden,
     diensten: r.diensten,
     uren: r.uren,
     bezettingPct: r.slotsT > 0 ? Math.round((r.slotsF / r.slotsT) * 100) : null,
@@ -134,28 +133,28 @@ export async function getLegacySummary(): Promise<{
   };
 }
 
-/** Months this klant booked in the archive (for the klant page + the AI). */
-export async function getLegacyMonthsForClient(clientId: string, limit = 18): Promise<{ month: string; shifts: number }[]> {
-  const rows = (await db
-    .select({ month: sql<string>`to_char(${legacyClientMonths.month}, 'YYYY-MM')`, shifts: legacyClientMonths.shifts })
-    .from(legacyClientMonths)
-    .where(and(eq(legacyClientMonths.clientId, clientId), isNotNull(legacyClientMonths.clientId)))
-    .orderBy(desc(legacyClientMonths.month))
-    .limit(limit)) as { month: string; shifts: number }[];
-  return rows;
+/** This klant's archive line (for the klant page + the AI), or null when unknown there. */
+export async function getLegacyForClient(clientId: string): Promise<{ diensten: number; eersteMaand: string; laatsteMaand: string } | null> {
+  const [r] = (await db
+    .select({ diensten: legacyClientTotals.shifts, eerste: legacyClientTotals.firstMonth, laatste: legacyClientTotals.lastMonth })
+    .from(legacyClientTotals)
+    .where(eq(legacyClientTotals.clientId, clientId))
+    .orderBy(desc(legacyClientTotals.shifts))
+    .limit(1)) as { diensten: number; eerste: string; laatste: string }[];
+  return r ? { diensten: r.diensten, eersteMaand: r.eerste, laatsteMaand: r.laatste } : null;
 }
 
 /** Archive slice for an explicit window — used by the reporting surfaces. */
 export async function getLegacyRange(fromDay: string, toDay: string) {
   const [r] = (await db
     .select({
-      diensten: sql<number>`coalesce(sum(${legacyOpsDays.orders}), 0)::int`,
-      uren: sql<number>`coalesce(sum(${legacyOpsDays.hoursFilled}), 0)::int`,
-      slotsF: sql<number>`coalesce(sum(${legacyOpsDays.slotsFilled}), 0)::int`,
-      slotsT: sql<number>`coalesce(sum(${legacyOpsDays.slotsTotal}), 0)::int`,
+      diensten: sql<number>`coalesce(sum(${legacyOpsMonths.orders}), 0)::int`,
+      uren: sql<number>`coalesce(sum(${legacyOpsMonths.hoursFilled}), 0)::int`,
+      slotsF: sql<number>`coalesce(sum(${legacyOpsMonths.slotsFilled}), 0)::int`,
+      slotsT: sql<number>`coalesce(sum(${legacyOpsMonths.slotsTotal}), 0)::int`,
     })
-    .from(legacyOpsDays)
-    .where(and(gte(legacyOpsDays.day, fromDay), lte(legacyOpsDays.day, toDay)))) as { diensten: number; uren: number; slotsF: number; slotsT: number }[];
+    .from(legacyOpsMonths)
+    .where(and(gte(legacyOpsMonths.month, fromDay), lte(legacyOpsMonths.month, toDay)))) as { diensten: number; uren: number; slotsF: number; slotsT: number }[];
   return {
     diensten: r?.diensten ?? 0,
     uren: r?.uren ?? 0,
