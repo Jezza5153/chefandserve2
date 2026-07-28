@@ -2376,6 +2376,88 @@ export const chefInvoiceStatusEnum = pgEnum("chef_invoice_status", [
   "rejected", // office bounced it (see decisionNote)
 ]);
 
+/* =============================================================================
+ * Betaalbatches — de agency betaalt haar chefs ZELF.
+ *
+ * Payingit was de payroll-partij; het systeem exporteerde een CSV en hoorde daarna niets
+ * meer, waardoor "betaald" een afgeleide was van onze eigen export in plaats van een feit.
+ * Nu het bureau het zelf doet, wordt betalen een stap ín dit systeem: een batch verzamelt
+ * wat openstaat, levert een bestand dat de bank accepteert, en houdt bij wat er daarna
+ * daadwerkelijk is afgeschreven.
+ *
+ * TWEE STATUSSEN, BEWUST GESCHEIDEN. `generated` betekent dat er een bestand is; `paid`
+ * betekent dat iemand heeft bevestigd dat de bank het heeft uitgevoerd. Die twee gelijk
+ * stellen is precies de fout die met Payingit werd gemaakt — een bestand aanmaken is geen
+ * betaling, en een bank kan een batch weigeren.
+ * =========================================================================== */
+
+export const betaalbatchStatusEnum = pgEnum("betaalbatch_status", [
+  "concept",    // samengesteld, nog geen bestand
+  "generated",  // SEPA-bestand gemaakt en gedownload
+  "paid",       // iemand heeft bevestigd dat de bank het heeft uitgevoerd
+  "cancelled",
+]);
+
+export const betaalbatches = pgTable(
+  "betaalbatches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Menselijk nummer, bv. "BET-2026-0001". */
+    nummer: text("nummer").notNull().unique(),
+    status: betaalbatchStatusEnum("status").notNull().default("concept"),
+    /** Datum waarop de bank moet uitvoeren. */
+    uitvoerDatum: date("uitvoer_datum").notNull(),
+    /** Snapshot van de tellingen bij aanmaken — verandert niet meer mee. */
+    aantalRegels: integer("aantal_regels").notNull().default(0),
+    totaalCents: integer("totaal_cents").notNull().default(0),
+    /** Checksum van het gegenereerde bestand, zodat je kunt zien of het is aangepast. */
+    bestandChecksum: text("bestand_checksum"),
+    gegenereerdOp: timestamp("gegenereerd_op", { withTimezone: true }),
+    betaaldOp: timestamp("betaald_op", { withTimezone: true }),
+    betaaldDoor: text("betaald_door").references(() => users.id, { onDelete: "set null" }),
+    notitie: text("notitie"),
+    aangemaaktDoor: text("aangemaakt_door").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("betaalbatches_status_idx").on(t.status, t.uitvoerDatum)],
+);
+
+/**
+ * Eén te betalen regel.
+ *
+ * Naam en IBAN worden hier als SNAPSHOT bewaard, versleuteld net als op de chef zelf: een
+ * chef die later zijn rekeningnummer wijzigt mag niet met terugwerkende kracht veranderen
+ * naar wie een betaling van vorige maand ging. Dat is dezelfde reden als de billing-snapshot
+ * op een factuur.
+ */
+export const betaalbatchRegels = pgTable(
+  "betaalbatch_regels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    batchId: uuid("batch_id")
+      .notNull()
+      .references(() => betaalbatches.id, { onDelete: "cascade" }),
+    chefId: text("chef_id").notNull().references(() => chefs.id, { onDelete: "restrict" }),
+    /** De chef-factuur die betaald wordt. Precies één regel per factuur. */
+    chefInvoiceId: uuid("chef_invoice_id").references(() => chefInvoices.id, { onDelete: "restrict" }),
+    bedragCents: integer("bedrag_cents").notNull(),
+    /** Wat er op het bankafschrift van de chef komt te staan. */
+    omschrijving: text("omschrijving").notNull(),
+    naamSnapshot: text("naam_snapshot").notNull(),
+    ibanEncrypted: text("iban_encrypted").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    /** Eén factuur kan maar in één batch zitten — de harde grens tegen dubbel betalen. */
+    uniqueIndex("betaalbatch_regels_invoice_unique").on(t.chefInvoiceId),
+    index("betaalbatch_regels_batch_idx").on(t.batchId),
+  ],
+);
+
+export type Betaalbatch = typeof betaalbatches.$inferSelect;
+export type BetaalbatchRegel = typeof betaalbatchRegels.$inferSelect;
+
 export const chefInvoices = pgTable(
   "chef_invoices",
   {
