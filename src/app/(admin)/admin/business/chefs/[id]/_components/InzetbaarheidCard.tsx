@@ -44,6 +44,7 @@ function fmtNlDate(d: Date | string): string {
 
 export function InzetbaarheidCard({
   verdict,
+  legacy,
   rating,
   ratingCount,
   noShowCount,
@@ -62,6 +63,8 @@ export function InzetbaarheidCard({
   noShowCount: number;
   cancelledCount: number;
   lastWorkedAt: Date | string | null;
+  /** The chef's record in the OLD system — shown only where our own numbers are still empty. */
+  legacy?: { urenGewerkt: number; beoordeling: number | null } | null;
   upcomingShifts: number;
   email: string | null;
   phone: string | null;
@@ -111,7 +114,22 @@ export function InzetbaarheidCard({
           ) : null}
           <div>
             <dt className="sr-only">Laatst gewerkt</dt>
-            <dd>laatst {lastWorkedAt ? fmtNlDate(lastWorkedAt) : "—"}</dd>
+            {/* A dash here on a chef with a thousand migrated hours reads as "unknown
+                quantity", which is the opposite of the truth. Fall back to the old
+                system's record — labelled, never mixed into our own counts. */}
+            <dd>
+              laatst{" "}
+              {lastWorkedAt ? (
+                fmtNlDate(lastWorkedAt)
+              ) : legacy && legacy.urenGewerkt > 0 ? (
+                <span className="text-ink-500">
+                  hier nog niet · oud systeem <b className="text-ink-700">{legacy.urenGewerkt.toLocaleString("nl-NL")} u</b>
+                  {legacy.beoordeling != null ? ` · ${legacy.beoordeling}/10` : ""}
+                </span>
+              ) : (
+                "—"
+              )}
+            </dd>
           </div>
           {upcomingShifts > 0 ? (
             <div>

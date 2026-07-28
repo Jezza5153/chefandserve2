@@ -600,6 +600,7 @@ export default async function ChefDetailPage({
           Answers the operator's #1 question before any editing chrome. */}
       <InzetbaarheidCard
         verdict={inzetbaarheid}
+        legacy={legacyProfile}
         rating={workSummary.averageRating}
         ratingCount={workSummary.ratingCount}
         noShowCount={workSummary.noShowCount}

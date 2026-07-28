@@ -18,9 +18,16 @@ export const demandForecast = defineTool({
   run: async (input) => {
     const f = await buildDemandForecast(new Date(), input.weeks ?? 6);
     if (f.totalOpen === 0) {
+      // "Bezetting is rond 👍" is only true if there is something to fill. With no
+      // upcoming shifts at all the same sentence tells the owner everything is fine
+      // while the old system is booking 380 diensten a month — a zero that means
+      // "not planned here yet" must never be reported as a zero that means "covered".
+      const nietsGepland = (f.totalShifts ?? 0) === 0;
       return {
-        data: f,
-        summary: `Geen openstaande plekken in de komende ${f.weeks} weken — de bezetting is rond. 👍`,
+        data: { ...f, legeAgenda: nietsGepland },
+        summary: nietsGepland
+          ? `Er staan de komende ${f.weeks} weken NUL diensten in dit systeem — dat is geen goede bezetting maar een lege agenda. Zeg dat zo, en wijs erop dat de planning voor die periode mogelijk nog in het oude systeem staat (ops.history laat zien wat daar normaal is voor deze periode).`
+          : `Geen openstaande plekken in de komende ${f.weeks} weken — alle ${f.totalShifts} geplande diensten zijn bemand. 👍`,
       };
     }
     const top = f.shortfalls
