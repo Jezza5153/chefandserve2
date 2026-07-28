@@ -18,6 +18,7 @@ import { defineTool } from "@/lib/ai/tools/registry";
 import { listPendingChefInvoices } from "@/lib/domain/chef-invoices";
 import { listPendingChefRequests } from "@/lib/domain/chef-requests";
 import { getQuietClients } from "@/lib/domain/intel";
+import { getDebiteurenOuderdom, ouderdomSamenvatting } from "@/lib/domain/invoice-aging";
 
 const eur = (c: number) => `€${Math.round(c / 100).toLocaleString("nl-NL")}`;
 
@@ -25,7 +26,7 @@ export const invoicingOpen = defineTool({
   name: "invoicing.open",
   title: "Openstaande klantfacturen",
   description:
-    'Welke klantfacturen staan open (verstuurd, nog niet betaald) en hoe lang al? Voor "welke facturen staan open / heeft [klant] al betaald / hoeveel geld staat er uit". Toont per factuur: nummer, klant, bedrag, dagen sinds verzending. Ook concepten die nog verstuurd moeten worden. Read-only — versturen/afboeken gaat via de facturatie-pagina.',
+    'Welke klantfacturen staan open (verstuurd, nog niet betaald), hoe lang al, en welke zijn TE LAAT? Voor "welke facturen staan open / heeft [klant] al betaald / hoeveel geld staat er uit / wie moet ik bellen over een factuur / wat staat er het langst open". Geeft per factuur nummer, klant, bedrag en dagen sinds verzending, plus de ouderdomsverdeling over alle verstuurde facturen (nog niet vervallen · 1-30 · 31-60 · 61-90 · 90+) en de oudste vervallen facturen met het aantal dagen over de vervaldatum. Ook concepten die nog verstuurd moeten worden. Read-only — versturen/afboeken gaat via de facturatie-pagina.',
   risk: "read",
   permission: { resource: "invoices", action: "read" },
   input: z.object({
@@ -58,14 +59,26 @@ export const invoicingOpen = defineTool({
       daysOpen: r.sentAt ? Math.floor((now - new Date(r.sentAt).getTime()) / 864e5) : null,
     }));
     const sent = shaped.filter((r) => r.status === "verstuurd");
-    const outstanding = sent.reduce((a, r) => a + r.totalCents, 0);
     const drafts = shaped.length - sent.length;
+    // De ouderdom komt uit een eigen query over ALLE verstuurde facturen — de lijst
+    // hierboven is afgekapt op `limit`, en een totaal over een pagina is geen totaal.
+    const ouderdom = await getDebiteurenOuderdom(new Date());
     return {
-      data: { count: shaped.length, outstandingCents: outstanding, invoices: shaped },
+      data: {
+        count: shaped.length,
+        outstandingCents: ouderdom.openCents,
+        overdueCents: ouderdom.teLaatCents,
+        ouderdom: ouderdom.bakken,
+        oudsteVervallen: ouderdom.oudste,
+        invoices: shaped,
+      },
       summary:
-        shaped.length === 0
+        shaped.length === 0 && ouderdom.openAantal === 0
           ? "Geen openstaande of concept-facturen."
-          : `${sent.length} verstuurde factuur/facturen open (${eur(outstanding)} uitstaand)${drafts > 0 ? ` · ${drafts} concept(en) nog te versturen` : ""}. Oudste eerst benoemen als er iets lang open staat.`,
+          : `${ouderdomSamenvatting(ouderdom)}${drafts > 0 ? ` Daarnaast ${drafts} concept(en) nog te versturen.` : ""}` +
+            (ouderdom.teLaatAantal > 0
+              ? " Noem bij een vraag over openstaand geld altijd de oudste eerst — die kost het meest."
+              : ""),
     };
   },
 });

@@ -11,6 +11,7 @@ import Link from "next/link";
 
 import { db } from "@/lib/db/client";
 import { clients, invoices } from "@/lib/db/schema";
+import { getDebiteurenOuderdom, ouderdomSamenvatting } from "@/lib/domain/invoice-aging";
 import { formatEuro } from "@/lib/hours-labels";
 import { invoiceStatusView, invoiceToneClasses } from "@/lib/invoice-labels";
 import { requirePermission } from "@/lib/permissions";
@@ -67,9 +68,10 @@ export default async function InvoicesPage({
   const unbilled = await getUnbilledHoursByClient();
   const unbilledTotal = unbilled.reduce((sum, u) => sum + u.totalCents, 0);
 
-  const openCents = rows
-    .filter((r) => r.status === "sent")
-    .reduce((sum, r) => sum + r.totalCents, 0);
+  // Over ALLE verstuurde facturen, niet over de 100 rijen hierboven: met een statusfilter
+  // op "paid" las het openstaande bedrag anders € 0 terwijl het geld gewoon uitstond.
+  const ouderdom = await getDebiteurenOuderdom(new Date());
+  const openCents = ouderdom.openCents;
 
   const flashErr =
     sp.error === "empty"
@@ -201,6 +203,60 @@ export default async function InvoicesPage({
         </section>
       ) : null}
 
+      {/* Debiteurenouderdom — een lijst op uitgiftedatum vertelt niet wie je eerst moet
+          bellen. Alleen tonen als er iets openstaat; de bakken zijn de belronde. */}
+      {ouderdom.openAantal > 0 ? (
+        <section className="mt-10">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="font-serif text-xl text-ink-900">Openstaand &amp; ouderdom</h2>
+            <p className="text-sm text-ink-500">{ouderdomSamenvatting(ouderdom)}</p>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {ouderdom.bakken.map((b) => (
+              <div
+                key={b.bak}
+                className={`rounded-lg border p-3 ${
+                  b.aantal === 0
+                    ? "border-ink-200 bg-white text-ink-400"
+                    : b.bak === "90+"
+                      ? "border-red-300 bg-red-50/60"
+                      : b.bak === "61-90"
+                        ? "border-amber-300 bg-amber-50/60"
+                        : "border-ink-200 bg-white"
+                }`}
+              >
+                <p className="font-ui text-[10px] uppercase tracking-[0.15em] text-ink-500">{b.label}</p>
+                <p className="mt-1 font-serif text-lg text-ink-900">{formatEuro(b.cents)}</p>
+                <p className="text-xs text-ink-500">
+                  {b.aantal} {b.aantal === 1 ? "factuur" : "facturen"}
+                </p>
+              </div>
+            ))}
+          </div>
+          {ouderdom.oudste.length > 0 ? (
+            <ul className="mt-4 divide-y divide-ink-200/60 rounded-lg border border-ink-200 bg-white">
+              {ouderdom.oudste.map((f) => (
+                <li key={f.id} className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-2.5 text-sm">
+                  <span className="text-ink-900">
+                    <a href={`/admin/business/invoices/${f.id}`} className="hover:underline">
+                      {f.nummer}
+                    </a>{" "}
+                    <span className="text-ink-600">· {f.klant}</span>
+                  </span>
+                  <span className="text-ink-600">
+                    {formatEuro(f.bedragCents)} ·{" "}
+                    <strong className={f.dagenTeLaat > 60 ? "text-red-700" : "text-amber-700"}>
+                      {f.dagenTeLaat} dagen te laat
+                    </strong>{" "}
+                    <span className="text-ink-400">(verviel {f.vervaldatum})</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
+
       {/* List */}
       <section className="mt-10">
         <div className="flex items-baseline justify-between gap-3">
@@ -209,6 +265,12 @@ export default async function InvoicesPage({
             {openCents > 0 ? (
               <p className="text-sm text-ink-500">
                 Openstaand: <strong className="text-ink-900">{formatEuro(openCents)}</strong>
+                {ouderdom.teLaatCents > 0 ? (
+                  <span className="text-red-700">
+                    {" "}
+                    · <strong>{formatEuro(ouderdom.teLaatCents)}</strong> te laat
+                  </span>
+                ) : null}
               </p>
             ) : null}
             {rows.length > 0 ? (
