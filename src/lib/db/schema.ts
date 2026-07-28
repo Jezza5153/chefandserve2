@@ -3526,6 +3526,14 @@ export const invoices = pgTable(
     /* ----- lifecycle ----- */
     sentAt: timestamp("sent_at", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
+    /**
+     * Chasing state. Two columns instead of a reminders table because that is all the
+     * question needs: when did we last chase, and how often. `lastReminderAt` is what makes
+     * the sweep idempotent — a re-run, a manual trigger or a retried cron cannot send a
+     * second reminder the same week.
+     */
+    lastReminderAt: timestamp("last_reminder_at", { withTimezone: true }),
+    reminderCount: integer("reminder_count").notNull().default(0),
     pdfR2Key: text("pdf_r2_key"),
     externalRef: text("external_ref"), // accounting-system id
     notes: text("notes"),
