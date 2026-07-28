@@ -4181,6 +4181,103 @@ export const chefClientHistory = pgTable(
  * Read-only after import and deliberately SEPARATE from our own tables — a legacy month is
  * not a set of placements, and summing them would corrupt every operational query.
  */
+/* =============================================================================
+ * Toeslagen — surcharges on top of the plain hourly rate
+ *
+ * Three public marketing pages promise "een toeslag conform horeca-cao" for night,
+ * weekend and spoed work while nothing in this system could compute one: an hour could
+ * only ever be minutes × one flat rate. Whatever surcharge was charged in practice
+ * disappeared into that rate, invisible to the klant, the chef and the margin figures.
+ *
+ * The RULES are deliberately empty on delivery. The cao percentages, the time windows and
+ * how a break is attributed are finance's call, not a developer's guess, so they are typed
+ * in at /admin/business/toeslagen. With no rules enabled nothing is computed and every
+ * amount stays exactly what it is today.
+ *
+ * V1 does NOT stack: per minute the highest-priority matching rule wins. Cao surcharges
+ * are normally alternatives (a Sunday night is paid at the Sunday rate, not Sunday plus
+ * night), and a stacking engine nobody has asked for is a lot of surface to get wrong.
+ * =========================================================================== */
+
+export const surchargeRuleKindEnum = pgEnum("surcharge_rule_kind", [
+  "time_window", // a local clock window, e.g. 00:00-06:00
+  "weekday",     // whole local weekdays, e.g. Saturday and Sunday
+  "holiday",     // Dutch public holidays
+  "spoed",       // booked less than N hours before it starts
+]);
+
+export const surchargeRules = pgTable(
+  "surcharge_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Stable key used in labels and snapshots, e.g. 'nacht'. */
+    code: text("code").notNull().unique(),
+    /** Dutch label, copied onto every computed line so an old amount stays explainable. */
+    label: text("label").notNull(),
+    kind: surchargeRuleKindEnum("kind").notNull(),
+
+    /** time_window: minutes from local midnight, [start, end). end <= start wraps midnight. */
+    startMinuteOfDay: integer("start_minute_of_day"),
+    endMinuteOfDay: integer("end_minute_of_day"),
+    /** weekday: ISO weekdays, 1 = Monday … 7 = Sunday. */
+    weekdays: integer("weekdays").array(),
+    /** spoed: booked fewer than this many hours before the shift starts. */
+    leadTimeHours: integer("lead_time_hours"),
+
+    /** Percentage ON TOP of the base rate, in basis points. Klant and chef differ. */
+    clientPctBps: integer("client_pct_bps").notNull().default(0),
+    chefPctBps: integer("chef_pct_bps").notNull().default(0),
+
+    /** Higher wins when several rules match the same minute. */
+    priority: integer("priority").notNull().default(0),
+    /** Off until finance has entered the real numbers. */
+    enabled: boolean("enabled").notNull().default(false),
+
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("surcharge_rules_enabled_idx").on(t.enabled, t.priority)],
+);
+
+/**
+ * The computed surcharge for one hours row — a SNAPSHOT, never recomputed.
+ *
+ * Everything needed to explain the amount years later is copied in, and `ruleId` is ON
+ * DELETE SET NULL: deleting a rule must never destroy an amount that was already booked.
+ */
+export const shiftHourSurcharges = pgTable(
+  "shift_hour_surcharges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    shiftHoursId: uuid("shift_hours_id")
+      .notNull()
+      .references(() => shiftHours.id, { onDelete: "cascade" }),
+    ruleId: uuid("rule_id").references(() => surchargeRules.id, { onDelete: "set null" }),
+
+    ruleCode: text("rule_code").notNull(),
+    label: text("label").notNull(),
+    minutes: integer("minutes").notNull(),
+    clientPctBps: integer("client_pct_bps").notNull(),
+    chefPctBps: integer("chef_pct_bps").notNull(),
+    baseClientRateCents: integer("base_client_rate_cents").notNull(),
+    baseChefRateCents: integer("base_chef_rate_cents").notNull(),
+    clientAmountCents: integer("client_amount_cents").notNull(),
+    chefAmountCents: integer("chef_amount_cents").notNull(),
+
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    /** Makes the approval insert idempotent — re-approving must not double an amount. */
+    uniqueIndex("shift_hour_surcharges_hours_rule_unique").on(t.shiftHoursId, t.ruleCode),
+    index("shift_hour_surcharges_hours_idx").on(t.shiftHoursId),
+  ],
+);
+
+export type SurchargeRule = typeof surchargeRules.$inferSelect;
+export type NewSurchargeRule = typeof surchargeRules.$inferInsert;
+export type ShiftHourSurcharge = typeof shiftHourSurcharges.$inferSelect;
+
 export const legacyOpsMonths = pgTable("legacy_ops_months", {
   /** First day of the month (YYYY-MM-01). */
   month: date("month").primaryKey(),

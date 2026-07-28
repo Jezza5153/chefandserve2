@@ -19,6 +19,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { recordAuditCore, stampFromRequest } from "@/lib/audit";
 import { withTx } from "@/lib/db/tx";
+import { berekenEnBewaarToeslagen } from "@/lib/domain/surcharges";
 import {
   chefs,
   clients,
@@ -160,6 +161,15 @@ export async function approveHoursRow(args: {
     return { ok: false, reason: "stale" };
   }
   const row = updated[0];
+
+  // Surcharges are frozen HERE, right after approval, and never recomputed afterwards: an
+  // approved hour gets invoiced and paid out, so a rule edited in March must not restate
+  // what was billed in January. With no rules switched on this is a no-op and every amount
+  // stays exactly what it was. It must not be able to break an approval that already
+  // committed, hence the catch.
+  await bewaarToeslagenVoorGoedgekeurdeUren(row.id).catch((e) => {
+    console.error("toeslagberekening mislukt (goedkeuring staat wel)", row.id, e);
+  });
 
   await enqueueIntegrationEvent({
     provider: "payroll",
@@ -470,4 +480,46 @@ export async function rejectHoursRow(args: {
   }
 
   return { ok: true };
+}
+
+/**
+ * Compute and freeze the surcharges for an approved hours row.
+ *
+ * Reads the times off the SHIFT rather than the hours row, because a surcharge window is
+ * about when the work actually happened. `leadTimeHours` comes from when the shift was
+ * created versus when it starts — that is what makes a booking "spoed".
+ *
+ * Separate function so it can be smoked on its own, and so a failure here is visibly a
+ * surcharge failure rather than an approval failure.
+ */
+export async function bewaarToeslagenVoorGoedgekeurdeUren(hoursId: string): Promise<void> {
+  const [rij] = await db
+    .select({
+      startedAt: shiftHours.startedAt,
+      endedAt: shiftHours.endedAt,
+      breakMinutes: shiftHours.breakMinutes,
+      chefRateCents: shiftHours.chefRateCents,
+      clientRateCents: shiftHours.clientRateCents,
+      shiftStart: shifts.startsAt,
+      shiftCreated: shifts.createdAt,
+    })
+    .from(shiftHours)
+    .innerJoin(shifts, eq(shifts.id, shiftHours.shiftId))
+    .where(eq(shiftHours.id, hoursId))
+    .limit(1);
+  if (!rij?.startedAt || !rij?.endedAt) return;
+
+  const leadTimeHours = rij.shiftCreated
+    ? Math.max(0, Math.round((new Date(rij.shiftStart).getTime() - new Date(rij.shiftCreated).getTime()) / 3_600_000))
+    : null;
+
+  await berekenEnBewaarToeslagen({
+    shiftHoursId: hoursId,
+    van: new Date(rij.startedAt),
+    tot: new Date(rij.endedAt),
+    pauzeMinuten: rij.breakMinutes ?? 0,
+    baseClientRateCents: rij.clientRateCents,
+    baseChefRateCents: rij.chefRateCents,
+    leadTimeHours,
+  });
 }
